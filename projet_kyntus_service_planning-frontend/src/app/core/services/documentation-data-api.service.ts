@@ -16,6 +16,7 @@ import type {
   DocumentTypeDto,
   OrganizationalUnitSummaryDto,
   PagedResponse,
+  TemplateVariableResolutionDto,
   TemplateVersionDto,
 } from '../models/documentation.models';
 
@@ -275,6 +276,9 @@ export class DocumentationDataApiService {
       sourcePriority?: number | null;
       normalizedName?: string | null;
       rawPlaceholder?: string | null;
+      sourceFieldKey?: string | null;
+      mappingConfidence?: string | null;
+      mappingConfirmed?: boolean | null;
     }>,
   ): Observable<DocumentTemplateDetailDto> {
     return this.http.put<DocumentTemplateDetailDto>(
@@ -344,6 +348,16 @@ export class DocumentationDataApiService {
 
   getDocumentTemplate(templateId: string): Observable<DocumentTemplateDetailDto> {
     return this.http.get<DocumentTemplateDetailDto>(`${this.dataRoot}/document-templates/${encodeURIComponent(templateId)}`);
+  }
+
+  resolveTemplateEmployeeValues(
+    templateId: string,
+    body: { beneficiaryUserId: string; currentValues?: Record<string, string> | null },
+  ): Observable<{ variables: TemplateVariableResolutionDto[] }> {
+    return this.http.post<{ variables: TemplateVariableResolutionDto[] }>(
+      `${this.dataRoot}/document-templates/${encodeURIComponent(templateId)}/resolve-employee-values`,
+      body,
+    );
   }
 
   /** Lien GET signé (MinIO privé) pour ouvrir le fichier modèle dans un nouvel onglet. */
@@ -504,6 +518,9 @@ export class DocumentationDataApiService {
         sourcePriority?: number | null;
         normalizedName?: string | null;
         rawPlaceholder?: string | null;
+        sourceFieldKey?: string | null;
+        mappingConfidence?: string | null;
+        mappingConfirmed?: boolean | null;
       }>;
     },
   ): Observable<TemplateVersionDto> {

@@ -1,4 +1,5 @@
 using EmployeeDirectory.Application.Dtos;
+using EmployeeDirectory.Application.Org;
 using EmployeeDirectory.Domain.Enums;
 
 namespace EmployeeDirectory.Application.Abstractions;
@@ -6,10 +7,19 @@ namespace EmployeeDirectory.Application.Abstractions;
 public interface IDirectoryReadService
 {
     Task<IReadOnlyList<EmployeeDto>> GetEmployeesAsync(string? role, string? poleId, CancellationToken ct = default);
+    /// <summary>Liste paginée des employés actifs (évite de charger toute la table sous charge).</summary>
+    Task<(IReadOnlyList<EmployeeDto> Items, int Total)> GetEmployeesPagedAsync(
+        string? role, string? poleId, int skip, int take, CancellationToken ct = default);
     Task<EmployeeDto?> GetEmployeeByIdAsync(Guid id, CancellationToken ct = default);
+    Task<EmployeeDto?> GetEmployeeByEmailAsync(string email, CancellationToken ct = default) =>
+        Task.FromResult<EmployeeDto?>(null);
     Task<OrgOverviewDto> GetOrgOverviewAsync(CancellationToken ct = default);
     Task<OrgAssignmentAsOfDto> GetAssignmentsAsOfAsync(DateTime asOf, CancellationToken ct = default);
     Task<IReadOnlyList<AssignmentHistoryEntryDto>> GetAssignmentHistoryAsync(Guid employeeId, CancellationToken ct = default);
+    Task<IReadOnlyList<Guid>> GetEmployeeIdsWithAssignmentsAfterAsync(
+        IReadOnlyList<Guid> employeeIds,
+        DateTime after,
+        CancellationToken ct = default);
     Task<bool> IsDescendantAsync(Guid viewerId, Guid targetId, CancellationToken ct = default);
     Task<RebacSubtreeDto> GetSubtreeAsync(Guid employeeId, CancellationToken ct = default);
     Task<RebacManagedNodesDto> GetManagedNodesAsync(Guid employeeId, string kind, CancellationToken ct = default);
@@ -67,6 +77,15 @@ public interface IDirectoryWriteService
     /// </summary>
     Task<int> DeduplicateActiveNodeIncumbentsAsync(Guid? changedBy = null, CancellationToken ct = default);
 
+    /// <summary>
+    /// Annule les affectations org créées/fermées dans une fenêtre (un import),
+    /// sans toucher aux rotations postérieures ni aux nœuds (pôles/cellules/services).
+    /// </summary>
+    Task<UndoImportAssignmentWindowResult> UndoImportAssignmentWindowAsync(
+        UndoImportAssignmentWindowRequest request,
+        Guid? changedBy,
+        CancellationToken ct = default);
+
     Task<string> CreatePoleAsync(string name, Guid businessDepartmentId, CancellationToken ct = default);
     Task<bool> AttachPoleToBusinessDepartmentAsync(string poleId, Guid businessDepartmentId, CancellationToken ct = default);
     Task<string> CreateCelluleAsync(string poleId, string name, CancellationToken ct = default);
@@ -93,4 +112,14 @@ public interface IIamReadService
 {
     Task<EffectivePermissionsDto> GetEffectivePermissionsAsync(Guid subjectId, string role, CancellationToken ct = default);
     Task<bool> EvaluateAsync(Guid subjectId, string role, string action, string resourceType, string? resourceId, CancellationToken ct = default);
+}
+
+public interface IIamAdminService
+{
+    Task<IamCatalogDto> GetCatalogAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<IamPermissionRowDto>> ListAsync(string? role, CancellationToken ct = default);
+    Task<IamMatrixDto> GetMatrixAsync(string role, string? scope = null, CancellationToken ct = default);
+    Task<IamPermissionRowDto> UpsertAsync(UpsertIamPermissionRequest request, CancellationToken ct = default);
+    Task<int> UpsertBulkAsync(IReadOnlyList<UpsertIamPermissionRequest> items, CancellationToken ct = default);
+    Task SeedDefaultsIfEmptyAsync(CancellationToken ct = default);
 }

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prime.Application.Abstractions;
 using Prime.Domain.Entities;
 using Prime.Infrastructure.Persistence;
 
@@ -8,10 +9,10 @@ public sealed class PrimeRbacReadService(PrimeDbContext db, PrimeOrgScopeService
 {
     public async Task<bool> RoleHasActionAsync(string role, string action, CancellationToken ct = default)
     {
-        var r = role.Trim();
+        var aliases = PermissionRoleAliases(role);
         var a = action.Trim();
         return await db.RbacPermissions.AsNoTracking()
-            .AnyAsync(p => p.Role == r && p.Action == a && p.IsAllowed, ct);
+            .AnyAsync(p => aliases.Contains(p.Role) && p.Action == a && p.IsAllowed, ct);
     }
 
     public async Task<List<string>> GetDistinctRolesAsync(CancellationToken ct = default) =>
@@ -22,12 +23,41 @@ public sealed class PrimeRbacReadService(PrimeDbContext db, PrimeOrgScopeService
             .OrderBy(r => r)
             .ToListAsync(ct);
 
-    public async Task<List<string>> GetAllowedScopesAsync(string role, string action, CancellationToken ct = default) =>
-        await db.RbacPermissions.AsNoTracking()
-            .Where(p => p.Role == role.Trim() && p.Action == action.Trim() && p.IsAllowed)
+    public async Task<List<string>> GetAllowedScopesAsync(string role, string action, CancellationToken ct = default)
+    {
+        var aliases = PermissionRoleAliases(role);
+        var a = action.Trim();
+        return await db.RbacPermissions.AsNoTracking()
+            .Where(p => aliases.Contains(p.Role) && p.Action == a && p.IsAllowed)
             .Select(p => p.Scope)
             .Distinct()
             .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Alias Coach ↔ Référent technique et RP ↔ Chef de projet pour la matrice RBAC.
+    /// </summary>
+    public static List<string> PermissionRoleAliases(string role)
+    {
+        var raw = (role ?? "").Trim();
+        if (raw.Length == 0) return [];
+
+        var expanded = IPrimeRequestUserResolver.ExpandRole(raw);
+        var set = new HashSet<string>(StringComparer.Ordinal) { raw, expanded };
+        if (IPrimeRequestUserResolver.RolesMatch(expanded, PrimeFicheValidationRoles.ReferentTechnique))
+        {
+            set.Add("Coach");
+            set.Add(PrimeFicheValidationRoles.ReferentTechnique);
+            set.Add("ReferentTechnique");
+        }
+        if (IPrimeRequestUserResolver.RolesMatch(expanded, PrimeFicheValidationRoles.ChefDeProjet))
+        {
+            set.Add("RP");
+            set.Add(PrimeFicheValidationRoles.ChefDeProjet);
+            set.Add("ChefDeProjet");
+        }
+        return set.ToList();
+    }
 
     /// <summary>Correspondance rôle employé ↔ rôle valideur d’une étape workflow (RP → Chef de projet, etc.).</summary>
     public static bool RolesMatchWorkflowApprover(string employeeRole, string stepApproverRole)
@@ -58,15 +88,20 @@ public sealed class PrimeRbacReadService(PrimeDbContext db, PrimeOrgScopeService
     }
 
     private static bool IsReferentTechniqueRole(string role) =>
-        string.Equals(role, PrimeFicheValidationRoles.ReferentTechnique, StringComparison.Ordinal) ||
-        string.Equals(role, "Coach", StringComparison.Ordinal);
+        PrimeOrgScopeService.IsReferentTechniqueRole(role);
+
+    private static bool IsSuperviseurRole(string role) =>
+        PrimeOrgScopeService.IsSuperviseurRole(role);
+
+    private static bool IsChefDeProjetRole(string role) =>
+        PrimeOrgScopeService.IsChefDeProjetRole(role);
 
     /// <summary>Pilote dans le périmètre du référent technique (responsabilité explicite ou hiérarchie RH).</summary>
     public Task<bool> IsPiloteUnderReferentAsync(
         Employee referent,
         EmployeePrimeServiceFiche fiche,
         CancellationToken ct = default) =>
-        org.IsPiloteUnderReferentResponsibilityAsync(referent.Id, fiche.EmployeeId, referent.Role, ct);
+        org.IsFicheUnderReferentResponsibilityAsync(referent.Id, fiche, referent.Role, ct);
 
     /// <summary>Clone employé avec le rôle d’action UI (validation en mode changement de rôle).</summary>
     public static Employee WithActingRole(Employee source, string actingRole) =>
@@ -90,32 +125,32 @@ public sealed class PrimeRbacReadService(PrimeDbContext db, PrimeOrgScopeService
     {
         if (!await RoleHasActionAsync(actor.Role, action, ct)) return false;
 
+        var isRead = string.Equals(action, "Read", StringComparison.OrdinalIgnoreCase);
+        var isValidate = string.Equals(action, "Validate", StringComparison.OrdinalIgnoreCase);
+
         if (IsReferentTechniqueRole(actor.Role))
         {
-            if (string.Equals(action, "Read", StringComparison.OrdinalIgnoreCase))
-            {
-                return !string.IsNullOrEmpty(actor.ServiceId) &&
-                       string.Equals(fiche.ServiceId, actor.ServiceId, StringComparison.Ordinal);
-            }
-
-            if (string.Equals(action, "Validate", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!await IsPiloteUnderReferentAsync(actor, fiche, ct))
-                    return false;
-                if (await IsWorkflowValidationTurnAsync(actor, fiche, ct))
-                    return true;
-                return false;
-            }
-
+            var inScope = await org.IsFicheUnderReferentResponsibilityAsync(actor.Id, fiche, actor.Role, ct);
+            if (isRead) return inScope;
+            if (isValidate) return inScope && await IsWorkflowValidationTurnAsync(actor, fiche, ct);
             return false;
         }
 
-        // Tour de validation workflow : le graphe (FromStatus + ApproverRole) prime sur le périmètre RBAC
-        // (ex. RH valide en Global puis Chef de projet doit voir les fiches « RH Approved »).
-        if (string.Equals(action, "Validate", StringComparison.OrdinalIgnoreCase) &&
-            PrimeFicheValidationRoles.IsOperationalApprover(actor.Role) &&
-            await IsWorkflowValidationTurnAsync(actor, fiche, ct))
-            return true;
+        if (IsSuperviseurRole(actor.Role))
+        {
+            var inScope = await org.IsFicheUnderSupervisorResponsibilityAsync(actor.Id, fiche, actor.Role, ct);
+            if (isRead) return inScope;
+            if (isValidate) return inScope && await IsWorkflowValidationTurnAsync(actor, fiche, ct);
+            return false;
+        }
+
+        if (IsChefDeProjetRole(actor.Role))
+        {
+            var inScope = await org.IsFicheUnderChefResponsibilityAsync(actor.Id, fiche, actor.Role, ct);
+            if (isRead) return inScope;
+            if (isValidate) return inScope && await IsWorkflowValidationTurnAsync(actor, fiche, ct);
+            return false;
+        }
 
         var scopes = await GetAllowedScopesAsync(actor.Role, action, ct);
         foreach (var raw in scopes)

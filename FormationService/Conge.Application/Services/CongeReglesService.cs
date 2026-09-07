@@ -31,16 +31,26 @@ public class CongeReglesService
         _employeRepo = employeRepo;
     }
 
-    public async Task AssertHorsPeriodeInterditeAsync(DateTime debut, DateTime fin, CancellationToken ct = default)
+    public Task AssertHorsPeriodeInterditeAsync(DateTime debut, DateTime fin, CancellationToken ct = default)
+        => AssertHorsPeriodeInterditeAsync(debut, fin, employe: null, ct);
+
+    public async Task AssertHorsPeriodeInterditeAsync(
+        DateTime debut,
+        DateTime fin,
+        EmployeSnapshot? employe,
+        CancellationToken ct = default)
     {
-        var config = await _periodeRepo.GetOrCreateAsync(ct);
+        var config = await ResolvePeriodeAsync(employe, ct);
         if (!config.ChevauchePeriode(debut, fin))
             return;
 
         var mois = config.GetMois();
         var labels = string.Join(", ", mois.Select(MoisLabel));
+        var scope = config.IsGeneral
+            ? string.Empty
+            : $" ({PeriodeInterditeScopeKinds.LabelFr(config.ScopeKind)})";
         throw new InvalidOperationException(
-            $"La période chevauche un mois interdit aux congés ({labels}).");
+            $"La période chevauche un mois interdit aux congés{scope} ({labels}).");
     }
 
     /// <summary>Quota sur un nœud org (service ou cellule Directory).</summary>
@@ -110,7 +120,7 @@ public class CongeReglesService
         CancellationToken ct = default)
     {
         var employe = await _employeRepo.GetByEmployeIdAsync(employeId, ct);
-        var config = await _periodeRepo.GetOrCreateAsync(ct);
+        var config = await ResolvePeriodeAsync(employe, ct);
         var mois = config.GetMois().ToList();
 
         // Jours des mois interdits dans la plage (pour griser le calendrier).
@@ -153,8 +163,19 @@ public class CongeReglesService
 
     public async Task<IReadOnlyList<int>> GetMoisInterditsAsync(CancellationToken ct = default)
     {
-        var config = await _periodeRepo.GetOrCreateAsync(ct);
+        var config = await ResolvePeriodeAsync(null, ct);
         return config.GetMois();
+    }
+
+    private async Task<PeriodeInterditeConge> ResolvePeriodeAsync(
+        EmployeSnapshot? employe,
+        CancellationToken ct)
+    {
+        var general = await _periodeRepo.GetOrCreateAsync(ct);
+        if (employe is null)
+            return general;
+        var all = await _periodeRepo.GetAllAsync(ct);
+        return PeriodeInterditeConge.PickForEmploye(all, employe, general);
     }
 
     private async Task<(string NodeId, QuotaCongeService Quota, string ScopeKind)?> ResolveQuotaContextAsync(

@@ -1,7 +1,7 @@
 @if (role$ | async; as role) {
   @if (!isAdmin(role)) {
     <app-admin-shell
-      title="General Configuration"
+      title="Configuration générale"
       description="Accès refusé pour ce rôle."
       iconName="settings"
     >
@@ -10,7 +10,7 @@
       </div>
     </app-admin-shell>
   } @else if (loading || !draft) {
-    <app-admin-shell title="General Configuration" description="Chargement de la configuration…" iconName="settings">
+    <app-admin-shell title="Configuration générale" description="Chargement de la configuration…" iconName="settings">
       <div class="card-navy p-6">
         <p class="text-primary">Veuillez patienter.</p>
       </div>
@@ -50,8 +50,8 @@
                   (ngModelChange)="patchDraft({ defaultLanguage: $event })"
                   class="mt-2 w-full bg-card border border-default rounded-lg p-3 text-sm text-primary outline-none focus:border-blue-500"
                 >
-                  <option value="fr">fr</option>
-                  <option value="en">en</option>
+                  <option value="fr">Français</option>
+                  <option value="en">Anglais</option>
                 </select>
               </div>
               <div>

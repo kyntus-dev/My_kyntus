@@ -23,7 +23,8 @@ public partial class EmployeeImportService(
     IPlanningOrgMirrorService orgMirror,
     IDirectoryOrgWriteClient directoryOrg,
     IEmployeeImportCredentialsStore credentialsStore,
-    IHttpContextAccessor httpContextAccessor) : IEmployeeImportService
+    IHttpContextAccessor httpContextAccessor,
+    IUserService userService) : IEmployeeImportService
 {
     private readonly AppDbContext _db = db;
     private readonly IEmployeeImportCredentialsStore _credentialsStore = credentialsStore;

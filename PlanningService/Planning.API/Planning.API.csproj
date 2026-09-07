@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Planning.Application\Planning.Application.csproj" />
     <ProjectReference Include="..\Planning.Infrastructure\Planning.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Kyntus.Iam\Kyntus.Iam.csproj" />
   </ItemGroup>
 
 </Project>

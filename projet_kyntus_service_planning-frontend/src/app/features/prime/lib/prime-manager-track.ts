@@ -17,8 +17,6 @@ export const SUPPORT_MANAGER_ALLOWED_PATHS = [
 export const OPERATIONAL_MANAGER_ALLOWED_PATHS = [
   '/',
   '/results',
-  '/global-pool',
-  '/synthesis-tracking',
   '/team-performance',
 ] as const;
 
@@ -44,7 +42,7 @@ export function isOperationalManagerPrimePath(path: string): boolean {
 export function managerHomePathForTrack(track: ManagerPrimeTrack): string {
   if (track === 'support') return '/allowances/dashboard';
   if (track === 'operational') return '/';
-  return '/global-pool';
+  return '/results';
 }
 
 export function isAllowancesPath(path: string): boolean {

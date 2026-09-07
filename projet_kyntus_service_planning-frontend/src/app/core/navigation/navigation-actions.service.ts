@@ -5,9 +5,7 @@ import type { OrganisationRhTab } from './organisation-nav';
 import { PrimeNavRequestService } from '../../features/prime/services/prime-nav-request.service';
 import { PrimeSectionService } from '../../features/prime/state/prime-section.service';
 import { ParrainageNavService } from '../../features/parrainage/state/parrainage-nav.service';
-import { AuditSectionService } from '../../features/parrainage/state/audit-section.service';
 import { DocumentationNavigationService } from '../../features/documentation/services/documentation-navigation.service';
-import { AuditInterfaceNavService } from '../../features/documentation/services/audit-interface-nav.service';
 import { mapApiRoleToDocumentationRole } from '../../features/documentation/lib/map-api-documentation-role';
 import { DocumentationIdentityService } from '../../core/services/documentation-identity.service';
 import { KyntusSessionService } from '../session/kyntus-session.service';
@@ -20,9 +18,7 @@ export class NavigationActionsService {
   private readonly primeNav = inject(PrimeNavRequestService);
   private readonly primeSection = inject(PrimeSectionService);
   private readonly parrainageNav = inject(ParrainageNavService);
-  private readonly parrainageAudit = inject(AuditSectionService);
   private readonly docNav = inject(DocumentationNavigationService);
-  private readonly docAuditNav = inject(AuditInterfaceNavService);
   private readonly docIdentity = inject(DocumentationIdentityService);
   private readonly session = inject(KyntusSessionService);
 
@@ -42,13 +38,49 @@ export class NavigationActionsService {
       return;
     }
 
-    if (item.parrainageView !== undefined || item.parrainageAuditSection !== undefined) {
+    if (item.parrainageView === 'admin-audit' || item.parrainageAuditSection !== undefined) {
+      await this.router.navigate(['/audit'], {
+        queryParams: {
+          section: item.parrainageAuditSection ?? 'journal',
+          module: 'parrainage',
+        },
+      });
+      return;
+    }
+
+    if (item.parrainageView !== undefined) {
       await this.applyParrainageItem(item);
       return;
     }
 
-    if (item.documentationTab !== undefined || item.documentationAuditSection !== undefined) {
+    if (
+      item.documentationTab === 'audit-logs' ||
+      item.documentationTab === 'access-history' ||
+      item.documentationAuditSection !== undefined
+    ) {
+      await this.router.navigate(['/audit'], {
+        queryParams: {
+          section:
+            item.documentationTab === 'access-history'
+              ? 'access-history'
+              : item.documentationAuditSection ?? 'journal',
+          module: 'documentation',
+        },
+      });
+      return;
+    }
+
+    if (item.documentationTab !== undefined) {
       await this.applyDocumentationItem(item);
+      return;
+    }
+
+    if (item.platformAdminSection !== undefined) {
+      await this.router.navigate(['/admin'], { queryParams: { section: item.platformAdminSection } });
+      return;
+    }
+    if (item.platformAuditSection !== undefined) {
+      await this.router.navigate(['/audit'], { queryParams: { section: item.platformAuditSection } });
       return;
     }
 
@@ -73,6 +105,14 @@ export class NavigationActionsService {
     if (!this.router.url.split('?')[0].startsWith('/prime')) {
       await this.router.navigateByUrl('/prime');
     }
+    if (item.primeAdminSection === 'anomalies') {
+      await this.router.navigate(['/admin'], { queryParams: { section: 'anomalies' } });
+      return;
+    }
+    if (item.primeAdminSection === 'logs') {
+      await this.router.navigate(['/audit'], { queryParams: { section: 'journal', module: 'prime' } });
+      return;
+    }
     if (item.primeAdminSection !== undefined) {
       this.primeSection.setActiveAdminSection(item.primeAdminSection);
       return;
@@ -82,7 +122,15 @@ export class NavigationActionsService {
       return;
     }
     if (item.primeAuditSection !== undefined) {
-      this.primeSection.setActiveAuditSection(item.primeAuditSection);
+      const section =
+        item.primeAuditSection === 'access-history'
+          ? 'access-history'
+          : item.primeAuditSection === 'anomalies'
+            ? 'anomalies'
+            : item.primeAuditSection === 'reporting'
+              ? 'reporting'
+              : 'journal';
+      await this.router.navigate(['/audit'], { queryParams: { section, module: 'prime' } });
       return;
     }
     // Ré-émettre après navigation (layout déjà monté ou remount) pour consommer la vue.
@@ -96,8 +144,9 @@ export class NavigationActionsService {
       await this.router.navigateByUrl('/parrainage');
     }
     if (item.parrainageAuditSection !== undefined) {
-      this.parrainageAudit.setSection(item.parrainageAuditSection);
-      this.parrainageNav.setView('admin-audit');
+      await this.router.navigate(['/audit'], {
+        queryParams: { section: item.parrainageAuditSection, module: 'parrainage' },
+      });
       return;
     }
     if (item.parrainageRhFilter !== undefined) {
@@ -119,8 +168,9 @@ export class NavigationActionsService {
     }
 
     if (item.documentationAuditSection !== undefined) {
-      this.docAuditNav.setSection(item.documentationAuditSection);
-      this.docNav.navigateToTab('audit-logs');
+      await this.router.navigate(['/audit'], {
+        queryParams: { section: item.documentationAuditSection, module: 'documentation' },
+      });
       return;
     }
     if (item.documentationTab !== undefined) {
@@ -202,8 +252,14 @@ export class NavigationActionsService {
     });
   }
 
-  /** Rôle documentation immédiat (profil annuaire ou JWT) — évite Pilote par défaut avant le chargement de l’annuaire. */
+  /** Rôle documentation immédiat : JWT d’abord (évite un profil RH collé en localStorage). */
   private syncDocumentationNavRole(): void {
+    this.docIdentity.syncFromJwtSession();
+    const jwtRole = this.session.getRole();
+    if (jwtRole) {
+      this.docNav.syncRoleFromIdentity(mapJwtRoleToDocumentationRole(jwtRole));
+      return;
+    }
     const prof = this.docIdentity.profile$.value;
     if (prof?.role) {
       try {
@@ -211,11 +267,6 @@ export class NavigationActionsService {
       } catch {
         /* ignore */
       }
-      return;
-    }
-    const jwtRole = this.session.getRole();
-    if (jwtRole) {
-      this.docNav.syncRoleFromIdentity(mapJwtRoleToDocumentationRole(jwtRole));
     }
   }
 }

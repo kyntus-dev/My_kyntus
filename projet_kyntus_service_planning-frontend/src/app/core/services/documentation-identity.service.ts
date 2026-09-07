@@ -5,7 +5,6 @@ import { environment } from '../../../environments/environment';
 import { DocumentationHeaders } from '../models/documentation-headers';
 import type { DirectoryUserDto } from '../models/documentation.models';
 import { mapJwtRoleToDocumentationRole } from '../navigation/documentation-menu.config';
-import { KYNTUS_DEFAULT_TENANT } from '../session/kyntus-session.constants';
 import { KyntusSessionService } from '../session/kyntus-session.service';
 
 const STORAGE_USER_ID = 'documentation-dev-user-id';
@@ -75,17 +74,13 @@ export class DocumentationIdentityService {
   /** Aligne tenant / rôle documentation sur la session JWT (email résolu côté API). */
   syncFromJwtSession(): void {
     if (!this.session.isAuthenticated()) return;
-    if (!this.tenantId) {
-      this.setTenantId(KYNTUS_DEFAULT_TENANT);
-    }
+    this.discardStaleProfileIfJwtMismatch();
     const jwtRole = this.session.getRole();
     if (!jwtRole) return;
     const mapped = mapJwtRoleToDocumentationRole(jwtRole).toLowerCase();
     if (!mapped) return;
-    if (!this.roleHeader || this.roleHeader === 'pilote') {
-      this.roleHeader = mapped;
-      localStorage.setItem(STORAGE_USER_ROLE, this.roleHeader);
-    }
+    this.roleHeader = mapped;
+    localStorage.setItem(STORAGE_USER_ROLE, this.roleHeader);
   }
 
   /** Carte à fusionner sur les requêtes vers le microservice Documentation (voir intercepteur HTTP). */
@@ -182,7 +177,9 @@ export class DocumentationIdentityService {
   /** Après GET /users/me — met à jour stockage, en-têtes futurs et profil affiché. */
   applyProfile(dto: DirectoryUserDto): void {
     this.userId = dto.id;
-    this.roleHeader = dto.role.trim().toLowerCase();
+    const jwtRole = this.session.getRole();
+    const fromJwt = jwtRole ? mapJwtRoleToDocumentationRole(jwtRole).toLowerCase() : '';
+    this.roleHeader = fromJwt || dto.role.trim().toLowerCase();
     localStorage.setItem(STORAGE_USER_ID, this.userId);
     localStorage.setItem(STORAGE_USER_ROLE, this.roleHeader);
     try {
@@ -206,6 +203,30 @@ export class DocumentationIdentityService {
   bumpContextRevision(): void {
     this.contextRevision$.next(this.contextRevision$.value + 1);
   }
+
+  private discardStaleProfileIfJwtMismatch(): void {
+    const jwtEmail = normalizeIdentityEmail(this.session.getEmail());
+    const jwtSub = (this.session.getSubjectId() ?? '').trim().toLowerCase();
+    const prof = this.profile$.value;
+    const profEmail = normalizeIdentityEmail(prof?.email);
+    const storedId = this.userId.trim().toLowerCase();
+
+    const emailMismatch = !!jwtEmail && !!profEmail && jwtEmail !== profEmail;
+    const idMismatch = !!jwtSub && !!storedId && storedId !== jwtSub && !emailMismatch && !profEmail;
+
+    if (!emailMismatch && !idMismatch) return;
+
+    this.userId = '';
+    this.roleHeader = '';
+    this.profile$.next(null);
+    localStorage.removeItem(STORAGE_USER_ID);
+    localStorage.removeItem(STORAGE_USER_ROLE);
+    localStorage.removeItem(STORAGE_PROFILE_JSON);
+  }
+}
+
+function normalizeIdentityEmail(email: string | null | undefined): string {
+  return (email ?? '').trim().toLowerCase();
 }
 
 export function documentationIdentityInitFactory(id: DocumentationIdentityService): () => Promise<void> {

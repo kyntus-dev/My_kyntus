@@ -17,6 +17,9 @@
 /build_log.txt
 /dir
 /docker-compose.yml.backup
+*.backup
+*.lnk
+/_planning_validation_api.json
 /kcq_images/
 /backup_kcq_db/
 /docker-compose.override.yml
@@ -28,6 +31,17 @@
 /_run_docker_audit.ps1
 /RUN_E2E_AUDIT.cmd
 /TRY_LOGIN.cmd
+
+# Angular / Node caches & dumps
+**/.angular/
+**/node_modules/
+auth-frontend/dist/
+projet_kyntus_service_planning-frontend/dist/
+QualiteService/Frontend/dist/
+*.sql.gz
+*.dump
+*.log
+!deploy/history.jsonl
 
 # Profil URL actif (régénéré par scripts/switch-kyntus-urls.ps1)
 /config/kyntus-public-urls.active.json

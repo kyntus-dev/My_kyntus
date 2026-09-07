@@ -45,6 +45,10 @@
     Mois interdits aux congés :
     <strong>{{ moisInterditsLabel }}</strong>
   </p>
+  <p class="ce-forbid-hint" *ngIf="showEligibiliteHint && dateEligibiliteLabel">
+    Congé annuel possible à partir du <strong>{{ dateEligibiliteLabel }}</strong>
+    (6 mois d’ancienneté). Vous pouvez déposer la demande maintenant pour une période ultérieure.
+  </p>
 
   <div class="ce-loading" *ngIf="loading"><div class="ce-spinner"></div><p>Chargement…</p></div>
 
@@ -85,71 +89,78 @@
         <button (click)="showModal = false">Fermer</button>
       </div>
       <div class="ce-modal-body">
-        <div class="ce-field">
-          <label>Type de congé</label>
-          <select class="ky-input" [(ngModel)]="form.typeConge" (change)="onTypeCongeChange()">
-            <option *ngFor="let t of typesConge" [ngValue]="t.value">{{ t.label }}</option>
-          </select>
-        </div>
-        <div class="ce-field" *ngIf="isExceptionnel()">
-          <label>Événement</label>
-          <select class="ky-input" [(ngModel)]="form.typeExceptionnel" (ngModelChange)="touchDraft()">
-            <option [ngValue]="null">-- Sélectionner --</option>
-            <option *ngFor="let e of typesExceptionnels" [ngValue]="e.value">{{ e.label }}</option>
-          </select>
-          <small class="ce-hint">La durée est fixée automatiquement par la loi marocaine.</small>
-        </div>
-        <div class="ce-row">
-          <div class="ce-field">
-            <label>Date début</label>
-            <input class="ky-input" type="date" [(ngModel)]="form.dateDebut" (ngModelChange)="checkDisponibilite()" />
-          </div>
-          <div class="ce-field" *ngIf="isDateFinManuelle()">
-            <label>Date fin</label>
-            <input class="ky-input" type="date" [(ngModel)]="form.dateFin" (ngModelChange)="checkDisponibilite()" />
-          </div>
-        </div>
+        <div class="ce-modal-layout">
+          <div class="ce-modal-fields">
+            <div class="ce-field">
+              <label>Type de congé</label>
+              <select class="ky-input" [(ngModel)]="form.typeConge" (change)="onTypeCongeChange()">
+                <option *ngFor="let t of typesConge" [ngValue]="t.value">{{ t.label }}</option>
+              </select>
+            </div>
+            <div class="ce-field" *ngIf="isExceptionnel()">
+              <label>Événement</label>
+              <select class="ky-input" [(ngModel)]="form.typeExceptionnel" (ngModelChange)="touchDraft()">
+                <option [ngValue]="null">-- Sélectionner --</option>
+                <option *ngFor="let e of typesExceptionnels" [ngValue]="e.value">{{ e.label }}</option>
+              </select>
+              <small class="ce-hint">La durée est fixée automatiquement par la loi marocaine.</small>
+            </div>
+            <div class="ce-row">
+              <div class="ce-field">
+                <label>Date début</label>
+                <input class="ky-input" type="date" [(ngModel)]="form.dateDebut" [min]="minDateDebut" (ngModelChange)="checkDisponibilite()" />
+              </div>
+              <div class="ce-field" *ngIf="isDateFinManuelle()">
+                <label>Date fin</label>
+                <input class="ky-input" type="date" [(ngModel)]="form.dateFin" (ngModelChange)="checkDisponibilite()" />
+              </div>
+            </div>
 
-        <div class="ce-calendar">
-          <div class="ce-cal-head">
-            <button type="button" class="ce-cal-nav" (click)="shiftCalendarMonth(-1)" aria-label="Mois précédent">‹</button>
-            <span class="ce-cal-title">{{ calendarTitle }}</span>
-            <button type="button" class="ce-cal-nav" (click)="shiftCalendarMonth(1)" aria-label="Mois suivant">›</button>
+            <p class="ce-disponibilite-error" *ngIf="disponibiliteMotif">{{ disponibiliteMotif }}</p>
+            <div class="ce-field">
+              <label>Motif <small>(optionnel)</small></label>
+              <textarea class="ky-input" [(ngModel)]="form.motif" (ngModelChange)="touchDraft()" rows="3" placeholder="Motif…"></textarea>
+            </div>
+            <div class="ce-info-solde" *ngIf="solde && form.typeConge === TypeConge.Annuel">
+              Solde disponible : <strong>{{ solde.soldeRestant }} jours</strong>
+            </div>
+            <p class="ce-forbid-hint" *ngIf="form.typeConge === TypeConge.Annuel && showEligibiliteHint && dateEligibiliteLabel">
+              Congé annuel : à partir du <strong>{{ dateEligibiliteLabel }}</strong>. La demande peut être faite maintenant.
+            </p>
+            <p class="ce-forbid-hint" *ngIf="moisInterdits.length">
+              Mois interdits : {{ moisInterditsLabel }}
+            </p>
           </div>
-          <div class="ce-cal-weekdays">
-            <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
-          </div>
-          <div class="ce-cal-grid">
-            <button
-              type="button"
-              class="ce-cal-day"
-              *ngFor="let cell of calendarCells"
-              [disabled]="!cell.date || cell.blocked"
-              [class.is-empty]="!cell.date"
-              [class.is-blocked]="cell.blocked"
-              [class.is-selected]="cell.selected"
-              [class.is-range]="cell.inRange && !cell.selected"
-              (click)="onCalendarDayClick(cell)">
-              {{ cell.day || '' }}
-            </button>
-          </div>
-          <p class="ce-cal-hint">
-            Jours grisés = quota atteint ou mois interdit.
-            <span *ngIf="isDateFinManuelle()"> Cliquez début puis fin.</span>
-          </p>
-        </div>
 
-        <p class="ce-disponibilite-error" *ngIf="disponibiliteMotif">{{ disponibiliteMotif }}</p>
-        <div class="ce-field">
-          <label>Motif <small>(optionnel)</small></label>
-          <textarea class="ky-input" [(ngModel)]="form.motif" (ngModelChange)="touchDraft()" rows="3" placeholder="Motif…"></textarea>
+          <div class="ce-calendar">
+            <div class="ce-cal-head">
+              <button type="button" class="ce-cal-nav" (click)="shiftCalendarMonth(-1)" aria-label="Mois précédent">‹</button>
+              <span class="ce-cal-title">{{ calendarTitle }}</span>
+              <button type="button" class="ce-cal-nav" (click)="shiftCalendarMonth(1)" aria-label="Mois suivant">›</button>
+            </div>
+            <div class="ce-cal-weekdays">
+              <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
+            </div>
+            <div class="ce-cal-grid">
+              <button
+                type="button"
+                class="ce-cal-day"
+                *ngFor="let cell of calendarCells"
+                [disabled]="!cell.date || cell.blocked"
+                [class.is-empty]="!cell.date"
+                [class.is-blocked]="cell.blocked"
+                [class.is-selected]="cell.selected"
+                [class.is-range]="cell.inRange && !cell.selected"
+                (click)="onCalendarDayClick(cell)">
+                {{ cell.day || '' }}
+              </button>
+            </div>
+            <p class="ce-cal-hint">
+              Jours grisés = quota atteint ou mois interdit.
+              <span *ngIf="isDateFinManuelle()"> Cliquez début puis fin.</span>
+            </p>
+          </div>
         </div>
-        <div class="ce-info-solde" *ngIf="solde && form.typeConge === TypeConge.Annuel">
-          Solde disponible : <strong>{{ solde.soldeRestant }} jours</strong>
-        </div>
-        <p class="ce-forbid-hint" *ngIf="moisInterdits.length">
-          Mois interdits : {{ moisInterditsLabel }}
-        </p>
       </div>
       <div class="ce-modal-foot">
         <button class="prime-btn-secondary" (click)="showModal = false">Annuler</button>

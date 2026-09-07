@@ -128,7 +128,10 @@ import {
 } from '../../../parrainage/utils/referral-candidate-match.util';
 import { REFERRAL_STATUS_LABELS } from '../../../parrainage/utils/referral-status.util';
 import { FormationTrainingService } from '../../../../core/services/formation-training.service';
-import type { FormationDocumentChecklistItemDto } from '../../../../core/models/formation-training.models';
+import type {
+  FormationDocumentChecklistItemDto,
+  InitialTrainingPathDto,
+} from '../../../../core/models/formation-training.models';
 import {
   ContractService,
   type CreateContractDto,
@@ -266,6 +269,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
   /** Query ?passageProduction=pathId — confirmation RH sans changer le statut avant clic. */
   passageProductionPathId = '';
   passageProductionBusy = false;
+  /** Affectation org posée par le formateur — préremplit la cascade si Directory est vide. */
+  trainingPathOrg: InitialTrainingPathDto | null = null;
 
   selectedReferralId = '';
   linkableReferrals: Referral[] = [];
@@ -368,6 +373,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
     const passagePath = q.get('passageProduction');
     if (passagePath) {
       this.passageProductionPathId = passagePath;
+      void this.loadTrainingPathOrgThenReconcile();
     }
     if (referralId) {
       this.referralLockedFromUrl = true;
@@ -594,6 +600,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
           { id: 7, name: 'Audit' },
           { id: 8, name: 'EquipeFormation' },
           { id: 9, name: 'Manager' },
+          { id: 10, name: 'Comptabilité' },
         ];
         this.syncAncienPickersFromProfile();
         this.cdr.detectChanges();
@@ -1168,6 +1175,34 @@ export class UserFormComponent implements OnInit, OnDestroy {
     } finally {
       this.passageProductionBusy = false;
       this.cdr.detectChanges();
+    }
+  }
+
+  private async loadTrainingPathOrgThenReconcile(): Promise<void> {
+    await this.loadTrainingPathOrg();
+    if (this.operationalDepartments.length > 0 || this.unassignedPoles.length > 0) {
+      this.reconcileOrgPickerAfterLoad();
+    }
+    this.cdr.detectChanges();
+  }
+
+  private async loadTrainingPathOrg(): Promise<void> {
+    try {
+      if (this.passageProductionPathId) {
+        this.trainingPathOrg = await this.formationTraining.getInitialPath(this.passageProductionPathId);
+        return;
+      }
+      if (!this.loadedUserGuid.trim()) {
+        this.trainingPathOrg = null;
+        return;
+      }
+      const rows = await this.formationTraining.listInitialByEmployee(this.loadedUserGuid);
+      this.trainingPathOrg =
+        rows.find((p) => p.status === 'AttenteValidationRh' && !!p.orgServiceId?.trim()) ??
+        rows.find((p) => !!p.orgServiceId?.trim()) ??
+        null;
+    } catch {
+      this.trainingPathOrg = null;
     }
   }
 
@@ -2266,12 +2301,44 @@ export class UserFormComponent implements OnInit, OnDestroy {
         return;
       }
     }
+    if (this.applyOrgFromTrainingPath()) {
+      this.syncDefaultMentorsFromIncumbents();
+      return;
+    }
     if (this.form.subServiceId) {
       this.applyOrgFromSubServiceId(this.form.subServiceId);
     } else if (this.showOrgAssignmentBlock) {
       this.ensureOrgPickerDefaults();
     }
     this.syncDefaultMentorsFromIncumbents();
+  }
+
+  private applyOrgFromTrainingPath(): boolean {
+    const serviceId = this.trainingPathOrg?.orgServiceId?.trim() ?? '';
+    if (!serviceId || !this.showOrgAssignmentBlock) return false;
+
+    const sel = findOperationalSelectionByServiceId(
+      this.operationalDepartments,
+      this.unassignedPoles,
+      serviceId,
+    ) ?? {
+      operationalDeptId: this.trainingPathOrg?.orgDepartmentId?.trim() ?? '',
+      poleId: this.trainingPathOrg?.orgPoleId?.trim() ?? '',
+      celluleId: this.trainingPathOrg?.orgCelluleId?.trim() ?? '',
+      serviceId,
+    };
+    if (!sel.serviceId) return false;
+
+    this.applyOrgSelection(sel);
+    this.syncSubServiceFromOrg();
+    if (this.supportsMultiOrg && this.orgAssignmentDepth === 'service' && this.orgServiceId.trim()) {
+      this.applyMultiOrgLeafSelection();
+    } else if (this.orgServiceId.trim()) {
+      this.selectedOrgNodeIds = [this.orgServiceId.trim()];
+      this.primaryOrgNodeId = this.orgServiceId.trim();
+    }
+    this.orgMirrorWarning = null;
+    return true;
   }
 
   private applyOrgFromPrimeOverview(guid: string, roleName: string): boolean {
@@ -2448,9 +2515,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
             })
             .catch(() => undefined);
         }
-        if (this.operationalDepartments.length > 0 || this.unassignedPoles.length > 0) {
-          this.reconcileOrgPickerAfterLoad();
-        }
+        void this.loadTrainingPathOrgThenReconcile();
         this.startFormDraft();
         this.loading = false;
         this.cdr.detectChanges();

@@ -21,6 +21,11 @@ public class SubServiceShiftConfig
     /// <summary>true = modèle éditable ; false = snapshot généré pour une semaine.</summary>
     public bool IsTemplate { get; set; }
 
+    /// <summary>
+    /// true = créneau samedi dédié ; false = Lun–Ven (et samedi par défaut, quota moitié).
+    /// </summary>
+    public bool AppliesToSaturday { get; set; }
+
     // -- Définition du shift ---------------------------
     public string Label { get; set; } = string.Empty;
     public TimeOnly StartTime { get; set; }

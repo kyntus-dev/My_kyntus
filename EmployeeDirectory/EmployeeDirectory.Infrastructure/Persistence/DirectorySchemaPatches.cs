@@ -10,6 +10,7 @@ public static class DirectorySchemaPatches
         // Chaque patch est isolé : un échec (ex. contrainte legacy) ne doit pas
         // empêcher les suivants (HTEL, colonnes HR, etc.).
         await EnsureOutboxTableAsync(db, ct);
+        await EnsureIamPermissionsTableAsync(db, ct);
         await EnsureEmployeeRowVersionDefaultAsync(db, ct);
         await EnsureBusinessDepartmentSchemaAsync(db, ct);
         await EnsureOrgPoleBusinessDepartmentAsync(db, ct);
@@ -19,6 +20,7 @@ public static class DirectorySchemaPatches
         await EnsureEmailPersonnelColumnAsync(db, ct);
         await EnsureEmployeeHtelColumnsAsync(db, ct);
         await EnsureOrgAssignmentNodeUniquenessAsync(db, ct);
+        await EnsurePerfIndexesAsync(db, ct);
     }
 
     /// <summary>
@@ -31,6 +33,7 @@ public static class DirectorySchemaPatches
         CancellationToken ct = default)
     {
         await RunPatchAsync(nameof(EnsureOutboxTableAsync), () => EnsureOutboxTableAsync(db, ct), log);
+        await RunPatchAsync(nameof(EnsureIamPermissionsTableAsync), () => EnsureIamPermissionsTableAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureEmployeeRowVersionDefaultAsync), () => EnsureEmployeeRowVersionDefaultAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureBusinessDepartmentSchemaAsync), () => EnsureBusinessDepartmentSchemaAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureOrgPoleBusinessDepartmentAsync), () => EnsureOrgPoleBusinessDepartmentAsync(db, ct), log);
@@ -40,6 +43,7 @@ public static class DirectorySchemaPatches
         await RunPatchAsync(nameof(EnsureEmailPersonnelColumnAsync), () => EnsureEmailPersonnelColumnAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureEmployeeHtelColumnsAsync), () => EnsureEmployeeHtelColumnsAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureOrgAssignmentNodeUniquenessAsync), () => EnsureOrgAssignmentNodeUniquenessAsync(db, ct), log);
+        await RunPatchAsync(nameof(EnsurePerfIndexesAsync), () => EnsurePerfIndexesAsync(db, ct), log);
     }
 
     private static async Task RunPatchAsync(
@@ -57,12 +61,32 @@ public static class DirectorySchemaPatches
         }
     }
 
+    /// <summary>Index lecture fréquents (filtres employés / assignments actifs) — capacité ≥300 users.</summary>
+    public static async Task EnsurePerfIndexesAsync(DirectoryDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_employees_IsActive_Role"
+                ON employees ("IsActive", "Role");
+            CREATE INDEX IF NOT EXISTS "IX_employees_IsActive_PoleId"
+                ON employees ("IsActive", "PoleId");
+            CREATE INDEX IF NOT EXISTS "IX_employees_Email_Active_Lower"
+                ON employees (lower("Email"))
+                WHERE "IsActive" = true;
+            CREATE INDEX IF NOT EXISTS "IX_org_assignments_EffectiveTo_Active"
+                ON org_assignments ("EffectiveTo")
+                WHERE "EffectiveTo" IS NULL;
+            """,
+            ct);
+    }
+
     public static async Task EnsureEmployeeHtelColumnsAsync(DirectoryDbContext db, CancellationToken ct = default)
     {
         await db.Database.ExecuteSqlRawAsync(
             """
             ALTER TABLE employees ADD COLUMN IF NOT EXISTS "IdTechnicien" integer NULL;
             ALTER TABLE employees ADD COLUMN IF NOT EXISTS "HtelCode" character varying(128) NULL;
+            ALTER TABLE employees ADD COLUMN IF NOT EXISTS "HtelTechnicienName" character varying(256) NULL;
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_employees_IdTechnicien"
                 ON employees ("IdTechnicien")
                 WHERE "IdTechnicien" IS NOT NULL;
@@ -86,6 +110,23 @@ public static class DirectorySchemaPatches
 
             CREATE INDEX IF NOT EXISTS "IX_org_assignments_Kind_NodeId"
                 ON org_assignments ("Kind", "NodeId");
+            """,
+            ct);
+    }
+
+    public static async Task EnsureIamPermissionsTableAsync(DirectoryDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS iam_permissions (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "Role" character varying(64) NOT NULL,
+                "Action" character varying(128) NOT NULL,
+                "Scope" character varying(32) NOT NULL,
+                "IsAllowed" boolean NOT NULL DEFAULT TRUE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_iam_permissions_Role_Action_Scope"
+                ON iam_permissions ("Role", "Action", "Scope");
             """,
             ct);
     }

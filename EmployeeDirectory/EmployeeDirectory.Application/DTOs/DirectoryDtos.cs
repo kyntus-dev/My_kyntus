@@ -249,6 +249,31 @@ public record EffectivePermissionsDto(
     string Role,
     IReadOnlyList<string> Permissions);
 
+public record IamScreenDto(string Id, string Label, string Module, IReadOnlyList<string> Verbs);
+
+public record IamCatalogDto(
+    IReadOnlyList<string> Roles,
+    IReadOnlyList<string> Verbs,
+    IReadOnlyList<string> Scopes,
+    IReadOnlyList<IamScreenDto> Screens);
+
+public record IamPermissionRowDto(Guid Id, string Role, string Action, string Scope, bool IsAllowed);
+
+public record UpsertIamPermissionRequest(string Role, string Action, string Scope, bool IsAllowed);
+
+public record UpsertIamPermissionsBulkRequest(IReadOnlyList<UpsertIamPermissionRequest> Items);
+
+public record IamMatrixRowDto(
+    string Capability,
+    string Label,
+    string Module,
+    string Scope,
+    IReadOnlyDictionary<string, bool> Verbs);
+
+public record IamMatrixDto(string Role, string PrimaryScope, IReadOnlyList<IamMatrixRowDto> Rows);
+
+public record LeaveWorkflowDto(bool RhValidationRequired);
+
 public record DirectoryReconcileVerifyDto(
     int DirectoryActiveEmployees,
     int DirectoryInactiveEmployees,

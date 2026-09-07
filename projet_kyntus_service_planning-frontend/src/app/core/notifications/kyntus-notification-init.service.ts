@@ -3,6 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { KyntusSessionService } from '../session/kyntus-session.service';
 import { NotificationService } from '../services/notification.service';
 import { KyntusNotificationHubService } from './kyntus-notification-hub.service';
+import { DesktopPushService } from './desktop-push.service';
 import { UserService } from '../../features/users/services/user.service';
 
 const MANAGER_ROLES = new Set(['manager', 'rh', 'admin', 'rp', 'pilote', 'coach', 'superviseur', 'audit']);
@@ -12,10 +13,12 @@ export class KyntusNotificationInitService {
   private readonly session = inject(KyntusSessionService);
   private readonly planningNotif = inject(NotificationService);
   private readonly hub = inject(KyntusNotificationHubService);
+  private readonly desktopPush = inject(DesktopPushService);
   private readonly userService = inject(UserService);
   private connected = false;
 
   connectIfAuthenticated(): void {
+    void this.desktopPush.bootstrap();
     if (!this.session.isAuthenticated()) return;
     void this.bootstrap();
   }
@@ -38,6 +41,7 @@ export class KyntusNotificationInitService {
     }
 
     this.hub.bootstrapAfterLogin();
+    void this.desktopPush.syncAfterLogin();
   }
 
   private async resolvePlanningUserId(authUserId: number): Promise<number> {

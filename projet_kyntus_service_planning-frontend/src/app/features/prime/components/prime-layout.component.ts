@@ -9,6 +9,7 @@ import {
   signal,
   type Type,
 } from '@angular/core';
+import { Router } from '@angular/router';
 import { PRIME_AUTHORIZED_ROLES, type Role } from '../models';
 import { isProjectLeadRole } from '../lib/projectLeadRole';
 import { isPrimePathAllowedForRole, resolveManagerHomePath } from '../lib/prime-nav-access';
@@ -111,6 +112,7 @@ export class PrimeLayoutComponent implements OnInit {
   private readonly primeAdmin = inject(PrimeAdminService);
   private readonly permissions = inject(PrimeUiPermissionsService);
   private readonly deptContext = inject(DepartmentContextService);
+  private readonly router = inject(Router);
 
   /** Initialise depuis une navigation menu déjà demandée (ex. Périmètre → /superviseur/scope). */
   readonly currentView = signal(this.navRequest.pendingPath() ?? '/');
@@ -166,6 +168,7 @@ export class PrimeLayoutComponent implements OnInit {
 
   readonly lazyComponent = signal<Type<unknown> | null>(null);
   readonly lazyViewLoading = signal(false);
+  private lastLazyKey: string | null = null;
 
   /** Dernière identité (rôle + utilisateur) pour détecter un vrai changement mode développeur. */
   private lastDeveloperIdentityKey: string | null = null;
@@ -180,6 +183,7 @@ export class PrimeLayoutComponent implements OnInit {
   constructor() {
     effect(() => {
       if (!this.isAuthorized()) {
+        this.lastLazyKey = null;
         this.lazyComponent.set(null);
         return;
       }
@@ -259,6 +263,7 @@ export class PrimeLayoutComponent implements OnInit {
       const u = this.role.currentUser();
       const r = this.role.currentRole();
       if (!u?.id || !route) return;
+      if (r !== 'Admin' && r !== 'Audit') return;
       const traceKey = `${u.id}|${r}|${route}`;
       if (this.lastAuditTraceKey === traceKey) return;
       this.lastAuditTraceKey = traceKey;
@@ -277,10 +282,16 @@ export class PrimeLayoutComponent implements OnInit {
   private scheduleLazyView(key: string): void {
     const loader = PRIME_VIEW_LOADERS[key];
     if (!loader) {
+      this.lastLazyKey = null;
       this.lazyComponent.set(null);
       this.lazyViewLoading.set(false);
       return;
     }
+    if (key === this.lastLazyKey && this.lazyComponent()) {
+      this.lazyViewLoading.set(false);
+      return;
+    }
+    this.lastLazyKey = key;
     const seq = ++this.lazyLoadSeq;
     this.lazyViewLoading.set(true);
     loader().then((cmp) => {
@@ -314,6 +325,10 @@ export class PrimeLayoutComponent implements OnInit {
     const deptKind = this.deptContext.departmentKind();
     const home = getRoleHomeTarget(role, deptKind, managerNav);
     const path = resolveAllowedHomePath(role, home, deptKind, managerNav);
+    if (path === '/admin' || path === '/audit') {
+      void this.router.navigateByUrl(path);
+      return;
+    }
     this.currentView.set(path);
     this.navRequest.setActivePath(path);
   }

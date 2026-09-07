@@ -46,7 +46,8 @@ public record SoldeCongeDto(
     int Annee,
     double SoldeInitial,
     double SoldeUtilise,
-    double SoldeRestant
+    double SoldeRestant,
+    DateTime? DateEligibilite = null
 );
 
 public record EmployeSnapshotDto(
@@ -71,7 +72,18 @@ public record SuiviEquipeDto(
     double SoldeRestant
 );
 
-public record PeriodesInterditesDto(IReadOnlyList<int> Mois, DateTime UpdatedAt);
+public record PeriodesInterditesDto(
+    IReadOnlyList<int> Mois,
+    DateTime UpdatedAt,
+    string ScopeKind = "General",
+    string ScopeId = "",
+    bool IsOverride = false,
+    string InheritedFrom = "General",
+    string? ScopeLabel = null);
+
+public record PeriodesInterditesScopesDto(
+    PeriodesInterditesDto General,
+    IReadOnlyList<PeriodesInterditesDto> Overrides);
 
 public record QuotaCongeServiceDto(
     string ServiceId,

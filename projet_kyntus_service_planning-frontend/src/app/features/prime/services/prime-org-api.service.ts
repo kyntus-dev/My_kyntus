@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, throwError, timer } from 'rxjs';
 import { catchError, filter, map, switchMap, take, timeout } from 'rxjs/operators';
+import { DirectoryFacadeService } from '../../../core/directory/directory-facade.service';
 import type { PilotRotationEligibilityDto } from '../../../core/directory/directory-employee-api.service';
 import type { Cellule, Department, Employee, Pole } from '../models';
 import type { OperationalDepartmentNode, OrgPoleNode } from '../models/org-tree.types';
@@ -142,14 +143,20 @@ interface DirectoryOverviewResponse {
 @Injectable({ providedIn: 'root' })
 export class PrimeOrgApiService {
   private readonly http = inject(HttpClient);
+  private readonly directoryFacade = inject(DirectoryFacadeService);
 
   getSupervisorScope(supervisorUserId: string): Observable<SupervisorOrgScopePole[]> {
     const params = { supervisorUserId };
     return this.http.get<SupervisorOrgScopePole[]>(`${primeBase}/org/supervisor-scope`, { params });
   }
 
+  /** Invalide le cache mémoire de l’overview (à appeler après toute mutation org). */
+  invalidateOverviewCache(): void {
+    this.directoryFacade.invalidate();
+  }
+
   loadOverview(): Observable<OrgAssignmentsOverview> {
-    return this.http.get<DirectoryOverviewResponse>(`${orgBase}/overview`).pipe(
+    return this.directoryFacade.getOrgOverview<DirectoryOverviewResponse>().pipe(
       map((d) => ({
         etages: d.etages ?? [],
         services: (d.services ?? []).map((s) => ({

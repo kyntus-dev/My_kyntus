@@ -9,7 +9,9 @@ namespace Planning.API.Controllers;
 [ApiController]
 [Route("api/users/fields")]
 [Authorize]
-public class EmployeeFieldsController(IEmployeeFieldService fieldService) : ControllerBase
+public class EmployeeFieldsController(
+    IEmployeeFieldService fieldService,
+    IEmployeeDocumentFieldQueryService documentFieldQuery) : ControllerBase
 {
     private static bool IsHrOrAdmin(string role) =>
         string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
@@ -62,6 +64,18 @@ public class EmployeeFieldsController(IEmployeeFieldService fieldService) : Cont
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    [HttpPost("match-variables")]
+    public async Task<ActionResult<List<EmployeeVariableMatchDto>>> MatchVariables(
+        [FromBody] EmployeeVariableMatchRequest request,
+        CancellationToken ct = default)
+    {
+        if (!IsHrOrAdmin(GetRole()))
+            return Forbid();
+
+        var sources = request.Sources ?? [];
+        return Ok(await documentFieldQuery.MatchVariablesAsync(sources, ct));
     }
 
     [HttpDelete("{fieldKey}")]

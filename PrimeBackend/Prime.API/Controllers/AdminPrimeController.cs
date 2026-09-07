@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Prime.Application.Abstractions;
 using Prime.Application.DTOs;
@@ -9,6 +10,8 @@ namespace Prime.API.Controllers;
 
 [ApiController]
 [Route("api/admin")]
+[Authorize(Roles = "Admin")]
+[Obsolete("Utiliser /api/prime/admin/* comme source canonique.")]
 public sealed class AdminPrimeController(IMediator mediator, IPrimeAdminReadAppService? admin) : ControllerBase
 {
     [HttpGet("dashboard")]

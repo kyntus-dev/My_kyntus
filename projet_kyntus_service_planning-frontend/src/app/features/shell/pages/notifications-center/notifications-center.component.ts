@@ -62,7 +62,7 @@ export class NotificationsCenterComponent {
 
     return ALL_FILTER_OPTIONS.filter((opt) => {
       if (opt.id === 'all') return true;
-      if (!prefs[prefKeyForSource(opt.id)]) return false;
+      if (opt.id !== 'planning' && !prefs[prefKeyForSource(opt.id)]) return false;
       if (opt.id === 'formation') return sourcesWithData.has('formation');
       return true;
     });

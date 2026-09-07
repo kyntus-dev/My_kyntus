@@ -21,6 +21,15 @@ public interface IEmployeeImportService
     Task<List<EmployeeImportJobSummaryDto>> GetHistoryAsync(int take = 50, CancellationToken ct = default);
     Task<EmployeeImportReportDto?> GetJobReportAsync(Guid jobId, CancellationToken ct = default);
     Task<EmployeeImportSourceFile?> GetJobSourceFileAsync(Guid jobId, CancellationToken ct = default);
+    Task<EmployeeImportRollbackResultDto> RollbackJobAsync(Guid jobId, CancellationToken ct = default);
+    Task<EmployeeImportRollbackResultDto> RollbackJobByStartedAtAsync(
+        DateTime startedAt,
+        string? fileNameContains,
+        CancellationToken ct = default);
+    Task<EmployeeImportPlacementRestoreResultDto> RestorePlacementsAfterImportAsync(
+        Guid jobId,
+        bool dryRun,
+        CancellationToken ct = default);
     Task<byte[]> BuildTemplateAsync(CancellationToken ct = default);
 }
 
@@ -55,5 +64,17 @@ public interface IEmployeeFieldService
         CancellationToken ct = default);
     Task ValidateCustomFieldsForCreateAsync(
         Dictionary<string, string?> values,
+        CancellationToken ct = default);
+}
+
+public interface IEmployeeDocumentFieldQueryService
+{
+    Task<List<EmployeeVariableMatchDto>> MatchVariablesAsync(
+        IReadOnlyList<EmployeeVariableMatchSourceDto> sources,
+        CancellationToken ct = default);
+
+    Task<EmployeeDocumentFieldValuesDto?> GetFieldValuesAsync(
+        Guid employeeGuid,
+        IReadOnlyList<string>? includeKeys,
         CancellationToken ct = default);
 }

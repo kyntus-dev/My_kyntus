@@ -20,7 +20,11 @@ export class KyntusUserPreferencesService {
       const parsed = JSON.parse(raw) as Partial<KyntusUserPreferences>;
       return {
         compactMode: parsed.compactMode ?? false,
-        notifications: { ...DEFAULT_USER_PREFERENCES.notifications, ...parsed.notifications },
+        notifications: {
+          ...DEFAULT_USER_PREFERENCES.notifications,
+          ...parsed.notifications,
+          planning: true,
+        },
       };
     } catch {
       return { ...DEFAULT_USER_PREFERENCES };
@@ -37,14 +41,20 @@ export class KyntusUserPreferencesService {
   }
 
   setNotificationPref(key: keyof KyntusNotificationPreferences, enabled: boolean): void {
+    if (key === 'planning') return;
     this.prefs.update((p) => ({
       ...p,
-      notifications: { ...p.notifications, [key]: enabled },
+      notifications: { ...p.notifications, [key]: enabled, planning: true },
     }));
     this.persist();
   }
 
   isSourceEnabled(source: keyof KyntusNotificationPreferences): boolean {
+    if (source === 'planning') return true;
     return this.prefs().notifications[source] ?? true;
+  }
+
+  isLockedPref(key: keyof KyntusNotificationPreferences): boolean {
+    return key === 'planning';
   }
 }

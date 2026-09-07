@@ -296,6 +296,8 @@ public class DocumentationDbContext : DbContext
             e.Property(x => x.FormScope).HasMaxLength(16).IsRequired();
             e.Property(x => x.NormalizedName).HasMaxLength(128);
             e.Property(x => x.RawPlaceholder).HasMaxLength(255);
+            e.Property(x => x.SourceFieldKey).HasMaxLength(128);
+            e.Property(x => x.MappingConfidence).HasMaxLength(16);
             e.HasOne(x => x.Template)
                 .WithMany(t => t.Variables)
                 .HasForeignKey(x => x.TemplateId)

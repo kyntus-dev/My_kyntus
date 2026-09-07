@@ -2,7 +2,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { DocumentationGatewayDefaultHeaders } from '../models/documentation-gateway-default-headers';
 import { DocumentationHeaders } from '../models/documentation-headers';
 import { DocumentationIdentityService } from '../services/documentation-identity.service';
 import { KyntusSessionService } from '../session/kyntus-session.service';
@@ -15,8 +14,8 @@ function shouldApplyDocumentationGatewayDefaults(url: string): boolean {
 }
 
 /**
- * En-têtes de repli (tenant / utilisateur / rôle) uniquement pour les appels Documentation,
- * afin de ne pas mélanger avec les autres microservices du planning sous `/api/`.
+ * Pose les en-têtes Documentation depuis le profil/session authentifiée uniquement
+ * (pas de tenant / utilisateur démo de repli).
  */
 @Injectable()
 export class DocumentationGatewayHeadersInterceptor implements HttpInterceptor {
@@ -28,6 +27,10 @@ export class DocumentationGatewayHeadersInterceptor implements HttpInterceptor {
       return next.handle(req);
     }
 
+    if (!this.session.isAuthenticated()) {
+      return next.handle(req);
+    }
+
     let headers = req.headers;
     const profileHeaders = this.identity.getHeaderMap();
     for (const [key, value] of Object.entries(profileHeaders)) {
@@ -35,27 +38,7 @@ export class DocumentationGatewayHeadersInterceptor implements HttpInterceptor {
         headers = headers.set(key, value);
       }
     }
-    if (!this.session.isAuthenticated()) {
-      for (const [key, value] of Object.entries(this.resolveGatewayDefaultHeaders())) {
-        if (!headers.has(key)) {
-          headers = headers.set(key, value);
-        }
-      }
-    }
 
     return next.handle(req.clone({ headers }));
-  }
-
-  /** En-têtes de repli : profil RH démo si le rôle stocké indique RH, sinon pilote. */
-  private resolveGatewayDefaultHeaders(): Record<string, string> {
-    const role = (this.identity.getCurrentRole() || this.session.getRole() || '').trim().toLowerCase();
-    if (role === 'rh' || role === 'admin') {
-      return {
-        ...DocumentationGatewayDefaultHeaders,
-        [DocumentationHeaders.userId]: '11111111-1111-4111-8111-111111111102',
-        [DocumentationHeaders.userRole]: 'rh',
-      };
-    }
-    return { ...DocumentationGatewayDefaultHeaders };
   }
 }

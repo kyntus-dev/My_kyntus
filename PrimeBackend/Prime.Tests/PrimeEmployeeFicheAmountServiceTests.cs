@@ -6,7 +6,7 @@ namespace Prime.Tests;
 public class PrimeEmployeeFicheAmountServiceTests
 {
     [Fact]
-    public void ResolveWorkflowDisplayAmounts_falls_back_to_plafonds_when_montants_missing()
+    public void ResolveWorkflowDisplayAmounts_does_not_use_plafonds_as_payable_amounts()
     {
         var fiche = new EmployeePrimeServiceFiche
         {
@@ -23,9 +23,9 @@ public class PrimeEmployeeFicheAmountServiceTests
 
         var amounts = PrimeEmployeeFicheAmountService.ResolveWorkflowDisplayAmounts(fiche);
 
-        Assert.Equal(1500m, amounts.PrimeAmount);
-        Assert.Equal(400m, amounts.ChallengeAmount);
-        Assert.Equal(1900m, amounts.TotalAmount);
+        Assert.Null(amounts.PrimeAmount);
+        Assert.Null(amounts.ChallengeAmount);
+        Assert.Null(amounts.TotalAmount);
     }
 
     [Fact]
@@ -67,5 +67,48 @@ public class PrimeEmployeeFicheAmountServiceTests
         Assert.Equal(800m, amounts.PrimeAmount);
         Assert.Equal(100m, amounts.ChallengeAmount);
         Assert.Equal(900m, amounts.TotalAmount);
+    }
+
+    [Fact]
+    public void ResolveWorkflowDisplayAmounts_prefers_entity_total_general_over_saisie_and_plafonds()
+    {
+        var fiche = new EmployeePrimeServiceFiche
+        {
+            PrimeAmount = 215.46m,
+            ChallengeAmount = 0m,
+            TotalAmount = 215.46m,
+            ServiceSaisieJson = """
+                {
+                  "plafondPrime": "1000",
+                  "plafondChallenge": "0",
+                  "rows": [
+                    { "montantPrime": "50", "montantChallenge": "10" }
+                  ]
+                }
+                """,
+        };
+
+        var amounts = PrimeEmployeeFicheAmountService.ResolveWorkflowDisplayAmounts(fiche);
+
+        Assert.Equal(215.46m, amounts.PrimeAmount);
+        Assert.Equal(0m, amounts.ChallengeAmount);
+        Assert.Equal(215.46m, amounts.TotalAmount);
+    }
+
+    [Fact]
+    public void ExtractPlafondsFromFiche_still_reads_plafond_fields()
+    {
+        var fiche = new EmployeePrimeServiceFiche
+        {
+            ServiceSaisieJson = """
+                { "plafondPrime": "1000", "plafondChallenge": "0" }
+                """,
+        };
+
+        var plafonds = PrimeEmployeeFicheAmountService.ExtractPlafondsFromFiche(fiche);
+
+        Assert.Equal(1000m, plafonds.PrimeAmount);
+        Assert.Equal(0m, plafonds.ChallengeAmount);
+        Assert.Equal(1000m, plafonds.TotalAmount);
     }
 }

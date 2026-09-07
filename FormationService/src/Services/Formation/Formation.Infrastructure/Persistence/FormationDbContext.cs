@@ -193,6 +193,14 @@ public class FormationDbContext : DbContext
             e.ToTable("initial_training_paths");
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.EmployeeId);
+            e.Property(x => x.OrgDepartmentId).HasMaxLength(200);
+            e.Property(x => x.OrgPoleId).HasMaxLength(200);
+            e.Property(x => x.OrgCelluleId).HasMaxLength(200);
+            e.Property(x => x.OrgServiceId).HasMaxLength(200);
+            e.Property(x => x.OrgDepartmentName).HasMaxLength(200);
+            e.Property(x => x.OrgPoleName).HasMaxLength(200);
+            e.Property(x => x.OrgCelluleName).HasMaxLength(200);
+            e.Property(x => x.OrgServiceName).HasMaxLength(200);
             e.HasMany(x => x.QuizResults)
                 .WithOne(x => x.Path)
                 .HasForeignKey(x => x.InitialTrainingPathId)

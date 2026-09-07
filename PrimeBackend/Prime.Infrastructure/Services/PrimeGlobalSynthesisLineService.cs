@@ -21,7 +21,7 @@ public sealed class PrimeGlobalSynthesisLineService(
             return (false, "Un motif de rejet est obligatoire.");
 
         if (!CanActAsValidator(role))
-            return (false, "Seuls RH et Manager peuvent rejeter une ligne de synthèse.");
+            return (false, "Seuls RH et Admin peuvent rejeter une ligne de synthèse.");
 
         try
         {
@@ -70,9 +70,8 @@ public sealed class PrimeGlobalSynthesisLineService(
         {
             return await MutateLineAsync(lineId, userId, role, ct, mutate: (line, uid, now) =>
             {
-                if (!string.Equals(line.RhDecision, GlobalPoolLineDecisions.Pending, StringComparison.Ordinal) ||
-                    !string.Equals(line.ManagerDecision, GlobalPoolLineDecisions.Pending, StringComparison.Ordinal))
-                    return "La régularisation n'est plus modifiable après validation RH ou Manager.";
+                if (!GlobalPoolLineDecisions.RegularizationEditable(line.RhDecision))
+                    return "La régularisation n'est plus modifiable après validation RH.";
 
                 line.RegularizationAmount = regularizationAmount;
                 line.RegularizationUpdatedByUserId = uid;
@@ -106,7 +105,7 @@ public sealed class PrimeGlobalSynthesisLineService(
         CancellationToken ct = default)
     {
         if (!CanActAsValidator(role))
-            return (false, "Seuls RH et Manager peuvent valider une ligne de synthèse.");
+            return (false, "Seuls RH et Admin peuvent valider une ligne de synthèse.");
 
         try
         {
@@ -185,20 +184,16 @@ public sealed class PrimeGlobalSynthesisLineService(
 
     private static bool CanActAsValidator(string role) =>
         string.Equals(role, "RH", StringComparison.Ordinal) ||
-        string.Equals(role, "Manager", StringComparison.Ordinal) ||
         string.Equals(role, "Admin", StringComparison.Ordinal);
 
     private static string NormalizeActingRole(string role) =>
         string.Equals(role, "Admin", StringComparison.Ordinal) ? "Admin" : role;
 
-    /// <summary>Approbation déjà enregistrée pour tous les rôles concernés par l'acteur.</summary>
+    /// <summary>Approbation déjà enregistrée pour le rôle RH (Admin agit comme RH).</summary>
     private static bool IsIdempotentApprove(GlobalPoolSynthesisLineEntity line, string role)
     {
-        var rhDone = !ActsAsRh(role) ||
-                     string.Equals(line.RhDecision, GlobalPoolLineDecisions.Approved, StringComparison.Ordinal);
-        var mgrDone = !ActsAsManager(role) ||
-                      string.Equals(line.ManagerDecision, GlobalPoolLineDecisions.Approved, StringComparison.Ordinal);
-        return rhDone && mgrDone;
+        if (!ActsAsRh(role)) return false;
+        return string.Equals(line.RhDecision, GlobalPoolLineDecisions.Approved, StringComparison.Ordinal);
     }
 
     private static string? GuardPendingDecisionForRole(GlobalPoolSynthesisLineEntity line, string role)
@@ -209,14 +204,6 @@ public sealed class PrimeGlobalSynthesisLineService(
             return string.Equals(line.RhDecision, GlobalPoolLineDecisions.Approved, StringComparison.Ordinal)
                 ? null
                 : "Décision RH déjà enregistrée sur cette ligne.";
-        }
-
-        if (ActsAsManager(role) &&
-            !string.Equals(line.ManagerDecision, GlobalPoolLineDecisions.Pending, StringComparison.Ordinal))
-        {
-            return string.Equals(line.ManagerDecision, GlobalPoolLineDecisions.Approved, StringComparison.Ordinal)
-                ? null
-                : "Décision Manager déjà enregistrée sur cette ligne.";
         }
 
         return null;
@@ -233,16 +220,7 @@ public sealed class PrimeGlobalSynthesisLineService(
             line.RhRejectionReason = null;
         }
 
-        if (ActsAsManager(role) &&
-            string.Equals(line.ManagerDecision, GlobalPoolLineDecisions.Pending, StringComparison.Ordinal))
-        {
-            line.ManagerDecision = GlobalPoolLineDecisions.Approved;
-            line.ManagerDecidedByUserId = userId;
-            line.ManagerDecidedAt = now;
-            line.ManagerRejectionReason = null;
-        }
-
-        ClearLegacyRejectIfBothApproved(line);
+        ClearLegacyRejectIfRhApproved(line);
     }
 
     private static void ApplyRejectDecision(
@@ -260,14 +238,6 @@ public sealed class PrimeGlobalSynthesisLineService(
             line.RhRejectionReason = reason;
         }
 
-        if (ActsAsManager(role))
-        {
-            line.ManagerDecision = GlobalPoolLineDecisions.Rejected;
-            line.ManagerDecidedByUserId = userId;
-            line.ManagerDecidedAt = now;
-            line.ManagerRejectionReason = reason;
-        }
-
         line.RejectedByUserId = userId;
         line.RejectedByRole = NormalizeActingRole(role);
         line.RejectedAt = now;
@@ -278,14 +248,9 @@ public sealed class PrimeGlobalSynthesisLineService(
         string.Equals(role, "RH", StringComparison.Ordinal) ||
         string.Equals(role, "Admin", StringComparison.Ordinal);
 
-    private static bool ActsAsManager(string role) =>
-        string.Equals(role, "Manager", StringComparison.Ordinal) ||
-        string.Equals(role, "Admin", StringComparison.Ordinal);
-
-    private static void ClearLegacyRejectIfBothApproved(GlobalPoolSynthesisLineEntity line)
+    private static void ClearLegacyRejectIfRhApproved(GlobalPoolSynthesisLineEntity line)
     {
-        if (!string.Equals(line.RhDecision, GlobalPoolLineDecisions.Approved, StringComparison.Ordinal) ||
-            !string.Equals(line.ManagerDecision, GlobalPoolLineDecisions.Approved, StringComparison.Ordinal))
+        if (!string.Equals(line.RhDecision, GlobalPoolLineDecisions.Approved, StringComparison.Ordinal))
             return;
 
         line.RejectedByUserId = null;
@@ -308,8 +273,6 @@ public sealed class PrimeGlobalSynthesisLineService(
         var now = DateTimeOffset.UtcNow;
         var allRhDecided = lines.All(l =>
             !string.Equals(l.RhDecision, GlobalPoolLineDecisions.Pending, StringComparison.Ordinal));
-        var allManagerDecided = lines.All(l =>
-            !string.Equals(l.ManagerDecision, GlobalPoolLineDecisions.Pending, StringComparison.Ordinal));
 
         if (allRhDecided)
         {
@@ -327,24 +290,6 @@ public sealed class PrimeGlobalSynthesisLineService(
         {
             scope.RhApprovedAt = null;
             scope.RhApprovedByUserId = null;
-        }
-
-        if (allManagerDecided)
-        {
-            if (!scope.ManagerApprovedAt.HasValue)
-            {
-                scope.ManagerApprovedAt = now;
-                scope.ManagerApprovedByUserId = lines
-                    .Where(l => l.ManagerDecidedByUserId is not null)
-                    .OrderByDescending(l => l.ManagerDecidedAt)
-                    .Select(l => l.ManagerDecidedByUserId)
-                    .FirstOrDefault();
-            }
-        }
-        else
-        {
-            scope.ManagerApprovedAt = null;
-            scope.ManagerApprovedByUserId = null;
         }
     }
 }

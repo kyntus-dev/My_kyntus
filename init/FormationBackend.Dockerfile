@@ -11,6 +11,7 @@ COPY Directory.Build.props Directory.Packages.props ./
 COPY Messaging.Contracts/Messaging.Contracts.csproj Messaging.Contracts/
 COPY Shared.Kernel/Shared.Kernel.csproj Shared.Kernel/
 COPY Kyntus.Identity.Jwt/Kyntus.Identity.Jwt.csproj Kyntus.Identity.Jwt/
+COPY Kyntus.Caching/Kyntus.Caching.csproj Kyntus.Caching/
 COPY FormationService/projetformationconges/Formation.API.csproj FormationService/projetformationconges/
 COPY FormationService/src/Services/Formation/Formation.Domain/Formation.Domain.csproj FormationService/src/Services/Formation/Formation.Domain/
 COPY FormationService/src/Services/Formation/Formation.Application/Formation.Application.csproj FormationService/src/Services/Formation/Formation.Application/
@@ -21,6 +22,7 @@ RUN dotnet restore FormationService/projetformationconges/Formation.API.csproj
 COPY Messaging.Contracts/ Messaging.Contracts/
 COPY Shared.Kernel/ Shared.Kernel/
 COPY Kyntus.Identity.Jwt/ Kyntus.Identity.Jwt/
+COPY Kyntus.Caching/ Kyntus.Caching/
 COPY FormationService/ FormationService/
 
 WORKDIR /src/FormationService/projetformationconges

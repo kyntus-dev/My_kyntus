@@ -74,7 +74,7 @@ function lineStatusLabel(status?: string | null): string {
               <button
                 type="button"
                 (click)="goToGlobalPool()"
-                class="text-[var(--electric-blue)] hover:text-indigo-300 underline"
+                class="text-[var(--info-text)] hover:opacity-80 underline"
               >
                 Synthèse globale
               </button>.
@@ -132,7 +132,6 @@ function lineStatusLabel(status?: string | null): string {
                 <tr class="border-b border-default text-left text-muted">
                   <th class="py-3 px-4 font-medium">Période</th>
                   <th class="py-3 px-4 font-medium">Périmètre</th>
-                  <th class="py-3 px-4 font-medium">Manager</th>
                   <th class="py-3 px-4 font-medium">RH</th>
                   <th class="py-3 px-4 font-medium">Lignes</th>
                   <th class="py-3 px-4 font-medium">Compta</th>
@@ -143,7 +142,7 @@ function lineStatusLabel(status?: string | null): string {
               <tbody>
                 @if (filteredInbox().length === 0) {
                   <tr>
-                    <td colspan="8" class="py-8 text-center text-muted">Aucune synthèse générée.</td>
+                    <td colspan="7" class="py-8 text-center text-muted">Aucune synthèse générée.</td>
                   </tr>
                 } @else {
                   @for (r of filteredInbox(); track r.scopeSynthesisId) {
@@ -159,14 +158,6 @@ function lineStatusLabel(status?: string | null): string {
                         <span class="text-primary">{{ r.scopeDisplayName }}</span>
                       </td>
                       <td class="py-3 px-4">
-                        <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold" [class]="roleProgressClass(r.managerDecidedLines, r.totalLines)">
-                          @if (r.totalLines > 0 && r.managerDecidedLines >= r.totalLines) {
-                            <app-lucide-icon [icon]="icons.check" className="w-3 h-3" />
-                          }
-                          {{ r.managerDecidedLines }}/{{ r.totalLines }}
-                        </span>
-                      </td>
-                      <td class="py-3 px-4">
                         <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold" [class]="roleProgressClass(r.rhDecidedLines, r.totalLines)">
                           @if (r.totalLines > 0 && r.rhDecidedLines >= r.totalLines) {
                             <app-lucide-icon [icon]="icons.check" className="w-3 h-3" />
@@ -176,7 +167,7 @@ function lineStatusLabel(status?: string | null): string {
                       </td>
                       <td class="py-3 px-4">
                         <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
-                          <span class="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-300" title="Validées (RH + Manager)">{{ r.approvedLines }} val.</span>
+                          <span class="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-300" title="Validées (RH)">{{ r.approvedLines }} val.</span>
                           @if (r.rejectedLines > 0) {
                             <span class="inline-flex items-center rounded-full bg-rose-500/15 px-2 py-0.5 font-semibold text-rose-300" title="Rejetées">{{ r.rejectedLines }} rej.</span>
                           }
@@ -277,7 +268,7 @@ function lineStatusLabel(status?: string | null): string {
                 <tr>
                   <th>Date</th>
                   <th>Périmètre</th>
-                  <th>Employé</th>
+                  <th>Pilote</th>
                   <th>Action</th>
                   <th>Statut ligne</th>
                   <th class="text-center">Fiche</th>
@@ -310,12 +301,12 @@ function lineStatusLabel(status?: string | null): string {
                           {{ actionLabel(item.action) }}
                         </span>
                         @if (item.comment || item.lineRejectionReason) {
-                          <div class="text-[11px] text-rose-300/90 italic mt-1 max-w-xs truncate" [title]="item.comment || item.lineRejectionReason || ''">
+                          <div class="text-[11px] text-[var(--danger-text)] italic mt-1 max-w-xs truncate" [title]="item.comment || item.lineRejectionReason || ''">
                             « {{ item.comment || item.lineRejectionReason }} »
                           </div>
                         }
                         @if (isMyAction(item)) {
-                          <span class="inline-block mt-1 text-[10px] uppercase tracking-wide text-indigo-300/90">
+                          <span class="inline-block mt-1 text-[10px] uppercase tracking-wide text-[var(--info-text)]">
                             Votre action
                           </span>
                         }

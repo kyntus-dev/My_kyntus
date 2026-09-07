@@ -13,6 +13,7 @@ import {
   RefuserCongeRequest, ValiderCongeRequest, normalizeStatutDemande,
 } from '../../../../core/models/conge.models';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 
 @Component({
   selector: 'app-conge-manager',
@@ -25,6 +26,7 @@ export class CongeManagerComponent implements OnInit {
 
   private readonly toastSvc = inject(KyntusToastService);
   private readonly confirmService = inject(KyntusConfirmService);
+  private readonly access = inject(PlatformAccessService);
 
   demandes:         DemandeCongeDto[] = [];
   demandesFiltrees: DemandeCongeDto[] = [];
@@ -79,7 +81,13 @@ export class CongeManagerComponent implements OnInit {
     this.userSvc.getCurrentUser().subscribe({
       next: (user) => {
         this.managerId = user.guid;
-        this.loadDemandes();
+        void this.access.ensureLoaded().finally(() => {
+          if (this.isRhFlow && !this.canValidateLeaves()) {
+            this.filtreStatut = StatutDemande.Validee;
+          }
+          this.loadDemandes();
+          this.cdr.detectChanges();
+        });
       },
       error: () => this.showToast('Impossible de récupérer le profil.', 'error')
     });
@@ -122,11 +130,22 @@ export class CongeManagerComponent implements OnInit {
   onFiltreChange(): void { this.appliquerFiltres(); }
 
   canAct(d: DemandeCongeDto): boolean {
+    if (!this.canValidateLeaves()) return false;
     const s = normalizeStatutDemande(d.statut);
     return this.isRhFlow ? s === StatutDemande.EnAttenteRh : s === StatutDemande.EnAttente;
   }
 
+  canValidateLeaves(): boolean {
+    if (this.access.hasCatalog()) return this.access.canValidate('conges.validation');
+    const role = (this.authSvc.getRole() || '').toLowerCase();
+    return role === 'admin' || role === 'rh' || role === 'superviseur' || role === 'manager';
+  }
+
   async valider(d: DemandeCongeDto): Promise<void> {
+    if (!this.canValidateLeaves()) {
+      this.showToast('La validation des congés n’est pas autorisée pour votre rôle.', 'error');
+      return;
+    }
     const label = this.isRhFlow ? 'validation RH finale' : 'validation superviseur';
     const ok = await this.confirmService.confirm({
       title: 'Confirmer la validation',
@@ -148,6 +167,10 @@ export class CongeManagerComponent implements OnInit {
   }
 
   ouvrirRefus(d: DemandeCongeDto): void {
+    if (!this.canValidateLeaves()) {
+      this.showToast('La validation des congés n’est pas autorisée pour votre rôle.', 'error');
+      return;
+    }
     this.demandeSelectee  = d;
     this.commentaireRefus = '';
     this.showRefusModal   = true;
@@ -155,6 +178,10 @@ export class CongeManagerComponent implements OnInit {
 
   confirmerRefus(): void {
     if (!this.demandeSelectee) return;
+    if (!this.canValidateLeaves()) {
+      this.showToast('La validation des congés n’est pas autorisée pour votre rôle.', 'error');
+      return;
+    }
     if (!this.commentaireRefus.trim()) {
       this.showToast('Le motif de refus est obligatoire.', 'error');
       return;

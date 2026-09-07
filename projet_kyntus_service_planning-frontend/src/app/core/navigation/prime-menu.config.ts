@@ -15,14 +15,31 @@ import type { MenuItem } from './microservices.config';
 const PRIME_ROUTE = '/prime';
 
 /**
- * Menu Prime Superviseur : parcours mensuel (Périmètre = entrée menu global, hors Prime).
- * Indicateurs/pondérations = étape du wizard partie commune.
+ * Menu Prime Superviseur : pilotage et validation regroupés (onglets).
+ * Périmètre = entrée menu global, hors Prime (`perimetre-superviseur`).
+ * Pas de ruban d’avancement campagne sur la partie commune.
  */
 export const SUPERVISEUR_PRIME_MENU_ITEMS: Array<MenuItem & { primeRoles: Role[] }> = [
   {
     label: 'Tableau de bord',
     route: PRIME_ROUTE,
     primePath: '/',
+    primeActiveAliases: ['/dashboard', '/results', '/team-performance'],
+    primeRoles: ['Superviseur'],
+    hat: 'team',
+  },
+  {
+    label: 'Validation',
+    route: PRIME_ROUTE,
+    primePath: '/validation',
+    primeActiveAliases: ['/validation-history'],
+    primeRoles: ['Superviseur'],
+    hat: 'team',
+  },
+  {
+    label: 'Partie service — fiches pilotes',
+    route: PRIME_ROUTE,
+    primePath: '/prime-fiches-pilotes',
     primeRoles: ['Superviseur'],
     hat: 'team',
   },
@@ -34,23 +51,23 @@ export const SUPERVISEUR_PRIME_MENU_ITEMS: Array<MenuItem & { primeRoles: Role[]
     hat: 'team',
   },
   {
-    label: 'Fiches PRIME agents',
+    label: 'Indicateurs et pondérations',
     route: PRIME_ROUTE,
-    primePath: '/prime-fiches-agents',
+    primePath: '/prime-cellule-indicateurs',
     primeRoles: ['Superviseur'],
     hat: 'team',
   },
   {
-    label: 'Validation',
-    route: PRIME_ROUTE,
-    primePath: '/prime-validation-hub',
-    primeRoles: ['Superviseur'],
-    hat: 'team',
-  },
-  {
-    label: 'Templates fiche PRIME',
+    label: 'Modèles de fiches',
     route: PRIME_ROUTE,
     primePath: '/template-manager',
+    primeRoles: ['Superviseur'],
+    hat: 'team',
+  },
+  {
+    label: 'Importer une fiche remplie',
+    route: PRIME_ROUTE,
+    primePath: '/prime-fiche-import',
     primeRoles: ['Superviseur'],
     hat: 'team',
   },
@@ -62,6 +79,7 @@ export const PRIME_PATH_MENU_ITEMS: Array<MenuItem & { primeRoles: Role[] }> = [
     label: 'Tableau de bord',
     route: PRIME_ROUTE,
     primePath: '/',
+    primeActiveAliases: ['/dashboard', '/results', '/team-performance'],
     primeRoles: ['Admin', 'RH', 'RP', 'Chef de projet', 'Manager', 'Superviseur', 'Coach', 'Référent technique'],
   },
   {
@@ -71,45 +89,33 @@ export const PRIME_PATH_MENU_ITEMS: Array<MenuItem & { primeRoles: Role[] }> = [
     primeRoles: ['Pilote'],
     hat: 'self',
   },
-  { label: 'Types de prime', route: PRIME_ROUTE, primePath: '/types', primeRoles: ['Admin'] },
-  { label: 'Règles de prime', route: PRIME_ROUTE, primePath: '/rules', primeRoles: ['Admin'] },
   {
-    label: 'Résultats',
+    label: 'Périmètre référent technique',
     route: PRIME_ROUTE,
-    primePath: '/results',
-    primeRoles: ['Admin', 'RH', 'RP', 'Chef de projet', 'Manager', 'Coach', 'Référent technique'],
+    primePath: '/referent-technique/scope',
+    primeRoles: ['Coach', 'Référent technique'],
+    hat: 'team',
   },
   {
-    label: 'Valider les primes',
+    label: 'Fiches à valider',
     route: PRIME_ROUTE,
     primePath: '/validation',
-    primeRoles: ['Admin', 'RP', 'Chef de projet', 'Coach', 'Référent technique'],
-  },
-  {
-    label: 'Suivi validation',
-    route: PRIME_ROUTE,
-    primePath: '/validation-history',
+    primeActiveAliases: ['/validation-history'],
     primeRoles: ['Admin', 'RP', 'Chef de projet', 'Coach', 'Référent technique'],
   },
   {
     label: 'Synthèse globale PRIME',
     route: PRIME_ROUTE,
     primePath: '/global-pool',
-    primeRoles: ['Admin', 'RH', 'Manager', 'Comptabilité'],
+    primeRoles: ['Admin', 'RH', 'Comptabilité'],
   },
   {
     label: 'Suivi synthèse',
     route: PRIME_ROUTE,
     primePath: '/synthesis-tracking',
-    primeRoles: ['Admin', 'RH', 'Manager'],
+    primeRoles: ['Admin', 'RH'],
   },
   { label: 'Historique', route: PRIME_ROUTE, primePath: '/history', primeRoles: ['Admin', 'RH', 'RP'] },
-  {
-    label: 'Performance équipe',
-    route: PRIME_ROUTE,
-    primePath: '/team-performance',
-    primeRoles: ['Manager', 'Chef de projet', 'Coach', 'Référent technique'],
-  },
   {
     label: 'Périmètre chef de projet',
     route: PRIME_ROUTE,
@@ -117,18 +123,18 @@ export const PRIME_PATH_MENU_ITEMS: Array<MenuItem & { primeRoles: Role[] }> = [
     primeRoles: ['Chef de projet', 'RP'],
   },
   {
-    label: 'Import fiche prête',
+    label: 'Importer une fiche remplie',
     route: PRIME_ROUTE,
     primePath: '/prime-fiche-import',
     primeRoles: ['Admin'],
   },
   {
-    label: 'Templates fiche PRIME',
+    label: 'Modèles de fiches',
     route: PRIME_ROUTE,
     primePath: '/template-manager',
     primeRoles: ['Superviseur', 'Admin'],
   },
-  { label: 'Configuration Prime', route: PRIME_ROUTE, primePath: '/configuration', primeRoles: ['Admin'] },
+  { label: 'Paramètres du module', route: PRIME_ROUTE, primePath: '/configuration', primeRoles: ['Admin'] },
   { label: 'Mes primes', route: PRIME_ROUTE, primePath: '/employee/primes', primeRoles: ['Pilote'], hat: 'self' },
   { label: 'Ma performance', route: PRIME_ROUTE, primePath: '/employee/performance', primeRoles: ['Pilote'], hat: 'self' },
 ];
@@ -221,24 +227,18 @@ export const PRIME_ALLOWANCE_MENU_ITEMS: Array<
 
 export const PRIME_RP_MENU_ITEMS: Array<MenuItem & { primeRoles: Role[] }> = [
   { label: 'Tableau de bord', route: PRIME_ROUTE, primeRpSection: 'dashboard', primeRoles: ['RP'] },
-  { label: 'Performance équipe', route: PRIME_ROUTE, primeRpSection: 'performance', primeRoles: ['RP'] },
-  { label: 'Validation finale', route: PRIME_ROUTE, primeRpSection: 'validation', primeRoles: ['RP'] },
-  { label: 'Avancement fiches PRIME', route: PRIME_ROUTE, primeRpSection: 'suivi-projet', primeRoles: ['RP'] },
+  { label: 'Performance de l’équipe', route: PRIME_ROUTE, primeRpSection: 'performance', primeRoles: ['RP'] },
+  { label: 'Fiches à valider', route: PRIME_ROUTE, primeRpSection: 'validation', primeRoles: ['RP'] },
+  { label: 'Suivi des fiches', route: PRIME_ROUTE, primeRpSection: 'suivi-projet', primeRoles: ['RP'] },
 ];
 
 export const PRIME_ADMIN_MENU_ITEMS: Array<MenuItem & { primeRoles: Role[] }> = [
-  { label: 'Dashboard système', route: PRIME_ROUTE, primeAdminSection: 'dashboard', primeRoles: ['Admin'] },
-  { label: 'Gestion des accès', route: PRIME_ROUTE, primeAdminSection: 'access', primeRoles: ['Admin'] },
-  { label: 'Configuration du flux', route: PRIME_ROUTE, primeAdminSection: 'workflows', primeRoles: ['Admin'] },
-  { label: 'Supervision & logs', route: PRIME_ROUTE, primeAdminSection: 'logs', primeRoles: ['Admin'] },
-  { label: 'Anomalies', route: PRIME_ROUTE, primeAdminSection: 'anomalies', primeRoles: ['Admin'] },
+  { label: 'Supervision du module', route: PRIME_ROUTE, primeAdminSection: 'dashboard', primeRoles: ['Admin'] },
+  { label: 'Circuit de validation', route: PRIME_ROUTE, primeAdminSection: 'workflows', primeRoles: ['Admin'] },
 ];
 
 export const PRIME_AUDIT_MENU_ITEMS: Array<MenuItem & { primeRoles: Role[] }> = [
-  { label: 'Journal d’audit', route: PRIME_ROUTE, primeAuditSection: 'journal', primeRoles: ['Audit'] },
-  { label: 'Historique d’accès', route: PRIME_ROUTE, primeAuditSection: 'access-history', primeRoles: ['Audit'] },
-  { label: 'Anomalies', route: PRIME_ROUTE, primeAuditSection: 'anomalies', primeRoles: ['Audit'] },
-  { label: 'Reporting', route: PRIME_ROUTE, primeAuditSection: 'reporting', primeRoles: ['Audit'] },
+  { label: 'Audit et conformité', route: '/audit?section=journal', platformAuditSection: 'journal', primeRoles: ['Audit'], hat: 'both' },
 ];
 
 export function buildPrimeMenuItemsForRole(

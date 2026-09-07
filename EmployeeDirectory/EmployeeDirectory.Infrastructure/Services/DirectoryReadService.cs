@@ -3,27 +3,68 @@ using EmployeeDirectory.Application.Dtos;
 using EmployeeDirectory.Domain.Entities;
 using EmployeeDirectory.Domain.Enums;
 using EmployeeDirectory.Infrastructure.Persistence;
+using Kyntus.Caching;
 using Microsoft.EntityFrameworkCore;
 
 namespace EmployeeDirectory.Infrastructure.Services;
 
-public sealed class DirectoryReadService(DirectoryDbContext db) : IDirectoryReadService
+public sealed class DirectoryReadService(
+    DirectoryDbContext db,
+    ICacheService cache) : IDirectoryReadService
 {
+    private const int DefaultPageSize = 200;
+    private const int MaxPageSize = 500;
+
     public async Task<IReadOnlyList<EmployeeDto>> GetEmployeesAsync(string? role, string? poleId, CancellationToken ct = default)
     {
-        var q = db.Employees.AsNoTracking().Where(e => e.IsActive);
-        if (!string.IsNullOrWhiteSpace(role))
-            q = q.Where(e => e.Role == role.Trim());
-        if (!string.IsNullOrWhiteSpace(poleId))
-            q = q.Where(e => e.PoleId == poleId.Trim());
-        var rows = await q.OrderBy(e => e.LastName).ThenBy(e => e.FirstName).ToListAsync(ct);
-        return rows.Select(MapEmployee).ToList();
+        var (items, _) = await GetEmployeesPagedAsync(role, poleId, 0, DefaultPageSize, ct);
+        return items;
+    }
+
+    public async Task<(IReadOnlyList<EmployeeDto> Items, int Total)> GetEmployeesPagedAsync(
+        string? role, string? poleId, int skip, int take, CancellationToken ct = default)
+    {
+        take = Math.Clamp(take <= 0 ? DefaultPageSize : take, 1, MaxPageSize);
+        skip = Math.Max(0, skip);
+        var cacheKey = $"{KyntusCacheKeys.DirectoryEmployees(role, poleId)}:p:{skip}:{take}";
+
+        return await cache.GetOrCreateAsync(cacheKey, async token =>
+        {
+            var q = db.Employees.AsNoTracking().Where(e => e.IsActive);
+            if (!string.IsNullOrWhiteSpace(role))
+                q = q.Where(e => e.Role == role.Trim());
+            if (!string.IsNullOrWhiteSpace(poleId))
+                q = q.Where(e => e.PoleId == poleId.Trim());
+
+            var total = await q.CountAsync(token);
+            var rows = await q
+                .OrderBy(e => e.LastName).ThenBy(e => e.FirstName)
+                .Skip(skip).Take(take)
+                .ToListAsync(token);
+            return ((IReadOnlyList<EmployeeDto>)rows.Select(MapEmployee).ToList(), total);
+        }, KyntusCacheTtl.Entity, ct);
     }
 
     public async Task<EmployeeDto?> GetEmployeeByIdAsync(Guid id, CancellationToken ct = default)
     {
-        var e = await db.Employees.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
-        return e is null ? null : MapEmployee(e);
+        return await cache.GetOrCreateAsync(
+            KyntusCacheKeys.DirectoryEmployee(id),
+            async token =>
+            {
+                var e = await db.Employees.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, token);
+                return e is null ? null : MapEmployee(e);
+            },
+            KyntusCacheTtl.Entity,
+            ct);
+    }
+
+    public async Task<EmployeeDto?> GetEmployeeByEmailAsync(string email, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return null;
+        var normalized = email.Trim().ToLower();
+        var employee = await db.Employees.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.IsActive && e.Email.ToLower() == normalized, ct);
+        return employee is null ? null : MapEmployee(employee);
     }
 
     public async Task<bool> IsEmailUsedAsync(string email, Guid? excludeEmployeeId = null, CancellationToken ct = default)
@@ -36,7 +77,14 @@ public sealed class DirectoryReadService(DirectoryDbContext db) : IDirectoryRead
         return await query.AnyAsync(ct);
     }
 
-    public async Task<OrgOverviewDto> GetOrgOverviewAsync(CancellationToken ct = default)
+    public Task<OrgOverviewDto> GetOrgOverviewAsync(CancellationToken ct = default) =>
+        cache.GetOrCreateAsync(
+            KyntusCacheKeys.DirectoryOrgOverview(),
+            LoadOrgOverviewAsync,
+            KyntusCacheTtl.Referential,
+            ct);
+
+    private async Task<OrgOverviewDto> LoadOrgOverviewAsync(CancellationToken ct)
     {
         var poles = await db.OrgPoles.AsNoTracking()
             .Include(p => p.Cellules).ThenInclude(c => c.Services)
@@ -57,7 +105,6 @@ public sealed class DirectoryReadService(DirectoryDbContext db) : IDirectoryRead
         var services = poles.SelectMany(p => p.Cellules.Select(c => new ServiceNodeDto(c.Id, c.Name, p.Id))).ToList();
         var sousServices = poles.SelectMany(p => p.Cellules.SelectMany(c => c.Services.Select(s => new SousServiceNodeDto(s.Id, s.Name, c.Id)))).ToList();
 
-        // Legacy : DepartmentDto = pôle (compat écrans Planning / formulaires employé)
         var departments = poles.Select(p => new DepartmentDto(
             p.Id,
             p.Name,
@@ -129,7 +176,7 @@ public sealed class DirectoryReadService(DirectoryDbContext db) : IDirectoryRead
             sousServices,
             employees.Select(MapEmployee).ToList(),
             departments,
-            await GetBusinessDepartmentsAsync(ct),
+            await GetBusinessDepartmentsUncachedAsync(ct),
             operationalDepartments,
             unassignedPoles,
             managerEtage,
@@ -138,7 +185,10 @@ public sealed class DirectoryReadService(DirectoryDbContext db) : IDirectoryRead
             coachPilot);
     }
 
-    public async Task<IReadOnlyList<BusinessDepartmentDto>> GetBusinessDepartmentsAsync(CancellationToken ct = default)
+    public Task<IReadOnlyList<BusinessDepartmentDto>> GetBusinessDepartmentsAsync(CancellationToken ct = default) =>
+        GetBusinessDepartmentsUncachedAsync(ct);
+
+    private async Task<IReadOnlyList<BusinessDepartmentDto>> GetBusinessDepartmentsUncachedAsync(CancellationToken ct)
     {
         var rows = await db.BusinessDepartments.AsNoTracking()
             .Include(d => d.PoleAssignments)
@@ -206,6 +256,22 @@ public sealed class DirectoryReadService(DirectoryDbContext db) : IDirectoryRead
             h.ChangeReason)).ToList();
     }
 
+    public async Task<IReadOnlyList<Guid>> GetEmployeeIdsWithAssignmentsAfterAsync(
+        IReadOnlyList<Guid> employeeIds,
+        DateTime after,
+        CancellationToken ct = default)
+    {
+        var ids = employeeIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (ids.Count == 0)
+            return Array.Empty<Guid>();
+
+        return await db.OrgAssignments.AsNoTracking()
+            .Where(a => ids.Contains(a.EmployeeId) && a.EffectiveFrom > after)
+            .Select(a => a.EmployeeId)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
     public async Task<bool> IsDescendantAsync(Guid viewerId, Guid targetId, CancellationToken ct = default)
     {
         if (viewerId == targetId) return true;
@@ -268,9 +334,22 @@ public sealed class DirectoryReadService(DirectoryDbContext db) : IDirectoryRead
         e.ChefDeProjetId?.ToString(),
         e.SuperviseurId?.ToString(),
         e.ReferentTechniqueId?.ToString(),
-        null,
+        MapHrProfile(e),
         e.IdTechnicien,
         e.HtelCode);
+
+    private static EmployeeHrProfileDto? MapHrProfile(Employee e)
+    {
+        if (e.HireDate == default)
+            return null;
+
+        var hire = DateOnly.FromDateTime(e.HireDate);
+        return DirectoryHrProfileHelper.MapDto(new EmployeeHrProfile
+        {
+            DateEmbauche = hire,
+            DateEntree = hire,
+        });
+    }
 
     private static BusinessDepartmentDto MapBusinessDepartment(BusinessDepartment d, IReadOnlyList<string> poleIds) => new(
         d.Id.ToString(),

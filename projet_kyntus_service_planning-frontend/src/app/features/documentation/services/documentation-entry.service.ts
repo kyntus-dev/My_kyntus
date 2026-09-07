@@ -20,16 +20,20 @@ export class DocumentationEntryService {
 
   /** Synchrone — à appeler avant l’affichage des écrans documentation. */
   syncNavRoleFromSession(): void {
+    this.identity.syncFromJwtSession();
+    const jwtRole = this.session.getRole();
+    if (jwtRole) {
+      this.nav.syncRoleFromIdentity(mapJwtRoleToDocumentationRole(jwtRole));
+      return;
+    }
     const prof = this.identity.profile$.value;
     if (prof?.role?.trim()) {
       try {
         this.nav.syncRoleFromIdentity(mapApiRoleToDocumentationRole(prof.role));
       } catch {
-        this.syncNavRoleFromJwt();
+        /* ignore */
       }
-      return;
     }
-    this.syncNavRoleFromJwt();
   }
 
   /** Charge GET /users/me une fois si l’identifiant annuaire manque encore. */
@@ -44,10 +48,15 @@ export class DocumentationEntryService {
         const previousRole = this.identity.getCurrentRole();
         const previousUserId = this.identity.getCurrentUserId();
         this.identity.applyProfile(dto);
-        try {
-          this.nav.syncRoleFromIdentity(mapApiRoleToDocumentationRole(dto.role));
-        } catch {
-          /* ignore */
+        const jwtRole = this.session.getRole();
+        if (jwtRole) {
+          this.nav.syncRoleFromIdentity(mapJwtRoleToDocumentationRole(jwtRole));
+        } else {
+          try {
+            this.nav.syncRoleFromIdentity(mapApiRoleToDocumentationRole(dto.role));
+          } catch {
+            /* ignore */
+          }
         }
         const roleChanged = previousRole !== this.identity.getCurrentRole();
         const userChanged = previousUserId !== this.identity.getCurrentUserId();
@@ -58,11 +67,5 @@ export class DocumentationEntryService {
       .catch(() => {
         this.profileLoadStarted = false;
       });
-  }
-
-  private syncNavRoleFromJwt(): void {
-    const jwtRole = this.session.getRole();
-    if (!jwtRole) return;
-    this.nav.syncRoleFromIdentity(mapJwtRoleToDocumentationRole(jwtRole));
   }
 }

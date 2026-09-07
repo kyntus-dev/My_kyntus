@@ -4,8 +4,10 @@ import {
   Input,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import {
   Check,
@@ -46,6 +48,7 @@ import {
   mergedFicheActionsEnabled,
 } from '../lib/prime-fiche-distribution-access';
 import { primeHttpErrorMessage } from '../lib/primeHttpErrorMessage';
+import { primeFillingStatusLabel } from '../lib/prime-workflow-labels';
 
 /** Pilote sélectionné + contexte cellule pour le panneau de droite. */
 interface PilotSelection {
@@ -92,12 +95,11 @@ interface PilotageCelluleGroup {
         <div class="space-y-2">
           <h1 class="ky-page-title text-2xl sm:text-3xl flex items-center gap-2">
             <app-lucide-icon [icon]="icons.board" className="w-8 h-8 text-blue-400 shrink-0" />
-            Fiches PRIME — pilotage
+            Partie service — fiches pilotes
           </h1>
           <p class="ky-page-subtitle max-w-2xl">
-            Choisissez la <strong class="text-primary">période</strong> : le brouillon (partie commune RACC/SAV)
-            s’applique à toute la cellule. À gauche : <strong class="text-primary">Pôle → Cellule → Service → Pilote</strong>
-            (pilotes uniquement, depuis les affectations RH). À droite : saisie du pilote sélectionné.
+            Choisissez une période et un pilote, puis complétez sa fiche. La partie commune RACC/SAV s’applique
+            automatiquement à toutes les fiches de la cellule.
           </p>
         </div>
         }
@@ -266,7 +268,7 @@ interface PilotageCelluleGroup {
                 class="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-default bg-card"
               >
                 <div class="min-w-0 flex-1 space-y-3">
-                  <h2 class="text-sm font-semibold text-primary">Saisie cellule</h2>
+                  <h2 class="text-sm font-semibold text-primary">Saisie de la fiche pilote</h2>
                   @if (selectedPilot(); as sp) {
                     <div class="flex flex-col sm:flex-row flex-wrap gap-3 min-w-0">
                       @if (sp.poleName) {
@@ -318,7 +320,7 @@ interface PilotageCelluleGroup {
                     class="inline-flex items-center gap-1.5 rounded-lg border border-default px-3 py-1.5 text-xs font-medium text-muted hover:bg-input shrink-0"
                   >
                     <app-lucide-icon [icon]="icons.external" className="w-3.5 h-3.5" />
-                    Plein écran
+                    Agrandir la fiche
                   </button>
                 }
               </div>
@@ -342,7 +344,7 @@ interface PilotageCelluleGroup {
                     class="mx-auto max-w-md min-h-[200px] flex flex-col items-center justify-center text-center text-sm px-6 py-12"
                   >
                     <p class="text-primary leading-relaxed">Les indicateurs verts, jaunes et rouges indiquent l’avancement de chaque fiche pilote.</p>
-                    <p class="mt-4 text-xs text-muted leading-relaxed">Sans brouillon pôle pour cette période, la saisie affichera une erreur : complétez d’abord la partie commune dans « Fiche PRIME — saisie ».</p>
+                    <p class="mt-4 text-xs text-muted leading-relaxed">Si aucune partie commune n’existe pour cette période, créez-la d’abord dans « Partie commune (RACC / SAV) ».</p>
                   </div>
                 }
               </div>
@@ -457,6 +459,14 @@ export class PrimeFichesPilotesPageComponent implements OnInit {
     return complete > 0 && ready === 0;
   });
 
+  constructor() {
+    effect(() => {
+      const userId = this.role.currentUser().id.trim();
+      if (!userId) return;
+      untracked(() => this.reload());
+    });
+  }
+
   ngOnInit(): void {
     // Si une période a été demandée par la liste fiches communes, l'appliquer
     // avant le premier chargement.
@@ -465,7 +475,6 @@ export class PrimeFichesPilotesPageComponent implements OnInit {
       this.scope.setPeriod(requested);
       this.nav.clearRequestedPeriod();
     }
-    void this.reload();
   }
 
   onPeriodChange(ev: Event): void {
@@ -492,6 +501,10 @@ export class PrimeFichesPilotesPageComponent implements OnInit {
 
   private loadPilotData(fullPageSpinner: boolean): void {
     const u = this.role.currentUser();
+    if (!u.id.trim()) {
+      if (fullPageSpinner) this.loading.set(true);
+      return;
+    }
     if (fullPageSpinner) {
       this.loading.set(true);
       this.error.set(null);
@@ -610,7 +623,7 @@ export class PrimeFichesPilotesPageComponent implements OnInit {
     return forkJoin({
       draft: this.api.getPoleDraft(u.id, cell.celluleId.trim(), this.period(), tid),
       fiche: this.api.getFicheForEmployee(u.id, emp.employeeId, this.period(), tid),
-      inds: this.api.getIndicators(emp.serviceId, u.id),
+      inds: this.api.getIndicators(emp.serviceId, u.id, emp.employeeId),
       polePonds: this.api
         .getServiceCommonLinePonderations(emp.serviceId, u.id, { templateId: tid || undefined })
         .pipe(catchError(() => of([]))),
@@ -721,27 +734,24 @@ export class PrimeFichesPilotesPageComponent implements OnInit {
 
   stateShortLabel(state: string): string {
     const s = state.toLowerCase();
-    if (s === 'done') return 'OK';
-    if (s === 'inprogress') return 'Encours';
-    if (s === 'empty') return 'Vide';
-    if (s === 'notstarted') return 'NS';
+    if (s === 'done') return 'Terminées';
+    if (s === 'inprogress') return 'En cours';
+    if (s === 'empty') return 'Aucune fiche';
+    if (s === 'notstarted') return 'Non démarrées';
     return 'À faire';
   }
 
   statusShort(st: string): string {
-    const s = st.toLowerCase();
-    if (s === 'complete') return 'OK';
-    if (s === 'inprogress') return '…';
-    return '·';
+    return primeFillingStatusLabel(st);
   }
 
   pilotValidationShort(emp: EmployeePrimeCellFicheListItemDto): string {
     const val = (emp.validationStatus ?? 'AwaitingData').trim().toLowerCase();
     const fill = emp.fillingStatus.trim().toLowerCase();
-    if (emp.isReadyForValidation === true && val === 'pending') return 'Valid.';
-    if (val === 'pending') return 'Valid.';
-    if (fill === 'complete' && emp.isReadyForValidation !== true) return 'Cellule OK';
-    if (emp.isReadyForValidation === true) return 'Prête';
+    if (emp.isReadyForValidation === true && val === 'pending') return 'En validation';
+    if (val === 'pending') return 'En validation';
+    if (fill === 'complete' && emp.isReadyForValidation !== true) return 'Saisie terminée';
+    if (emp.isReadyForValidation === true) return 'Prête à valider';
     return this.statusShort(emp.fillingStatus);
   }
 
@@ -749,14 +759,14 @@ export class PrimeFichesPilotesPageComponent implements OnInit {
     const val = (emp.validationStatus ?? 'AwaitingData').trim().toLowerCase();
     const fill = emp.fillingStatus.trim().toLowerCase();
     if (emp.isReadyForValidation === true && val === 'pending') {
-      return 'Fiche complète — en attente du premier valideur (workflow admin)';
+      return 'Fiche complète — en attente du référent technique';
     }
-    if (val === 'pending') return 'Fiche soumise au workflow de validation';
+    if (val === 'pending') return 'Fiche soumise au circuit de validation';
     if (fill === 'complete' && emp.isReadyForValidation !== true) {
       return 'Partie cellule complète — validez la partie commune pour lancer la validation';
     }
     if (emp.isReadyForValidation === true) {
-      return 'Prête — soumission au workflow en attente. Actualisez la page ; la fiche doit passer en « Valid. » puis apparaître chez le référent technique.';
+      return 'Fiche prête — soumission au circuit en cours.';
     }
     return this.statusShort(emp.fillingStatus);
   }

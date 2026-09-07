@@ -23,6 +23,7 @@ public sealed class DocumentTemplateManagementService(
     IAiTemplateContentGenerator aiGenerator,
     ITemplateEngineService templateEngine,
     ITemplatePlaceholderNormalizationService placeholderNormalization,
+    IDocumentTemplateEmployeeMappingService employeeMapping,
     ILogger<DocumentTemplateManagementService> logger) : IDocumentTemplateManagementService
 {
     private const int MaxTemplateContentLength = 100_000;
@@ -465,6 +466,10 @@ public sealed class DocumentTemplateManagementService(
         }
 
         var now = DateTimeOffset.UtcNow;
+        var mutableVariables = variables.ToList();
+        if (kind != DocumentTemplateKind.Static && mutableVariables.Count > 0)
+            await employeeMapping.ApplyMatchesAsync(mutableVariables, ct).ConfigureAwait(false);
+
         var template = new DocumentTemplate
         {
             Id = Guid.NewGuid(),
@@ -487,7 +492,7 @@ public sealed class DocumentTemplateManagementService(
             structuredContent,
             "published",
             originalAssetUri,
-            kind == DocumentTemplateKind.Static ? Array.Empty<TemplateVariableInput>() : variables,
+            kind == DocumentTemplateKind.Static ? Array.Empty<TemplateVariableInput>() : mutableVariables,
             userId,
             ct).ConfigureAwait(false);
 
@@ -549,6 +554,9 @@ public sealed class DocumentTemplateManagementService(
             })
             .Take(MaxTemplateVariables)
             .ToList();
+        foreach (var (row, input) in rows.Zip(
+                     variables.Where(v => IsValidVariableName(v.Name)).Take(MaxTemplateVariables)))
+            DocumentTemplateVariableMapper.ApplyInput(row, input);
         if (rows.Count > 0)
             db.DocumentTemplateVariables.AddRange(rows);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -569,23 +577,13 @@ public sealed class DocumentTemplateManagementService(
         DocumentTemplateVersionResponse? versionDto = null;
         if (template.CurrentVersionId.HasValue)
         {
-            var vars = await db.DocumentTemplateVariables.AsNoTracking()
+            var varRows = await db.DocumentTemplateVariables.AsNoTracking()
                 .Where(v => v.TemplateVersionId == template.CurrentVersionId.Value)
                 .OrderBy(v => v.SortOrder)
-                .Select(v => new DocumentTemplateVariableResponse(
-                    v.Id.ToString(),
-                    v.VariableName,
-                    v.VariableType,
-                    v.IsRequired,
-                    v.DefaultValue,
-                    v.ValidationRule,
-                    v.DisplayLabel,
-                    string.IsNullOrWhiteSpace(v.FormScope) ? "hr" : v.FormScope,
-                    v.SourcePriority,
-                    v.NormalizedName,
-                    v.RawPlaceholder,
-                    v.SortOrder))
                 .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var vars = await employeeMapping
+                .EnrichAsync(varRows.Select(DocumentTemplateVariableMapper.ToResponse).ToList(), ct)
                 .ConfigureAwait(false);
             var cv = template.CurrentVersion;
             if (cv is not null)

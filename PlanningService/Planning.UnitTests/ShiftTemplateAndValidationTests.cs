@@ -259,6 +259,44 @@ public class ShiftTemplateAndValidationTests
     }
 
     [Fact]
+    public async Task EnsureWeekSnapshot_forceRefresh_replaces_rows_from_updated_template()
+    {
+        await using var db = CreateDb();
+        await SeedSubServiceAsync(db);
+        var svc = CreateService(db);
+
+        await svc.SaveShiftTemplateAsync(new SaveShiftConfigDto
+        {
+            SubServiceId = 1,
+            Shifts =
+            [
+                new ShiftConfigItemDto { Label = "Matin", StartTime = "08:00", WorkHours = 8, RequiredCount = 3, DisplayOrder = 1 },
+            ]
+        });
+
+        var monday = new DateOnly(2026, 7, 20);
+        await svc.EnsureWeekSnapshotAsync(1, "2026-W30", monday);
+
+        await svc.SaveShiftTemplateAsync(new SaveShiftConfigDto
+        {
+            SubServiceId = 1,
+            Shifts =
+            [
+                new ShiftConfigItemDto { Label = "Soir", StartTime = "14:00", WorkHours = 8, RequiredCount = 2, DisplayOrder = 1 },
+            ]
+        });
+
+        await svc.EnsureWeekSnapshotAsync(1, "2026-W30", monday, forceRefresh: true);
+
+        var snaps = await db.SubServiceShiftConfigs
+            .Where(c => !c.IsTemplate && c.WeekCode == "2026-W30")
+            .ToListAsync();
+        Assert.Single(snaps);
+        Assert.Equal("Soir", snaps[0].Label);
+        Assert.Equal(2, snaps[0].RequiredCount);
+    }
+
+    [Fact]
     public async Task SaveShiftTemplate_propagates_MinPresencePercent_to_existing_week_snapshots()
     {
         await using var db = CreateDb();
@@ -352,6 +390,91 @@ public class ShiftTemplateAndValidationTests
         Assert.Equal(1, status.ConfiguredCount);
         Assert.Contains(status.Items, i => i.SubServiceId == 1 && i.HasTemplate && i.ShiftCount == 1);
         Assert.Contains(status.Items, i => i.SubServiceId == 2 && !i.HasTemplate);
+    }
+
+    [Fact]
+    public async Task SaveShiftTemplate_stores_distinct_saturday_shifts()
+    {
+        await using var db = CreateDb();
+        await SeedSubServiceAsync(db);
+        var svc = CreateService(db);
+
+        var saved = await svc.SaveShiftTemplateAsync(new SaveShiftConfigDto
+        {
+            SubServiceId = 1,
+            UseDistinctSaturdayShifts = true,
+            Shifts =
+            [
+                new ShiftConfigItemDto { Label = "Matin", StartTime = "08:00", WorkHours = 8, RequiredCount = 4, DisplayOrder = 1 },
+            ],
+            SaturdayShifts =
+            [
+                new ShiftConfigItemDto { Label = "Matin", StartTime = "09:00", WorkHours = 8, RequiredCount = 2, DisplayOrder = 1 },
+                new ShiftConfigItemDto { Label = "Midi", StartTime = "12:00", WorkHours = 8, RequiredCount = 1, DisplayOrder = 2 },
+            ]
+        });
+
+        Assert.True(saved.UseDistinctSaturdayShifts);
+        Assert.Single(saved.Shifts);
+        Assert.Equal("08:00", saved.Shifts[0].StartTime);
+        Assert.Equal(4, saved.TotalEffectif);
+        Assert.Equal(2, saved.SaturdayShifts.Count);
+        Assert.Equal("09:00", saved.SaturdayShifts[0].StartTime);
+        Assert.Equal(2, saved.SaturdayShifts[0].RequiredCount);
+
+        var rows = await db.SubServiceShiftConfigs.Where(c => c.IsTemplate).ToListAsync();
+        Assert.Equal(3, rows.Count);
+        Assert.Equal(1, rows.Count(c => !c.AppliesToSaturday));
+        Assert.Equal(2, rows.Count(c => c.AppliesToSaturday));
+    }
+
+    [Fact]
+    public async Task GetWeekOverview_uses_live_headcount_when_no_planning()
+    {
+        await using var db = CreateDb();
+        await SeedSubServiceAsync(db);
+        db.Users.Add(new User
+        {
+            Id = 11,
+            FirstName = "Agent",
+            LastName = "Deux",
+            Email = "agent2@test.ma",
+            RoleId = 1,
+            IsActive = true,
+            SubServiceId = 1,
+        });
+        await db.SaveChangesAsync();
+        var svc = CreateService(db);
+
+        var list = await svc.GetWeekOverviewAsync("2026-W38");
+        var item = Assert.Single(list.Items);
+        Assert.Null(item.PlanningId);
+        Assert.Equal(2, item.TotalEffectif);
+    }
+
+    [Fact]
+    public async Task GetWeekOverview_keeps_planning_effectif_when_generated()
+    {
+        await using var db = CreateDb();
+        await SeedSubServiceAsync(db);
+        db.WeeklyPlannings.Add(new WeeklyPlanning
+        {
+            Id = 1,
+            SubServiceId = 1,
+            WeekCode = "2026-W38",
+            WeekStartDate = new DateOnly(2026, 9, 14),
+            TotalEffectif = 4,
+            Status = PlanningStatus.Draft,
+            SaturdayGroupId = 1,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var svc = CreateService(db);
+
+        var list = await svc.GetWeekOverviewAsync("2026-W38");
+        var item = Assert.Single(list.Items);
+        Assert.Equal(1, item.PlanningId);
+        Assert.Equal(4, item.TotalEffectif);
     }
 
     private sealed class FakePlanningHubContext : IHubContext<PlanningHub>

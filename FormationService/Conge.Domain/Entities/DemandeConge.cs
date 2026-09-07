@@ -57,8 +57,13 @@ public class DemandeConge
         string? validationNodeId = null,
         string? validationNodeLevel = null)
     {
-        if (!employe.EstEligibleCongeAnnuel())
-            throw new EligibiliteException(employeId, "L'employé doit avoir au moins 6 mois d'ancienneté.");
+        if (!employe.EstEligibleCongeAnnuel(dateDebut))
+        {
+            var eligibleAt = employe.DateEligibiliteCongeAnnuel();
+            throw new EligibiliteException(
+                employeId,
+                $"Le congé annuel ne peut commencer qu'à partir du {eligibleAt:dd/MM/yyyy} (6 mois d'ancienneté). La demande peut être déposée dès maintenant.");
+        }
 
         if (dateDebut >= dateFin)
             throw new ArgumentException("La date de début doit être antérieure à la date de fin.");
@@ -144,20 +149,26 @@ public class DemandeConge
             throw new ArgumentException("Statut initial invalide pour une nouvelle demande.");
     }
 
-    /// <summary>Validation superviseur : EnAttente → EnAttenteRh.</summary>
+    /// <summary>
+    /// Validation superviseur : EnAttente → EnAttenteRh, ou directement Validee
+    /// si l’étape RH est inactive dans la matrice d’accès.
+    /// </summary>
     public void ValiderParSuperviseur(
         Guid superviseurId,
         string? commentaire = null,
         string? acteurNom = null,
-        string? acteurRole = null)
+        string? acteurRole = null,
+        bool etapeRh = true)
     {
         EnsureTransition(StatutDemande.EnAttente, "valider (superviseur)");
 
         var avant = Statut;
-        Statut = StatutDemande.EnAttenteRh;
         CommentaireManager = commentaire;
         DateValidationSuperviseur = DateTime.UtcNow;
         SuperviseurDecideurId = superviseurId;
+        Statut = etapeRh ? StatutDemande.EnAttenteRh : StatutDemande.Validee;
+        if (!etapeRh)
+            DateDecision = DateTime.UtcNow;
 
         AppendDecision(
             superviseurId,
@@ -167,6 +178,37 @@ public class DemandeConge
             avant,
             Statut,
             commentaire);
+
+        if (!etapeRh)
+            _domainEvents.Add(new CongeValideEvent(Id, EmployeId, superviseurId, NombreJours, TypeConge));
+    }
+
+    /// <summary>
+    /// File RH déjà validée par le superviseur : clôture sans palier RH
+    /// (matrice « Valider les congés » désactivée pour RH).
+    /// </summary>
+    public void FinaliserSansEtapeRh(
+        Guid acteurId,
+        string? acteurNom = null,
+        string? acteurRole = null)
+    {
+        EnsureTransition(StatutDemande.EnAttenteRh, "finaliser sans étape RH");
+
+        var avant = Statut;
+        var validateur = SuperviseurDecideurId ?? acteurId;
+        Statut = StatutDemande.Validee;
+        DateDecision = DateTime.UtcNow;
+
+        AppendDecision(
+            acteurId,
+            acteurNom,
+            acteurRole ?? "Superviseur",
+            DemandeCongeDecisionActions.ValidationSuperviseur,
+            avant,
+            Statut,
+            "Étape RH inactive");
+
+        _domainEvents.Add(new CongeValideEvent(Id, EmployeId, validateur, NombreJours, TypeConge));
     }
 
     /// <summary>Validation RH finale : EnAttenteRh → Validee.</summary>

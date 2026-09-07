@@ -168,9 +168,11 @@ public static class WeekShiftPatternAssigner
         {
             var sample = day.First();
             var isSat = sample.IsSaturday || day.Key.DayOfWeek == DayOfWeek.Saturday;
+            var weekday = configs.Where(c => !c.AppliesToSaturday).ToList();
+            var satPool = ShiftConfigScope.Saturday(configs);
             var dayConfigs = isSat
-                ? configs.Select(c => CloneRequired(c, ShiftDispersionSelector.SaturdayRequiredCount(c.RequiredCount))).ToList()
-                : configs.ToList();
+                ? satPool.Select(c => CloneRequired(c, ShiftDispersionSelector.EffectiveSaturdayQuota(c))).ToList()
+                : (weekday.Count > 0 ? weekday : configs.ToList());
             var byId = dayConfigs.ToDictionary(c => c.Id);
 
             var assigned = new Dictionary<int, SubServiceShiftConfig>();
@@ -216,7 +218,8 @@ public static class WeekShiftPatternAssigner
         DisplayOrder = c.DisplayOrder,
         ShiftKind = c.ShiftKind,
         ShiftModeProfileId = c.ShiftModeProfileId,
-        IsTemplate = c.IsTemplate
+        IsTemplate = c.IsTemplate,
+        AppliesToSaturday = c.AppliesToSaturday
     };
 
     /// <summary>

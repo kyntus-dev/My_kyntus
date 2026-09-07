@@ -77,6 +77,22 @@ public static class ParrainageSchemaPatches
 
         await EnsureMigrationsHistoryTableAsync(db, ct);
         await RecordMigrationIfMissingAsync(db, AddReferralCandidateEmployeeIdMigrationId, ct);
+
+        await EnsurePerfIndexesAsync(db, ct);
+    }
+
+    /// <summary>Index lecture fréquents (listes filtrées par statut / tri created_at).</summary>
+    public static async Task EnsurePerfIndexesAsync(ParrainageDbContext db, CancellationToken ct = default)
+    {
+        if (!await TableExistsAsync(db, "parrainage_referral", ct))
+            return;
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_parrainage_referral_Status_CreatedAt"
+                ON parrainage_referral ("Status", "CreatedAt");
+            """,
+            ct);
     }
 
     private static async Task EnsureMigrationsHistoryTableAsync(ParrainageDbContext db, CancellationToken ct)

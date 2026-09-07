@@ -12,7 +12,7 @@ public sealed class PrimeCelluleDraftGlobalPoolAppService(
     GlobalPoolWorkflowService poolWf) : IPrimeCelluleDraftGlobalPoolAppService
 {
     private static bool PoolUnlocked(SupervisorCellulePrimeDraft d) =>
-        d.GlobalPoolManagerApprovedAt.HasValue && d.GlobalPoolRhApprovedAt.HasValue;
+        GlobalPoolWorkflowService.LegacyPoolUnlocked(d);
 
     private static CelluleDraftGlobalPoolStateDto MapState(SupervisorCellulePrimeDraft d) => new()
     {
@@ -120,28 +120,14 @@ public sealed class PrimeCelluleDraftGlobalPoolAppService(
         return MapState(d);
     }
 
-    public async Task<CelluleDraftGlobalPoolStateDto> ApproveManagerAsync(
+    public Task<CelluleDraftGlobalPoolStateDto> ApproveManagerAsync(
         Guid draftId,
         string supervisorUserId,
         GlobalPoolActingUserRequest body,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(body.UserId))
-            throw new ArgumentException("UserId est requis.");
-        var role = await RoleOfUserAsync(body.UserId, ct);
-        if (!string.Equals(role, "Manager", StringComparison.Ordinal) && !string.Equals(role, "Admin", StringComparison.Ordinal))
-            throw new PrimeApiException(403, "Seul le rôle Manager (ou Admin) peut valider cette étape.");
-
-        var d = await GetOwnedDraftAsync(draftId, supervisorUserId, ct);
-        if (d.GlobalPoolExcelContent is not { Length: > 0 })
-            throw new ArgumentException("Générez d'abord le fichier de synthèse globale (POST …/global-pool/generate).");
-
-        var now = DateTimeOffset.UtcNow;
-        d.GlobalPoolManagerApprovedAt = now;
-        d.GlobalPoolManagerApprovedByUserId = body.UserId.Trim();
-        d.UpdatedAt = now;
-        await db.SaveChangesAsync(ct);
-        return MapState(d);
+        _ = (draftId, supervisorUserId, body, ct);
+        throw new PrimeApiException(410, PrimeGlobalPoolActorResolver.ManagerStepGoneMessage);
     }
 
     public async Task<CelluleDraftGlobalPoolStateDto> ApproveRhAsync(
@@ -182,7 +168,7 @@ public sealed class PrimeCelluleDraftGlobalPoolAppService(
 
         var d = await GetOwnedDraftAsync(draftId, supervisorUserId, ct);
         if (!PoolUnlocked(d))
-            throw new ArgumentException("Les validations Manager et RH doivent être complétées avant la comptabilité.");
+            throw new ArgumentException("La validation RH doit être complétée avant la comptabilité.");
 
         var now = DateTimeOffset.UtcNow;
         d.GlobalPoolComptaAckAt = now;

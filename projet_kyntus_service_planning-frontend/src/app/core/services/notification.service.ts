@@ -264,21 +264,18 @@ private connectPlanningHub(): void {
     const joinPlanningGroups = async (): Promise<void> => {
       if (authUserId) {
         await this.connection.invoke('JoinUserGroup', authUserId);
-        console.log('✅ Planning Hub — groupe user rejoint:', authUserId);
       }
       if (isRhOrAdmin) {
         await this.connection.invoke('JoinRhAdminGroup');
-        console.log('✅ Planning Hub — groupe rh_admins rejoint');
       }
     };
 
     this.connection.onreconnected(async () => {
-      console.log('🔄 Planning Hub reconnecté — re-join groupe');
       try {
         await joinPlanningGroups();
         this.loadPersistedPlanningNotifications(authUserId);
       } catch (err) {
-        console.error('❌ Planning Hub re-join échoué:', err);
+        console.error('Planning Hub re-join échoué:', err);
       }
     });
 
@@ -288,10 +285,9 @@ private connectPlanningHub(): void {
 
     this.connection.start()
       .then(async () => {
-        console.log('✅ Planning Hub connecté — AuthUserId:', authUserId);
         await joinPlanningGroups();
       })
-      .catch(err => console.error('❌ Planning Hub erreur:', err));
+      .catch(err => console.error('Planning Hub erreur:', err));
   }
 
   private isRhOrAdminRole(): boolean {
@@ -327,7 +323,6 @@ private connectReclamationHub(userId: number, isManager: boolean): void {
       skipNegotiation: false,
       accessTokenFactory: () => {
         const token = this.getToken();
-        console.log('🔑 Token envoyé au hub:', token ? 'OK' : 'VIDE ❌');
         return token;
       }
     })
@@ -336,8 +331,6 @@ private connectReclamationHub(userId: number, isManager: boolean): void {
 
     // ✅ Écouter l'événement avant la connexion
    this.reclamationConnection.on('ReclamationNotification', (data: ReclamationNotif) => {
-  console.log('📨 ReclamationNotification reçue:', data);
-
   this.reclamationNotif$.next(data);
 
   // ✅ Détecter si c'est une proposition ou une réclamation
@@ -358,34 +351,30 @@ private connectReclamationHub(userId: number, isManager: boolean): void {
     const joinGroups = async (): Promise<void> => {
       if (isManager) {
         await this.reclamationConnection.invoke('JoinManagerGroup');
-        console.log('✅ Reclamation Hub — groupe managers rejoint');
       }
       // Un manager reçoit aussi ses propres notifs en tant qu'auteur
       await this.reclamationConnection.invoke('JoinUserGroup', userId.toString());
-      console.log(`✅ Reclamation Hub — groupe user_${userId} rejoint`);
     };
 
     // ✅ Re-rejoindre après reconnexion automatique
     this.reclamationConnection.onreconnected(async () => {
-      console.log('🔄 Reclamation Hub reconnecté — re-join groupes');
       try {
         await joinGroups();
       } catch (err) {
-        console.error('❌ Reclamation Hub re-join échoué:', err);
+        console.error('Reclamation Hub re-join échoué:', err);
       }
     });
 
     this.reclamationConnection.onclose(err =>
-      console.warn('⚠️ Reclamation Hub fermé', err)
+      console.warn('Reclamation Hub fermé', err)
     );
 
     // ✅ Démarrer puis rejoindre les groupes
     this.reclamationConnection.start()
       .then(async () => {
-        console.log('✅ Reclamation Hub connecté — state:', this.reclamationConnection.state);
         await joinGroups();
       })
-      .catch(err => console.error('❌ Reclamation Hub erreur:', err));
+      .catch(err => console.error('Reclamation Hub erreur:', err));
   }
 
   private connectNewsletterHub(): void {

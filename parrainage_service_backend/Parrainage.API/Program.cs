@@ -8,7 +8,13 @@ using Parrainage.Infrastructure.Persistence;
 var builder = WebApplication.CreateBuilder(args);
 var isTesting = builder.Environment.IsEnvironment("Testing");
 
-builder.Services.AddControllers().AddJsonOptions(o =>
+builder.Services.AddControllers(options =>
+{
+    var policy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+    options.Filters.Add(new Microsoft.AspNetCore.Mvc.Authorization.AuthorizeFilter(policy));
+}).AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
     o.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
@@ -21,7 +27,11 @@ builder.Services.AddHealthChecks();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("devCors", policy =>
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+        policy
+            .WithOrigins("http://localhost:8200", "http://localhost:8201")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials());
 });
 
 builder.Services.AddKyntusJwtAuthentication(builder.Configuration);
@@ -45,6 +55,20 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("devCors");
+app.Use(async (ctx, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+        if (ctx.Response.HasStarted) throw;
+        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        ctx.Response.ContentType = "application/json";
+        await ctx.Response.WriteAsJsonAsync(new { error = ex.Message });
+    }
+});
 app.UseAuthentication();
 app.UseAuthorization();
 

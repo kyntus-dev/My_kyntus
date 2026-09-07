@@ -58,7 +58,7 @@ public class EmployeSnapshot
             ManagerId = managerId,
             ServiceId = serviceId,
             ServiceNom = serviceNom,
-            DateEmbauche = dateEmbauche,
+            DateEmbauche = AsUtc(dateEmbauche),
             EstMineur = estMineur,
             Role = role,
             PoleId = NormalizeId(poleId),
@@ -91,7 +91,7 @@ public class EmployeSnapshot
         ServiceNom = serviceNom;
         Role = role;
         if (dateEmbauche.HasValue)
-            DateEmbauche = dateEmbauche.Value;
+            DateEmbauche = AsUtc(dateEmbauche.Value);
         MettreAJourPerimetre(poleId, celluleId, orgServiceId, businessDepartmentId);
         DerniereModification = DateTime.UtcNow;
     }
@@ -171,13 +171,36 @@ public class EmployeSnapshot
         return years;
     }
 
-    public bool EstEligibleCongeAnnuel()
+    public DateTime DateEligibiliteCongeAnnuel()
     {
-        return DateTime.Today >= DateEmbauche.AddMonths(6);
+        var eligible = DateEmbauche.Date.AddMonths(PolitiqueConge.MoisAncienneteMinimum);
+        return DateTime.SpecifyKind(eligible, DateTimeKind.Utc);
+    }
+
+    /// <summary>
+    /// Droit au congé annuel à partir de la date d’embauche + 6 mois.
+    /// La demande peut être déposée avant : c’est la date de début du congé qui doit être éligible.
+    /// </summary>
+    public bool EstEligibleCongeAnnuel(DateTime? dateDebutConge = null)
+    {
+        var reference = (dateDebutConge ?? DateTime.Today).Date;
+        return reference >= DateEligibiliteCongeAnnuel().Date;
     }
 
     public string NomComplet => $"{Prenom} {Nom}".Trim();
 
     private static string? NormalizeId(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Npgsql refuse Kind=Unspecified sur timestamp with time zone.
+    /// DateOnly.ToDateTime et JSON Directory arrivent souvent Unspecified.
+    /// </summary>
+    internal static DateTime AsUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
 }

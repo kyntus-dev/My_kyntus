@@ -159,8 +159,8 @@ export class ReclamationAdminComponent implements OnInit, OnDestroy {
   loadDemandes(): void {
     this.loading = true;
     forkJoin({
-      rec: this.reclamationSvc.getAll(1, 100).pipe(catchError(() => of({ items: [], totalCount: 0 } as PaginatedResult<Reclamation>))),
-      prop: this.propositionSvc.getAll(1, 100).pipe(catchError(() => of({ items: [], totalCount: 0 } as PaginatedResult<Proposition>))),
+      rec: this.reclamationSvc.getAll(1, 100).pipe(catchError(() => of({ items: [], totalCount: 0, page: 1, pageSize: 100, totalPages: 0 } as PaginatedResult<Reclamation>))),
+      prop: this.propositionSvc.getAll(1, 100).pipe(catchError(() => of({ items: [], totalCount: 0, page: 1, pageSize: 100, totalPages: 0 } as PaginatedResult<Proposition>))),
     }).subscribe({
       next: ({ rec, prop }) => {
         this.reclamations = rec.items;
@@ -312,10 +312,10 @@ export class ReclamationAdminComponent implements OnInit, OnDestroy {
     this.loading = true;
     forkJoin({
       rec: this.reclamationSvc.getHistorique(undefined, 1).pipe(
-        catchError(() => of({ items: [], totalCount: 0 } as PaginatedResult<ReclamationDetail>))
+        catchError(() => of({ items: [], totalCount: 0, page: 1, pageSize: 50, totalPages: 0 } as PaginatedResult<ReclamationDetail>))
       ),
       prop: this.propositionSvc.getHistorique(undefined, 1).pipe(
-        catchError(() => of({ items: [], totalCount: 0 } as PaginatedResult<PropositionDetail>))
+        catchError(() => of({ items: [], totalCount: 0, page: 1, pageSize: 50, totalPages: 0 } as PaginatedResult<PropositionDetail>))
       ),
     }).subscribe({
       next: ({ rec, prop }) => {

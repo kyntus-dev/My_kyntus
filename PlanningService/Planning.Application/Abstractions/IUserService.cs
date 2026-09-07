@@ -7,9 +7,13 @@ public interface IUserService
     Task<List<UserDto>> GetAllUsersAsync();
     Task<List<UserDto>> GetUsersBySubServiceAsync(int subServiceId);
     Task<UserDto?> GetUserByIdAsync(int id);
+    Task<UserDto?> GetUserByGuidAsync(Guid employeeGuid);
     Task<UserDto> CreateUserAsync(CreateUserDto dto);
     Task<UserDto> CreateUserFromImportAsync(CreateUserFromImportDto dto);
     Task<ResetPasswordResultDto?> ResetPasswordAsync(int userId, CancellationToken ct = default);
+    Task<ResetPasswordsByGroupResultDto> ResetPasswordsByGroupAsync(
+        ResetPasswordsByGroupRequest request,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Insert Planning + Auth batch pour un chunk déjà créé dans Directory (sans check-email Directory).
@@ -56,6 +60,9 @@ public interface IUserService
         UpdateUserDto previousState,
         Dictionary<string, string?> previousCustomFields,
         CancellationToken ct = default);
+
+    /// <summary>Change uniquement le rattachement cellule/service (sans toucher groupes samedi ni périmètres managés).</summary>
+    Task RestoreSubServicePlacementAsync(int planningUserId, int subServiceId, CancellationToken ct = default);
 
     Task<UserDto?> UpdateContractualLevelAsync(
         int targetUserId,

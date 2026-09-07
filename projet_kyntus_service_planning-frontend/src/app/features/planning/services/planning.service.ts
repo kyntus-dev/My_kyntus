@@ -1,10 +1,11 @@
-// features/planning/services/planning.service.ts
+﻿// features/planning/services/planning.service.ts
 
 import { Injectable } from '@angular/core';
 import { HttpClient,HttpHeaders } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 import { environment } from '../../../../environments/environment';
+import { planningOverrideShiftOptions } from '../lib/planning-override-shift-options.util';
 
 export interface CoverageDayShift {
   date: string;
@@ -147,6 +148,8 @@ export interface SaturdayBalance {
   isImbalanced: boolean;
   imbalanceDelta: number;
   employees: SaturdayEmployeeMode[];
+  group1SaturdayDate?: string;
+  group2SaturdayDate?: string;
 }
 
 export interface DayAssignment {
@@ -158,7 +161,7 @@ export interface DayAssignment {
   endTime:           string;
   isSaturday:        boolean;
   isManagerOverride: boolean;
-  /** Demande exceptionnelle appliquée sur ce créneau. */
+  /** Demande exceptionnelle appliquÃ©e sur ce crÃ©neau. */
   isExceptionalRequest?: boolean;
   /** Renfort samedi (n'impacte pas SaturdayHistory). */
   isReinforcement?: boolean;
@@ -178,6 +181,8 @@ export interface DayAssignment {
 export interface EmployeePlanning {
   userId:          number;
   fullName:        string;
+  firstName?:      string;
+  lastName?:       string;
   isNewEmployee:   boolean;
   days:            DayAssignment[];
   managerComment?: string;
@@ -187,6 +192,10 @@ export interface EmployeePlanning {
   specialCaseDescription?: string | null;
   /** Formation plateau — RH / superviseur (pas côté pilote). */
   isPlateauTraining?: boolean;
+  idTechnicien?: number | null;
+  htelCode?: string | null;
+  /** Libellé HTEL (NOM Prénom) — export uniquement. */
+  htelTechnicienName?: string | null;
 }
 
 export interface WeeklyPlanningResponse {
@@ -203,7 +212,7 @@ export interface WeeklyPlanningResponse {
   coverageReport?: CoverageReport | null;
 }
 
-/** Liste légère Planning Équipe (sans grille / coverage). */
+/** Liste lÃ©gÃ¨re Planning Ã‰quipe (sans grille / coverage). */
 export interface EquipePlanningSummary {
   id: number;
   weekCode: string;
@@ -212,7 +221,7 @@ export interface EquipePlanningSummary {
   subServiceId: number;
   subServiceName: string;
   employeeCount: number;
-  /** UserIds distincts affectés sur ce planning. */
+  /** UserIds distincts affectÃ©s sur ce planning. */
   assignedUserIds?: number[];
 }
 
@@ -234,7 +243,7 @@ export interface AgentPlanningDay {
   isModeOverride?: boolean;
 }
 
-/** Vue plannings agent (même forme que Mes plannings). */
+/** Vue plannings agent (mÃªme forme que Mes plannings). */
 export interface AgentPlanningWeek {
   weeklyPlanningId?: number;
   weekCode: string;
@@ -277,11 +286,11 @@ export interface GeneratePlanningDto {
   totalEffectif:    number;
 }
 
-// ✅ CORRIGÉ — newSubServiceShiftConfigId ajouté
+// âœ… CORRIGÃ‰ â€” newSubServiceShiftConfigId ajoutÃ©
 export interface OverrideShiftDto {
   shiftAssignmentId:          number;
-  newShiftId:                 number;   // ancien système (0 si inutilisé)
-  newSubServiceShiftConfigId: number;   // ✅ nouveau système
+  newShiftId:                 number;   // ancien systÃ¨me (0 si inutilisÃ©)
+  newSubServiceShiftConfigId: number;   // âœ… nouveau systÃ¨me
 }
 
 export interface SubServiceSimple {
@@ -325,12 +334,12 @@ export interface ShiftConfigItem {
   breakDurationMinutes: number;
   breakRangeStart?:     string;
   breakRangeEnd?:       string;
-  /** Heures de début de pause (max 3). */
+  /** Heures de dÃ©but de pause (max 3). */
   breakSlots?:          string[];
   requiredCount:        number;
   /** Pourcentage du groupe mode (ou cellule). Prioritaire en multi-mode. */
   percentage?:          number | null;
-  /** @deprecated Présence min est au niveau cellule (SaveShiftConfigDto). */
+  /** @deprecated PrÃ©sence min est au niveau cellule (SaveShiftConfigDto). */
   minPresencePercent?:  number;
   displayOrder:         number;
 }
@@ -344,6 +353,7 @@ export interface ShiftModeProfileSaveDto {
   minPresencePercent: number;
   isCriticalCell?: boolean;
   shifts: ShiftConfigItem[];
+  saturdayShifts?: ShiftConfigItem[];
 }
 
 export interface ShiftModeProfileDto {
@@ -355,6 +365,7 @@ export interface ShiftModeProfileDto {
   minPresencePercent: number;
   isCriticalCell?: boolean;
   shifts: ShiftConfigResponseNew[];
+  saturdayShifts?: ShiftConfigResponseNew[];
 }
 
 export interface SaveShiftConfigDto {
@@ -362,13 +373,15 @@ export interface SaveShiftConfigDto {
   weekCode?:     string | null;
   weekStartDate?: string | null;
   isCriticalCell?: boolean;
-  /** Présence min plateau de toute la cellule (défaut 70). Mono-mode. */
+  /** PrÃ©sence min plateau de toute la cellule (dÃ©faut 70). Mono-mode. */
   minPresencePercent?: number;
   /** Active les profils multi-modes pour cette cellule. */
   multiShiftModesEnabled?: boolean;
   /** Profils quand multiShiftModesEnabled ; sinon ignorer et utiliser shifts. */
   modes?: ShiftModeProfileSaveDto[];
   shifts:        ShiftConfigItem[];
+  useDistinctSaturdayShifts?: boolean;
+  saturdayShifts?: ShiftConfigItem[];
 }
 
 export interface ShiftConfigResponseNew {
@@ -388,6 +401,7 @@ export interface ShiftConfigResponseNew {
   displayOrder:         number;
   shiftKind?:           string;
   shiftModeProfileId?:  number | null;
+  appliesToSaturday?:   boolean;
 }
 
 export interface WeekShiftConfigResponse {
@@ -397,12 +411,14 @@ export interface WeekShiftConfigResponse {
   weekStartDate:  string;
   isTemplate?:    boolean;
   isCriticalCell?: boolean;
-  /** Présence min plateau de toute la cellule. */
+  /** PrÃ©sence min plateau de toute la cellule. */
   minPresencePercent?: number;
   multiShiftModesEnabled?: boolean;
   modes?: ShiftModeProfileDto[];
   totalEffectif:  number;
   shifts:         ShiftConfigResponseNew[];
+  useDistinctSaturdayShifts?: boolean;
+  saturdayShifts?: ShiftConfigResponseNew[];
 }
 
 export interface WeeklyEmployeeShiftMode {
@@ -471,6 +487,7 @@ export interface GeneratePlanningFromConfigDto {
 
 export interface PlanningWeekItem {
   subServiceId: number;
+  primeServiceId?: string | null;
   subServiceName: string;
   orgLabel: string;
   planningId?: number | null;
@@ -479,6 +496,8 @@ export interface PlanningWeekItem {
   hasTemplate: boolean;
   coverageOk: boolean;
   hasConsulted: boolean;
+  /** Affectations modifiées manuellement (hors DE / renfort). */
+  manualModificationCount?: number;
   /** UserIds distincts affectés (si planning généré). */
   assignedUserIds?: number[];
 }
@@ -498,6 +517,18 @@ export interface AutoGenerateSettings {
   target: string;
   lastRunAt?: string | null;
   lastRunWeekCode?: string | null;
+  senderFromEmail?: string | null;
+  senderDisplayName?: string | null;
+  smtpHost?: string | null;
+  smtpPort?: number;
+  smtpUser?: string | null;
+  smtpPassword?: string | null;
+  smtpEnableSsl?: boolean;
+  smtpPasswordSet?: boolean;
+  mailSendMode?: string;
+  mailApiProvider?: string;
+  mailApiKey?: string | null;
+  mailApiKeySet?: boolean;
 }
 
 export interface AutoGenerateWeekResult {
@@ -552,7 +583,7 @@ export interface ShiftOption {
   value: string;
 }
 
-// ✅ CORRIGÉ — weeklyPlanningId + userId pour le cas OFF → WORK
+// âœ… CORRIGÃ‰ â€” weeklyPlanningId + userId pour le cas OFF â†’ WORK
 export interface OverrideSaturdayDto {
   shiftAssignmentId:          number;
   newSubServiceShiftConfigId: number;
@@ -560,9 +591,9 @@ export interface OverrideSaturdayDto {
   userId?:                    number;
 }
 
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // SERVICE
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @Injectable({ providedIn: 'root' })
 export class PlanningService {
 
@@ -579,7 +610,7 @@ export class PlanningService {
     return new HttpHeaders({ Authorization: `Bearer ${token}` });
   }
 
-  // ── CRUD Planning ──────────────────────────────────
+  // â”€â”€ CRUD Planning â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   create(dto: CreatePlanningDto): Observable<WeeklyPlanningResponse> {
     return this.http.post<WeeklyPlanningResponse>(this.base, dto);
   }
@@ -596,12 +627,12 @@ export class PlanningService {
     return this.http.delete<void>(`${this.base}/${id}`);
   }
 
-  // ── Génération ────────────────────────────────────
+  // â”€â”€ GÃ©nÃ©ration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   generate(dto: GeneratePlanningDto): Observable<WeeklyPlanningResponse> {
     return this.http.post<WeeklyPlanningResponse>(`${this.base}/generate`, dto);
   }
 
-  // ── Config shifts ─────────────────────────────────
+  // â”€â”€ Config shifts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   saveShiftConfig(dto: SaveShiftConfigDto): Observable<WeekShiftConfigResponse> {
     return this.http.post<WeekShiftConfigResponse>(`${this.base}/config`, dto);
   }
@@ -655,6 +686,13 @@ export class PlanningService {
     return this.http.put<AutoGenerateSettings>(`${this.base}/auto-generate-settings${q}`, dto);
   }
 
+  sendTestPlanningEmail(to?: string): Observable<{ sent: boolean; to: string }> {
+    return this.http.post<{ sent: boolean; to: string }>(
+      `${this.base}/auto-generate-settings/test-email`,
+      { to: to?.trim() || null },
+    );
+  }
+
   autoGenerateWeek(weekCode: string, force = false): Observable<AutoGenerateWeekResult> {
     return this.http.post<AutoGenerateWeekResult>(
       `${this.base}/week/${weekCode}/auto-generate?force=${force}`, {});
@@ -665,7 +703,7 @@ export class PlanningService {
     return this.http.get<PendingRequestsSummary>(`${this.base}/pending-requests-summary${q}`);
   }
 
-  // ── Vue Employé ───────────────────────────────────
+  // â”€â”€ Vue EmployÃ© â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   getMyCurrentPlanning(userId: number): Observable<any> {
     return this.http.get(
       `${this.api}/planning/my/current?userId=${userId}`,
@@ -703,7 +741,7 @@ export class PlanningService {
     );
   }
 
-  // ── Publication + Override ─────────────────────────
+  // â”€â”€ Publication + Override â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   publish(id: number, validatorId: number): Observable<WeeklyPlanningResponse> {
     return this.http.post<WeeklyPlanningResponse>(
       `${this.base}/${id}/publish?validatorId=${validatorId}`, {});
@@ -722,11 +760,13 @@ export class PlanningService {
   }
 
   getShiftConfigsForSaturday(subServiceId: number, weekCode: string): Observable<ShiftConfigResponseNew[]> {
-    return this.http.get<WeekShiftConfigResponse>(`${this.base}/config/${subServiceId}/${weekCode}`)
-      .pipe(map((r: WeekShiftConfigResponse) => r.shifts));
+    return this.http.get<WeekShiftConfigResponse>(`${this.base}/config/${subServiceId}/${weekCode}`).pipe(
+      map((r: WeekShiftConfigResponse) => planningOverrideShiftOptions(r).saturday),
+      catchError(() => of([])),
+    );
   }
 
-  // ── Groupes samedi ────────────────────────────────
+  // â”€â”€ Groupes samedi â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   autoAssignSaturdayGroups(subServiceId: number): Observable<any> {
     return this.http.post(`${this.base}/saturday-groups/auto/${subServiceId}`, {});
   }
@@ -793,7 +833,7 @@ export class PlanningService {
     return this.http.post(`${this.base}/saturday-history`, dto);
   }
 
-  // ── Demandes de changement (RH / Superviseur) ───────────────────
+  // â”€â”€ Demandes de changement (RH / Superviseur) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   getChangeRequests(
     status?: string,
     weekCode?: string,
@@ -834,7 +874,7 @@ export class PlanningService {
     );
   }
 
-  // ── Demandes exceptionnelles (Superviseur / RH) ───────────────────
+  // â”€â”€ Demandes exceptionnelles (Superviseur / RH) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   getExceptionalRequests(
     status?: string,
     weekCode?: string,
@@ -889,7 +929,7 @@ export class PlanningService {
     );
   }
 
-  // ── Demandes de renfort samedi ───────────────────────
+  // â”€â”€ Demandes de renfort samedi â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   getReinforcementRequests(
     status?: string,
     weekCode?: string,
@@ -978,7 +1018,7 @@ export class PlanningService {
     );
   }
 
-  // ── Commentaires ──────────────────────────────────
+  // â”€â”€ Commentaires â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   saveComment(dto: SavePlanningCommentDto): Observable<PlanningCommentDto> {
     return this.http.post<PlanningCommentDto>(`${this.base}/comment`, dto);
   }
@@ -987,7 +1027,7 @@ export class PlanningService {
     return this.http.delete<void>(`${this.base}/${planningId}/comment/${userId}`);
   }
 
-  // ── Sous-services + Employés ──────────────────────
+  // â”€â”€ Sous-services + EmployÃ©s â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   getSubServices(): Observable<SubServiceSimple[]> {
     return this.http.get<SubServiceSimple[]>(this.subSvcUrl);
   }
@@ -996,7 +1036,7 @@ export class PlanningService {
     return this.http.get<EmployeeItem[]>(`${this.subSvcUrl}/${subServiceId}/employees`);
   }
 
-  // ── Options horaires ──────────────────────────────
+  // â”€â”€ Options horaires â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   getShiftStartOptions(): ShiftOption[] {
     const options: ShiftOption[] = [];
     for (let h = 5; h <= 14; h++) {

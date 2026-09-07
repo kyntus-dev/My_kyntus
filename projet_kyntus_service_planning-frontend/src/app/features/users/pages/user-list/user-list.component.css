@@ -257,6 +257,56 @@
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
 }
 
+.level-modal.group-reset-modal {
+  width: min(640px, 100%);
+  max-height: min(88vh, 760px);
+  overflow: auto;
+}
+
+.group-reset-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-reset-label {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.group-reset-preview {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.group-reset-list {
+  max-height: 240px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.group-reset-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.82rem;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.group-reset-errors {
+  margin: 6px 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  color: var(--danger-text);
+}
+
 .level-modal h3 {
   margin: 0 0 4px;
   font-size: 1.05rem;

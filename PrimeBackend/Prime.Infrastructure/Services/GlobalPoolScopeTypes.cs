@@ -27,18 +27,17 @@ public static class GlobalPoolLineDecisions
 
     public static string DeriveLineStatus(string? rhDecision, string? managerDecision)
     {
+        _ = managerDecision;
         var rh = rhDecision ?? Pending;
-        var mgr = managerDecision ?? Pending;
-        // La ligne n'est terminale qu'une fois les DEUX rôles décidés : tant qu'un rôle
-        // est encore en attente, l'autre peut toujours saisir sa propre décision.
-        if (string.Equals(rh, Pending, StringComparison.Ordinal) ||
-            string.Equals(mgr, Pending, StringComparison.Ordinal))
+        if (string.Equals(rh, Pending, StringComparison.Ordinal))
             return GlobalPoolSynthesisLineStatuses.PendingReview;
-        if (string.Equals(rh, Approved, StringComparison.Ordinal) &&
-            string.Equals(mgr, Approved, StringComparison.Ordinal))
+        if (string.Equals(rh, Approved, StringComparison.Ordinal))
             return GlobalPoolSynthesisLineStatuses.Approved;
         return GlobalPoolSynthesisLineStatuses.LineRejected;
     }
+
+    public static bool RegularizationEditable(string? rhDecision) =>
+        string.Equals(rhDecision ?? Pending, Pending, StringComparison.Ordinal);
 }
 
 public static class GlobalPoolSynthesisLineHistoryActions

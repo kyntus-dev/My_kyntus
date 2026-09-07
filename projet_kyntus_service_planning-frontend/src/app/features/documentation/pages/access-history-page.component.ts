@@ -1,20 +1,18 @@
-import { Component, OnInit } from '@angular/core';
-
-import { AuditJournalPageComponent } from '../components/audit-journal-page/audit-journal-page.component';
-import { AuditInterfaceNavService } from '../services/audit-interface-nav.service';
+import { Component, OnInit, inject } from '@angular/core';
+import { Router } from '@angular/router';
 
 @Component({
   standalone: true,
   selector: 'app-access-history-page',
-  imports: [AuditJournalPageComponent],
-  template: '<app-audit-journal-page [title]="title"></app-audit-journal-page>',
+  template: '',
 })
 export class AccessHistoryPageComponent implements OnInit {
-  readonly title = "Historique d'accès";
-
-  constructor(private readonly auditNav: AuditInterfaceNavService) {}
+  private readonly router = inject(Router);
 
   ngOnInit(): void {
-    this.auditNav.setSection('access-history');
+    void this.router.navigate(['/audit'], {
+      queryParams: { section: 'access-history', module: 'documentation' },
+      replaceUrl: true,
+    });
   }
 }

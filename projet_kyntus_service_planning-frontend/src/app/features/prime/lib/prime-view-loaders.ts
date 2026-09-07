@@ -1,4 +1,5 @@
 import type { Type } from '@angular/core';
+import { remapPrimeShellPath } from './prime-campaign-nav';
 
 export type PrimeLazyViewLoader = () => Promise<Type<unknown>>;
 
@@ -6,6 +7,10 @@ export type PrimeLazyViewLoader = () => Promise<Type<unknown>>;
 export const PRIME_VIEW_LOADERS: Record<string, PrimeLazyViewLoader> = {
   '/dashboard': () =>
     import('../pages/dashboard-page.component').then((m) => m.DashboardPageComponent),
+  '/prime-pilotage': () =>
+    import('../pages/prime-pilotage-hub.component').then((m) => m.PrimePilotageHubComponent),
+  '/prime-validation-hub': () =>
+    import('../pages/prime-validation-hub.component').then((m) => m.PrimeValidationHubComponent),
   '/types': () => import('../pages/prime-types-page.component').then((m) => m.PrimeTypesPageComponent),
   '/rules': () => import('../pages/prime-rules-page.component').then((m) => m.PrimeRulesPageComponent),
   '/results': () =>
@@ -18,6 +23,10 @@ export const PRIME_VIEW_LOADERS: Record<string, PrimeLazyViewLoader> = {
     ),
   '/chef-projet/scope': () =>
     import('../pages/chef-projet-scope-page.component').then((m) => m.ChefProjetScopePageComponent),
+  '/referent-technique/scope': () =>
+    import('../pages/referent-technique-scope-page.component').then(
+      (m) => m.ReferentTechniqueScopePageComponent,
+    ),
   '/global-pool': () =>
     import('../pages/prime-global-pool-page.component').then((m) => m.PrimeGlobalPoolPageComponent),
   '/synthesis-tracking': () =>
@@ -40,10 +49,6 @@ export const PRIME_VIEW_LOADERS: Record<string, PrimeLazyViewLoader> = {
     import('../pages/template-manager.component').then((m) => m.TemplateManagerComponent),
   '/prime-fiches-pilotes': () =>
     import('../pages/prime-fiches-pilotes-page.component').then((m) => m.PrimeFichesPilotesPageComponent),
-  '/prime-fiches-agents': () =>
-    import('../pages/prime-fiches-agents-shell.component').then((m) => m.PrimeFichesAgentsShellComponent),
-  '/prime-validation-hub': () =>
-    import('../pages/prime-validation-hub.component').then((m) => m.PrimeValidationHubComponent),
   '/prime-fiche-import': () =>
     import('../pages/prime-fiche-import.component').then((m) => m.PrimeFicheImportComponent),
   '/prime-cellule-indicateurs': () =>
@@ -100,7 +105,13 @@ export const PRIME_VIEW_LOADERS: Record<string, PrimeLazyViewLoader> = {
     ),
 };
 
+const PILOTAGE_VIEWS = new Set(['/', '/dashboard', '/results', '/team-performance']);
+const VALIDATION_HUB_VIEWS = new Set(['/validation', '/validation-history']);
+
 export function resolvePrimeLazyViewKey(effectiveView: string): string {
-  const key = effectiveView === '/' ? '/dashboard' : effectiveView;
+  const remapped = remapPrimeShellPath(effectiveView);
+  if (VALIDATION_HUB_VIEWS.has(remapped)) return '/prime-validation-hub';
+  if (PILOTAGE_VIEWS.has(remapped)) return '/prime-pilotage';
+  const key = remapped === '/' ? '/dashboard' : remapped;
   return PRIME_VIEW_LOADERS[key] ? key : '/dashboard';
 }

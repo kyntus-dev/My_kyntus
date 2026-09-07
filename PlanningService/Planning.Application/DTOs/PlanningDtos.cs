@@ -83,7 +83,9 @@ public record SaturdayBalanceDto(
     int ProjectedSaturdayGroup2,
     bool IsImbalanced,
     int ImbalanceDelta,
-    IReadOnlyList<SaturdayEmployeeModeDto> Employees
+    IReadOnlyList<SaturdayEmployeeModeDto> Employees,
+    DateOnly Group1SaturdayDate,
+    DateOnly Group2SaturdayDate
 );
 
 public record SetSaturdayHistoryDto(
@@ -368,6 +370,9 @@ public class SaveShiftConfigDto
     /// <summary>Profils quand MultiShiftModesEnabled ; sinon ignorer et utiliser Shifts.</summary>
     public List<ShiftModeProfileSaveDto> Modes { get; set; } = new();
     public List<ShiftConfigItemDto> Shifts { get; set; } = new();
+    /// <summary>Si true, SaturdayShifts remplace le fallback « moitié weekday » le samedi.</summary>
+    public bool UseDistinctSaturdayShifts { get; set; }
+    public List<ShiftConfigItemDto> SaturdayShifts { get; set; } = new();
 }
 
 public class ShiftModeProfileSaveDto
@@ -380,6 +385,7 @@ public class ShiftModeProfileSaveDto
     public int MinPresencePercent { get; set; } = 70;
     public bool IsCriticalCell { get; set; }
     public List<ShiftConfigItemDto> Shifts { get; set; } = new();
+    public List<ShiftConfigItemDto> SaturdayShifts { get; set; } = new();
 }
 
 public class ShiftModeProfileDto
@@ -392,6 +398,7 @@ public class ShiftModeProfileDto
     public int MinPresencePercent { get; set; }
     public bool IsCriticalCell { get; set; }
     public List<ShiftConfigResponseNewDto> Shifts { get; set; } = new();
+    public List<ShiftConfigResponseNewDto> SaturdayShifts { get; set; } = new();
 }
 
 // -- Un shift dans la config --
@@ -413,6 +420,7 @@ public class ShiftConfigItemDto
     public int DisplayOrder { get; set; }
     /// <summary>Optionnel — sinon déduit (StartTime min=Opening, max=Closing).</summary>
     public string? ShiftKind { get; set; }
+    public bool AppliesToSaturday { get; set; }
 }
 
 // -- Réponse après sauvegarde config --
@@ -434,6 +442,7 @@ public class ShiftConfigResponseNewDto
     public int DisplayOrder { get; set; }
     public string ShiftKind { get; set; } = "Standard";
     public int? ShiftModeProfileId { get; set; }
+    public bool AppliesToSaturday { get; set; }
 }
 
 // -- Statut modèle shift par service (vue arbre RH) --
@@ -470,6 +479,8 @@ public class WeekShiftConfigResponseDto
     public List<ShiftModeProfileDto> Modes { get; set; } = new();
     public int TotalEffectif { get; set; }
     public List<ShiftConfigResponseNewDto> Shifts { get; set; } = new();
+    public bool UseDistinctSaturdayShifts { get; set; }
+    public List<ShiftConfigResponseNewDto> SaturdayShifts { get; set; } = new();
 }
 
 public class WeeklyShiftModePlanDto
@@ -547,6 +558,7 @@ public class GeneratePlanningFromConfigDto
 public class PlanningWeekItemDto
 {
     public int SubServiceId { get; set; }
+    public string? PrimeServiceId { get; set; }
     public string SubServiceName { get; set; } = string.Empty;
     public string OrgLabel { get; set; } = string.Empty;
     public int? PlanningId { get; set; }
@@ -555,6 +567,11 @@ public class PlanningWeekItemDto
     public bool HasTemplate { get; set; }
     public bool CoverageOk { get; set; } = true;
     public bool HasConsulted { get; set; }
+    /// <summary>
+    /// Nombre d’affectations modifiées manuellement (IsManagerOverride),
+    /// hors demandes exceptionnelles / renforts — même règle que le badge « Modifié manuellement ».
+    /// </summary>
+    public int ManualModificationCount { get; set; }
     /// <summary>UserIds distincts affectés (si planning généré).</summary>
     public List<int> AssignedUserIds { get; set; } = new();
 }
@@ -576,6 +593,27 @@ public class AutoGenerateSettingsDto
     public string Target { get; set; } = "NextWeek";
     public DateTime? LastRunAt { get; set; }
     public string? LastRunWeekCode { get; set; }
+    public string? SenderFromEmail { get; set; }
+    public string? SenderDisplayName { get; set; }
+    public string? SmtpHost { get; set; }
+    public int SmtpPort { get; set; } = 587;
+    public string? SmtpUser { get; set; }
+    /// <summary>Uniquement en écriture. Jamais renvoyé par GET.</summary>
+    public string? SmtpPassword { get; set; }
+    public bool SmtpEnableSsl { get; set; } = true;
+    public bool SmtpPasswordSet { get; set; }
+    /// <summary>Smtp | ApiKey</summary>
+    public string MailSendMode { get; set; } = "Smtp";
+    /// <summary>Brevo | SendGrid</summary>
+    public string MailApiProvider { get; set; } = "Brevo";
+    /// <summary>Uniquement en écriture. Jamais renvoyé par GET.</summary>
+    public string? MailApiKey { get; set; }
+    public bool MailApiKeySet { get; set; }
+}
+
+public class TestPlanningEmailRequest
+{
+    public string? To { get; set; }
 }
 
 public class AutoGenerateWeekResultDto
@@ -617,6 +655,8 @@ public class EmployeePlanningDto
 {
     public int UserId { get; set; }
     public string FullName { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
     public bool IsNewEmployee { get; set; }
     public int Level { get; set; }
     public List<DayAssignmentDto> Days { get; set; } = new();
@@ -626,4 +666,8 @@ public class EmployeePlanningDto
     public string? SpecialCaseDescription { get; set; }
     /// <summary>Formation plateau — visible RH / superviseur uniquement.</summary>
     public bool IsPlateauTraining { get; set; }
+    public int? IdTechnicien { get; set; }
+    public string? HtelCode { get; set; }
+    /// <summary>Libellé HTEL (NOM Prénom) — export planning uniquement.</summary>
+    public string? HtelTechnicienName { get; set; }
 }

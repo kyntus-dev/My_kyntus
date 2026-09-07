@@ -1,4 +1,7 @@
 using System.Net.Http.Json;
+using Kyntus.Caching;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Planning.Infrastructure.Services;
 
@@ -10,12 +13,22 @@ public interface IDirectoryHierarchyClient
 public sealed class DirectoryHierarchyClient(
     IHttpClientFactory httpClientFactory,
     IConfiguration configuration,
+    ICacheService cache,
     ILogger<DirectoryHierarchyClient> logger) : IDirectoryHierarchyClient
 {
-    public async Task<Guid> ResolveSupervisorIdAsync(Guid employeeGuid, CancellationToken ct = default)
+    public Task<Guid> ResolveSupervisorIdAsync(Guid employeeGuid, CancellationToken ct = default)
     {
-        if (employeeGuid == Guid.Empty) return Guid.Empty;
+        if (employeeGuid == Guid.Empty) return Task.FromResult(Guid.Empty);
 
+        return cache.GetOrCreateAsync(
+            KyntusCacheKeys.PlanningDirectoryParent(employeeGuid),
+            token => LookupAsync(employeeGuid, token),
+            KyntusCacheTtl.Entity,
+            ct);
+    }
+
+    private async Task<Guid> LookupAsync(Guid employeeGuid, CancellationToken ct)
+    {
         try
         {
             var baseUrl = configuration["Directory:BaseUrl"]?.Trim()

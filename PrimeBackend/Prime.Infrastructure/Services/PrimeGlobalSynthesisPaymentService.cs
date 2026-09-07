@@ -3,15 +3,14 @@ using Prime.Infrastructure.Persistence;
 
 namespace Prime.Infrastructure.Services;
 
-/// <summary>Paiement par employé (ligne de synthèse) marqué par le comptable après validation Manager + RH.</summary>
+/// <summary>Paiement par employé (ligne de synthèse) marqué par le comptable après validation RH.</summary>
 public sealed class PrimeGlobalSynthesisPaymentService(PrimeDbContext db)
 {
     private static bool IsAccountant(string? role) =>
         role is "Comptable" or "Comptabilité" or "Admin";
 
-    /// <summary>Une prime est payable dès que sa ligne est validée par RH ET Manager (LineStatus = Approved),
-    /// indépendamment de l'avancement des autres lignes du périmètre.</summary>
-    private static bool LineApprovedByBoth(GlobalPoolSynthesisLineEntity line) =>
+    /// <summary>Une prime est payable dès que sa ligne est validée par la RH (LineStatus = Approved).</summary>
+    private static bool LineApproved(GlobalPoolSynthesisLineEntity line) =>
         string.Equals(line.LineStatus, GlobalPoolSynthesisLineStatuses.Approved, StringComparison.Ordinal);
 
     /// <summary>Etat agrégé du paiement d'une synthèse à partir du compte des lignes payées.</summary>
@@ -37,8 +36,8 @@ public sealed class PrimeGlobalSynthesisPaymentService(PrimeDbContext db)
             .Include(l => l.ScopeSynthesis)
             .FirstOrDefaultAsync(l => l.Id == lineId, ct);
         if (line is null) return (false, "Ligne introuvable.");
-        if (paid && !LineApprovedByBoth(line))
-            return (false, "Cette prime n'est pas encore validée par RH et Manager.");
+        if (paid && !LineApproved(line))
+            return (false, "Cette prime n'est pas encore validée par la RH.");
 
         ApplyPayment(line, userId, role, paid, paidAt, reference);
         await db.SaveChangesAsync(ct);
@@ -61,9 +60,9 @@ public sealed class PrimeGlobalSynthesisPaymentService(PrimeDbContext db)
             .FirstOrDefaultAsync(s => s.Id == scopeSynthesisId, ct);
         if (synthesis is null) return (false, "Synthèse introuvable.");
 
-        // Ne payer que les primes validées par les deux workflows et non déjà payées.
+        // Ne payer que les primes validées par la RH et non déjà payées.
         var payable = synthesis.Lines
-            .Where(l => LineApprovedByBoth(l) &&
+            .Where(l => LineApproved(l) &&
                         !string.Equals(l.PaymentStatus, GlobalPoolPaymentStatuses.Paid, StringComparison.Ordinal))
             .ToList();
         if (payable.Count == 0)

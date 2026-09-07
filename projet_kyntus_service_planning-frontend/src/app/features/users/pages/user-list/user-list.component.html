@@ -11,8 +11,12 @@
     title="Employés"
     [subtitle]="filteredUsers.length + ' employé(s) trouvé(s)'">
     <div actions>
+      <button type="button" class="ky-btn-secondary btn-import-export" (click)="openGroupReset()">
+        <app-lucide-icon [icon]="icons.key" className="w-4 h-4" />
+        Régénérer par groupe
+      </button>
       <button type="button" class="ky-btn-secondary btn-import-export" (click)="goimport()">
-        Import / Export
+        Importer / Exporter
       </button>
       <button type="button" class="ky-btn-primary" (click)="createUser()">
         <span class="plus-icon">+</span> Nouvel employé
@@ -205,22 +209,148 @@
     </div>
   }
 
-  @if (resetCredentials) {
-    <div class="level-modal-backdrop" appBodyPortal (click)="closeResetCredentials()">
-      <div class="level-modal" (click)="$event.stopPropagation()">
-        <h3>Nouveau mot de passe (une seule fois)</h3>
-        <p class="level-modal-sub">{{ resetCredentials.email }}</p>
-        <p>
-          <code>{{ showResetPassword ? resetCredentials.password : '••••••••••••••••' }}</code>
+  @if (groupResetOpen) {
+    <div class="level-modal-backdrop" appBodyPortal (click)="closeGroupReset()">
+      <div class="level-modal group-reset-modal" (click)="$event.stopPropagation()">
+        <h3>Régénérer les mots de passe d’un groupe</h3>
+        <p class="level-modal-sub">
+          Ciblez un pôle, une cellule ou un service. Les comptes Administrateur sont exclus.
         </p>
+
+        <div class="group-reset-fields">
+          <label class="group-reset-label">Niveau</label>
+          <div class="level-modal-choices">
+            <button type="button" class="level-choice" [class.active]="groupResetScope === 'Pole'" (click)="onGroupResetScopeChange('Pole')">
+              <strong>Pôle</strong>
+              <span>Tous les employés rattachés au pôle</span>
+            </button>
+            <button type="button" class="level-choice" [class.active]="groupResetScope === 'Cellule'" (click)="onGroupResetScopeChange('Cellule')">
+              <strong>Cellule</strong>
+              <span>Uniquement la cellule choisie</span>
+            </button>
+            <button type="button" class="level-choice" [class.active]="groupResetScope === 'Service'" (click)="onGroupResetScopeChange('Service')">
+              <strong>Service</strong>
+              <span>Le service (groupe le plus fin)</span>
+            </button>
+          </div>
+
+          @if (groupResetScope !== 'Pole') {
+            <label class="group-reset-label" for="group-reset-pole-filter">Filtrer par pôle (optionnel)</label>
+            <select
+              id="group-reset-pole-filter"
+              class="ky-input"
+              [(ngModel)]="groupResetFilterPoleId"
+              (ngModelChange)="onGroupResetPoleFilterChange()"
+            >
+              <option value="">Tous les pôles</option>
+              @for (pole of groupResetPoles(); track pole.id) {
+                <option [value]="pole.id">{{ pole.name }}</option>
+              }
+            </select>
+          }
+
+          @if (groupResetScope === 'Service') {
+            <label class="group-reset-label" for="group-reset-cellule-filter">Filtrer par cellule (optionnel)</label>
+            <select
+              id="group-reset-cellule-filter"
+              class="ky-input"
+              [(ngModel)]="groupResetFilterCelluleId"
+              (ngModelChange)="onGroupResetCelluleFilterChange()"
+            >
+              <option value="">Toutes les cellules</option>
+              @for (cellule of groupResetCellules(); track cellule.id) {
+                <option [value]="cellule.id">{{ cellule.name }}</option>
+              }
+            </select>
+          }
+
+          <label class="group-reset-label" for="group-reset-node">
+            @if (groupResetScope === 'Pole') { Pôle }
+            @else if (groupResetScope === 'Cellule') { Cellule }
+            @else { Service }
+          </label>
+          <select id="group-reset-node" class="ky-input" [(ngModel)]="groupResetNodeId">
+            <option value="">Sélectionner…</option>
+            @for (node of groupResetNodeOptions(); track node.id) {
+              <option [value]="node.id">{{ node.label }}</option>
+            }
+          </select>
+
+          @if (groupResetNodeId) {
+            <p class="group-reset-preview">
+              {{ groupResetPreviewCount() }} compte(s) Planning actif(s) seront réinitialisés
+              @if (groupResetDirectoryCount() !== groupResetPreviewCount()) {
+                ({{ groupResetDirectoryCount() }} personne(s) dans l’annuaire)
+              }.
+              Les comptes Administrateur sont exclus. L’opération peut prendre quelques minutes.
+            </p>
+          } @else if (!orgOverviewHasNodes()) {
+            <p class="level-modal-error">Organisation indisponible. Rechargez la page.</p>
+          }
+        </div>
+
+        <div class="level-modal-actions">
+          <button type="button" class="ky-btn-secondary" [disabled]="groupResetting" (click)="closeGroupReset()">Annuler</button>
+          <button
+            type="button"
+            class="ky-btn-primary"
+            [disabled]="!groupResetNodeId || groupResetting"
+            (click)="confirmGroupReset()"
+          >
+            {{ groupResetting ? 'Régénération…' : 'Régénérer' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (resetCredentialRows.length || resetCredentialErrors.length) {
+    <div class="level-modal-backdrop" appBodyPortal (click)="closeResetCredentials()">
+      <div class="level-modal group-reset-modal" (click)="$event.stopPropagation()">
+        <h3>
+          @if (resetCredentialRows.length > 1) {
+            Nouveaux mots de passe (une seule fois)
+          } @else {
+            Nouveau mot de passe (une seule fois)
+          }
+        </h3>
+        @if (resetCredentials && resetCredentialRows.length === 1) {
+          <p class="level-modal-sub">{{ resetCredentials.email }}</p>
+          <p>
+            <code>{{ showResetPassword ? resetCredentials.password : '••••••••••••••••' }}</code>
+          </p>
+        } @else if (resetCredentialRows.length) {
+          <p class="level-modal-sub">{{ resetCredentialRows.length }} identifiant(s) à remettre. Téléchargez l’Excel puis fermez cet écran.</p>
+          <div class="group-reset-list">
+            @for (row of resetCredentialRows; track row.email) {
+              <div class="group-reset-row">
+                <span>{{ row.lastName }} {{ row.firstName }}</span>
+                <code>{{ row.email }}</code>
+                <code>{{ showResetPassword ? row.password : '••••••••' }}</code>
+              </div>
+            }
+          </div>
+        }
+        @if (resetCredentialErrors.length) {
+          <p class="level-modal-error">{{ resetCredentialErrors.length }} échec(s)</p>
+          <ul class="group-reset-errors">
+            @for (err of resetCredentialErrors; track err) {
+              <li>{{ err }}</li>
+            }
+          </ul>
+        }
         <div class="level-modal-actions">
           <button type="button" class="ky-btn-secondary" (click)="showResetPassword = !showResetPassword">
             {{ showResetPassword ? 'Masquer' : 'Afficher' }}
           </button>
-          <button type="button" class="ky-btn-secondary" (click)="copyResetPassword()">Copier</button>
-          <button type="button" class="ky-btn-secondary" (click)="downloadResetCredentialsExcel()" [disabled]="downloadingCredentialsExcel">
-            {{ downloadingCredentialsExcel ? 'Téléchargement…' : 'Télécharger Excel' }}
-          </button>
+          @if (resetCredentials && resetCredentialRows.length === 1) {
+            <button type="button" class="ky-btn-secondary" (click)="copyResetPassword()">Copier</button>
+          }
+          @if (resetCredentialRows.length) {
+            <button type="button" class="ky-btn-secondary" (click)="downloadResetCredentialsExcel()" [disabled]="downloadingCredentialsExcel">
+              {{ downloadingCredentialsExcel ? 'Téléchargement…' : 'Télécharger Excel' }}
+            </button>
+          }
           <button type="button" class="ky-btn-primary" (click)="closeResetCredentials()">Fermer</button>
         </div>
       </div>

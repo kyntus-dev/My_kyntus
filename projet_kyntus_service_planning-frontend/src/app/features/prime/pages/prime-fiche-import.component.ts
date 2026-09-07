@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import { Upload, Eye, CheckCircle, AlertTriangle } from 'lucide';
+import { Upload, Eye, CheckCircle, AlertTriangle, Download } from 'lucide';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
 import { PrimeCardComponent } from '../components/prime-card.component';
 import { PrimeTemplatePreviewComponent } from '../components/prime-template-preview.component';
@@ -38,6 +38,7 @@ import { parseFlatPrimeFicheCsv } from '../lib/prime-fiche-flat-csv.parser';
 import { parseReadyPrimeFicheExcel } from '../lib/prime-fiche-ready-import.parser';
 import { buildDetailSnapshotPayload } from '../lib/prime-fiche-detail-snapshot';
 import { summarizeGridDiagnostics } from '../lib/prime-fiche-grid-diagnostics';
+import { downloadPrimeFicheStandardTemplate } from '../lib/prime-fiche-template-download';
 import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/prime-template.model';
 
 @Component({
@@ -45,15 +46,15 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
   standalone: true,
   imports: [FormsModule, LucideIconComponent, PrimeCardComponent, PrimeTemplatePreviewComponent],
   template: `
-    <div class="flex flex-col min-h-0 p-4 sm:p-6 space-y-6 max-w-5xl mx-auto pb-16">
+    <div class="flex flex-col min-h-0 p-3 sm:p-4 xl:p-5 space-y-6 w-full max-w-none pb-16">
       @if (!embeddedInShell) {
       <div>
         <h1 class="text-xl font-bold tracking-tight text-primary sm:text-2xl">
-          Import fiche PRIME prête
+          Importer une fiche remplie
         </h1>
         <p class="mt-1 text-sm text-muted">
-          Déposez une fiche Excel ou CSV déjà remplie pour un employé — sans passer par la saisie manuelle.
-          Cochez « Historique » pour enregistrer directement (hors workflow) ; sinon la fiche entre en validation.
+          Importez une fiche Excel ou CSV déjà remplie pour un pilote. Activez « Import historique » uniquement
+          pour archiver une ancienne fiche sans l’envoyer dans le circuit de validation.
         </p>
       </div>
       } @else {
@@ -79,7 +80,7 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
         </div>
       }
 
-      <app-prime-card title="Cible et période" description="Cellule, employé et mois de la fiche importée.">
+      <app-prime-card title="Pilote et période" description="Sélectionnez le pilote et le mois de la fiche importée.">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label class="mb-1 block text-sm font-medium text-muted">Année</label>
@@ -122,7 +123,7 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
           </div>
           @if (!isHistorical()) {
             <div class="sm:col-span-2">
-              <label class="mb-1 block text-sm font-medium text-muted">Employé (pilote)</label>
+              <label class="mb-1 block text-sm font-medium text-muted">Pilote</label>
               <select [ngModel]="employeeId()" (ngModelChange)="employeeId.set($event)" [class]="inputFieldClass">
                 <option value="">— Choisir —</option>
                 @for (e of pilots(); track e.employeeId) {
@@ -134,13 +135,13 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
             </div>
           } @else {
             <div class="sm:col-span-2">
-              <label class="mb-1 block text-sm font-medium text-muted">Employé (si connu)</label>
+              <label class="mb-1 block text-sm font-medium text-muted">Pilote (si connu)</label>
               <select
                 [ngModel]="employeeId()"
                 (ngModelChange)="onHistoricalEmployeeChange($event)"
                 [class]="inputFieldClass"
               >
-                <option value="">— Autre employé —</option>
+                <option value="">— Autre pilote —</option>
                 @for (e of pilots(); track e.employeeId) {
                   <option [value]="e.employeeId">
                     {{ e.firstName }} {{ e.lastName }}
@@ -159,13 +160,13 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
                   placeholder="Ex. Dupont Jean"
                 />
                 <p class="mt-1 text-xs text-muted">
-                  Employé absent du référentiel — saisissez le nom tel qu'il doit apparaître dans l'historique.
+                  Pilote absent du référentiel — saisissez le nom tel qu'il doit apparaître dans l'historique.
                 </p>
               </div>
             } @else {
               <div class="sm:col-span-2">
                 <p class="text-xs font-medium text-primary">
-                  Employé sélectionné : {{ selectedHistoricalEmployeeName() }}
+                  Pilote sélectionné : {{ selectedHistoricalEmployeeName() }}
                 </p>
               </div>
             }
@@ -178,7 +179,7 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
                 (ngModelChange)="onHistoricalToggle($event)"
                 class="rounded border-default"
               />
-              Historique — enregistrement direct hors workflow de validation
+              Import historique — archiver sans circuit de validation
             </label>
           </div>
         </div>
@@ -186,6 +187,17 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
 
       <app-prime-card title="Fichier" description="Excel (.xlsx) modèle rempli ou CSV plat (.csv).">
         <div class="flex flex-col gap-3">
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              (click)="downloadStandardTemplate()"
+              [disabled]="templateDownloadBusy()"
+              class="inline-flex items-center gap-2 rounded-lg border border-default bg-card px-4 py-2 text-sm font-medium text-primary hover:bg-input/40 disabled:opacity-50"
+            >
+              <app-lucide-icon [icon]="icons.download" className="w-4 h-4" />
+              Télécharger le modèle standard
+            </button>
+          </div>
           <label
             class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-default bg-card/40 px-4 py-6 text-sm text-muted hover:bg-input/30"
           >
@@ -235,8 +247,8 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
       </app-prime-card>
 
       @if (previewTemplate()) {
-        <app-prime-card title="Aperçu" [description]="previewSummary()">
-          <app-prime-template-preview [tpl]="previewTemplate()" />
+        <app-prime-card className="p-0 overflow-hidden" title="Aperçu" [description]="previewSummary()">
+          <app-prime-template-preview [tpl]="previewTemplate()" [computedRows]="previewRows().length ? previewRows() : null" />
         </app-prime-card>
       }
 
@@ -248,15 +260,15 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
           class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
         >
           <app-lucide-icon [icon]="icons.check" className="w-4 h-4" />
-          {{ isHistorical() ? 'Enregistrer (historique)' : 'Importer et soumettre au workflow' }}
+          {{ isHistorical() ? 'Archiver cette fiche' : 'Importer et envoyer en validation' }}
         </button>
         @if (!isHistorical()) {
           <button
             type="button"
-            (click)="nav.requestViewWithTab('/prime-fiches-agents', 'pilotage')"
+            (click)="nav.requestView('/prime-fiches-pilotes')"
             class="rounded-lg border border-default px-4 py-2 text-sm font-medium text-primary hover:bg-input/40"
           >
-            Aller au pilotage
+            Voir les fiches pilotes
           </button>
         }
       </div>
@@ -273,7 +285,7 @@ export class PrimeFicheImportComponent implements OnInit {
   readonly nav = inject(PrimeNavRequestService);
   private readonly scope = inject(PrimeScopeStore);
 
-  readonly icons = { upload: Upload, eye: Eye, check: CheckCircle, alert: AlertTriangle };
+  readonly icons = { upload: Upload, eye: Eye, check: CheckCircle, alert: AlertTriangle, download: Download };
   readonly inputFieldClass = PRIME_INPUT_FIELD_CLASS;
 
   readonly periodYear = computed(() => this.scope.periodYear());
@@ -297,6 +309,7 @@ export class PrimeFicheImportComponent implements OnInit {
   readonly challengeAmount = signal<number | null>(null);
   readonly totalAmount = signal<number | null>(null);
   readonly serviceSaisieJson = signal('{}');
+  readonly templateDownloadBusy = signal(false);
   readonly previewSheetName = signal<string | null>(null);
   readonly previewTemplate = signal<StoredPrimeTemplate | null>(null);
 
@@ -454,6 +467,19 @@ export class PrimeFicheImportComponent implements OnInit {
     this.showParseDetail.update((v) => !v);
   }
 
+  async downloadStandardTemplate(): Promise<void> {
+    if (this.templateDownloadBusy()) return;
+    this.templateDownloadBusy.set(true);
+    try {
+      await downloadPrimeFicheStandardTemplate();
+    } catch (e) {
+      this.bannerIsError.set(true);
+      this.banner.set(e instanceof Error ? e.message : 'Impossible de télécharger le modèle standard.');
+    } finally {
+      this.templateDownloadBusy.set(false);
+    }
+  }
+
   async onFileSelected(ev: Event): Promise<void> {
     const input = ev.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -555,7 +581,7 @@ export class PrimeFicheImportComponent implements OnInit {
           serviceSaisieJson: this.serviceSaisieJson(),
         }),
       );
-      const name = res.employeeDisplayName ?? 'Employé';
+      const name = res.employeeDisplayName ?? 'Pilote';
       if (res.outcome === 'HistoricalArchive') {
         this.banner.set(`Archive historique enregistrée pour ${name} — ${res.period}.`);
       } else if (this.isHistorical()) {

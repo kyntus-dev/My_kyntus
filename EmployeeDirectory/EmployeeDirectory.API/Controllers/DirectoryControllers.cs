@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace EmployeeDirectory.API.Controllers;
 
@@ -28,6 +29,25 @@ public class DirectoryEmployeesController(IMediator mediator) : ControllerBase
         [FromQuery] string? poleId,
         CancellationToken ct) =>
         Ok(await mediator.Send(new ListEmployeesQuery(role, poleId), ct));
+
+    [HttpGet("employees/by-email")]
+    public async Task<ActionResult<EmployeeDto>> GetByEmail([FromQuery] string email, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return BadRequest(new { error = "email requis." });
+
+        var jwtEmail = User.GetEmail();
+        var role = User.GetAuthRole();
+        var privileged = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase);
+        if (!privileged
+            && (string.IsNullOrWhiteSpace(jwtEmail)
+                || !string.Equals(jwtEmail, email.Trim(), StringComparison.OrdinalIgnoreCase)))
+            return Forbid();
+
+        var e = await mediator.Send(new GetEmployeeByEmailQuery(email.Trim()), ct);
+        return e is null ? NotFound() : Ok(e);
+    }
 
     [HttpGet("employees/check-email")]
     public async Task<ActionResult<object>> CheckEmail([FromQuery] string email, [FromQuery] Guid? excludeId, CancellationToken ct)
@@ -153,14 +173,42 @@ public class DirectoryEmployeesController(IMediator mediator) : ControllerBase
 public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgController> logger) : ControllerBase
 {
     [HttpGet("overview")]
-    [AllowAnonymous]
-    public async Task<ActionResult<OrgOverviewDto>> Overview(CancellationToken ct) =>
-        Ok(await mediator.Send(new GetOrgOverviewQuery(), ct));
+    public async Task<ActionResult<OrgOverviewDto>> Overview(CancellationToken ct)
+    {
+        // Mutations org (pilotes, cellules, services…) doivent être visibles immédiatement :
+        // interdire le cache navigateur / proxy sur cet endpoint.
+        Response.Headers.CacheControl = "private, no-store, no-cache, must-revalidate";
+        Response.Headers.Pragma = "no-cache";
+        return Ok(await mediator.Send(new GetOrgOverviewQuery(), ct));
+    }
 
     [HttpGet("assignments/as-of")]
-    [AllowAnonymous]
     public async Task<ActionResult<OrgAssignmentAsOfDto>> AsOf([FromQuery] DateTime date, CancellationToken ct) =>
         Ok(await mediator.Send(new GetAssignmentsAsOfQuery(date), ct));
+
+    [HttpPost("assignments/created-after")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<IReadOnlyList<Guid>>> AssignmentsCreatedAfter(
+        [FromBody] EmployeeIdsCreatedAfterRequest body,
+        CancellationToken ct)
+    {
+        if (body is null || body.EmployeeIds is null || body.EmployeeIds.Count == 0)
+            return Ok(Array.Empty<Guid>());
+        return Ok(await mediator.Send(
+            new GetEmployeeIdsWithAssignmentsAfterQuery(body.EmployeeIds, body.After), ct));
+    }
+
+    [HttpPost("assignments/undo-import-window")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<UndoImportAssignmentWindowResult>> UndoImportWindow(
+        [FromBody] UndoImportAssignmentWindowRequest body,
+        CancellationToken ct)
+    {
+        if (body.EmployeeIds is null || body.EmployeeIds.Count == 0)
+            return BadRequest(new { error = "employeeIds requis." });
+        var changedBy = User.GetSubjectId();
+        return Ok(await mediator.Send(new UndoImportAssignmentWindowCommand(body, changedBy), ct));
+    }
 
     [HttpPost("structure/poles")]
     [Authorize(Roles = "Admin,RH")]
@@ -377,7 +425,6 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
 public class DirectoryRebacController(IMediator mediator) : ControllerBase
 {
     [HttpGet("is-descendant")]
-    [AllowAnonymous]
     public async Task<ActionResult<object>> IsDescendant([FromQuery] Guid viewerId, [FromQuery] Guid targetId, CancellationToken ct)
     {
         var isDescendant = await mediator.Send(new IsDescendantQuery(viewerId, targetId), ct);
@@ -385,7 +432,6 @@ public class DirectoryRebacController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("managed-nodes")]
-    [AllowAnonymous]
     public async Task<ActionResult<RebacManagedNodesDto>> ManagedNodes(
         [FromQuery] Guid employeeId,
         [FromQuery] string kind,
@@ -393,7 +439,6 @@ public class DirectoryRebacController(IMediator mediator) : ControllerBase
         Ok(await mediator.Send(new GetManagedNodesQuery(employeeId, kind), ct));
 
     [HttpGet("responsibles")]
-    [AllowAnonymous]
     public async Task<ActionResult<object>> Responsibles(
         [FromQuery] string kind,
         [FromQuery] string nodeId,
@@ -404,7 +449,6 @@ public class DirectoryRebacController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("managed-employees")]
-    [AllowAnonymous]
     public async Task<ActionResult<object>> ManagedEmployees(
         [FromQuery] Guid employeeId,
         CancellationToken ct)
@@ -414,11 +458,29 @@ public class DirectoryRebacController(IMediator mediator) : ControllerBase
     }
 
     [HttpPost("can-act")]
-    [AllowAnonymous]
     public async Task<ActionResult<CanActOnResultDto>> CanAct(
         [FromBody] CanActOnRequest body,
-        CancellationToken ct) =>
-        Ok(await mediator.Send(new CanActOnCommand(body.ActorId, body.TargetEmployeeId), ct));
+        CancellationToken ct)
+    {
+        // L'identité Auth (sub) et l'identité Directory n'utilisent pas toujours
+        // le même Guid. Résoudre l'acteur depuis le JWT empêche à la fois les 403
+        // sur l'accès à soi-même et l'usurpation d'un ActorId fourni par le client.
+        EmployeeDto? actor = null;
+        var email = (User.FindFirst("email")?.Value
+                     ?? User.FindFirst(ClaimTypes.Email)?.Value)?.Trim();
+        if (!string.IsNullOrWhiteSpace(email))
+            actor = await mediator.Send(new GetEmployeeByEmailQuery(email), ct);
+
+        var subjectId = User.GetSubjectId();
+        if (actor is null && subjectId is { } id && id != Guid.Empty)
+            actor = await mediator.Send(new GetEmployeeByIdQuery(id), ct);
+
+        var actorId = actor is not null && Guid.TryParse(actor.Id, out var resolvedId)
+            ? resolvedId
+            : Guid.Empty;
+
+        return Ok(await mediator.Send(new CanActOnCommand(actorId, body.TargetEmployeeId), ct));
+    }
 
     [HttpGet("hierarchy/{employeeId:guid}/subtree")]
     public async Task<ActionResult<RebacSubtreeDto>> Subtree(Guid employeeId, CancellationToken ct) =>
@@ -433,11 +495,76 @@ public record CanActOnRequest(Guid ActorId, Guid TargetEmployeeId);
 public class IamController(IMediator mediator) : ControllerBase
 {
     [HttpGet("effective-permissions")]
-    public async Task<ActionResult<EffectivePermissionsDto>> EffectivePermissions(CancellationToken ct)
+    public async Task<ActionResult<EffectivePermissionsDto>> EffectivePermissions(
+        [FromQuery] string? role,
+        CancellationToken ct)
     {
         var subjectId = User.GetSubjectId() ?? Guid.Empty;
-        var role = User.GetAuthRole() ?? "Employee";
-        return Ok(await mediator.Send(new GetEffectivePermissionsQuery(subjectId, role), ct));
+        var callerRole = User.GetAuthRole() ?? "Employee";
+        var preview = !string.IsNullOrWhiteSpace(role)
+                      && (string.Equals(callerRole, "Admin", StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(callerRole, "RH", StringComparison.OrdinalIgnoreCase));
+        return Ok(await mediator.Send(new GetEffectivePermissionsQuery(subjectId, preview ? role!.Trim() : callerRole), ct));
+    }
+
+    [HttpGet("leave-workflow")]
+    public async Task<ActionResult<LeaveWorkflowDto>> LeaveWorkflow(CancellationToken ct) =>
+        Ok(await mediator.Send(new GetLeaveWorkflowQuery(), ct));
+
+    [HttpGet("catalog")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<IamCatalogDto>> Catalog(CancellationToken ct) =>
+        Ok(await mediator.Send(new GetIamCatalogQuery(), ct));
+
+    [HttpGet("permissions")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<IReadOnlyList<IamPermissionRowDto>>> Permissions(
+        [FromQuery] string? role,
+        CancellationToken ct) =>
+        Ok(await mediator.Send(new ListIamPermissionsQuery(role), ct));
+
+    [HttpGet("matrix")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<IamMatrixDto>> Matrix(
+        [FromQuery] string role,
+        [FromQuery] string? scope,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(role)) return BadRequest(new { error = "role requis" });
+        return Ok(await mediator.Send(new GetIamMatrixQuery(role.Trim(), scope), ct));
+    }
+
+    [HttpPut("permissions")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<IamPermissionRowDto>> Upsert(
+        [FromBody] UpsertIamPermissionRequest body,
+        CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await mediator.Send(new UpsertIamPermissionCommand(body), ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPut("permissions/bulk")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<object>> UpsertBulk(
+        [FromBody] UpsertIamPermissionsBulkRequest body,
+        CancellationToken ct)
+    {
+        try
+        {
+            var upserted = await mediator.Send(new UpsertIamPermissionsBulkCommand(body.Items ?? []), ct);
+            return Ok(new { upserted });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPost("evaluate")]
@@ -677,4 +804,6 @@ internal static class ClaimsExtensions
         Kyntus.Identity.Jwt.KyntusClaimsPrincipalExtensions.GetSubjectId(user);
     public static string? GetAuthRole(this System.Security.Claims.ClaimsPrincipal user) =>
         Kyntus.Identity.Jwt.KyntusClaimsPrincipalExtensions.GetAuthRole(user);
+    public static string? GetEmail(this System.Security.Claims.ClaimsPrincipal user) =>
+        Kyntus.Identity.Jwt.KyntusClaimsPrincipalExtensions.GetEmail(user);
 }

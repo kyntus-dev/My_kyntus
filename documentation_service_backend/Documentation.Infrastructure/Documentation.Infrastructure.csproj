@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Documentation.Application\Documentation.Application.csproj" />
     <ProjectReference Include="..\Documentation.Domain\Documentation.Domain.csproj" />
+    <ProjectReference Include="..\..\Kyntus.Caching\Kyntus.Caching.csproj" />
     <ProjectReference Include="..\..\Kyntus.Iam\Kyntus.Iam.csproj" />
     <ProjectReference Include="..\..\Kyntus.Identity.Jwt\Kyntus.Identity.Jwt.csproj" />
     <ProjectReference Include="..\..\Messaging.Contracts\Messaging.Contracts.csproj" />

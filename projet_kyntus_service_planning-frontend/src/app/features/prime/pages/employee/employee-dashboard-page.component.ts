@@ -34,13 +34,13 @@ echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
   providers: [provideEchartsCore({ echarts })],
   template: `
     @if (loading()) {
-      <div class="p-8 text-muted">Loading your dashboard...</div>
+      <div class="p-8 text-muted">Chargement de votre tableau de bord…</div>
     } @else {
       <div class="prime-page-shell">
         <div>
-          <h1 class="text-3xl font-bold text-primary">Welcome back, {{ user().firstName }}</h1>
+          <h1 class="text-3xl font-bold text-primary">Bonjour, {{ user().firstName }}</h1>
           <p class="text-muted mt-1">
-            Your personal PRIME space - read-only and focused on your results.
+            Votre espace PRIME personnel — consultation seule, centré sur vos résultats.
           </p>
         </div>
 
@@ -48,7 +48,7 @@ echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
           <app-prime-card className="card-navy">
             <div class="flex items-center justify-between">
               <div>
-                <p class="text-muted text-sm">Total primes earned</p>
+                <p class="text-muted text-sm">Total des primes perçues</p>
                 <p class="text-2xl font-bold text-[var(--success-text)]">{{ totalEarned() }} MAD</p>
               </div>
               <app-lucide-icon [icon]="icons.wallet" className="w-5 h-5 text-[var(--success-text)]" />
@@ -57,7 +57,7 @@ echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
           <app-prime-card className="card-navy">
             <div class="flex items-center justify-between">
               <div>
-                <p class="text-muted text-sm">Current month primes</p>
+                <p class="text-muted text-sm">Primes du mois en cours</p>
                 <p class="text-2xl font-bold text-[var(--info-text)]">{{ currentMonthEarned() }} MAD</p>
               </div>
               <app-lucide-icon [icon]="icons.calendar" className="w-5 h-5 text-[var(--info-text)]" />
@@ -75,20 +75,20 @@ echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
         </div>
 
         <app-prime-card
-          title="Monthly earnings"
-          description="Your prime evolution by month"
+          title="Gains mensuels"
+          description="Évolution de vos primes par mois"
           className="card-navy"
         >
           @if (monthlyData().length === 0) {
-            <div class="text-muted py-10 text-center">No primes yet</div>
+            <div class="text-muted py-10 text-center">Aucune prime pour le moment</div>
           } @else {
             <div class="h-72" echarts [options]="chartOptions()"></div>
           }
         </app-prime-card>
 
-        <app-prime-card title="Recent primes" className="card-navy">
+        <app-prime-card title="Primes récentes" className="card-navy">
           @if (recentPrimes().length === 0) {
-            <div class="text-muted py-8 text-center">No primes yet</div>
+            <div class="text-muted py-8 text-center">Aucune prime pour le moment</div>
           } @else {
             <div class="space-y-3">
               @for (prime of recentPrimes(); track prime.id) {
@@ -167,7 +167,7 @@ export class EmployeeDashboardPageComponent {
       .slice(0, 5)
       .map((result) => ({
         ...result,
-        typeName: this.types().find((type) => type.id === result.primeTypeId)?.name ?? 'Unknown',
+        typeName: this.types().find((type) => type.id === result.primeTypeId)?.name ?? 'Inconnu',
       })),
   );
 

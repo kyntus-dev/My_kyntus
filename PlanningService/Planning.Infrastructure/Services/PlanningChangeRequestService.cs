@@ -109,8 +109,15 @@ public class PlanningChangeRequestService : IPlanningChangeRequestService
         var result = new List<PlanningChangeRequestDto>();
         foreach (var id in ids)
         {
-            var dto = await MapAsync(id, requesterUserId);
-            if (dto != null) result.Add(dto);
+            try
+            {
+                var dto = await MapAsync(id, requesterUserId);
+                if (dto != null) result.Add(dto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Mapping demande de changement {RequestId} ignoré.", id);
+            }
         }
         return result;
     }
@@ -182,8 +189,15 @@ public class PlanningChangeRequestService : IPlanningChangeRequestService
         var result = new List<PlanningChangeRequestDto>();
         foreach (var id in ids)
         {
-            var dto = await MapAsync(id, viewerUserId);
-            if (dto != null) result.Add(dto);
+            try
+            {
+                var dto = await MapAsync(id, viewerUserId);
+                if (dto != null) result.Add(dto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Mapping demande de changement {RequestId} ignoré.", id);
+            }
         }
         return result;
     }
@@ -225,7 +239,7 @@ public class PlanningChangeRequestService : IPlanningChangeRequestService
             {
                 UserId = g.UserId,
                 FullName = users.TryGetValue(g.UserId, out var u)
-                    ? $"{u.FirstName} {u.LastName}"
+                    ? UserDisplayName.Format(u.FirstName, u.LastName)
                     : $"#{g.UserId}",
                 TotalRequests = g.Total,
                 PendingCount = g.Pending,
@@ -277,7 +291,7 @@ public class PlanningChangeRequestService : IPlanningChangeRequestService
                 return new SwapCandidateDto
                 {
                     UserId = peer.Id,
-                    FullName = $"{peer.FirstName} {peer.LastName}",
+                    FullName = UserDisplayName.Format(peer.FirstName, peer.LastName),
                     Level = peer.Level,
                     AssignmentId = a.Id,
                     ShiftLabel = a.SubServiceShiftConfig?.Label ?? "—"
@@ -581,7 +595,7 @@ public class PlanningChangeRequestService : IPlanningChangeRequestService
     private static string DisplayName(User? user, int fallbackId)
     {
         if (user == null) return $"#{fallbackId}";
-        var name = $"{user.FirstName} {user.LastName}".Trim();
+        var name = UserDisplayName.Format(user.FirstName, user.LastName);
         return string.IsNullOrWhiteSpace(name) ? (user.Email ?? $"#{fallbackId}") : name;
     }
 
@@ -715,32 +729,34 @@ public class PlanningChangeRequestService : IPlanningChangeRequestService
             Id = r.Id,
             WeekCode = r.WeekCode,
             RequesterUserId = r.RequesterUserId,
-            RequesterName = $"{r.Requester.FirstName} {r.Requester.LastName}",
+            RequesterName = r.Requester is null
+                ? "—"
+                : UserDisplayName.Format(r.Requester.FirstName, r.Requester.LastName),
             CurrentAssignmentId = r.CurrentAssignmentId,
-            AssignmentDay = r.CurrentAssignment.DayOfWeek.ToString(),
-            AssignmentDate = r.CurrentAssignment.AssignedDate,
-            ShiftLabel = r.CurrentAssignment.SubServiceShiftConfig?.Label ?? "—",
+            AssignmentDay = r.CurrentAssignment?.DayOfWeek.ToString() ?? "—",
+            AssignmentDate = r.CurrentAssignment?.AssignedDate ?? default,
+            ShiftLabel = r.CurrentAssignment?.SubServiceShiftConfig?.Label ?? "—",
             Reason = r.Reason,
             ProposedSwapUserId = r.ProposedSwapUserId,
             ProposedSwapUserName = r.ProposedSwapUser != null
-                ? $"{r.ProposedSwapUser.FirstName} {r.ProposedSwapUser.LastName}"
+                ? UserDisplayName.Format(r.ProposedSwapUser.FirstName, r.ProposedSwapUser.LastName)
                 : null,
             Status = r.Status.ToString(),
             CreatedAt = r.CreatedAt,
             PartnerRespondedAt = r.PartnerRespondedAt,
             SupervisorProcessedByUserId = r.SupervisorProcessedByUserId,
             SupervisorProcessedByName = r.SupervisorProcessedBy != null
-                ? $"{r.SupervisorProcessedBy.FirstName} {r.SupervisorProcessedBy.LastName}"
+                ? UserDisplayName.Format(r.SupervisorProcessedBy.FirstName, r.SupervisorProcessedBy.LastName)
                 : null,
             ProcessedByUserId = r.ProcessedByUserId,
             ProcessedByName = r.ProcessedBy != null
-                ? $"{r.ProcessedBy.FirstName} {r.ProcessedBy.LastName}"
+                ? UserDisplayName.Format(r.ProcessedBy.FirstName, r.ProcessedBy.LastName)
                 : null,
             ProcessedAt = r.ProcessedAt,
             RejectionReason = r.RejectionReason,
-            SubServiceId = r.CurrentAssignment.WeeklyPlanning.SubServiceId,
-            SubServiceName = r.CurrentAssignment.WeeklyPlanning.SubService.Name,
-            WeeklyPlanningId = r.CurrentAssignment.WeeklyPlanningId,
+            SubServiceId = r.CurrentAssignment?.WeeklyPlanning?.SubServiceId ?? 0,
+            SubServiceName = r.CurrentAssignment?.WeeklyPlanning?.SubService?.Name ?? "—",
+            WeeklyPlanningId = r.CurrentAssignment?.WeeklyPlanningId ?? 0,
             ViewerIsPartner = viewerUserId.HasValue && r.ProposedSwapUserId == viewerUserId.Value,
             ViewerIsRequester = viewerUserId.HasValue && r.RequesterUserId == viewerUserId.Value,
         };

@@ -1,6 +1,6 @@
 namespace Prime.Infrastructure.Services;
 
-/// <summary>Diffusion des livrables PRIME : pilote attend la fin ; comptabilité après Manager+RH pour la synthèse.</summary>
+/// <summary>Diffusion des livrables PRIME : pilote attend la fin ; comptabilité après validation RH pour la synthèse.</summary>
 public static class PrimeFicheDistributionAccess
 {
     public static bool RoleMustWaitForPrimeDistribution(string? role)
@@ -24,7 +24,7 @@ public static class PrimeFicheDistributionAccess
 
     /// <summary>
     /// Synthèse globale Excel : superviseur et validateurs dès que le fichier existe ;
-    /// comptabilité après Manager + RH ; pilote après diffusion complète.
+    /// comptabilité après validation RH ; pilote après diffusion complète.
     /// </summary>
     public static bool CanDownloadGlobalPoolSynthesis(
         string? role,

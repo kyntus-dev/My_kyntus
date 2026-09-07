@@ -20,8 +20,8 @@ public sealed class GlobalPoolWorkflowService(PrimeDbContext db)
             .ThenBy(s => s.ApproverRole)
             .ToListAsync(ct);
 
-    public bool LegacyPoolUnlocked(SupervisorCellulePrimeDraft d) =>
-        d.GlobalPoolManagerApprovedAt.HasValue && d.GlobalPoolRhApprovedAt.HasValue;
+    public static bool LegacyPoolUnlocked(SupervisorCellulePrimeDraft d) =>
+        d.GlobalPoolRhApprovedAt.HasValue;
 
     public async Task<bool> PoolDistributionUnlockedAsync(SupervisorCellulePrimeDraft d, CancellationToken ct)
     {
@@ -91,10 +91,9 @@ public sealed class GlobalPoolWorkflowService(PrimeDbContext db)
         {
             return employeeRole switch
             {
-                "Manager" => !d.GlobalPoolManagerApprovedAt.HasValue,
                 "RH" => !d.GlobalPoolRhApprovedAt.HasValue,
                 "Comptable" or "Comptabilité" => LegacyPoolUnlocked(d) && !d.GlobalPoolComptaAckAt.HasValue,
-                "Admin" => !d.GlobalPoolManagerApprovedAt.HasValue || !d.GlobalPoolRhApprovedAt.HasValue ||
+                "Admin" => !d.GlobalPoolRhApprovedAt.HasValue ||
                            (LegacyPoolUnlocked(d) && !d.GlobalPoolComptaAckAt.HasValue),
                 _ => false,
             };
@@ -245,7 +244,7 @@ public sealed class GlobalPoolWorkflowService(PrimeDbContext db)
     // ---- Synthèse par périmètre (scope) ----
 
     public static bool LegacyScopePoolUnlocked(GlobalPoolScopeSynthesisEntity s) =>
-        s.ManagerApprovedAt.HasValue && s.RhApprovedAt.HasValue;
+        s.RhApprovedAt.HasValue;
 
     public async Task<bool> PoolDistributionUnlockedAsync(GlobalPoolScopeSynthesisEntity s, CancellationToken ct)
     {
@@ -314,10 +313,9 @@ public sealed class GlobalPoolWorkflowService(PrimeDbContext db)
         {
             return employeeRole switch
             {
-                "Manager" => !s.ManagerApprovedAt.HasValue,
                 "RH" => !s.RhApprovedAt.HasValue,
                 "Comptable" or "Comptabilité" => LegacyScopePoolUnlocked(s) && !s.ComptaAckAt.HasValue,
-                "Admin" => !s.ManagerApprovedAt.HasValue || !s.RhApprovedAt.HasValue ||
+                "Admin" => !s.RhApprovedAt.HasValue ||
                            (LegacyScopePoolUnlocked(s) && !s.ComptaAckAt.HasValue),
                 _ => false,
             };

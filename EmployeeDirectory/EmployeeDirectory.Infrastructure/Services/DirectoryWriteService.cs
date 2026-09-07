@@ -1,5 +1,6 @@
 using EmployeeDirectory.Application.Abstractions;
 using EmployeeDirectory.Application.Dtos;
+using EmployeeDirectory.Application.Org;
 using EmployeeDirectory.Domain.Entities;
 using EmployeeDirectory.Domain.Enums;
 using EmployeeDirectory.Infrastructure.Messaging;
@@ -18,8 +19,19 @@ public sealed class DirectoryWriteService(
     DirectoryHierarchyService hierarchy,
     IOrgStructuralRoleExclusivityService exclusivity,
     IPilotRotationTenureService pilotRotation,
-    IHtelFusionService htelFusion) : IDirectoryWriteService
+    IHtelFusionService htelFusion,
+    IDirectoryCacheInvalidator? cacheInvalidator = null) : IDirectoryWriteService
 {
+    private async Task PersistAndInvalidateAsync(CancellationToken ct, Guid? employeeId = null)
+    {
+        await db.SaveChangesAsync(ct);
+        if (cacheInvalidator is null) return;
+        if (employeeId.HasValue)
+            await cacheInvalidator.InvalidateEmployeeAsync(employeeId.Value, ct);
+        else
+            await cacheInvalidator.InvalidateOrgAsync(ct);
+    }
+
     public async Task<EmployeeDto> CreateEmployeeAsync(CreateEmployeeRequest request, Guid? changedBy, CancellationToken ct = default)
     {
         var id = request.EmployeeId ?? Guid.NewGuid();
@@ -70,7 +82,7 @@ public sealed class DirectoryWriteService(
         await DirectoryHrProfileHelper.UpsertAsync(
             db, outbox, employee.Id, request.HrProfile, employee.HireDate, ct);
         await EnqueueEmployeeChangedAsync(employee, isDeleted: false, emitLegacyCreate: false, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return Map(employee);
     }
 
@@ -107,7 +119,7 @@ public sealed class DirectoryWriteService(
         await DirectoryHrProfileHelper.UpsertAsync(
             db, outbox, employee.Id, request.HrProfile, employee.HireDate, ct);
         await EnqueueEmployeeChangedAsync(employee, isDeleted: false, emitLegacyCreate: false, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return Map(employee);
     }
 
@@ -151,7 +163,7 @@ public sealed class DirectoryWriteService(
         await DirectoryHrProfileHelper.UpsertAsync(
             db, outbox, employee.Id, request.HrProfile, employee.HireDate, ct);
         await EnqueueEmployeeChangedAsync(employee, isDeleted: false, emitLegacyCreate: false, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return Map(employee);
     }
 
@@ -316,7 +328,7 @@ public sealed class DirectoryWriteService(
 
         employee.UpdatedAt = DateTime.UtcNow;
         await EnqueueEmployeeChangedAsync(employee, isDeleted: false, emitLegacyCreate: false, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return Map(employee);
     }
 
@@ -354,7 +366,7 @@ public sealed class DirectoryWriteService(
         employee.IsActive = false;
         employee.UpdatedAt = DateTime.UtcNow;
         await EnqueueEmployeeChangedAsync(employee, isDeleted: true, emitLegacyCreate: false, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return true;
     }
 
@@ -459,7 +471,7 @@ public sealed class DirectoryWriteService(
 
         await EnqueueEmployeeChangedAsync(employee, isDeleted: false, emitLegacyCreate: false, ct);
         await EnqueueResponsiblesChangedAsync(assignmentKind, trimmedNodeId, nodeLevel, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
 
         if (assignmentKind == DomainAssignmentKind.Pilote
             && !string.IsNullOrWhiteSpace(previousServiceId)
@@ -624,7 +636,7 @@ public sealed class DirectoryWriteService(
         }, aggregateId: employeeId.ToString(), ct: ct);
 
         await EnqueueEmployeeChangedAsync(employee, isDeleted: false, emitLegacyCreate: false, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
 
         return new StructuralAssignmentsReconcileResult(
             assignmentKind.ToString(),
@@ -708,7 +720,7 @@ public sealed class DirectoryWriteService(
         if (!removed) return false;
 
         await ResetDisplacedEmployeeAsync(employeeId, changedBy, reason, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return true;
     }
 
@@ -864,7 +876,7 @@ public sealed class DirectoryWriteService(
         await EnqueueResponsiblesChangedAsync(
             DomainAssignmentKind.Pilote, trimmedServiceId, DomainNodeLevel.Service, ct);
 
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return true;
     }
 
@@ -958,9 +970,77 @@ public sealed class DirectoryWriteService(
             await ResetDisplacedEmployeeAsync(employeeId, changedBy, "Dédoublonnage unicité par nœud", ct);
 
         if (closed > 0)
-            await db.SaveChangesAsync(ct);
+            await PersistAndInvalidateAsync(ct);
 
         return closed;
+    }
+
+    public async Task<UndoImportAssignmentWindowResult> UndoImportAssignmentWindowAsync(
+        UndoImportAssignmentWindowRequest request,
+        Guid? changedBy,
+        CancellationToken ct = default)
+    {
+        var ids = request.EmployeeIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+            return new UndoImportAssignmentWindowResult(0, 0, 0);
+
+        var rows = await db.OrgAssignments
+            .Where(a => ids.Contains(a.EmployeeId))
+            .ToListAsync(ct);
+
+        var plan = ImportAssignmentWindowUndoPlanner.Plan(
+            rows.Select(a => new AssignmentWindowRow(a.Id, a.EmployeeId, a.EffectiveFrom, a.EffectiveTo)).ToList(),
+            request.WindowStart,
+            request.WindowEnd);
+
+        var deleted = 0;
+        var restored = 0;
+        var touched = new HashSet<Guid>();
+        var byId = rows.ToDictionary(a => a.Id);
+
+        foreach (var mutation in plan)
+        {
+            if (!byId.TryGetValue(mutation.AssignmentId, out var row))
+                continue;
+
+            touched.Add(row.EmployeeId);
+            if (mutation.Kind == AssignmentWindowMutationKind.Delete)
+            {
+                db.OrgAssignmentHistories.Add(new OrgAssignmentHistory
+                {
+                    Id = Guid.NewGuid(),
+                    Kind = row.Kind,
+                    NodeId = row.NodeId,
+                    NodeLevel = row.NodeLevel,
+                    PreviousEmployeeId = row.EmployeeId,
+                    NewEmployeeId = null,
+                    ChangedBy = changedBy,
+                    ChangeReason = "Annulation import employés",
+                    ChangedAt = DateTime.UtcNow,
+                });
+                db.OrgAssignments.Remove(row);
+                deleted++;
+                continue;
+            }
+
+            row.EffectiveTo = mutation.EffectiveTo;
+            row.SupersededBy = mutation.EffectiveTo is null ? null : Guid.NewGuid();
+            restored++;
+        }
+
+        if (deleted + restored > 0)
+            await db.SaveChangesAsync(ct);
+
+        foreach (var employeeId in touched)
+            await ResetDisplacedEmployeeAsync(employeeId, changedBy, "Annulation import employés", ct);
+
+        if (touched.Count > 0)
+            await PersistAndInvalidateAsync(ct);
+
+        return new UndoImportAssignmentWindowResult(deleted, restored, touched.Count);
     }
 
     public async Task ClearStructureRoleAsync(string kind, string nodeId, Guid? changedBy, string? reason, CancellationToken ct = default)
@@ -998,7 +1078,7 @@ public sealed class DirectoryWriteService(
             }, aggregateId: row.EmployeeId.ToString(), ct: ct);
         }
 
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
     }
 
     public async Task<string> CreatePoleAsync(string name, Guid businessDepartmentId, CancellationToken ct = default)
@@ -1035,7 +1115,7 @@ public sealed class DirectoryWriteService(
             Level = MessagingEnumMapper.ToMessage(DomainNodeLevel.Pole),
         }, aggregateId: id, ct: ct);
         await EnqueueBusinessDepartmentChangedAsync(dept, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return id;
     }
 
@@ -1073,7 +1153,7 @@ public sealed class DirectoryWriteService(
         await SyncJunctionForPoleAsync(dept, trimmedPoleId, ct);
         dept.UpdatedAt = DateTime.UtcNow;
         await EnqueueBusinessDepartmentChangedAsync(dept, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return true;
     }
 
@@ -1088,7 +1168,7 @@ public sealed class DirectoryWriteService(
             Level = MessagingEnumMapper.ToMessage(DomainNodeLevel.Cellule),
             ParentNodeId = poleId.Trim(),
         }, aggregateId: id, ct: ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return id;
     }
 
@@ -1103,7 +1183,7 @@ public sealed class DirectoryWriteService(
             Level = MessagingEnumMapper.ToMessage(DomainNodeLevel.Service),
             ParentNodeId = celluleId.Trim(),
         }, aggregateId: id, ct: ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return id;
     }
 
@@ -1144,7 +1224,7 @@ public sealed class DirectoryWriteService(
             Name = trimmedName,
             Level = MessagingEnumMapper.ToMessage(level),
         }, aggregateId: trimmedId, ct: ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return true;
     }
 
@@ -1194,7 +1274,7 @@ public sealed class DirectoryWriteService(
             Level = MessagingEnumMapper.ToMessage(level),
             IsDeleted = true,
         }, aggregateId: trimmedId, ct: ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return true;
     }
 
@@ -1204,7 +1284,7 @@ public sealed class DirectoryWriteService(
         if (employee is null) return false;
         employee.AuthSubjectId = authSubjectId;
         employee.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return true;
     }
 
@@ -1228,7 +1308,7 @@ public sealed class DirectoryWriteService(
         };
         db.BusinessDepartments.Add(dept);
         await EnqueueBusinessDepartmentChangedAsync(dept, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return await MapBusinessDepartmentAsync(dept, ct);
     }
 
@@ -1246,7 +1326,7 @@ public sealed class DirectoryWriteService(
             dept.PoleAssignments.Clear();
         }
         await EnqueueBusinessDepartmentChangedAsync(dept, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return await MapBusinessDepartmentAsync(dept, ct);
     }
 
@@ -1257,7 +1337,7 @@ public sealed class DirectoryWriteService(
         dept.IsActive = false;
         dept.UpdatedAt = DateTime.UtcNow;
         await EnqueueBusinessDepartmentChangedAsync(dept, ct, isDeleted: true);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return true;
     }
 
@@ -1282,7 +1362,7 @@ public sealed class DirectoryWriteService(
 
         dept.UpdatedAt = DateTime.UtcNow;
         await EnqueueBusinessDepartmentChangedAsync(dept, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return true;
     }
 
@@ -1332,7 +1412,7 @@ public sealed class DirectoryWriteService(
 
         await EnqueueBusinessDepartmentChangedAsync(dept, ct);
         await EnqueueEmployeeChangedAsync(employee, isDeleted: false, emitLegacyCreate: false, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return new StructuralRoleAssignmentResult(revoked, [], employeeId.ToString());
     }
 
@@ -1343,7 +1423,7 @@ public sealed class DirectoryWriteService(
         dept.ManagerEmployeeId = null;
         dept.UpdatedAt = DateTime.UtcNow;
         await EnqueueBusinessDepartmentChangedAsync(dept, ct);
-        await db.SaveChangesAsync(ct);
+        await PersistAndInvalidateAsync(ct);
         return true;
     }
 
@@ -1497,6 +1577,7 @@ public sealed class DirectoryWriteService(
             ReferentTechniqueId = employee.ReferentTechniqueId,
             IdTechnicien = employee.IdTechnicien,
             HtelCode = employee.HtelCode,
+            HtelTechnicienName = employee.HtelTechnicienName,
         }, aggregateId: employee.Id.ToString(), ct: ct);
 
         if (!emitLegacyCreate || isDeleted)

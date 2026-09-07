@@ -28,6 +28,8 @@ public static class CongeSchemaPatches
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE INDEX IF NOT EXISTS "IX_demandes_conge_ValidationNodeId"
                     ON demandes_conge ("ValidationNodeId");
+                CREATE INDEX IF NOT EXISTS "IX_demandes_conge_Employee_Status_Debut"
+                    ON demandes_conge ("EmployeId", "Statut", "DateDebut");
                 """, ct);
 
             await db.Database.ExecuteSqlRawAsync("""
@@ -77,6 +79,15 @@ public static class CongeSchemaPatches
                     "UpdatedAt" timestamp with time zone NOT NULL,
                     "UpdatedBy" uuid NULL
                 );
+                ALTER TABLE periodes_interdites_conge
+                    ADD COLUMN IF NOT EXISTS "ScopeKind" character varying(20) NOT NULL DEFAULT 'General';
+                ALTER TABLE periodes_interdites_conge
+                    ADD COLUMN IF NOT EXISTS "ScopeId" character varying(100) NOT NULL DEFAULT '';
+                UPDATE periodes_interdites_conge
+                    SET "ScopeKind" = 'General', "ScopeId" = ''
+                    WHERE "Id" = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0001';
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_periodes_interdites_conge_ScopeKind_ScopeId"
+                    ON periodes_interdites_conge ("ScopeKind", "ScopeId");
                 """, ct);
 
             await db.Database.ExecuteSqlRawAsync("""

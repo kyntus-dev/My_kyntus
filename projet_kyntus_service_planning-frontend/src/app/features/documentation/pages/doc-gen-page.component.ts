@@ -5,8 +5,6 @@ import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/co
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { catchError, concatMap, forkJoin, Observable, of, Subscription, tap, throwError } from 'rxjs';
-import mammoth from 'mammoth';
-
 import { KyntusPageHeaderComponent } from '../../../shared/components/ui/kyntus-page-header.component';
 import {
   DocumentationDataApiService,
@@ -21,6 +19,7 @@ import type {
   DocumentRequestDto,
   DocumentTemplateDetailDto,
   DocumentTemplateListItemDto,
+  TemplateVariableResolutionDto,
 } from '../../../core/models/documentation.models';
 import type { DocumentationRole } from '../interfaces/documentation-role';
 import { switchMapOnDocumentationContext } from '../lib/documentation-context-refresh';
@@ -103,6 +102,7 @@ export class DocGenPageComponent implements OnInit, OnDestroy {
   readyUploadMessageOk = false;
   hrFieldValues: Record<string, string> = {};
   linkedRequestFieldValues: Record<string, string> = {};
+  variableResolutions: TemplateVariableResolutionDto[] = [];
 
   /** Aperçu PDF intégré (colonne droite) après génération. */
   embedPdfUrl: string | null = null;
@@ -402,6 +402,7 @@ export class DocGenPageComponent implements OnInit, OnDestroy {
     this.embedPdfLoading = false;
     this.hrFieldValues = {};
     this.linkedRequestFieldValues = {};
+    this.variableResolutions = [];
   }
 
   /** Demandes strictement actionnables pour la génération RH. */
@@ -564,6 +565,7 @@ export class DocGenPageComponent implements OnInit, OnDestroy {
       this.primeSelectedTemplateDetail(this.selectedTemplateId.trim());
     }
     this.clearDraftPreviewState();
+    this.refreshVariableResolutions();
     this.scheduleAutoPreview();
   }
 
@@ -1100,6 +1102,8 @@ export class DocGenPageComponent implements OnInit, OnDestroy {
 
   /** DOCX → HTML (images en data URI, styles Word par défaut de mammoth). */
   private async mammothDocxArrayBufferToHtml(arrayBuffer: ArrayBuffer): Promise<string> {
+    const mammothMod = await import('mammoth');
+    const mammoth = mammothMod.default ?? mammothMod;
     const result = await mammoth.convertToHtml(
       { arrayBuffer },
       {
@@ -1112,7 +1116,34 @@ export class DocGenPageComponent implements OnInit, OnDestroy {
 
   /** Appelé depuis le template (champs RH) — relance l’aperçu PDF avec les nouvelles valeurs. */
   onRhFieldValueChange(): void {
+    this.refreshVariableResolutions();
     this.scheduleAutoPreview();
+  }
+
+  private refreshVariableResolutions(): void {
+    const templateId = this.selectedTemplateId.trim();
+    const userId = this.selectedUserId.trim();
+    if (!templateId || !userId) {
+      this.variableResolutions = [];
+      return;
+    }
+
+    this.sub.add(
+      this.data
+        .resolveTemplateEmployeeValues(templateId, {
+          beneficiaryUserId: userId,
+          currentValues: this.hrFieldValues,
+        })
+        .pipe(catchError(() => of({ variables: [] as TemplateVariableResolutionDto[] })))
+        .subscribe((dto) => {
+          this.variableResolutions = dto.variables ?? [];
+          for (const item of this.variableResolutions) {
+            if (item.needsRhInput && !(this.hrFieldValues[item.name] ?? '').trim()) {
+              this.hrFieldValues[item.name] = item.resolvedValue ?? '';
+            }
+          }
+        }),
+    );
   }
 
   private scheduleAutoPreview(): void {
@@ -1288,11 +1319,13 @@ export class DocGenPageComponent implements OnInit, OnDestroy {
           const nextValues: Record<string, string> = {};
           for (const v of detail.currentVersion?.variables ?? []) {
             const scope = (v.formScope ?? 'pilot').toLowerCase();
-            if (scope === 'hr' || scope === 'both' || scope === 'pilot') {
+            const needsRh = !!v.mappingUnavailable || scope === 'hr' || scope === 'both' || scope === 'pilot';
+            if (needsRh) {
               nextValues[v.name] = this.hrFieldValues[v.name] ?? (v.defaultValue ?? '');
             }
           }
           this.hrFieldValues = nextValues;
+          this.refreshVariableResolutions();
         },
         error: () => {
           this.hrFieldValues = {};
@@ -1307,11 +1340,12 @@ export class DocGenPageComponent implements OnInit, OnDestroy {
   }
 
   hrVariablesForCurrentTemplate(): Array<{ name: string; displayLabel?: string | null; isRequired: boolean }> {
+    const byName = new Map(this.variableResolutions.map((v) => [v.name, v]));
     return (this.currentTemplateDetail()?.currentVersion?.variables ?? [])
       .filter((v) => {
         const scope = (v.formScope ?? 'pilot').toLowerCase();
-        // Absorbe les anciennes variables « pilot » dans le formulaire RH.
-        return scope === 'hr' || scope === 'both' || scope === 'pilot';
+        const resolution = byName.get(v.name);
+        return !!resolution?.needsRhInput || scope === 'hr' || scope === 'both' || scope === 'pilot';
       })
       .map((v) => ({ name: v.name, displayLabel: v.displayLabel, isRequired: v.isRequired }));
   }

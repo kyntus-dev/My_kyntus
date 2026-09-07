@@ -30,6 +30,7 @@ import {
   type PrimeFicheValidationStatus,
 } from '../services/prime-fiche-result.service';
 import { PRIME_USER_LOAD_ERROR, primeHttpErrorDetail } from '../lib/primeHttpErrorMessage';
+import { primeValidationStatusShortLabel } from '../lib/prime-workflow-labels';
 
 /** Données agrégées `/api/prime/results` (sans périmètre fiche validation) → même grille que l’API validation. */
 function mapPrimeResultToFicheDto(
@@ -59,13 +60,16 @@ function mapPrimeResultToFicheDto(
 }
 
 const VALIDATION_STATUSES: { value: PrimeFicheValidationStatus; label: string }[] = [
-  { value: 'Pending', label: 'En attente' },
-  { value: 'Référent technique Approved', label: 'Réf. technique validé' },
-  { value: 'Superviseur Approved', label: 'Superviseur validé' },
-  { value: 'Chef de projet Approved', label: 'Chef de projet validé' },
-  { value: 'RH Approved', label: 'RH validé' },
-  { value: 'Rejected', label: 'Rejeté' },
-];
+  'Pending',
+  'Référent technique Approved',
+  'Superviseur Approved',
+  'Chef de projet Approved',
+  'RH Approved',
+  'Rejected',
+].map((value) => ({
+  value: value as PrimeFicheValidationStatus,
+  label: primeValidationStatusShortLabel(value),
+}));
 
 @Component({
   selector: 'app-prime-results-page',
@@ -259,7 +263,7 @@ const VALIDATION_STATUSES: { value: PrimeFicheValidationStatus; label: string }[
                           (click)="openResult(item)"
                           class="px-2.5 py-1.5 rounded-lg bg-cyan-500/15 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/25"
                         >
-                          Ouvrir
+                          Voir dans Validation
                         </button>
                       </td>
                     </tr>
@@ -504,7 +508,7 @@ export class PrimeResultsPageComponent implements OnInit {
 
   formatAmount(value: number | null | undefined): string {
     if (value === null || value === undefined) return '—';
-    return `${value.toFixed(2)} MAD`;
+    return `${value.toFixed(2)} DH`;
   }
 
   statusBadgeClass(status: string): string {
@@ -516,13 +520,7 @@ export class PrimeResultsPageComponent implements OnInit {
   }
 
   statusLabel(status: string): string {
-    if (status === 'RH Approved') return 'RH validé';
-    if (status === 'Rejected') return 'Rejeté';
-    if (status === 'Pending') return 'En attente';
-    if (status === 'Référent technique Approved') return 'Réf. technique validé';
-    if (status === 'Superviseur Approved') return 'Superviseur validé';
-    if (status === 'Chef de projet Approved') return 'Chef de projet validé';
-    return status;
+    return primeValidationStatusShortLabel(status);
   }
 
   workflowProgress(status: string): number {
@@ -561,7 +559,7 @@ export class PrimeResultsPageComponent implements OnInit {
   }
 
   openResult(item: EmployeePrimeServiceFicheValidationDto): void {
-    this.nav.requestViewWithPeriodAndTab('/prime-validation-hub', item.period, 'validate');
+    this.nav.requestViewWithPeriod('/validation', item.period);
   }
 
   private matchesQuickView(item: EmployeePrimeServiceFicheValidationDto): boolean {

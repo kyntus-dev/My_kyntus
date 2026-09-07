@@ -1,0 +1,99 @@
+/**
+ * Bandes Prime / Challenge / KPI — contrastes light & dark (tokens --info-* / --warning-*).
+ */
+
+.prime-band {
+  color: var(--text-primary);
+}
+
+.prime-band--prime {
+  border: 1px solid var(--info-border);
+  background: var(--info-bg);
+}
+
+.prime-band--prime h4,
+.prime-band--prime .prime-band__title {
+  color: var(--info-text);
+}
+
+.prime-band--challenge {
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+}
+
+.prime-band--challenge h4,
+.prime-band--challenge .prime-band__title {
+  color: var(--warning-text);
+}
+
+body.theme-light {
+  --prime-custom-text: #5b21b6;
+  --prime-custom-bg: color-mix(in srgb, #7c3aed 11%, var(--bg-card, #ffffff));
+  --prime-custom-border: color-mix(in srgb, #7c3aed 32%, var(--border-color, #e2e8f0));
+}
+
+body.theme-dark {
+  --prime-custom-text: #c4b5fd;
+  --prime-custom-bg: color-mix(in srgb, #5b21b6 22%, var(--bg-card, #0a1526));
+  --prime-custom-border: color-mix(in srgb, #8b5cf6 38%, var(--border-color, #1e3a5f));
+}
+
+.prime-band--custom {
+  border: 1px solid var(--prime-custom-border);
+  background: var(--prime-custom-bg);
+}
+
+.prime-band--custom h4,
+.prime-band--custom .prime-band__title {
+  color: var(--prime-custom-text);
+}
+
+.prime-banner--warning {
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--text-primary);
+}
+
+.prime-banner--warning ul,
+.prime-banner--warning p {
+  color: var(--text-primary);
+}
+
+.prime-banner--warning .prime-banner__title {
+  color: var(--warning-text);
+  font-weight: 600;
+}
+
+.prime-btn-secondary {
+  border: 1px solid var(--info-border);
+  background: var(--info-bg);
+  color: var(--text-primary);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.prime-btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--info) 18%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--info) 45%, var(--border-color));
+}
+
+.prime-btn-secondary:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border-color: var(--border-color);
+}
+
+.prime-chip-info {
+  border: 1px solid var(--info-border);
+  background: var(--info-bg);
+  color: var(--text-primary);
+}
+
+.prime-text-warning {
+  color: var(--warning-text);
+}
+
+.prime-text-success {
+  color: var(--success-text);
+}

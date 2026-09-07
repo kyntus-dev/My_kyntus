@@ -2,6 +2,8 @@ using Auth.Domain.Interfaces;
 using Auth.Infrastructure.Persistence;
 using Auth.Infrastructure.Repositories;
 using Auth.Infrastructure.Security;
+using Auth.Infrastructure.Services;
+using Kyntus.Caching;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +29,10 @@ public static class DependencyInjection
             }
         });
 
+        services.AddKyntusCaching(configuration);
+        services.AddHttpContextAccessor();
+        services.AddScoped<IAccessAuditWriter, AccessAuditService>();
+        services.AddScoped<IPushNotificationService, PushNotificationService>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IJwtService, JwtService>();

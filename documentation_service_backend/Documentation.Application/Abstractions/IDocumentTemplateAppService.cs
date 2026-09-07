@@ -74,4 +74,9 @@ public interface IDocumentTemplateAppService
         Guid templateId,
         DocumentTemplateGenerateRequest? body,
         CancellationToken ct = default);
+
+    Task<TemplateEmployeeResolutionResponse> ResolveEmployeeValuesAsync(
+        Guid templateId,
+        ResolveTemplateEmployeeValuesRequest body,
+        CancellationToken ct = default);
 }

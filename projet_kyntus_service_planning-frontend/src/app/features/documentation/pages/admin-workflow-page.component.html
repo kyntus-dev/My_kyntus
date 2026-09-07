@@ -1,7 +1,7 @@
 @if (role$ | async; as role) {
   <app-admin-shell
     title="Configuration du workflow"
-    description="Workflow fixe (pas de configuration par Admin)"
+    description="Circuit fixe (pas de configuration par Admin)"
     iconName="git-branch"
   >
     <div class="card-navy p-6 space-y-2">
@@ -11,8 +11,8 @@
       <p class="text-muted text-sm">
         Les rôles <span class="font-semibold">Coach</span>, <span class="font-semibold">Manager</span> et
         <span class="font-semibold">RP</span>
-        ne peuvent pas utiliser les actions <span class="font-semibold">Approve</span> /
-        <span class="font-semibold">Reject</span>.
+        ne peuvent pas utiliser les actions <span class="font-semibold">Approuver</span> /
+        <span class="font-semibold">Rejeter</span>.
       </p>
       @if (isAdmin(role)) {
         <p class="text-amber-400 text-sm">

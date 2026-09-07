@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
-import { catchError, tap } from 'rxjs/operators';
+import { catchError } from 'rxjs/operators';
 import { Service, ServiceDetail, CreateServiceDto, UpdateServiceDto } from '../services-module';
 import { environment } from '../../../../environments/environment';
 
@@ -11,13 +11,10 @@ import { environment } from '../../../../environments/environment';
 export class ServiceService {
   private apiUrl = `${environment.apiUrl}/services`;
 
-  constructor(private http: HttpClient) {
-    console.log('ServiceService - API URL:', this.apiUrl);
-  }
+  constructor(private http: HttpClient) {}
 
   getAllServices(): Observable<Service[]> {
     return this.http.get<Service[]>(this.apiUrl).pipe(
-      tap(data => console.log('Services reçus:', data)),
       catchError(err => {
         console.error('Erreur getAllServices:', err);
         return throwError(() => err);
@@ -39,7 +36,6 @@ export class ServiceService {
   
   getAllServicesWithSubServices(): Observable<ServiceDetail[]> {
   return this.http.get<ServiceDetail[]>(`${this.apiUrl}/with-subservices`).pipe(
-    tap(data => console.log('Services with subservices:', data)),
     catchError(err => throwError(() => err))
   );
 }

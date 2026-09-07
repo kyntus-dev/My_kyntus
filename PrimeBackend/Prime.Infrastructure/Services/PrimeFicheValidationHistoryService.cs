@@ -9,6 +9,7 @@ public static class PrimeFicheValidationHistoryActions
 {
     public const string Approved = "Approved";
     public const string Rejected = "Rejected";
+    public const string Submitted = "Submitted";
 }
 
 public sealed class PrimeFicheValidationHistoryService(PrimeDbContext? db)
@@ -50,6 +51,34 @@ public sealed class PrimeFicheValidationHistoryService(PrimeDbContext? db)
             toStatus,
             actor,
             reason,
+            amountsSnapshot,
+            ct);
+    }
+
+    public async Task AppendSubmittedAsync(
+        EmployeePrimeServiceFiche fiche,
+        string fromStatus,
+        PrimeResolvedUser actor,
+        PrimeEmployeeFicheAmounts amountsSnapshot,
+        CancellationToken ct = default)
+    {
+        if (db is null) return;
+        var alreadyTracked = db.EmployeePrimeFicheValidationHistories.Local.Any(h =>
+            h.FicheId == fiche.Id &&
+            h.Action == PrimeFicheValidationHistoryActions.Submitted);
+        if (alreadyTracked ||
+            await db.EmployeePrimeFicheValidationHistories.AsNoTracking().AnyAsync(h =>
+                h.FicheId == fiche.Id &&
+                h.Action == PrimeFicheValidationHistoryActions.Submitted, ct))
+            return;
+
+        await AppendCoreAsync(
+            fiche,
+            PrimeFicheValidationHistoryActions.Submitted,
+            fromStatus,
+            PrimeValidationWorkflowService.Pending,
+            actor,
+            null,
             amountsSnapshot,
             ct);
     }

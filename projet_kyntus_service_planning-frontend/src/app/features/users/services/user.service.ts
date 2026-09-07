@@ -11,6 +11,32 @@ export interface RoleOption {
   id: number;
   name: string;
 }
+
+export type OrgGroupScope = 'Pole' | 'Cellule' | 'Service';
+
+export interface ResetPasswordResult {
+  userId: number;
+  email: string;
+  temporaryPassword: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface ResetPasswordsByGroupRequest {
+  scope: OrgGroupScope;
+  nodeId: string;
+  employeeGuids?: string[];
+}
+
+export interface ResetPasswordsByGroupResult {
+  scope: string;
+  nodeId: string;
+  targetedCount: number;
+  resetCount: number;
+  failedCount: number;
+  items: ResetPasswordResult[];
+  errors: string[];
+}
 @Injectable({ providedIn: 'root' })
 export class UserService {
   private apiUrl = `${environment.apiUrl}/users`;
@@ -90,10 +116,19 @@ getUserByAuthId(authId: number): Observable<User> {
     );
   }
 
-  resetPassword(id: number): Observable<{ userId: number; email: string; temporaryPassword: string }> {
-    return this.http.post<{ userId: number; email: string; temporaryPassword: string }>(
+  resetPassword(id: number): Observable<ResetPasswordResult> {
+    return this.http.post<ResetPasswordResult>(
       `${this.apiUrl}/${id}/reset-password`,
       {},
+    ).pipe(
+      catchError(err => throwError(() => err))
+    );
+  }
+
+  resetPasswordsByGroup(body: ResetPasswordsByGroupRequest): Observable<ResetPasswordsByGroupResult> {
+    return this.http.post<ResetPasswordsByGroupResult>(
+      `${this.apiUrl}/reset-passwords/by-group`,
+      body,
     ).pipe(
       catchError(err => throwError(() => err))
     );

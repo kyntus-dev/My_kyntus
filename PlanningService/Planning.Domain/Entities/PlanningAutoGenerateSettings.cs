@@ -20,6 +20,21 @@ public class PlanningAutoGenerateSettings
     public DateOnly? LastPendingJ1ReminderDate { get; set; }
     /// <summary>WeekCode du dernier rappel RH phase validation.</summary>
     public string? LastValidationReminderWeekCode { get; set; }
+    /// <summary>Adresse RH « De : » des mails planning (prioritaire sur Smtp:From si valide).</summary>
+    public string? SenderFromEmail { get; set; }
+    /// <summary>Nom affiché optionnel (ex. Kyntus Planning).</summary>
+    public string? SenderDisplayName { get; set; }
+    /// <summary>Hôte SMTP (prioritaire sur Smtp:Host env si renseigné).</summary>
+    public string? SmtpHost { get; set; }
+    public int SmtpPort { get; set; } = 587;
+    public string? SmtpUser { get; set; }
+    public string? SmtpPassword { get; set; }
+    public bool SmtpEnableSsl { get; set; } = true;
+    /// <summary>Smtp | ApiKey</summary>
+    public string MailSendMode { get; set; } = "Smtp";
+    /// <summary>Brevo | SendGrid</summary>
+    public string MailApiProvider { get; set; } = "Brevo";
+    public string? MailApiKey { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public int? UpdatedByUserId { get; set; }
 }

@@ -25,7 +25,7 @@ import { PrimeCellSaisieContextService } from '../services/prime-cell-saisie-con
 
       @if (!employeeId()) {
         <app-prime-card
-          title="Aucun employé sélectionné"
+          title="Aucun pilote sélectionné"
           description="Ouvrez cette page depuis « Fiches PRIME — pilotage »."
         >
           <button
@@ -65,6 +65,6 @@ export class PrimeSaisieCellulePageComponent {
   readonly ctxCelluleName = computed(() => this.ctx.celluleName());
 
   goPilot(): void {
-    this.nav.requestViewWithTab('/prime-fiches-agents', 'pilotage');
+    this.nav.requestView('/prime-fiches-pilotes');
   }
 }

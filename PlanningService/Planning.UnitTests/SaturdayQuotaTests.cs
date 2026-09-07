@@ -15,6 +15,59 @@ public class SaturdayQuotaTests
         => Assert.Equal(expected, ShiftDispersionSelector.SaturdayRequiredCount(week));
 
     [Fact]
+    public void EffectiveSaturdayQuota_uses_full_count_when_dedicated_saturday_shift()
+    {
+        var dedicated = new SubServiceShiftConfig
+        {
+            Id = 1,
+            RequiredCount = 7,
+            AppliesToSaturday = true
+        };
+        var weekday = new SubServiceShiftConfig
+        {
+            Id = 2,
+            RequiredCount = 20,
+            AppliesToSaturday = false
+        };
+        Assert.Equal(7, ShiftDispersionSelector.EffectiveSaturdayQuota(dedicated));
+        Assert.Equal(10, ShiftDispersionSelector.EffectiveSaturdayQuota(weekday));
+    }
+
+    [Fact]
+    public void SelectSaturday_respects_dedicated_saturday_quota_without_halving()
+    {
+        var opening = new SubServiceShiftConfig
+        {
+            Id = 1, Label = "8h", StartTime = new TimeOnly(8, 0),
+            RequiredCount = 3, DisplayOrder = 1, AppliesToSaturday = true
+        };
+        var mid = new SubServiceShiftConfig
+        {
+            Id = 2, Label = "10h", StartTime = new TimeOnly(10, 0),
+            RequiredCount = 1, DisplayOrder = 2, AppliesToSaturday = true
+        };
+        var ordered = new List<SubServiceShiftConfig> { opening, mid };
+        var counts = new Dictionary<int, int> { [1] = 0, [2] = 0 };
+        var history = new Dictionary<int, List<int>>();
+
+        for (var i = 0; i < 3; i++)
+        {
+            history[i] = new List<int>();
+            var chosen = ShiftDispersionSelector.SelectSaturday(
+                ordered, preferredIndex: 0, fridayShiftId: null,
+                history, userId: i, shiftCountToday: counts);
+            Assert.Equal(1, chosen.Id);
+            counts[1]++;
+        }
+
+        history[100] = new List<int>();
+        var next = ShiftDispersionSelector.SelectSaturday(
+            ordered, preferredIndex: 0, fridayShiftId: null,
+            history, userId: 100, shiftCountToday: counts);
+        Assert.Equal(2, next.Id);
+    }
+
+    [Fact]
     public void SelectSaturday_fills_opening_quota_before_overflowing_next_shift()
     {
         var opening = new SubServiceShiftConfig

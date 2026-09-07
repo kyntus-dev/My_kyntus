@@ -1,16 +1,25 @@
 import { Injectable, inject } from '@angular/core';
 import { CanActivate, ActivatedRouteSnapshot, Router } from '@angular/router';
-import { clearStoredTokens, isJwtExpired, readJwtRole, readJwtRoles, readStoredAccessToken, readStoredRefreshToken } from '../../core/session/kyntus-auth-token.util';
-import { redirectToAuthLogin } from '../../core/session/kyntus-auth-refresh.service';
+import {
+  clearStoredTokens,
+  isJwtExpired,
+  readJwtRole,
+  readJwtRoles,
+  readStoredAccessToken,
+  readStoredRefreshToken,
+} from '../../core/session/kyntus-auth-token.util';
+import { redirectToAuthLogin, refreshAccessTokenOnce } from '../../core/session/kyntus-auth-refresh.service';
 import { currentAppReturnUrl } from '../../core/session/kyntus-return-url.util';
 import { roleNamesMatch } from '../../core/org/org-role-assignment';
+import { PlatformAccessService } from '../../core/platform-access/platform-access.service';
 
 @Injectable({ providedIn: 'root' })
 export class AuthGuard implements CanActivate {
   private readonly router = inject(Router);
+  private readonly access = inject(PlatformAccessService);
 
-  canActivate(route: ActivatedRouteSnapshot): boolean {
-    const token = readStoredAccessToken();
+  async canActivate(route: ActivatedRouteSnapshot): Promise<boolean> {
+    let token = readStoredAccessToken();
     const refresh = readStoredRefreshToken();
     if (!token && !refresh) {
       clearStoredTokens();
@@ -18,22 +27,46 @@ export class AuthGuard implements CanActivate {
       redirectToAuthLogin(currentAppReturnUrl() ?? undefined);
       return false;
     }
-    // Access expiré : on laisse passer si un refresh existe (renouvellement via interceptor).
-    if (token && isJwtExpired(token) && !refresh) {
-      clearStoredTokens();
-      localStorage.removeItem('user');
-      redirectToAuthLogin(currentAppReturnUrl() ?? undefined);
-      return false;
+
+    if (token && isJwtExpired(token)) {
+      if (!refresh) {
+        clearStoredTokens();
+        localStorage.removeItem('user');
+        redirectToAuthLogin(currentAppReturnUrl() ?? undefined);
+        return false;
+      }
+      const renewed = await refreshAccessTokenOnce();
+      if (!renewed) {
+        clearStoredTokens();
+        localStorage.removeItem('user');
+        redirectToAuthLogin(currentAppReturnUrl() ?? undefined);
+        return false;
+      }
+      token = renewed;
     }
 
     const allowedRoles = route.data?.['roles'] as string[] | undefined;
-    if (allowedRoles?.length) {
-      const roleToken = token && !isJwtExpired(token) ? token : null;
-      if (!roleToken) {
-        // Rôle indisponible tant que le refresh n’a pas abouti — autoriser, le menu filtrera.
-        return true;
+    const capability = route.data?.['capability'] as string | undefined;
+    if (token && !isJwtExpired(token)) {
+      try {
+        await this.access.ensureLoaded();
+      } catch {
+        // Catalogue IAM optionnel — ne pas bloquer le login.
       }
-      const roles = readJwtRoles(roleToken);
+    }
+    if (capability && this.access.hasCatalog()) {
+      if (!this.access.canView(capability)) {
+        this.router.navigate(['/unauthorized']);
+        return false;
+      }
+      if (!allowedRoles?.length) return true;
+    }
+    if (allowedRoles?.length) {
+      if (!token || isJwtExpired(token)) {
+        this.router.navigate(['/unauthorized']);
+        return false;
+      }
+      const roles = readJwtRoles(token);
       const ok = roles.some((role) => allowedRoles.some((r) => roleNamesMatch(r, role)));
       if (!ok) {
         this.router.navigate(['/unauthorized']);

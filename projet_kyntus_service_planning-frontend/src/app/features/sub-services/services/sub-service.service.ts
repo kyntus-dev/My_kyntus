@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
-import { catchError, tap } from 'rxjs/operators';
+import { catchError } from 'rxjs/operators';
 import { SubService, SubServiceDetail, CreateSubServiceDto, UpdateSubServiceDto } from '../sub-services-module';
 import { environment } from '../../../../environments/environment';
 
@@ -11,13 +11,10 @@ import { environment } from '../../../../environments/environment';
 export class SubServiceService {
   private apiUrl = `${environment.apiUrl}/subservices`;
 
-  constructor(private http: HttpClient) {
-    console.log('SubServiceService - API URL:', this.apiUrl);
-  }
+  constructor(private http: HttpClient) {}
 
   getAllSubServices(): Observable<SubService[]> {
     return this.http.get<SubService[]>(this.apiUrl).pipe(
-      tap(data => console.log('SubServices reçus:', data)),
       catchError(err => throwError(() => err))
     );
   }

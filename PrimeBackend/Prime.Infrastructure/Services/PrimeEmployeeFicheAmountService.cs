@@ -112,23 +112,26 @@ public static class PrimeEmployeeFicheAmountService
         ExtractFromServiceSaisieJson(fiche.ServiceSaisieJson);
 
     /// <summary>
-    /// Montants affichés sur les écrans de validation : saisie calculée, sinon colonnes entité, sinon plafonds pilote.
+    /// Montants affichés / agrégés (validation, synthèse) : colonnes fiche (TOTAL Général persisté),
+    /// sinon somme des montants de saisie. Ne jamais substituer les plafonds pilote aux montants à payer.
     /// </summary>
     public static PrimeEmployeeFicheAmounts ResolveWorkflowDisplayAmounts(EmployeePrimeServiceFiche fiche)
     {
+        if (fiche.PrimeAmount.HasValue || fiche.ChallengeAmount.HasValue || fiche.TotalAmount.HasValue)
+        {
+            var prime = fiche.PrimeAmount;
+            var challenge = fiche.ChallengeAmount;
+            var total = fiche.TotalAmount;
+            if (!total.HasValue && (prime.HasValue || challenge.HasValue))
+                total = (prime ?? 0m) + (challenge ?? 0m);
+            return new PrimeEmployeeFicheAmounts(prime, challenge, total);
+        }
+
         var fromSaisie = ExtractFromFiche(fiche);
-        var plafonds = ExtractPlafondsFromFiche(fiche);
+        if (fromSaisie.PrimeAmount.HasValue || fromSaisie.ChallengeAmount.HasValue || fromSaisie.TotalAmount.HasValue)
+            return fromSaisie;
 
-        var prime = fromSaisie.PrimeAmount ?? fiche.PrimeAmount ?? plafonds.PrimeAmount;
-        var challenge = fromSaisie.ChallengeAmount ?? fiche.ChallengeAmount ?? plafonds.ChallengeAmount;
-        var total = fromSaisie.TotalAmount ?? fiche.TotalAmount;
-        if (!total.HasValue && (prime.HasValue || challenge.HasValue))
-            total = (prime ?? 0m) + (challenge ?? 0m);
-
-        if (!prime.HasValue && !challenge.HasValue && !total.HasValue)
-            return PrimeEmployeeFicheAmounts.Empty;
-
-        return new PrimeEmployeeFicheAmounts(prime, challenge, total);
+        return PrimeEmployeeFicheAmounts.Empty;
     }
 
     public static void ApplySnapshotToEntity(EmployeePrimeServiceFiche fiche, PrimeEmployeeFicheAmounts amounts)

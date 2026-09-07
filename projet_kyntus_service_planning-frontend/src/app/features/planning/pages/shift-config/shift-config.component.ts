@@ -2,7 +2,8 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject } from '@angula
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
-import { forkJoin } from 'rxjs';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { KyntusFormDraftService } from '../../../../core/drafts/kyntus-form-draft.service';
 import { KyntusObjectDraftBinder } from '../../../../core/drafts/kyntus-object-draft.binder';
 import {
@@ -25,6 +26,13 @@ import type {
   OrgServiceNode,
 } from '../../../prime/models/org-tree.types';
 import { findOperationalSelectionByServiceId } from '../../../../core/org/operational-org-picker';
+import {
+  filterOrgTreeToCelluleIds,
+  resolveSuperviseurCelluleIds,
+} from '../../../../core/org/platform-org-perimeter';
+import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
+import { KyntusRoleNames } from '../../../../core/org/kyntus-role-names';
+import { resolveCurrentUserGuid } from '../../../../core/lib/user-guid.util';
 import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
 import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
@@ -38,6 +46,7 @@ import {
   Settings,
   Trash2,
   Users,
+  Calendar,
 } from 'lucide';
 
 type ConfigStatus = 'ok' | 'missing' | 'partial' | 'none';
@@ -60,6 +69,7 @@ type ModeDraft = {
   minPresencePercent: number;
   isCriticalCell: boolean;
   shifts: ShiftConfigItem[];
+  saturdayShifts: ShiftConfigItem[];
 };
 
 type ShiftConfigDraftState = {
@@ -67,9 +77,11 @@ type ShiftConfigDraftState = {
   isCriticalCell: boolean;
   minPresencePercent: number;
   multiShiftModesEnabled: boolean;
+  useDistinctSaturdayShifts: boolean;
   modes: ModeDraft[];
   activeModeIndex: number;
   shifts: ShiftConfigItem[];
+  saturdayShifts: ShiftConfigItem[];
 };
 
 @Component({
@@ -94,6 +106,7 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
     info: Info,
     chevDown: ChevronDown,
     chevRight: ChevronRight,
+    calendar: Calendar,
   };
 
   subServiceId = 0;
@@ -138,14 +151,21 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
   activeModeIndex = 0;
 
   shifts: ShiftConfigItem[] = [];
+  saturdayShifts: ShiftConfigItem[] = [];
+  useDistinctSaturdayShifts = false;
 
   constructor(
     private planningService: PlanningService,
     private subServiceService: SubServiceService,
     private orgApi: PrimeOrgApiService,
     private http: HttpClient,
+    private session: KyntusSessionService,
     private cdr: ChangeDetectorRef,
   ) {}
+
+  private isSuperviseur(): boolean {
+    return (this.session.getRole() ?? '') === KyntusRoleNames.Superviseur;
+  }
 
   ngOnInit(): void {
     this.loadStructure();
@@ -170,9 +190,11 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
       isCriticalCell: this.isCriticalCell,
       minPresencePercent: this.minPresencePercent,
       multiShiftModesEnabled: this.multiShiftModesEnabled,
+      useDistinctSaturdayShifts: this.useDistinctSaturdayShifts,
       modes: this.modes,
       activeModeIndex: this.activeModeIndex,
       shifts: this.shifts,
+      saturdayShifts: this.saturdayShifts,
     };
   }
 
@@ -189,10 +211,15 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
         isCriticalCell: !!m.isCriticalCell,
         minPresencePercent: m.minPresencePercent ?? 0,
         shifts: m.shifts ?? [],
+        saturdayShifts: m.saturdayShifts ?? [],
       }));
     }
     if (typeof s.activeModeIndex === 'number') this.activeModeIndex = s.activeModeIndex;
     if (Array.isArray(s.shifts) && s.shifts.length) this.shifts = s.shifts;
+    if (typeof s.useDistinctSaturdayShifts === 'boolean') {
+      this.useDistinctSaturdayShifts = s.useDistinctSaturdayShifts;
+    }
+    if (Array.isArray(s.saturdayShifts)) this.saturdayShifts = s.saturdayShifts;
     if (this.multiShiftModesEnabled) this.bindActiveModeShifts();
   }
 
@@ -216,6 +243,8 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
       this.multiShiftModesEnabled = false;
       this.modes = [];
       this.activeModeIndex = 0;
+      this.useDistinctSaturdayShifts = false;
+      this.saturdayShifts = [];
     }
     this.restartDraftBinder();
     this.cdr.detectChanges();
@@ -247,10 +276,21 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
 
   private bindActiveModeShifts(): void {
     const mode = this.activeMode;
-    if (mode) this.shifts = mode.shifts;
+    if (!mode) return;
+    this.shifts = mode.shifts;
+    if (!mode.saturdayShifts) mode.saturdayShifts = [];
+    this.saturdayShifts = mode.saturdayShifts;
   }
 
   private createDefaultMode(title: string, order: number, shifts?: ShiftConfigItem[]): ModeDraft {
+    const weekday = shifts?.length
+      ? shifts.map((s, i) => ({ ...s, displayOrder: i + 1 }))
+      : [
+          this.createShift('Shift 1', '08:00', 1),
+          this.createShift('Shift 2', '09:00', 2),
+          this.createShift('Shift 3', '10:00', 3),
+          this.createShift('Shift 4', '11:00', 4),
+        ];
     return {
       title,
       displayOrder: order,
@@ -258,14 +298,8 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
       isActive: true,
       minPresencePercent: this.enforceMinPresence ? this.minPresencePercent : 0,
       isCriticalCell: this.isCriticalCell,
-      shifts: shifts?.length
-        ? shifts.map((s, i) => ({ ...s, displayOrder: i + 1 }))
-        : [
-            this.createShift('Shift 1', '08:00', 1),
-            this.createShift('Shift 2', '09:00', 2),
-            this.createShift('Shift 3', '10:00', 3),
-            this.createShift('Shift 4', '11:00', 4),
-          ],
+      shifts: weekday,
+      saturdayShifts: this.useDistinctSaturdayShifts ? this.cloneShifts(weekday) : [],
     };
   }
 
@@ -282,6 +316,7 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
     if (enabled) {
       if (!this.modes.length) {
         this.modes = [this.createDefaultMode('Mode 1', 1, this.cloneShifts(this.shifts))];
+        this.modes[0].saturdayShifts = this.cloneShifts(this.saturdayShifts);
       }
       this.activeModeIndex = 0;
       this.bindActiveModeShifts();
@@ -289,6 +324,7 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
       const fromMode = this.activeMode;
       if (fromMode?.shifts?.length) {
         this.shifts = this.cloneShifts(fromMode.shifts);
+        this.saturdayShifts = this.cloneShifts(fromMode.saturdayShifts ?? []);
         this.isCriticalCell = !!fromMode.isCriticalCell;
         if (fromMode.minPresencePercent > 0) {
           this.enforceMinPresence = true;
@@ -355,6 +391,14 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
 
   modePctOk(mode: ModeDraft): boolean {
     return Math.abs(this.modePercentageSum(mode) - 100) <= 0.5;
+  }
+
+  modeSaturdayPercentageSum(mode: ModeDraft): number {
+    return (mode.saturdayShifts ?? []).reduce((sum, s) => sum + (Number(s.percentage) || 0), 0);
+  }
+
+  modeSaturdayPctOk(mode: ModeDraft): boolean {
+    return Math.abs(this.modeSaturdayPercentageSum(mode) - 100) <= 0.5;
   }
 
   private mapResponseShift(
@@ -530,12 +574,30 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
       subServices: this.subServiceService.getAllSubServices(),
       departments: this.http.get<Department[]>('/api/prime/departments'),
       overview: this.orgApi.loadOverview(),
-      status: this.planningService.getShiftConfigStatus(),
+      status: this.planningService.getShiftConfigStatus().pipe(
+        catchError(() => of({ items: [] as ShiftConfigStatusItem[], configuredCount: 0, totalCount: 0 })),
+      ),
     }).subscribe({
       next: ({ subServices, departments, overview, status }) => {
-        this.operationalDepartments = overview.operationalDepartments ?? [];
-        this.unassignedPoles = overview.unassignedPoles ?? [];
-        this.legacyDepartments = departments?.length ? departments : (overview.departments ?? []);
+        let ops = overview.operationalDepartments ?? [];
+        let unassigned = overview.unassignedPoles ?? [];
+        if (this.isSuperviseur()) {
+          const guid = (this.session.getSubjectId() ?? resolveCurrentUserGuid()).trim();
+          const me = (overview.employees ?? []).find(
+            (e) => (e.id ?? '').trim().toLowerCase() === guid.toLowerCase(),
+          );
+          const cellIds = resolveSuperviseurCelluleIds(guid, { celluleId: me?.celluleId ?? '' }, overview);
+          const scoped = filterOrgTreeToCelluleIds(ops, unassigned, cellIds);
+          ops = scoped.operationalDepartments;
+          unassigned = scoped.unassignedPoles;
+        }
+        this.operationalDepartments = ops;
+        this.unassignedPoles = unassigned;
+        this.legacyDepartments = this.isSuperviseur()
+          ? []
+          : departments?.length
+            ? departments
+            : (overview.departments ?? []);
 
         this.statusBySubId.clear();
         for (const item of status.items ?? []) {
@@ -787,6 +849,56 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
     this.touchDraft();
   }
 
+  addSaturdayShift(): void {
+    if (this.saturdayShifts.length >= 8) return;
+    this.saturdayShifts.push(
+      this.createShift(`Samedi ${this.saturdayShifts.length + 1}`, '08:00', this.saturdayShifts.length + 1),
+    );
+    this.touchDraft();
+  }
+
+  removeSaturdayShift(index: number): void {
+    if (this.saturdayShifts.length <= 1) return;
+    this.saturdayShifts.splice(index, 1);
+    this.saturdayShifts.forEach((s, i) => (s.displayOrder = i + 1));
+    this.touchDraft();
+  }
+
+  copyWeekdayShiftsToSaturday(): void {
+    this.saturdayShifts.splice(0, this.saturdayShifts.length, ...this.cloneShifts(this.shifts));
+    if (this.activeMode) this.activeMode.saturdayShifts = this.saturdayShifts;
+    this.touchDraft();
+  }
+
+  onDistinctSaturdayChange(enabled: boolean): void {
+    this.useDistinctSaturdayShifts = enabled;
+    if (enabled) {
+      if (this.multiShiftModesEnabled) {
+        for (const mode of this.modes) {
+          if (!mode.saturdayShifts?.length) {
+            mode.saturdayShifts = this.cloneShifts(mode.shifts);
+          }
+        }
+        this.bindActiveModeShifts();
+      } else if (!this.saturdayShifts.length) {
+        this.saturdayShifts = this.cloneShifts(this.shifts);
+      }
+    }
+    this.touchDraft();
+  }
+
+  get totalSaturdayEffectif(): number {
+    return this.saturdayShifts.reduce((sum, s) => sum + (s.requiredCount || 0), 0);
+  }
+
+  getSaturdayPercentage(shift: ShiftConfigItem): number {
+    if (this.multiShiftModesEnabled && shift.percentage != null && shift.percentage !== undefined) {
+      return Math.round(Number(shift.percentage) * 10) / 10;
+    }
+    if (this.totalSaturdayEffectif === 0) return 0;
+    return Math.round((shift.requiredCount / this.totalSaturdayEffectif) * 100);
+  }
+
   getEndTime(shift: ShiftConfigItem): string {
     return this.planningService.calculateEndTime(shift.startTime, shift.workHours);
   }
@@ -920,6 +1032,24 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
       if (p > 0 && (p < 50 || p > 100)) {
         return `Présence min du mode « ${mode.title} » invalide (50–100 %, ou 0).`;
       }
+      if (this.useDistinctSaturdayShifts) {
+        const sat = mode.saturdayShifts ?? [];
+        if (!sat.length) {
+          return `Le mode « ${mode.title} » : configurez au moins un shift samedi, ou décochez « Shifts samedi distincts ».`;
+        }
+        for (const s of sat) {
+          if (!(s.breakSlots?.length)) {
+            return `Samedi — au moins un créneau de pause est requis pour « ${s.label} » (${mode.title}).`;
+          }
+          if (s.percentage == null) {
+            return `Samedi — indiquez le % pour chaque shift du mode « ${mode.title} ».`;
+          }
+        }
+        const satSum = this.modeSaturdayPercentageSum(mode);
+        if (Math.abs(satSum - 100) > 0.5) {
+          return `Samedi — les pourcentages du mode « ${mode.title} » doivent totaliser 100 % (±0,5). Actuellement ${satSum} %.`;
+        }
+      }
     }
     return null;
   }
@@ -970,6 +1100,22 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
         this.error = 'Présence min cellule invalide (50–100 %).';
         return;
       }
+      if (this.useDistinctSaturdayShifts) {
+        if (!this.saturdayShifts.length) {
+          this.error = 'Configurez au moins un shift samedi, ou décochez « Shifts samedi distincts ».';
+          return;
+        }
+        if (this.totalSaturdayEffectif <= 0) {
+          this.error = "Veuillez définir le nombre d'employés pour les shifts samedi.";
+          return;
+        }
+        for (const s of this.saturdayShifts) {
+          if (!(s.breakSlots?.length)) {
+            this.error = `Samedi — au moins un créneau de pause est requis pour « ${s.label} ».`;
+            return;
+          }
+        }
+      }
     }
 
     this.saving = true;
@@ -995,11 +1141,18 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
             minPresencePercent: m.minPresencePercent > 0 ? m.minPresencePercent : 0,
             isCriticalCell: !!m.isCriticalCell,
             shifts: this.buildShiftPayload(m.shifts, true, !!m.isCriticalCell),
+            saturdayShifts: this.useDistinctSaturdayShifts
+              ? this.buildShiftPayload(m.saturdayShifts ?? [], true, !!m.isCriticalCell)
+              : [],
           }))
         : [],
       shifts: this.multiShiftModesEnabled
         ? []
         : this.buildShiftPayload(this.shifts, false),
+      useDistinctSaturdayShifts: this.useDistinctSaturdayShifts,
+      saturdayShifts: this.useDistinctSaturdayShifts && !this.multiShiftModesEnabled
+        ? this.buildShiftPayload(this.saturdayShifts, false)
+        : [],
     };
 
     this.planningService.saveShiftConfig(dto).subscribe({
@@ -1041,6 +1194,9 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
         shifts: (m.shifts ?? []).map((s) =>
           this.mapResponseShift(s, !!m.isCriticalCell),
         ),
+        saturdayShifts: (m.saturdayShifts ?? []).map((s) =>
+          this.mapResponseShift(s, !!m.isCriticalCell),
+        ),
       }));
       if (!this.modes.some((m) => m.isDefault) && this.modes.length) {
         this.modes[0].isDefault = true;
@@ -1050,6 +1206,9 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
         this.modes.findIndex((m) => m.isDefault),
       );
       if (this.activeModeIndex < 0) this.activeModeIndex = 0;
+      this.useDistinctSaturdayShifts =
+        !!config.useDistinctSaturdayShifts
+        || this.modes.some((m) => (m.saturdayShifts?.length ?? 0) > 0);
       this.bindActiveModeShifts();
       const anyPresence = this.modes.some((m) => m.minPresencePercent > 0);
       this.enforceMinPresence = anyPresence;
@@ -1074,6 +1233,9 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
         this.minPresencePercent = rawPresence;
       }
       this.shifts = (config.shifts ?? []).map((s) => this.mapResponseShift(s));
+      this.saturdayShifts = (config.saturdayShifts ?? []).map((s) => this.mapResponseShift(s));
+      this.useDistinctSaturdayShifts =
+        !!config.useDistinctSaturdayShifts || this.saturdayShifts.length > 0;
       if (!this.shifts.length) this.initShifts();
     }
   }
@@ -1096,6 +1258,8 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
         this.multiShiftModesEnabled = false;
         this.modes = [];
         this.activeModeIndex = 0;
+        this.useDistinctSaturdayShifts = false;
+        this.saturdayShifts = [];
         this.initShifts();
         this.loading = false;
         this.cdr.detectChanges();

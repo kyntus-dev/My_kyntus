@@ -1,3 +1,4 @@
+using Kyntus.Caching;
 using Kyntus.Iam;
 using MassTransit;
 using Microsoft.AspNetCore.Http.Features;
@@ -23,6 +24,7 @@ public static class DependencyInjection
         services.AddKyntusIamViaDirectoryHttp(
             configuration["Directory:BaseUrl"] ?? "http://employee-directory-backend:8080");
         services.AddHttpContextAccessor();
+        services.AddKyntusCaching(configuration);
         services.AddScoped<ParrainagePolicyService>();
 
         var conn = configuration.GetConnectionString("DefaultConnection");

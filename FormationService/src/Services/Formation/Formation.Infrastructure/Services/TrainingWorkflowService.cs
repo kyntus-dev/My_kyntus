@@ -413,6 +413,16 @@ public sealed partial class TrainingWorkflowService(
         return rows.Select(p => ToInitialDto(p, summaries.GetValueOrDefault(p.Id))).ToList();
     }
 
+    public async Task<InitialTrainingPathDto?> GetInitialPathAsync(Guid id, CancellationToken ct)
+    {
+        var path = await db.InitialTrainingPaths.AsNoTracking()
+            .Include(p => p.QuizResults)
+            .FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (path is null) return null;
+        var summaries = await documentChecklist.LoadSummariesAsync([path.Id], ct);
+        return ToInitialDto(path, summaries.GetValueOrDefault(path.Id));
+    }
+
     public async Task<InitialTrainingPathDto?> AddQuizResultAsync(Guid id, AddInitialQuizResultRequest request, CancellationToken ct)
     {
         var path = await db.InitialTrainingPaths
@@ -484,7 +494,11 @@ public sealed partial class TrainingWorkflowService(
         return ToInitialDto(path);
     }
 
-    public async Task<InitialTrainingPathDto?> FormateurValidateAsync(Guid id, Guid? validatedBy, CancellationToken ct)
+    public async Task<InitialTrainingPathDto?> FormateurValidateAsync(
+        Guid id,
+        Guid? validatedBy,
+        FormateurValidateOrgRequest? org,
+        CancellationToken ct)
     {
         var path = await db.InitialTrainingPaths
             .Include(p => p.QuizResults)
@@ -497,6 +511,8 @@ public sealed partial class TrainingWorkflowService(
         if (path.DateFinPrevue.Date.AddDays(-7) > DateTime.UtcNow.Date)
             throw new InvalidOperationException(
                 "La validation formateur n’est possible qu’à partir de J-7 avant la date de fin prévue (ou après prolongation).");
+
+        ApplyFormateurOrgAssignment(path, org);
 
         path.Status = InitialTrainingStatus.AttenteValidationRh;
         path.FormateurValidatedAt = DateTime.UtcNow;
@@ -923,7 +939,42 @@ public sealed partial class TrainingWorkflowService(
             docs?.MissingTitles ?? Array.Empty<string>(),
             daysUntilEnd,
             path.FormateurValidatedBy,
-            path.RhValidatedBy);
+            path.RhValidatedBy,
+            path.OrgDepartmentId,
+            path.OrgPoleId,
+            path.OrgCelluleId,
+            path.OrgServiceId,
+            path.OrgDepartmentName,
+            path.OrgPoleName,
+            path.OrgCelluleName,
+            path.OrgServiceName);
+    }
+
+    private static void ApplyFormateurOrgAssignment(InitialTrainingPath path, FormateurValidateOrgRequest? org)
+    {
+        path.OrgDepartmentId = TrimOrg(org?.OrgDepartmentId);
+        path.OrgPoleId = RequireOrg(org?.OrgPoleId, "pôle");
+        path.OrgCelluleId = RequireOrg(org?.OrgCelluleId, "cellule");
+        path.OrgServiceId = RequireOrg(org?.OrgServiceId, "service");
+        path.OrgDepartmentName = TrimOrg(org?.OrgDepartmentName);
+        path.OrgPoleName = TrimOrg(org?.OrgPoleName);
+        path.OrgCelluleName = TrimOrg(org?.OrgCelluleName);
+        path.OrgServiceName = TrimOrg(org?.OrgServiceName);
+    }
+
+    private static string RequireOrg(string? value, string label)
+    {
+        var trimmed = TrimOrg(value);
+        if (string.IsNullOrEmpty(trimmed))
+            throw new InvalidOperationException($"L’affectation organisationnelle est obligatoire ({label}).");
+        return trimmed;
+    }
+
+    private static string? TrimOrg(string? value, int maxLength = 200)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return null;
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
     }
 
     /// <summary>Moyenne des notes quiz (0–100), pas le taux de réussite.</summary>

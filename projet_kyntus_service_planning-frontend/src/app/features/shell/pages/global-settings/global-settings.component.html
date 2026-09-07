@@ -8,9 +8,9 @@
     <h2>Profil</h2>
     <div class="ks-settings-card">
       <div class="ks-profile-row">
-        <div class="ks-profile-av">{{ (user()?.username || 'U').substring(0, 2).toUpperCase() }}</div>
+        <div class="ks-profile-av">{{ initials() }}</div>
         <div>
-          <strong>{{ user()?.username || 'Utilisateur' }}</strong>
+          <strong>{{ displayName() }}</strong>
           <span>{{ user()?.email || '—' }}</span>
           <span class="ks-profile-role">{{ role() || '—' }}</span>
         </div>
@@ -58,16 +58,47 @@
     <div class="ks-settings-card">
       <p class="ks-settings-hint">Choisissez les domaines pour lesquels vous souhaitez recevoir des alertes.</p>
       @for (item of notifPrefLabels; track item.key) {
-        <label class="ks-toggle-row">
-          <span>{{ item.label }}</span>
+        <label class="ks-toggle-row" [class.ks-toggle-locked]="prefs.isLockedPref(item.key)">
+          <span>
+            {{ item.label }}
+            @if (prefs.isLockedPref(item.key)) {
+              <small class="ks-toggle-hint">Obligatoire — non désactivable</small>
+            }
+          </span>
           <input
             type="checkbox"
-            [checked]="prefs.preferences().notifications[item.key]"
+            [checked]="item.key === 'planning' || prefs.preferences().notifications[item.key]"
+            [disabled]="prefs.isLockedPref(item.key)"
             (change)="toggleNotifPref(item.key)"
           />
         </label>
       }
       <a routerLink="/notifications" class="ks-settings-link">Voir le centre de notifications</a>
+    </div>
+  </section>
+
+  <section class="ks-settings-section">
+    <h2>
+      <app-lucide-icon [icon]="icons.bell" className="w-5 h-5 inline" />
+      Notifications bureau
+    </h2>
+    <div class="ks-settings-card">
+      <p class="ks-settings-hint">
+        Recevez les alertes Planning et PRIME sur le bureau, même hors navigateur ou après déconnexion.
+        Aucun montant ni détail confidentiel n’est envoyé.
+      </p>
+      <div class="ks-desktop-push-row">
+        <span>{{ desktopStatusLabel() }}</span>
+        @if (desktopPush.status() === 'subscribed') {
+          <button type="button" [disabled]="desktopPush.busy()" (click)="desktopPush.disable()">
+            Désactiver sur cet appareil
+          </button>
+        } @else if (desktopPush.status() !== 'unsupported' && desktopPush.status() !== 'denied') {
+          <button type="button" [disabled]="desktopPush.busy()" (click)="desktopPush.enable()">
+            Activer
+          </button>
+        }
+      </div>
     </div>
   </section>
 

@@ -6,7 +6,8 @@ export const KYNTUS_JWT_CLAIMS = {
   email: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress',
 } as const;
 
-export const KYNTUS_DEFAULT_TENANT = 'atlas-tech-demo';
+/** Tenant documentation — pas de fallback démo ; doit venir de la session / env. */
+export const KYNTUS_DEFAULT_TENANT = '';
 
 export interface KyntusStoredUser {
   /** SubjectId Auth (UUID) — legacy champ `id`. */
@@ -14,6 +15,8 @@ export interface KyntusStoredUser {
   authUserId?: number;
   subjectId?: string;
   username: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   role: string;
 }

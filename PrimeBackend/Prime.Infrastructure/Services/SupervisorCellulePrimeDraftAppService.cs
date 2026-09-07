@@ -126,7 +126,7 @@ public sealed class SupervisorCellulePrimeDraftAppService(
                 IsFullyComplete = false,
                 UpdatedAt = draft.UpdatedAt,
                 HasGlobalPoolFile = draft.GlobalPoolExcelContent is { Length: > 0 },
-                PoolDistributionUnlocked = draft.GlobalPoolManagerApprovedAt.HasValue && draft.GlobalPoolRhApprovedAt.HasValue,
+                PoolDistributionUnlocked = GlobalPoolWorkflowService.LegacyPoolUnlocked(draft),
             });
         }
 

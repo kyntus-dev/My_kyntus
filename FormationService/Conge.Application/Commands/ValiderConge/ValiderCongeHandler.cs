@@ -1,7 +1,6 @@
-﻿using Conge.Application.Contracts;
+﻿using Conge.Application.Abstractions;
 using Conge.Application.Services;
 using Conge.Domain.Enums;
-using Conge.Domain.Events;
 using Conge.Domain.Exceptions;
 using Conge.Domain.Interfaces;
 using MediatR;
@@ -14,17 +13,23 @@ public class ValiderCongeSuperviseurHandler : IRequestHandler<ValiderCongeSuperv
     private readonly IEmployeSnapshotRepository _employeRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly CongeReglesService _regles;
+    private readonly ILeaveWorkflowPolicy _workflow;
+    private readonly CongeValidationFinalizer _finalizer;
 
     public ValiderCongeSuperviseurHandler(
         IDemandeCongeRepository demandeRepo,
         IEmployeSnapshotRepository employeRepo,
         IUnitOfWork unitOfWork,
-        CongeReglesService regles)
+        CongeReglesService regles,
+        ILeaveWorkflowPolicy workflow,
+        CongeValidationFinalizer finalizer)
     {
         _demandeRepo = demandeRepo;
         _employeRepo = employeRepo;
         _unitOfWork = unitOfWork;
         _regles = regles;
+        _workflow = workflow;
+        _finalizer = finalizer;
     }
 
     public async Task<bool> Handle(ValiderCongeSuperviseurCommand request, CancellationToken ct)
@@ -38,16 +43,26 @@ public class ValiderCongeSuperviseurHandler : IRequestHandler<ValiderCongeSuperv
         var employe = await _employeRepo.GetByEmployeIdAsync(demande.EmployeId, ct)
             ?? throw new EmployeNotFoundException(demande.EmployeId);
 
-        await _regles.AssertHorsPeriodeInterditeAsync(demande.DateDebut, demande.DateFin, ct);
+        await _regles.AssertHorsPeriodeInterditeAsync(demande.DateDebut, demande.DateFin, employe, ct);
         await _regles.AssertQuotaForEmployeAsync(
             employe, demande.DateDebut, demande.DateFin, demande.Id, ct);
 
+        var etapeRh = await _workflow.IsRhValidationRequiredAsync(ct);
         var acteur = await _employeRepo.GetByEmployeIdAsync(request.SuperviseurId, ct);
+        var acteurNom = acteur?.NomComplet;
         demande.ValiderParSuperviseur(
             request.SuperviseurId,
             request.Commentaire,
-            acteur?.NomComplet,
-            acteur?.Role ?? "Superviseur");
+            acteurNom,
+            acteur?.Role ?? "Superviseur",
+            etapeRh);
+
+        if (!etapeRh)
+        {
+            await _finalizer.PersistAndPublishAsync(demande, request.SuperviseurId, acteurNom, ct);
+            return true;
+        }
+
         _demandeRepo.Update(demande);
         await _unitOfWork.SaveChangesAsync(ct);
         return true;
@@ -57,26 +72,20 @@ public class ValiderCongeSuperviseurHandler : IRequestHandler<ValiderCongeSuperv
 public class ValiderCongeRhHandler : IRequestHandler<ValiderCongeRhCommand, bool>
 {
     private readonly IDemandeCongeRepository _demandeRepo;
-    private readonly ISoldeCongeRepository _soldeRepo;
     private readonly IEmployeSnapshotRepository _employeRepo;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly ICongeEventPublisher _publisher;
     private readonly CongeReglesService _regles;
+    private readonly CongeValidationFinalizer _finalizer;
 
     public ValiderCongeRhHandler(
         IDemandeCongeRepository demandeRepo,
-        ISoldeCongeRepository soldeRepo,
         IEmployeSnapshotRepository employeRepo,
-        IUnitOfWork unitOfWork,
-        ICongeEventPublisher publisher,
-        CongeReglesService regles)
+        CongeReglesService regles,
+        CongeValidationFinalizer finalizer)
     {
         _demandeRepo = demandeRepo;
-        _soldeRepo = soldeRepo;
         _employeRepo = employeRepo;
-        _unitOfWork = unitOfWork;
-        _publisher = publisher;
         _regles = regles;
+        _finalizer = finalizer;
     }
 
     public async Task<bool> Handle(ValiderCongeRhCommand request, CancellationToken ct)
@@ -90,8 +99,7 @@ public class ValiderCongeRhHandler : IRequestHandler<ValiderCongeRhCommand, bool
         var employe = await _employeRepo.GetByEmployeIdAsync(demande.EmployeId, ct)
             ?? throw new EmployeNotFoundException(demande.EmployeId);
 
-        await _regles.AssertHorsPeriodeInterditeAsync(demande.DateDebut, demande.DateFin, ct);
-        // excludeDemandeId : la demande occupe déjà le quota en EnAttenteRh
+        await _regles.AssertHorsPeriodeInterditeAsync(demande.DateDebut, demande.DateFin, employe, ct);
         await _regles.AssertQuotaForEmployeAsync(
             employe, demande.DateDebut, demande.DateFin, demande.Id, ct);
 
@@ -103,36 +111,7 @@ public class ValiderCongeRhHandler : IRequestHandler<ValiderCongeRhCommand, bool
             acteurNom,
             acteur?.Role ?? "RH");
 
-        if (demande.TypeConge == TypeConge.Annuel)
-        {
-            var solde = await _soldeRepo.GetByEmployeAndAnneeAsync(
-                demande.EmployeId, demande.DateDebut.Year, ct)
-                ?? throw new SoldeNotFoundException(demande.EmployeId, demande.DateDebut.Year);
-
-            solde.DeduireSolde(demande.NombreJours);
-            _soldeRepo.Update(solde);
-        }
-
-        _demandeRepo.Update(demande);
-        await _unitOfWork.SaveChangesAsync(ct);
-
-        await _publisher.PublishCongeValideAsync(
-            demande.EmployeId,
-            demande.Id,
-            demande.DateDebut,
-            demande.DateFin,
-            demande.NombreJours,
-            demande.TypeConge.ToString(),
-            demande.TypeExceptionnel?.ToString(),
-            request.RhId,
-            acteurNom,
-            ct);
-
-        foreach (var ev in demande.DomainEvents.OfType<CongeValideEvent>().ToList())
-        {
-            /* déjà publié via publisher */
-        }
-        demande.ClearDomainEvents();
+        await _finalizer.PersistAndPublishAsync(demande, request.RhId, acteurNom, ct);
         return true;
     }
 }

@@ -126,13 +126,21 @@ public class ImportExecutionJournalTests
             return Task.CompletedTask;
         }
 
+        public Task RestoreSubServicePlacementAsync(int planningUserId, int subServiceId, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
         public Task<List<UserDto>> GetAllUsersAsync() => Task.FromResult(new List<UserDto>());
         public Task<List<UserDto>> GetUsersBySubServiceAsync(int subServiceId) => Task.FromResult(new List<UserDto>());
         public Task<UserDto?> GetUserByIdAsync(int id) => Task.FromResult<UserDto?>(null);
+        public Task<UserDto?> GetUserByGuidAsync(Guid employeeGuid) => Task.FromResult<UserDto?>(null);
         public Task<UserDto> CreateUserAsync(CreateUserDto dto) => throw new NotImplementedException();
         public Task<UserDto> CreateUserFromImportAsync(CreateUserFromImportDto dto) => throw new NotImplementedException();
         public Task<ResetPasswordResultDto?> ResetPasswordAsync(int userId, CancellationToken ct = default) =>
             Task.FromResult<ResetPasswordResultDto?>(null);
+        public Task<ResetPasswordsByGroupResultDto> ResetPasswordsByGroupAsync(
+            ResetPasswordsByGroupRequest request,
+            CancellationToken ct = default) =>
+            Task.FromResult(new ResetPasswordsByGroupResultDto());
         public Task<IReadOnlyList<ImportChunkCreateResultDto>> CreateUsersFromImportChunkAsync(
             IReadOnlyList<ImportChunkCreateItemDto> items,
             CancellationToken ct = default) =>
@@ -219,6 +227,19 @@ public class ImportExecutionJournalTests
             throw new NotImplementedException();
         public Task<bool> AssignReferentTechniqueAsync(string serviceDirectoryId, Guid employeeGuid, CancellationToken ct = default) =>
             throw new NotImplementedException();
+
+        public Task<DirectoryUndoImportWindowResult> UndoImportAssignmentWindowAsync(
+            IReadOnlyList<Guid> employeeIds,
+            DateTime windowStart,
+            DateTime windowEnd,
+            CancellationToken ct = default) =>
+            Task.FromResult(new DirectoryUndoImportWindowResult());
+
+        public Task<IReadOnlyList<Guid>> GetEmployeeIdsWithAssignmentsAfterAsync(
+            IReadOnlyList<Guid> employeeIds,
+            DateTime after,
+            CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Guid>>(Array.Empty<Guid>());
     }
 
     private sealed class FakeOrgMirrorService : IPlanningOrgMirrorService

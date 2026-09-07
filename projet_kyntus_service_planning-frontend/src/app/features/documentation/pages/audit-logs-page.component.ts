@@ -1,20 +1,18 @@
-import { Component, OnInit } from '@angular/core';
-
-import { AuditJournalPageComponent } from '../components/audit-journal-page/audit-journal-page.component';
-import { AuditInterfaceNavService } from '../services/audit-interface-nav.service';
+import { Component, OnInit, inject } from '@angular/core';
+import { Router } from '@angular/router';
 
 @Component({
   standalone: true,
   selector: 'app-audit-logs-page',
-  imports: [AuditJournalPageComponent],
-  template: '<app-audit-journal-page [title]="title"></app-audit-journal-page>',
+  template: '',
 })
 export class AuditLogsPageComponent implements OnInit {
-  readonly title = "Journal d'audit";
-
-  constructor(private readonly auditNav: AuditInterfaceNavService) {}
+  private readonly router = inject(Router);
 
   ngOnInit(): void {
-    this.auditNav.setSection('journal');
+    void this.router.navigate(['/audit'], {
+      queryParams: { section: 'journal', module: 'documentation' },
+      replaceUrl: true,
+    });
   }
 }

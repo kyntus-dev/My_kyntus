@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { AlertTriangle, Wrench, Activity } from 'lucide';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
 import { KpiStatsComponent, KpiStatItem } from '../../components/kpi-stats.component';
@@ -107,6 +108,7 @@ export class AdminDashboardPageComponent {
   private readonly admin = inject(AdminService);
   private readonly roleSvc = inject(ParrainageRoleService);
   private readonly nav = inject(ParrainageNavService);
+  private readonly router = inject(Router);
 
   readonly activityIcon = Activity;
   readonly wrenchIcon = Wrench;
@@ -147,6 +149,10 @@ export class AdminDashboardPageComponent {
   });
 
   go(view: ParrainageView): void {
+    if (view === 'admin-audit') {
+      void this.router.navigate(['/audit'], { queryParams: { section: 'journal', module: 'parrainage' } });
+      return;
+    }
     this.nav.setView(view);
   }
 

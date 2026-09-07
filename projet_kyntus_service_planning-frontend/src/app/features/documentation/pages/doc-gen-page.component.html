@@ -254,7 +254,8 @@
             <div class="space-y-3 rounded-lg border border-[var(--info-border)] bg-[var(--info-bg)] p-3">
               <p class="text-xs font-bold text-primary uppercase tracking-wide">Données complémentaires (RH)</p>
               <p class="text-[11px] text-muted">
-                Les valeurs RH ont priorité sur la base employé. Les champs d’identité / organisation sont alimentés automatiquement.
+                Cette zone affiche les champs RH natifs du modèle ainsi que les champs DB mappés mais vides pour l’employé
+                sélectionné. Une valeur DB existante reste prioritaire.
               </p>
               @for (v of hrVariablesForCurrentTemplate(); track v.name) {
                 <div class="space-y-1">

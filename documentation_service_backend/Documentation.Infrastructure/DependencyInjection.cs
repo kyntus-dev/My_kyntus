@@ -8,6 +8,7 @@ using Documentation.Infrastructure.Messaging;
 using Documentation.Infrastructure.Persistence;
 using Documentation.Infrastructure.Services;
 using Documentation.Infrastructure.Storage;
+using Kyntus.Caching;
 using Kyntus.Iam;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -27,7 +28,7 @@ public static class DependencyInjection
         services.AddKyntusIamViaDirectoryHttp(
             configuration["Directory:BaseUrl"] ?? "http://employee-directory-backend:8080");
         services.AddHttpContextAccessor();
-        services.AddMemoryCache();
+        services.AddKyntusCaching(configuration);
         services.AddScoped<DocumentationCorrelationContext>();
         services.AddScoped<DocumentationUserContext>();
         services.AddScoped<IDocumentationTenantAccessor, DocumentationTenantAccessor>();
@@ -60,6 +61,13 @@ public static class DependencyInjection
         services.AddScoped<DirectoryUserSyncService>();
         services.AddScoped<DocumentationJwtDirectoryProvisioner>();
         services.AddScoped<DocumentationDirectoryUserLookup>();
+        services.AddHttpClient<IPlanningEmployeeFieldsClient, PlanningEmployeeFieldsClient>(client =>
+        {
+            var baseUrl = configuration["Planning:BaseUrl"] ?? "http://localhost:8521";
+            client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(8);
+        });
+        services.AddScoped<IDocumentTemplateEmployeeMappingService, DocumentTemplateEmployeeMappingService>();
         services.AddScoped<IDocumentTemplateManagementService, DocumentTemplateManagementService>();
         services.AddScoped<IDocumentTypeQueryService, DocumentTypeQueryService>();
 
@@ -148,6 +156,13 @@ public static class DependencyInjection
             services.AddScoped<IDirectoryQueryAppService, DirectoryQueryAppService>();
             services.AddScoped<IDocumentRequestAppService, DocumentRequestAppService>();
             services.AddScoped<IAuditLogQueryAppService, AuditLogQueryAppService>();
+            services.AddHttpClient<IPlanningEmployeeFieldsClient, PlanningEmployeeFieldsClient>(client =>
+            {
+                var baseUrl = configuration["Planning:BaseUrl"] ?? "http://localhost:8521";
+                client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+                client.Timeout = TimeSpan.FromSeconds(8);
+            });
+            services.AddScoped<IDocumentTemplateEmployeeMappingService, DocumentTemplateEmployeeMappingService>();
             services.AddScoped<IDocumentTemplateVariableMergeService, DocumentTemplateVariableMergeService>();
             services.AddScoped<IGeneratedDocumentAppService, GeneratedDocumentAppService>();
             services.AddScoped<IDocumentTemplateAppService, DocumentTemplateAppService>();

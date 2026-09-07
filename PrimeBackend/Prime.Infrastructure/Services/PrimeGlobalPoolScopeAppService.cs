@@ -19,7 +19,7 @@ public sealed class PrimeGlobalPoolScopeAppService(
     PrimeRbacReadService rbac) : IPrimeGlobalPoolScopeAppService
 {
     private static bool LegacyScopeUnlocked(GlobalPoolScopeSynthesisEntity s) =>
-        s.ManagerApprovedAt.HasValue && s.RhApprovedAt.HasValue;
+        GlobalPoolWorkflowService.LegacyScopePoolUnlocked(s);
 
     private async Task<string?> RoleOfUserAsync(string userId, CancellationToken ct)
     {
@@ -103,8 +103,8 @@ public sealed class PrimeGlobalPoolScopeAppService(
         if (string.IsNullOrWhiteSpace(body.UserId))
             throw new ArgumentException("userId est requis.");
         var role = await RoleOfUserAsync(body.UserId, ct);
-        if (role is not ("RH" or "Admin" or "Manager"))
-            throw new PrimeApiException(403, "Génération réservée à RH, Manager ou Admin.");
+        if (role is not ("RH" or "Admin"))
+            throw new PrimeApiException(403, "Génération réservée à RH ou Admin.");
 
         try
         {
@@ -214,25 +214,13 @@ public sealed class PrimeGlobalPoolScopeAppService(
         return await MapScopeInboxAsync(s, role, ct);
     }
 
-    public async Task<GlobalPoolScopeSynthesisInboxItemDto> ApproveScopeManagerAsync(
+    public Task<GlobalPoolScopeSynthesisInboxItemDto> ApproveScopeManagerAsync(
         Guid scopeSynthesisId,
         GlobalPoolActingUserRequest body,
         CancellationToken ct = default)
     {
-        if (await poolWf.UsesConfigurableWorkflowAsync(ct))
-            throw new ArgumentException("Utilisez approve-step.");
-        var role = await RoleOfUserAsync(body.UserId, ct);
-        if (role is not ("Manager" or "Admin"))
-            throw new PrimeApiException(403, "Manager uniquement.");
-
-        var s = await db.GlobalPoolScopeSyntheses.FirstOrDefaultAsync(x => x.Id == scopeSynthesisId, ct)
-            ?? throw new KeyNotFoundException();
-        var now = DateTimeOffset.UtcNow;
-        s.ManagerApprovedAt = now;
-        s.ManagerApprovedByUserId = body.UserId.Trim();
-        s.UpdatedAt = now;
-        await db.SaveChangesAsync(ct);
-        return await MapScopeInboxAsync(s, role!, ct);
+        _ = (scopeSynthesisId, body, ct);
+        throw new PrimeApiException(410, PrimeGlobalPoolActorResolver.ManagerStepGoneMessage);
     }
 
     public async Task<GlobalPoolScopeSynthesisInboxItemDto> ApproveScopeRhAsync(
@@ -270,7 +258,7 @@ public sealed class PrimeGlobalPoolScopeAppService(
         var s = await db.GlobalPoolScopeSyntheses.FirstOrDefaultAsync(x => x.Id == scopeSynthesisId, ct)
             ?? throw new KeyNotFoundException();
         if (!LegacyScopeUnlocked(s))
-            throw new ArgumentException("Validations Manager et RH requises.");
+            throw new ArgumentException("Validation RH requise avant la comptabilité.");
 
         var now = DateTimeOffset.UtcNow;
         var approvedExcel = await synthesis.BuildApprovedExportExcelAsync(scopeSynthesisId, ct);
@@ -369,7 +357,7 @@ public sealed class PrimeGlobalPoolScopeAppService(
         {
             lineByFiche.TryGetValue(r.f.Id, out var match);
             var syn = match?.syn;
-            var unlocked = syn is not null && syn.ManagerApprovedAt.HasValue && syn.RhApprovedAt.HasValue;
+            var unlocked = syn is not null && GlobalPoolWorkflowService.LegacyScopePoolUnlocked(syn);
             return new SupervisorSynthesisTrackingItemDto
             {
                 FicheId = r.f.Id,
@@ -537,10 +525,9 @@ public sealed class PrimeGlobalPoolScopeAppService(
             ? await poolWf.PendingActionForScopeAsync(s, employeeRole, ct)
             : employeeRole switch
             {
-                "Manager" => !s.ManagerApprovedAt.HasValue,
                 "RH" => !s.RhApprovedAt.HasValue,
                 "Comptable" or "Comptabilité" => LegacyScopeUnlocked(s) && !s.ComptaAckAt.HasValue,
-                "Admin" => !s.ManagerApprovedAt.HasValue || !s.RhApprovedAt.HasValue ||
+                "Admin" => !s.RhApprovedAt.HasValue ||
                            (LegacyScopeUnlocked(s) && !s.ComptaAckAt.HasValue),
                 _ => false,
             };

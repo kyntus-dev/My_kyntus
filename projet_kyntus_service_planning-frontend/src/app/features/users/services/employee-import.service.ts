@@ -187,6 +187,28 @@ export interface EmployeeImportJobSummary {
   completedAt: string | null;
 }
 
+export interface EmployeeImportRollbackResult {
+  jobId: string;
+  fileName: string;
+  startedAt: string;
+  createdDeleted: number;
+  directoryAssignmentsDeleted: number;
+  directoryAssignmentsRestored: number;
+  deletedEmails: string[];
+  message: string;
+}
+
+export interface EmployeeImportPlacementRestoreResult {
+  jobId: string;
+  dryRun: boolean;
+  restored: number;
+  skippedRotation: number;
+  skippedAlready: number;
+  skippedNoHistory: number;
+  items: { email: string; currentLabel?: string; previousLabel?: string; action: string }[];
+  message: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class EmployeeImportService {
   private readonly http = inject(HttpClient);
@@ -250,5 +272,17 @@ export class EmployeeImportService {
       next: (blob) => triggerBlobDownload(blob, fileName || `import_${jobId}.xlsx`),
       error: () => this.toast.error('Fichier source indisponible pour cet import.'),
     });
+  }
+
+  rollbackJob(jobId: string): Observable<EmployeeImportRollbackResult> {
+    return this.http.post<EmployeeImportRollbackResult>(`${this.base}/history/${jobId}/rollback`, {});
+  }
+
+  restorePlacements(jobId: string, dryRun = true): Observable<EmployeeImportPlacementRestoreResult> {
+    return this.http.post<EmployeeImportPlacementRestoreResult>(
+      `${this.base}/history/${jobId}/restore-placements`,
+      {},
+      { params: { dryRun } },
+    );
   }
 }

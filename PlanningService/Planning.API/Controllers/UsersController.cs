@@ -2,8 +2,10 @@ using Kyntus.Iam;
 using Kyntus.Identity.Jwt;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Planning.Application.Abstractions;
+using Planning.Application.Abstractions.EmployeeImport;
 using Planning.Application.DTOs;
 using Planning.Application.Users;
 
@@ -15,6 +17,7 @@ namespace Planning.API.Controllers;
 public class UsersController(
     IMediator mediator,
     IUserService userService,
+    IEmployeeDocumentFieldQueryService documentFieldQuery,
     IPolicyEvaluator policyEvaluator) : ControllerBase
 {
     private async Task<ActionResult?> DenyUnlessCanManageUsersAsync()
@@ -81,11 +84,12 @@ public class UsersController(
         if (authUserId is null or <= 0 && string.IsNullOrWhiteSpace(email))
             return Unauthorized(new { message = "Authentification requise." });
 
+        var subjectId = User.GetSubjectId();
         var user = await userService.GetOrEnsureUserForAuthAsync(
             authUserId ?? 0,
             email,
             User.GetAuthRole(),
-            User.GetSubjectId(),
+            subjectId,
             ct);
 
         if (user is null)
@@ -106,6 +110,19 @@ public class UsersController(
         if (user == null)
             return NotFound(new { message = "Utilisateur introuvable." });
         return Ok(user);
+    }
+
+    [HttpGet("by-guid/{guid:guid}/document-field-values")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<EmployeeDocumentFieldValuesDto>> GetDocumentFieldValues(
+        Guid guid,
+        [FromQuery] string[]? includeKeys,
+        CancellationToken ct)
+    {
+        var result = await documentFieldQuery.GetFieldValuesAsync(guid, includeKeys, ct);
+        if (result is null)
+            return NotFound(new { message = "Employé introuvable." });
+        return Ok(result);
     }
 
     [HttpGet("{id}")]
@@ -166,6 +183,32 @@ public class UsersController(
         return NoContent();
     }
 
+    [HttpPost("reset-passwords/by-group")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<ResetPasswordsByGroupResultDto>> ResetPasswordsByGroup(
+        [FromBody] ResetPasswordsByGroupRequest request,
+        CancellationToken ct)
+    {
+        if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
+        try
+        {
+            var result = await userService.ResetPasswordsByGroupAsync(request, ct);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = ex.Message });
+        }
+    }
+
     [HttpPost("{id}/reset-password")]
     [Authorize(Roles = "Admin,RH")]
     public async Task<ActionResult<ResetPasswordResultDto>> ResetPassword(int id, CancellationToken ct)
@@ -206,7 +249,10 @@ public class UsersController(
 
         var role = User.GetAuthRole() ?? "Employee";
         var subjectId = User.GetSubjectId() ?? Guid.Empty;
-        if (subjectId == Guid.Empty && !IsHrOrAdmin(role))
+        var hasIdentity = subjectId != Guid.Empty
+            || User.GetAuthUserId() is > 0
+            || !string.IsNullOrWhiteSpace(User.GetEmail());
+        if (!hasIdentity && !IsHrOrAdmin(role))
             return Unauthorized();
 
         try
@@ -218,7 +264,10 @@ public class UsersController(
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Forbid();
+            var message = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Modification du niveau non autorisée."
+                : ex.Message;
+            return StatusCode(StatusCodes.Status403Forbidden, new { message });
         }
         catch (InvalidOperationException ex)
         {

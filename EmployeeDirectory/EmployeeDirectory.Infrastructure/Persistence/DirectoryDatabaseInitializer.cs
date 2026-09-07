@@ -1,3 +1,4 @@
+using EmployeeDirectory.Application.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,16 @@ public static class DirectoryDatabaseInitializer
             log.LogCritical(ex,
                 "Employee Directory : base indisponible au démarrage — l'API démarre quand même (health OK).");
             return;
+        }
+
+        try
+        {
+            await scope.ServiceProvider.GetRequiredService<IIamAdminService>()
+                .SeedDefaultsIfEmptyAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "Employee Directory : seed IAM ignoré (table absente ou déjà peuplée).");
         }
 
         log.LogInformation("Employee Directory database ready.");

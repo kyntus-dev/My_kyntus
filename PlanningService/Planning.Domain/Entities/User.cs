@@ -43,6 +43,9 @@ public class User
     /// <summary>Miroir Directory / HTEL.</summary>
     public int? IdTechnicien { get; set; }
     public string? HtelCode { get; set; }
+    /// <summary>Libellé technicien HTEL (NOM Prénom) — source export planning.</summary>
+    [MaxLength(256)]
+    public string? HtelTechnicienName { get; set; }
     public ICollection<UserSubService> ManagedSubServices { get; set; } = new List<UserSubService>();
     public ICollection<ShiftAssignment> ShiftAssignments { get; set; } = new List<ShiftAssignment>();
     public ICollection<Declaration> Declarations { get; set; } = new List<Declaration>();

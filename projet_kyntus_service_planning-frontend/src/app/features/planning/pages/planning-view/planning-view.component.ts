@@ -14,13 +14,27 @@ import {
   ShiftSimple,
   ShiftOption,
   ShiftConfig,
+  WeekShiftConfigResponse,
   SavePlanningCommentDto,
   SetSaturdayHistoryDto
 } from '../../services/planning.service';
 import { contractLevelLabel } from '../../../../core/hr/user-hr-display.util';
 import { BodyPortalDirective } from '../../../../shared/directives/body-portal.directive';
-import { downloadPlanningWeekExcel } from '../../lib/planning-week-xlsx-export';
+import { downloadHtelPlanningExcel } from '../../lib/htel-planning-xlsx-export';
+import { downloadPlanningWeekPdf } from '../../lib/planning-week-pdf-export';
+import {
+  collectHtelExportAgents,
+  formatHtelDateHeader,
+  htelCellBreakDisplay,
+  htelCellStartDisplay,
+  htelWeekDates,
+  type HtelDayCell,
+  type HtelExportAgentRow,
+} from '../../lib/htel-planning-export.util';
+import { isPiloteRole } from '../../../../core/org/org-role-assignment';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
+import { planningOverrideShiftOptions } from '../../lib/planning-override-shift-options.util';
 
 /** Normalise une clé jour (EN technique ou FR affichage). */
 function normalizeDayKey(day: string | null | undefined): string {
@@ -66,10 +80,12 @@ export class PlanningViewComponent implements OnInit {
   publishing    = false;
   regenerating  = false;
   exporting     = false;
+  exportingPdf  = false;
+  showExportPreview = false;
   hasConsulted  = false;
   consulting    = false;
   canValidate   = false;
-  /** Édition grille (overrides, commentaires) — Admin/RH + brouillon uniquement. */
+  /** Édition grille (overrides, commentaires) — Admin/RH, brouillon ou publié. */
   canEdit = false;
   /** Provenance navigation (retour liste). */
   fromSource: 'validation' | 'equipe' | 'other' = 'other';
@@ -139,6 +155,8 @@ selectedHolidayShiftId      = 0;
   private currentSubServiceId  = 0;
   saturdayShiftConfigs: any[]  = [];  // ✅ alias de weekShiftConfigs pour le modal samedi
 
+  readonly htelCellStartDisplay = htelCellStartDisplay;
+  readonly htelCellBreakDisplay = htelCellBreakDisplay;
   readonly days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   readonly dayLabels: Record<string, string> = {
     Monday: 'Lun', Tuesday: 'Mar', Wednesday: 'Mer',
@@ -161,11 +179,16 @@ selectedHolidayShiftId      = 0;
     private session: KyntusSessionService,
     private confirmService: KyntusConfirmService,
     private cdr: ChangeDetectorRef,
+    private access: PlatformAccessService,
   ) {}
 
   ngOnInit(): void {
     const role = this.session.getRole();
-    this.canValidate = role === 'Admin' || role === 'RH';
+    const isAdminRh = role === 'Admin' || role === 'RH';
+    // RH/Admin : correction manuelle des brouillons même si le catalogue IAM
+    // est incomplet. La publication reste canValidate (bouton Valider).
+    this.canValidate = isAdminRh
+      || (this.access.hasCatalog() && this.access.canValidate('planning.publish'));
 
     const qp = this.route.snapshot.queryParamMap;
     const from = (qp.get('from') || '').toLowerCase();
@@ -216,18 +239,11 @@ selectedHolidayShiftId      = 0;
       next: data => {
         this.planning = data;
         this.loading  = false;
-        this.canEdit = this.canValidate && data.status === 'Draft';
+        this.canEdit = this.canEditPublishedOrDraft(data.status);
         this.buildShiftColorMap(data);
 
         if (data.subServiceId && data.weekCode) {
-          this.planningService.getShiftConfigsForSaturday(
-            data.subServiceId,
-            data.weekCode
-          ).subscribe(configs => {
-            this.weekShiftConfigs    = configs;
-            this.saturdayShiftConfigs = configs;
-            this.cdr.detectChanges();
-          });
+          this.loadOverrideShiftConfigs(data.subServiceId, data.weekCode);
         }
 
         // Ouvrir l’écran = consultation : Valider actif tout de suite
@@ -242,6 +258,25 @@ selectedHolidayShiftId      = 0;
         }
       },
       error: () => { this.loading = false; this.cdr.detectChanges(); }
+    });
+  }
+
+  private applyOverrideShiftConfigs(r: WeekShiftConfigResponse | null | undefined): void {
+    const opts = planningOverrideShiftOptions(r);
+    this.weekShiftConfigs = opts.weekday;
+    this.saturdayShiftConfigs = opts.saturday;
+    this.cdr.detectChanges();
+  }
+
+  private loadOverrideShiftConfigs(subServiceId: number, weekCode: string): void {
+    this.planningService.getShiftConfig(subServiceId, weekCode).subscribe({
+      next: (r) => this.applyOverrideShiftConfigs(r),
+      error: () => {
+        this.planningService.getShiftTemplate(subServiceId).subscribe({
+          next: (r) => this.applyOverrideShiftConfigs(r),
+          error: () => this.applyOverrideShiftConfigs(null),
+        });
+      },
     });
   }
 
@@ -324,7 +359,8 @@ selectedHolidayShiftId      = 0;
         this.planning   = data;
         this.hasConsulted = true;
         this.publishing = false;
-        this.successMsg = 'Planning validé !';
+        this.canEdit = this.canEditPublishedOrDraft(data.status);
+        this.successMsg = 'Planning validé — les équipes sont notifiées.';
         this.cdr.detectChanges();
       },
       error: (err) => {
@@ -562,12 +598,16 @@ selectedHolidayShiftId      = 0;
     this.expandedShiftKpiLabel = this.expandedShiftKpiLabel === label ? null : label;
   }
 
+  get isPiloteViewer(): boolean {
+    return isPiloteRole(this.session.getRole() ?? '');
+  }
+
   get hasSpecialCaseTickets(): boolean {
-    return (this.planning?.assignments ?? []).some((e) => !!e.isSpecialCase);
+    return !this.isPiloteViewer && (this.planning?.assignments ?? []).some((e) => !!e.isSpecialCase);
   }
 
   get hasPlateauTrainingTickets(): boolean {
-    return (this.planning?.assignments ?? []).some((e) => !!e.isPlateauTraining);
+    return !this.isPiloteViewer && (this.planning?.assignments ?? []).some((e) => !!e.isPlateauTraining);
   }
 
   /**
@@ -962,14 +1002,60 @@ selectedHolidayShiftId      = 0;
     void this.router.navigate(['/planning/change-requests']);
   }
 
+  openExportPreview(): void {
+    if (!this.planning) return;
+    this.showExportPreview = true;
+    this.cdr.detectChanges();
+  }
+
+  closeExportPreview(): void {
+    this.showExportPreview = false;
+  }
+
+  get htelExportPreviewRows(): HtelExportAgentRow[] {
+    return this.planning ? collectHtelExportAgents([this.planning]) : [];
+  }
+
+  get htelExportHeaderDates(): Date[] {
+    return this.planning ? htelWeekDates(this.planning.weekStartDate) : [];
+  }
+
+  formatHtelHeaderDate(date: Date): string {
+    return formatHtelDateHeader(date);
+  }
+
+  htelStartCellClass(cell: HtelDayCell): string {
+    if (cell.kind === 'cp') return 'export-htel-cp';
+    if (cell.kind === 'f') return 'export-htel-f';
+    return '';
+  }
+
+  async exportPlanningPdf(): Promise<void> {
+    if (!this.planning || this.exportingPdf) return;
+    this.exportingPdf = true;
+    this.error = '';
+    try {
+      await downloadPlanningWeekPdf(this.planning, {
+        getAbsenceLabel: v => this.getAbsenceLabel(v),
+        shiftColorMap: this.shiftColorMap,
+        statusLabel: this.getStatusLabel(this.planning.status),
+      });
+      this.successMsg = `Export PDF — ${this.planning.weekCode}`;
+    } catch (err) {
+      console.error(err);
+      this.error = 'Impossible d’exporter le PDF.';
+    } finally {
+      this.exportingPdf = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   async exportPlanningWeek(): Promise<void> {
     if (!this.planning || this.exporting) return;
     this.exporting = true;
     this.error = '';
     try {
-      await downloadPlanningWeekExcel(this.planning, {
-        getAbsenceLabel: (v) => this.getAbsenceLabel(v),
-      });
+      await downloadHtelPlanningExcel([this.planning]);
       this.successMsg = `Export Excel — ${this.planning.weekCode}`;
     } catch (err) {
       console.error(err);
@@ -1001,6 +1087,13 @@ selectedHolidayShiftId      = 0;
     this.cdr.detectChanges();
   }
 
+  private afterManualOverride(message: string): void {
+    this.successMsg = message;
+    if (this.planning) this.loadPlanning(this.planning.id);
+    this.cdr.detectChanges();
+    setTimeout(() => { this.successMsg = ''; this.cdr.detectChanges(); }, 4000);
+  }
+
   confirmOverride(): void {
     if (!this.selectedNewShiftConfigId) return; // ✅
 
@@ -1011,8 +1104,7 @@ selectedHolidayShiftId      = 0;
     }).subscribe({
       next: () => {
         this.showOverride = false;
-        this.loadPlanning(this.planning!.id);
-        this.cdr.detectChanges();
+        this.afterManualOverride('Shift modifié — validez pour republier.');
       },
       error: err => {
         this.error = `Erreur : ${err.error?.message ?? 'Erreur serveur'}`;
@@ -1079,8 +1171,7 @@ selectedHolidayShiftId      = 0;
     }).subscribe({
       next: () => {
         this.showBreakOverride = false;
-        this.loadPlanning(this.planning!.id);
-        this.cdr.detectChanges();
+        this.afterManualOverride('Pause modifiée — validez pour republier.');
       },
       error: err => {
         this.error = `Erreur : ${err.error?.message ?? 'Erreur serveur'}`;
@@ -1093,32 +1184,19 @@ selectedHolidayShiftId      = 0;
   openSaturdayOverride(employee: EmployeePlanning, event: Event): void {
     event.stopPropagation();
     if (!this.canEdit) return;
-    if (!this.planning || this.planning.status !== 'Draft') return;
+    if (!this.planning || !this.canEditPublishedOrDraft(this.planning.status)) return;
 
     const assignment = this.getAssignment(employee, 'Saturday');
 
     this.selectedSaturdayEmployeeId   = employee.userId;
     this.selectedSaturdayEmployeeName = employee.fullName;
     this.selectedSaturdayAssignmentId = assignment?.assignmentId ?? 0;
-    this.selectedSaturdayAction       = assignment && !assignment.isOnLeave ? 'off' : 'work';this.selectedSaturdayAction = (assignment && !assignment.isOnLeave) || assignment?.isOnLeave
-  ? 'off'
-  : 'work';
+    this.selectedSaturdayAction       = assignment && !assignment.isOnLeave ? 'off' : 'work';
     this.selectedSaturdayShiftId      = 0;
     this.showSaturdayOverride         = true;
 
-    // ✅ Réutiliser weekShiftConfigs déjà chargés, sinon recharger
-    if (this.weekShiftConfigs.length > 0) {
-      this.saturdayShiftConfigs = this.weekShiftConfigs;
-      this.cdr.detectChanges();
-    } else if (this.planning.subServiceId && this.planning.weekCode) {
-      this.planningService.getShiftConfigsForSaturday(
-        this.planning.subServiceId,
-        this.planning.weekCode
-      ).subscribe(configs => {
-        this.weekShiftConfigs     = configs;
-        this.saturdayShiftConfigs = configs;
-        this.cdr.detectChanges();
-      });
+    if (this.saturdayShiftConfigs.length === 0 && this.planning.subServiceId && this.planning.weekCode) {
+      this.loadOverrideShiftConfigs(this.planning.subServiceId, this.planning.weekCode);
     }
 
     this.cdr.detectChanges();
@@ -1153,10 +1231,7 @@ selectedHolidayShiftId      = 0;
  
         this.savingSaturday       = false;
         this.showSaturdayOverride = false;
-        this.successMsg           = 'Samedi mis à OFF !';
-        this.loadPlanning(this.planning!.id);
-        setTimeout(() => { this.successMsg = ''; this.cdr.detectChanges(); }, 3000);
-        this.cdr.detectChanges();
+        this.afterManualOverride('Samedi mis à OFF — validez pour republier.');
       },
       error: err => {
         this.savingSaturday = false;
@@ -1189,10 +1264,7 @@ selectedHolidayShiftId      = 0;
  
         this.savingSaturday       = false;
         this.showSaturdayOverride = false;
-        this.successMsg           = 'Samedi mis à jour !';
-        this.loadPlanning(this.planning!.id);
-        setTimeout(() => { this.successMsg = ''; this.cdr.detectChanges(); }, 3000);
-        this.cdr.detectChanges();
+        this.afterManualOverride('Samedi mis à jour — validez pour republier.');
       },
       error: err => {
         this.savingSaturday = false;
@@ -1210,7 +1282,7 @@ selectedHolidayShiftId      = 0;
 openHolidayOverride(employee: EmployeePlanning, day: string, event: Event): void {
   event.stopPropagation();
   if (!this.canEdit) return;
-  if (!this.planning || this.planning.status !== 'Draft') return;
+  if (!this.planning || !this.canEditPublishedOrDraft(this.planning.status)) return;
 
   const assignment = this.getAssignment(employee, day);
   if (!assignment || !assignment.isHoliday) return;
@@ -1242,10 +1314,7 @@ confirmHolidayOverride(): void {
     }).subscribe({
       next: () => {
         this.showHolidayOverride = false;
-        this.successMsg = 'Jour modifié en repos !';
-        this.loadPlanning(this.planning!.id);
-        setTimeout(() => { this.successMsg = ''; this.cdr.detectChanges(); }, 3000);
-        this.cdr.detectChanges();
+        this.afterManualOverride('Jour modifié en repos — validez pour republier.');
       },
       error: err => {
         this.error = `Erreur : ${err.error?.message ?? 'Erreur serveur'}`;
@@ -1261,10 +1330,7 @@ confirmHolidayOverride(): void {
     }).subscribe({
       next: () => {
         this.showHolidayOverride = false;
-        this.successMsg = 'Shift assigné sur jour férié !';
-        this.loadPlanning(this.planning!.id);
-        setTimeout(() => { this.successMsg = ''; this.cdr.detectChanges(); }, 3000);
-        this.cdr.detectChanges();
+        this.afterManualOverride('Shift assigné — validez pour republier.');
       },
       error: err => {
         this.error = `Erreur : ${err.error?.message ?? 'Erreur serveur'}`;
@@ -1398,6 +1464,11 @@ confirmHolidayOverride(): void {
 
   getStatusLabel(status: string): string {
     return ({ Draft: 'À valider', Published: 'Validé' } as any)[status] ?? status;
+  }
+
+  /** RH/Admin : correction manuelle valable sur brouillon et après validation. */
+  private canEditPublishedOrDraft(status: string | null | undefined): boolean {
+    return this.canValidate && (status === 'Draft' || status === 'Published');
   }
   
   getAbsenceLabel(value: string | null): string {

@@ -5,6 +5,7 @@ WORKDIR /src
 COPY Messaging.Contracts/Messaging.Contracts.csproj Messaging.Contracts/
 COPY Kyntus.Identity.Jwt/Kyntus.Identity.Jwt.csproj Kyntus.Identity.Jwt/
 COPY Kyntus.Iam/Kyntus.Iam.csproj Kyntus.Iam/
+COPY Kyntus.Caching/Kyntus.Caching.csproj Kyntus.Caching/
 COPY documentation_service_backend/Documentation.Contracts/Documentation.Contracts.csproj documentation_service_backend/Documentation.Contracts/
 COPY documentation_service_backend/Documentation.Domain/Documentation.Domain.csproj documentation_service_backend/Documentation.Domain/
 COPY documentation_service_backend/Documentation.Application/Documentation.Application.csproj documentation_service_backend/Documentation.Application/
@@ -15,6 +16,7 @@ RUN dotnet restore documentation_service_backend/Documentation.API/Documentation
 COPY Messaging.Contracts/ Messaging.Contracts/
 COPY Kyntus.Identity.Jwt/ Kyntus.Identity.Jwt/
 COPY Kyntus.Iam/ Kyntus.Iam/
+COPY Kyntus.Caching/ Kyntus.Caching/
 COPY documentation_service_backend/Documentation.Contracts/ documentation_service_backend/Documentation.Contracts/
 COPY documentation_service_backend/ documentation_service_backend/
 RUN dotnet publish documentation_service_backend/Documentation.API/Documentation.API.csproj -c Release -o /out

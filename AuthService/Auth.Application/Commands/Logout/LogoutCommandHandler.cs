@@ -8,8 +8,13 @@ public record LogoutCommand(string RefreshToken) : IRequest<bool>;
 public class LogoutCommandHandler : IRequestHandler<LogoutCommand, bool>
 {
     private readonly IUserRepository _userRepository;
+    private readonly IAccessAuditWriter _accessAudit;
 
-    public LogoutCommandHandler(IUserRepository userRepository) => _userRepository = userRepository;
+    public LogoutCommandHandler(IUserRepository userRepository, IAccessAuditWriter accessAudit)
+    {
+        _userRepository = userRepository;
+        _accessAudit = accessAudit;
+    }
 
     public async Task<bool> Handle(LogoutCommand request, CancellationToken ct)
     {
@@ -21,6 +26,7 @@ public class LogoutCommandHandler : IRequestHandler<LogoutCommand, bool>
         user.RefreshToken = null;
         user.RefreshTokenExpiryTime = null;
         await _userRepository.UpdateAsync(user, ct);
+        await _accessAudit.WriteAsync("Logout", user.Email, user.Id, null, ct);
         return true;
     }
 }

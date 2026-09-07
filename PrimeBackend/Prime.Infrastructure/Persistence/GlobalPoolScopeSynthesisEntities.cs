@@ -39,7 +39,7 @@ public class GlobalPoolSynthesisLineEntity
     public decimal? PrimeAmount { get; set; }
     public decimal? ChallengeAmount { get; set; }
     public decimal? TotalAmount { get; set; }
-    /// <summary>PendingReview | Approved | LineRejected (dérivé des décisions RH + Manager)</summary>
+    /// <summary>PendingReview | Approved | LineRejected (dérivé de la décision RH)</summary>
     public string LineStatus { get; set; } = "PendingReview";
     /// <summary>Pending | Approved | Rejected</summary>
     public string RhDecision { get; set; } = "Pending";

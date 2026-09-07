@@ -22,6 +22,10 @@ export class AuthInterceptor implements HttpInterceptor {
         if (!(error instanceof HttpErrorResponse) || error.status !== 401) {
           return throwError(() => error);
         }
+        // Inbox push / IAM catalogue : un 401 métier ne doit pas détruire la session login.
+        if (this.isOptionalAuthFailure(req.url)) {
+          return throwError(() => error);
+        }
         if (!this.shouldAttemptRefresh(req)) {
           this.authRefresh.redirectToLogin();
           return throwError(() => error);
@@ -63,6 +67,12 @@ export class AuthInterceptor implements HttpInterceptor {
         Authorization: `Bearer ${token}`,
       },
     });
+  }
+
+  /** Endpoints optionnels : 401 ≠ session expirée (claims / route absente). */
+  private isOptionalAuthFailure(url: string): boolean {
+    const u = url.toLowerCase();
+    return u.includes('/api/iam') || u.includes('/api/auth/push');
   }
 
   private shouldAttemptRefresh(req: HttpRequest<any>): boolean {

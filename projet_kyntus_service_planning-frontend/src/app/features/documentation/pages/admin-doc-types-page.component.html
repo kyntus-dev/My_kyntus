@@ -1,12 +1,12 @@
 @if (role$ | async; as role) {
   @if (!isAdmin(role)) {
-    <app-admin-shell title="Document Types" description="Accès refusé pour ce rôle." iconName="layers">
+    <app-admin-shell title="Types de documents" description="Accès refusé pour ce rôle." iconName="layers">
       <div class="card-navy p-6">
         <p class="text-primary">Seul le rôle `Admin` peut gérer les types de documents.</p>
       </div>
     </app-admin-shell>
   } @else if (loading) {
-    <app-admin-shell title="Document Types" description="Chargement des types…" iconName="layers">
+    <app-admin-shell title="Types de documents" description="Chargement des types…" iconName="layers">
       <div class="card-navy p-6">
         <p class="text-primary">Veuillez patienter.</p>
       </div>

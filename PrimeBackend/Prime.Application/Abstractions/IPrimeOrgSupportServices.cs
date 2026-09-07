@@ -8,12 +8,24 @@ public interface IServicePrimeIndicatorsAppService
     Task<IReadOnlyList<ServicePrimeIndicatorDto>> GetAsync(
         string serviceId,
         string supervisorUserId,
+        string? employeeId = null,
         CancellationToken ct = default);
 
     Task<IReadOnlyList<ServicePrimeIndicatorDto>> PutAsync(
         string serviceId,
         string supervisorUserId,
         PutServicePrimeIndicatorsRequest body,
+        CancellationToken ct = default);
+
+    Task<ServicePrimeIndicatorAgentOverridesResponse> GetAgentOverridesAsync(
+        string serviceId,
+        string supervisorUserId,
+        CancellationToken ct = default);
+
+    Task<ServicePrimeIndicatorAgentOverridesResponse> PutAgentOverridesAsync(
+        string serviceId,
+        string supervisorUserId,
+        PutServicePrimeIndicatorAgentOverridesRequest body,
         CancellationToken ct = default);
 }
 
@@ -54,6 +66,8 @@ public interface IPrimeCoreQueryAppService
     Task<IReadOnlyList<Employee>> GetLegacyEmployeesAsync(CancellationToken ct = default);
     Task<IReadOnlyList<PrimeResult>> GetPrimeResultsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<PrimeResult>> GetMyPrimeResultsAsync(string employeeId, CancellationToken ct = default);
+    Task<IReadOnlyList<PrimeType>> GetPrimeTypesAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<PrimeRule>> GetPrimeRulesAsync(CancellationToken ct = default);
     Task<object> GetDashboardStatsAsync(CancellationToken ct = default);
 }
 

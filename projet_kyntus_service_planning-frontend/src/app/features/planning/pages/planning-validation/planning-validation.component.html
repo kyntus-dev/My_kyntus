@@ -3,13 +3,25 @@
     title="Validation plannings"
     subtitle="Consultez les brouillons générés automatiquement par service (plus petite entité organisationnelle), modifiez si besoin, puis validez (Admin / RH).">
     <div actions class="pv-actions">
-      <button type="button" class="ky-btn-secondary" (click)="showSettings = !showSettings">
+      <button
+        type="button"
+        class="ky-btn-secondary"
+        *ngIf="canSeeAutoGenerateSettings"
+        (click)="showSettings = !showSettings">
         <app-lucide-icon [icon]="icons.settings" className="w-4 h-4" />
         Auto-génération
       </button>
       <button type="button" class="ky-btn-secondary" [disabled]="generating" (click)="regenerate()">
         <app-lucide-icon [icon]="icons.refresh" className="w-4 h-4" />
         {{ generating ? 'Génération…' : 'Générer / compléter' }}
+      </button>
+      <button
+        type="button"
+        class="ky-btn-secondary"
+        [disabled]="exportingHtel || exportHtelCount === 0"
+        (click)="exportHtelSelection()">
+        <app-lucide-icon [icon]="icons.download" className="w-4 h-4" />
+        {{ exportingHtel ? 'Export HTEL…' : exportHtelLabel }}
       </button>
     </div>
   </app-kyntus-page-header>
@@ -48,7 +60,7 @@
     </button>
   </div>
 
-  <div class="settings-panel ky-card" *ngIf="showSettings">
+  <div class="settings-panel ky-card" *ngIf="showSettings && canSeeAutoGenerateSettings">
     <h3>Génération automatique</h3>
     <p class="hint">Défaut : chaque jeudi pour la semaine suivante. Modifiable par RH / Admin.</p>
     <div class="settings-grid">
@@ -78,18 +90,142 @@
         </select>
       </div>
     </div>
+    <h4 class="settings-subtitle">Adresse RH</h4>
+    <p class="hint">
+      Adresse « De : » des mails de planning envoyés aux pilotes — utilisée si elle est renseignée et valide.
+    </p>
+    <div class="settings-mail">
+      <div class="form-group">
+        <label for="pv-sender-from">Adresse RH</label>
+        <input
+          id="pv-sender-from"
+          class="ky-input"
+          type="email"
+          name="senderFromEmail"
+          autocomplete="off"
+          placeholder="rh@entreprise.ma"
+          [(ngModel)]="settings.senderFromEmail" />
+      </div>
+      <div class="form-group">
+        <label for="pv-sender-name">Nom affiché (optionnel)</label>
+        <input
+          id="pv-sender-name"
+          class="ky-input"
+          type="text"
+          name="senderDisplayName"
+          maxlength="128"
+          autocomplete="off"
+          placeholder="Kyntus Planning"
+          [(ngModel)]="settings.senderDisplayName" />
+      </div>
+    </div>
+    <h4 class="settings-subtitle">Envoi des mails</h4>
+    <p class="hint">
+      Utilisez une clé API (Brevo ou SendGrid) fournie par votre prestataire — ce n’est pas le mot de passe d’une boîte. L’adresse RH ci-dessus reste l’expéditeur.
+    </p>
+    <div class="settings-mail-mode">
+      <div class="form-group">
+        <label for="pv-mail-mode">Mode</label>
+        <select id="pv-mail-mode" class="ky-input" name="mailSendMode" [(ngModel)]="settings.mailSendMode">
+          <option value="ApiKey">Clé API</option>
+          <option value="Smtp">SMTP (serveur mail)</option>
+        </select>
+      </div>
+    </div>
+    <ng-container *ngIf="isMailApiKeyMode; else smtpMailSettings">
+      <div class="settings-mail-api">
+        <div class="form-group">
+          <label for="pv-mail-provider">Prestataire</label>
+          <select id="pv-mail-provider" class="ky-input" name="mailApiProvider" [(ngModel)]="settings.mailApiProvider">
+            <option value="Brevo">Brevo (Sendinblue)</option>
+            <option value="SendGrid">SendGrid</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="pv-mail-api-key">Clé API</label>
+          <input
+            id="pv-mail-api-key"
+            class="ky-input"
+            type="password"
+            name="mailApiKey"
+            autocomplete="new-password"
+            [placeholder]="settings.mailApiKeySet ? 'Laisser vide pour conserver' : 'Clé API du prestataire'"
+            [(ngModel)]="mailApiKeyDraft" />
+        </div>
+      </div>
+    </ng-container>
+    <ng-template #smtpMailSettings>
+      <p class="hint">
+        Gmail : hôte <strong>smtp.gmail.com</strong>, port <strong>587</strong>, SSL coché, utilisateur = l’adresse Gmail.
+        Le mot de passe Gmail est refusé : il faut un <strong>mot de passe d’application</strong> (compte Google → Sécurité → Validation en 2 étapes → Mots de passe des applications).
+      </p>
+      <div class="settings-smtp">
+        <div class="form-group">
+          <label for="pv-smtp-host">Hôte</label>
+          <input
+            id="pv-smtp-host"
+            class="ky-input"
+            type="text"
+            name="smtpHost"
+            autocomplete="off"
+            placeholder="smtp.exemple.ma"
+            [(ngModel)]="settings.smtpHost" />
+        </div>
+        <div class="form-group">
+          <label for="pv-smtp-port">Port</label>
+          <input
+            id="pv-smtp-port"
+            class="ky-input"
+            type="number"
+            min="1"
+            max="65535"
+            name="smtpPort"
+            [(ngModel)]="settings.smtpPort" />
+        </div>
+        <div class="form-group">
+          <label for="pv-smtp-user">Utilisateur</label>
+          <input
+            id="pv-smtp-user"
+            class="ky-input"
+            type="text"
+            name="smtpUser"
+            autocomplete="off"
+            [(ngModel)]="settings.smtpUser" />
+        </div>
+        <div class="form-group">
+          <label for="pv-smtp-password">Mot de passe</label>
+          <input
+            id="pv-smtp-password"
+            class="ky-input"
+            type="password"
+            name="smtpPassword"
+            autocomplete="new-password"
+            [placeholder]="settings.smtpPasswordSet ? 'Laisser vide pour conserver' : 'Mot de passe SMTP'"
+            [(ngModel)]="smtpPasswordDraft" />
+        </div>
+        <label class="chk settings-smtp-ssl">
+          <input type="checkbox" [(ngModel)]="settings.smtpEnableSsl" />
+          SSL / STARTTLS
+        </label>
+      </div>
+    </ng-template>
     <p class="hint" *ngIf="settings.lastRunWeekCode">
       Dernière exécution : {{ settings.lastRunWeekCode }}
       <span *ngIf="settings.lastRunAt"> ({{ settings.lastRunAt | date:'short' }})</span>
     </p>
-    <button type="button" class="ky-btn-primary" [disabled]="savingSettings" (click)="saveSettings()">
-      {{ savingSettings ? 'Enregistrement…' : 'Enregistrer' }}
-    </button>
+    <div class="settings-actions">
+      <button type="button" class="ky-btn-primary" [disabled]="savingSettings || testingEmail" (click)="saveSettings()">
+        {{ savingSettings ? 'Enregistrement…' : 'Enregistrer' }}
+      </button>
+      <button type="button" class="ky-btn-secondary" [disabled]="savingSettings || testingEmail" (click)="sendTestEmail()">
+        {{ testingEmail ? 'Envoi…' : 'Envoyer un mail de test' }}
+      </button>
+    </div>
   </div>
 
   <div class="filters-row">
-    <input class="ky-input" type="search" placeholder="Rechercher un service…" [(ngModel)]="search" />
-    <select class="ky-input" [(ngModel)]="statusFilter">
+    <input class="ky-input" type="search" placeholder="Rechercher un service…" [(ngModel)]="search" (ngModelChange)="expandVisibleBranches()" />
+    <select class="ky-input" [(ngModel)]="statusFilter" (ngModelChange)="expandVisibleBranches()">
       <option value="all">Tous</option>
       <option value="draft">À valider</option>
       <option value="published">Validés</option>
@@ -103,7 +239,7 @@
         [(ngModel)]="agentSearch"
         aria-label="Filtrer la liste des agents"
       />
-      <select class="ky-input" [(ngModel)]="agentFilterId">
+      <select class="ky-input" [(ngModel)]="agentFilterId" (ngModelChange)="expandVisibleBranches()">
         <option [ngValue]="null">Tous les agents</option>
         <option *ngFor="let a of agentOptions" [ngValue]="a.id">{{ a.label }}</option>
       </select>
@@ -123,43 +259,326 @@
 
   <div class="loading" *ngIf="loading">Chargement…</div>
 
-  <div class="table-wrap ky-card" *ngIf="!loading">
-    <table class="prime-table">
-      <thead>
-        <tr>
-          <th>Service</th>
-          <th>Effectif</th>
-          <th>Statut</th>
-          <th>Consultation</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let item of filteredItems">
-          <td>
-            <div class="cell-name">{{ item.orgLabel || item.subServiceName }}</div>
-          </td>
-          <td>{{ item.totalEffectif || '—' }}</td>
-          <td><span class="status-pill" [ngClass]="statusClass(item)">{{ statusLabel(item) }}</span></td>
-          <td>
-            <span *ngIf="item.planningId && item.hasConsulted" class="ok">Consulté</span>
-            <span *ngIf="item.planningId && !item.hasConsulted" class="muted">Non consulté</span>
-            <span *ngIf="!item.planningId" class="muted">—</span>
-          </td>
-          <td>
-            <button
-              type="button"
-              class="ky-btn-secondary btn-sm"
-              [disabled]="!item.planningId"
-              (click)="openItem(item)">
-              Consulter
+  <div class="pv-bulk-bar ky-card" *ngIf="canValidateRole() && !loading">
+    <div class="pv-bulk-left">
+      <button
+        type="button"
+        class="ky-btn-secondary btn-sm"
+        [disabled]="selectableFilteredCount === 0 || validatingBulk"
+        (click)="selectAllFiltered()">
+        Tout sélectionner
+      </button>
+      <button
+        type="button"
+        class="ky-btn-secondary btn-sm"
+        [disabled]="selectedIds.size === 0 || validatingBulk"
+        (click)="deselectAll()">
+        Tout désélectionner
+      </button>
+      <span class="pv-bulk-count">
+        {{ selectedCount }} sélectionnée(s)
+        <span *ngIf="selectableFilteredCount > 0"> · {{ selectableFilteredCount }} à valider</span>
+      </span>
+    </div>
+    <button
+      type="button"
+      class="ky-btn-secondary btn-sm"
+      [disabled]="exportHtelCount === 0 || exportingHtel"
+      (click)="exportHtelSelection()">
+      <app-lucide-icon [icon]="icons.download" className="w-4 h-4" />
+      {{ exportingHtel ? 'Export…' : exportHtelLabel }}
+    </button>
+    <button
+      type="button"
+      class="ky-btn-primary btn-sm"
+      [disabled]="selectedCount === 0 || validatingBulk"
+      (click)="validateSelected()">
+      <app-lucide-icon [icon]="icons.check" className="w-4 h-4" />
+      {{ validatingBulk ? 'Validation…' : (selectedCount > 0 ? 'Valider la sélection (' + selectedCount + ')' : 'Valider la sélection') }}
+    </button>
+  </div>
+  <div class="pv-layout" *ngIf="!loading">
+    <div class="pv-tree ky-card">
+      <div class="pv-tree-header">
+        <h2>Organisation</h2>
+        <p>Département → Pôle → Cellule → Service. Effectif, modifications, statut et consultation sur chaque service.</p>
+      </div>
+
+      <div class="pv-tree-scroll">
+      <div class="pv-cols pv-cols-head" [class.pv-cols--check]="canValidateRole()">
+        <span class="pv-col-check" *ngIf="canValidateRole()">
+          <input
+            type="checkbox"
+            [checked]="allFilteredSelected"
+            [indeterminate]="selectionIndeterminate"
+            [disabled]="selectableFilteredCount === 0 || validatingBulk"
+            aria-label="Sélectionner toutes les cellules à valider"
+            (change)="onHeaderCheck($event)" />
+        </span>
+        <span class="pv-col-org">Service</span>
+        <span class="pv-col-eff">Effectif</span>
+        <span class="pv-col-mod" title="Affectations modifiées manuellement (hors demandes exceptionnelles / renforts)">
+          Modifs. manuelles
+        </span>
+        <span class="pv-col-stat">Statut</span>
+        <span class="pv-col-cons">Consultation</span>
+      </div>
+
+      <div class="pv-tree-body">
+        <ng-container *ngFor="let md of operationalDepartments">
+          <div class="tree-block" *ngIf="deptVisible(md)">
+            <button type="button" class="tree-row tree-row--dept pv-cols" [class.pv-cols--check]="canValidateRole()" (click)="selectDept(md)">
+              <span class="pv-col-check" *ngIf="canValidateRole()"></span>
+              <span class="pv-col-org">
+                <span class="tree-chev-hit" (click)="toggleDept(md.id, $event)">
+                  <app-lucide-icon
+                    [icon]="deptExpanded(md.id) ? icons.chevDown : icons.chevRight"
+                    className="w-4 h-4 tree-chev" />
+                </span>
+                <span class="badge badge-dept">Dépt</span>
+                <span class="tree-name">{{ md.code }} — {{ md.name }}</span>
+              </span>
+              <span class="pv-col-eff">{{ effectifOf(deptServices(md)) || '—' }}</span>
+              <span class="pv-col-mod">
+                <span class="pv-manual-kpi" [class.pv-manual-kpi--hot]="manualOf(deptServices(md)) > 0">{{ manualOf(deptServices(md)) }}</span>
+              </span>
+              <span class="pv-col-stat">
+                <span
+                  class="status-dot"
+                  [class.dot-ok]="statusForDept(md) === 'ok'"
+                  [class.dot-missing]="statusForDept(md) === 'missing'"
+                  [class.dot-partial]="statusForDept(md) === 'partial'"
+                  [class.dot-none]="statusForDept(md) === 'none'"
+                  [attr.title]="statusTitle(statusForDept(md))"></span>
+                <span class="pv-stat-text">{{ statusTitle(statusForDept(md)) }}</span>
+              </span>
+              <span class="pv-col-cons muted"></span>
             </button>
-          </td>
-        </tr>
-        <tr *ngIf="filteredItems.length === 0">
-          <td colspan="5" class="empty">Aucun planning pour cette semaine.</td>
-        </tr>
-      </tbody>
-    </table>
+
+            <div class="tree-children" *ngIf="deptExpanded(md.id)">
+              <ng-container *ngFor="let pole of md.poles">
+                <div class="tree-block tree-block--pole" *ngIf="poleVisible(pole)">
+                  <button type="button" class="tree-row tree-row--pole pv-cols" [class.pv-cols--check]="canValidateRole()" (click)="selectPole(pole)">
+                    <span class="pv-col-check" *ngIf="canValidateRole()"></span>
+                    <span class="pv-col-org">
+                      <span class="tree-chev-hit" (click)="togglePole(pole.id, $event)">
+                        <app-lucide-icon
+                          [icon]="poleExpanded(pole.id) ? icons.chevDown : icons.chevRight"
+                          className="w-3.5 h-3.5 tree-chev" />
+                      </span>
+                      <span class="badge badge-pole">Pôle</span>
+                      <span class="tree-name">{{ pole.name }}</span>
+                    </span>
+                    <span class="pv-col-eff">{{ effectifOf(poleServices(pole)) || '—' }}</span>
+                    <span class="pv-col-mod">
+                      <span class="pv-manual-kpi" [class.pv-manual-kpi--hot]="manualOf(poleServices(pole)) > 0">{{ manualOf(poleServices(pole)) }}</span>
+                    </span>
+                    <span class="pv-col-stat">
+                      <span
+                        class="status-dot"
+                        [class.dot-ok]="statusForPole(pole) === 'ok'"
+                        [class.dot-missing]="statusForPole(pole) === 'missing'"
+                        [class.dot-partial]="statusForPole(pole) === 'partial'"
+                        [class.dot-none]="statusForPole(pole) === 'none'"
+                        [attr.title]="statusTitle(statusForPole(pole))"></span>
+                      <span class="pv-stat-text">{{ statusTitle(statusForPole(pole)) }}</span>
+                    </span>
+                    <span class="pv-col-cons muted"></span>
+                  </button>
+
+                  <div class="tree-children" *ngIf="poleExpanded(pole.id)">
+                    <ng-container *ngFor="let cell of pole.cellules">
+                      <div class="tree-block tree-block--cell" *ngIf="celluleVisible(cell)">
+                        <button type="button" class="tree-row tree-row--cell pv-cols" [class.pv-cols--check]="canValidateRole()" (click)="selectCellule(cell)">
+                          <span class="pv-col-check" *ngIf="canValidateRole()"></span>
+                          <span class="pv-col-org">
+                            <span class="tree-chev-hit" (click)="toggleCellule(cell.id, $event)">
+                              <app-lucide-icon
+                                [icon]="celluleExpanded(cell.id) ? icons.chevDown : icons.chevRight"
+                                className="w-3 h-3 tree-chev" />
+                            </span>
+                            <span class="badge badge-cell">Cell.</span>
+                            <span class="tree-name">{{ cell.name }}</span>
+                          </span>
+                          <span class="pv-col-eff">{{ effectifOf(cell.services) || '—' }}</span>
+                          <span class="pv-col-mod">
+                            <span class="pv-manual-kpi" [class.pv-manual-kpi--hot]="manualOf(cell.services) > 0">{{ manualOf(cell.services) }}</span>
+                          </span>
+                          <span class="pv-col-stat">
+                            <span
+                              class="status-dot"
+                              [class.dot-ok]="statusForCellule(cell) === 'ok'"
+                              [class.dot-missing]="statusForCellule(cell) === 'missing'"
+                              [class.dot-partial]="statusForCellule(cell) === 'partial'"
+                              [class.dot-none]="statusForCellule(cell) === 'none'"
+                              [attr.title]="statusTitle(statusForCellule(cell))"></span>
+                            <span class="pv-stat-text">{{ statusTitle(statusForCellule(cell)) }}</span>
+                          </span>
+                          <span class="pv-col-cons muted"></span>
+                        </button>
+
+                        <div class="tree-children" *ngIf="celluleExpanded(cell.id)">
+                          <ng-container *ngFor="let svc of visibleServices(cell.services)">
+                            <ng-container *ngTemplateOutlet="svcRow; context: { $implicit: svc }"></ng-container>
+                          </ng-container>
+                        </div>
+                      </div>
+                    </ng-container>
+                  </div>
+                </div>
+              </ng-container>
+            </div>
+          </div>
+        </ng-container>
+
+        <div class="tree-block" *ngIf="hasVisibleUnassignedPoles">
+          <div class="tree-row tree-row--dept tree-row--static pv-cols" [class.pv-cols--check]="canValidateRole()">
+            <span class="pv-col-check" *ngIf="canValidateRole()"></span>
+            <span class="pv-col-org">
+              <span class="badge badge-dept">Hors dépt</span>
+              <span class="tree-name">Pôles non rattachés</span>
+            </span>
+            <span class="pv-col-eff"></span>
+            <span class="pv-col-mod"></span>
+            <span class="pv-col-stat"></span>
+            <span class="pv-col-cons"></span>
+          </div>
+          <div class="tree-children">
+            <ng-container *ngFor="let pole of unassignedPoles">
+              <div class="tree-block tree-block--pole" *ngIf="poleVisible(pole)">
+                <button type="button" class="tree-row tree-row--pole pv-cols" [class.pv-cols--check]="canValidateRole()" (click)="selectPole(pole)">
+                  <span class="pv-col-check" *ngIf="canValidateRole()"></span>
+                  <span class="pv-col-org">
+                    <span class="tree-chev-hit" (click)="togglePole(pole.id, $event)">
+                      <app-lucide-icon
+                        [icon]="poleExpanded(pole.id) ? icons.chevDown : icons.chevRight"
+                        className="w-3.5 h-3.5 tree-chev" />
+                    </span>
+                    <span class="badge badge-pole">Pôle</span>
+                    <span class="tree-name">{{ pole.name }}</span>
+                  </span>
+                  <span class="pv-col-eff">{{ effectifOf(poleServices(pole)) || '—' }}</span>
+                  <span class="pv-col-mod">
+                    <span class="pv-manual-kpi" [class.pv-manual-kpi--hot]="manualOf(poleServices(pole)) > 0">{{ manualOf(poleServices(pole)) }}</span>
+                  </span>
+                  <span class="pv-col-stat">
+                    <span
+                      class="status-dot"
+                      [class.dot-ok]="statusForPole(pole) === 'ok'"
+                      [class.dot-missing]="statusForPole(pole) === 'missing'"
+                      [class.dot-partial]="statusForPole(pole) === 'partial'"
+                      [class.dot-none]="statusForPole(pole) === 'none'"></span>
+                    <span class="pv-stat-text">{{ statusTitle(statusForPole(pole)) }}</span>
+                  </span>
+                  <span class="pv-col-cons muted"></span>
+                </button>
+                <div class="tree-children" *ngIf="poleExpanded(pole.id)">
+                  <ng-container *ngFor="let cell of pole.cellules">
+                    <div class="tree-block tree-block--cell" *ngIf="celluleVisible(cell)">
+                      <button type="button" class="tree-row tree-row--cell pv-cols" [class.pv-cols--check]="canValidateRole()" (click)="selectCellule(cell)">
+                        <span class="pv-col-check" *ngIf="canValidateRole()"></span>
+                        <span class="pv-col-org">
+                          <span class="tree-chev-hit" (click)="toggleCellule(cell.id, $event)">
+                            <app-lucide-icon
+                              [icon]="celluleExpanded(cell.id) ? icons.chevDown : icons.chevRight"
+                              className="w-3 h-3 tree-chev" />
+                          </span>
+                          <span class="badge badge-cell">Cell.</span>
+                          <span class="tree-name">{{ cell.name }}</span>
+                        </span>
+                        <span class="pv-col-eff">{{ effectifOf(cell.services) || '—' }}</span>
+                        <span class="pv-col-mod">
+                          <span class="pv-manual-kpi" [class.pv-manual-kpi--hot]="manualOf(cell.services) > 0">{{ manualOf(cell.services) }}</span>
+                        </span>
+                        <span class="pv-col-stat">
+                          <span
+                            class="status-dot"
+                            [class.dot-ok]="statusForCellule(cell) === 'ok'"
+                            [class.dot-missing]="statusForCellule(cell) === 'missing'"
+                            [class.dot-partial]="statusForCellule(cell) === 'partial'"
+                            [class.dot-none]="statusForCellule(cell) === 'none'"></span>
+                          <span class="pv-stat-text">{{ statusTitle(statusForCellule(cell)) }}</span>
+                        </span>
+                        <span class="pv-col-cons muted"></span>
+                      </button>
+                      <div class="tree-children" *ngIf="celluleExpanded(cell.id)">
+                        <ng-container *ngFor="let svc of visibleServices(cell.services)">
+                          <ng-container *ngTemplateOutlet="svcRow; context: { $implicit: svc }"></ng-container>
+                        </ng-container>
+                      </div>
+                    </div>
+                  </ng-container>
+                </div>
+              </div>
+            </ng-container>
+          </div>
+        </div>
+
+        <p class="pv-tree-empty" *ngIf="!operationalDepartments.length && !unassignedPoles.length">
+          Aucune structure organisationnelle chargée.
+        </p>
+        <p class="pv-tree-empty" *ngIf="(operationalDepartments.length || unassignedPoles.length) && !hasAnyVisibleOrg">
+          Aucun service pour ce filtre.
+        </p>
+      </div>
+      </div>
+    </div>
   </div>
 </div>
+
+<ng-template #svcRow let-svc>
+  <div
+    class="tree-row tree-row--svc pv-cols"
+    [class.pv-cols--check]="canValidateRole()"
+    [class.is-selected]="isOrgServiceSelected(svc.id) || (itemForPrime(svc.id) && isSelected(itemForPrime(svc.id)!))"
+    [class.is-disabled]="!itemForPrime(svc.id)"
+    [class.pv-row-disabled]="canValidateRole() && itemForPrime(svc.id) && !isSelectable(itemForPrime(svc.id)!)"
+    (click)="selectOrgService(svc)">
+    <span class="pv-col-check" *ngIf="canValidateRole()">
+      <input
+        *ngIf="itemForPrime(svc.id) as it"
+        type="checkbox"
+        [checked]="isSelected(it)"
+        [disabled]="!isSelectable(it) || validatingBulk"
+        [attr.aria-label]="'Sélectionner ' + (it.orgLabel || it.subServiceName || svc.name)"
+        [title]="isSelectable(it) ? 'Sélectionner pour valider' : 'Non validable (config manquante, non généré ou déjà validé)'"
+        (click)="$event.stopPropagation()"
+        (change)="onRowCheck(it, $event)" />
+    </span>
+    <span class="pv-col-org">
+      <span class="tree-indent"></span>
+      <span class="badge badge-svc">Svc.</span>
+      <span class="tree-name">{{ svc.name }}</span>
+    </span>
+    <span class="pv-col-eff">{{ headcountForPrime(svc.id) || '—' }}</span>
+    <span class="pv-col-mod">
+      <span
+        *ngIf="itemForPrime(svc.id) as it"
+        class="pv-manual-kpi"
+        [class.pv-manual-kpi--hot]="(it.manualModificationCount ?? 0) > 0"
+        [title]="(it.manualModificationCount ?? 0) + ' modification(s) manuelle(s)'">
+        {{ it.manualModificationCount ?? 0 }}
+      </span>
+      <span *ngIf="!itemForPrime(svc.id)" class="muted">—</span>
+    </span>
+    <span class="pv-col-stat">
+      <span class="status-pill" *ngIf="itemForPrime(svc.id) as it" [ngClass]="statusClass(it)">{{ statusLabel(it) }}</span>
+      <span class="status-pill st-missing" *ngIf="!itemForPrime(svc.id)">Non généré</span>
+    </span>
+    <span class="pv-col-cons">
+      <ng-container *ngIf="itemForPrime(svc.id) as it">
+        <span *ngIf="it.planningId && it.hasConsulted" class="ok">Consulté</span>
+        <span *ngIf="it.planningId && !it.hasConsulted" class="muted">Non consulté</span>
+        <span *ngIf="!it.planningId" class="muted">—</span>
+        <button
+          type="button"
+          class="ky-btn-secondary btn-sm"
+          [disabled]="!it.planningId"
+          (click)="openItem(it); $event.stopPropagation()">
+          Consulter
+        </button>
+      </ng-container>
+      <span *ngIf="!itemForPrime(svc.id)" class="muted">—</span>
+    </span>
+  </div>
+</ng-template>

@@ -19,6 +19,7 @@ import { RoleService } from '../state/role.service';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
 import { Award, TrendingUp, Users, Wallet } from 'lucide';
 import { primeChartTheme } from '../lib/allowance-status';
+import { formatMonthYearFr, monthKeyToFr } from '../../../core/i18n/format-month-fr.util';
 
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
@@ -44,7 +45,7 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRendere
             </p>
           </div>
           <div class="text-sm font-medium text-primary card-navy px-4 py-2 rounded-lg">
-            March 2026
+            {{ periodLabel() }}
           </div>
         </div>
 
@@ -54,7 +55,7 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRendere
               <app-lucide-icon [icon]="icons.award" className="w-6 h-6" />
             </div>
             <div>
-              <p class="text-sm font-medium text-muted">Total Primes</p>
+              <p class="text-sm font-medium text-muted">Total des primes</p>
               <p class="text-2xl font-bold text-primary">{{ stats()!.totalPrimesThisMonth }}</p>
             </div>
           </div>
@@ -63,7 +64,7 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRendere
               <app-lucide-icon [icon]="icons.wallet" className="w-6 h-6" />
             </div>
             <div>
-              <p class="text-sm font-medium text-muted">Budget Used</p>
+              <p class="text-sm font-medium text-muted">Budget consommé</p>
               <p class="text-2xl font-bold text-primary">{{ stats()!.budgetConsumption }}%</p>
             </div>
           </div>
@@ -72,7 +73,7 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRendere
               <app-lucide-icon [icon]="icons.users" className="w-6 h-6" />
             </div>
             <div>
-              <p class="text-sm font-medium text-muted">Top Team</p>
+              <p class="text-sm font-medium text-muted">Meilleure équipe</p>
               <p class="text-lg font-bold text-primary truncate">{{ stats()!.topTeams[0].name }}</p>
             </div>
           </div>
@@ -81,14 +82,14 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRendere
               <app-lucide-icon [icon]="icons.trending" className="w-6 h-6" />
             </div>
             <div>
-              <p class="text-sm font-medium text-muted">Top Performer</p>
+              <p class="text-sm font-medium text-muted">Meilleur contributeur</p>
               <p class="text-lg font-bold text-primary truncate">{{ stats()!.topEmployees[0].name }}</p>
             </div>
           </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <app-prime-card title="Prime Evolution" className="lg:col-span-2">
+          <app-prime-card title="Évolution des primes" className="lg:col-span-2">
             <div echarts [options]="areaChartOptions()" class="h-80 w-full"></div>
           </app-prime-card>
 
@@ -98,7 +99,7 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRendere
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <app-prime-card title="Top Teams">
+          <app-prime-card title="Meilleures équipes">
             <div class="space-y-4">
               @for (team of stats()!.topTeams; track team.name; let i = $index) {
                 <div class="flex items-center justify-between p-3 rounded-lg hover:bg-input transition-colors">
@@ -115,7 +116,7 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRendere
               }
             </div>
           </app-prime-card>
-          <app-prime-card title="Top Employees">
+          <app-prime-card title="Meilleurs collaborateurs">
             <div class="space-y-4">
               @for (emp of stats()!.topEmployees; track emp.name) {
                 <div class="flex items-center justify-between p-3 rounded-lg hover:bg-input transition-colors">
@@ -163,6 +164,8 @@ export class PrimeDashboardStandardComponent implements OnInit {
     return 'Vue globale des performances et de la distribution des primes.';
   });
 
+  readonly periodLabel = computed(() => formatMonthYearFr());
+
   readonly loading = signal(true);
   readonly stats = signal<{
     totalPrimesThisMonth: number;
@@ -183,7 +186,7 @@ export class PrimeDashboardStandardComponent implements OnInit {
       grid: { left: 0, right: 30, top: 10, bottom: 0, containLabel: true },
       xAxis: {
         type: 'category',
-        data: s.primeEvolution.map((d) => d.month),
+        data: s.primeEvolution.map((d) => monthKeyToFr(d.month)),
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: { color: c.axisLabel, fontSize: 12, margin: 10 },

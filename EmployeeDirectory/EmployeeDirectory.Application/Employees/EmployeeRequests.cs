@@ -31,6 +31,15 @@ public sealed class GetEmployeeByIdQueryHandler(IDirectoryReadService read)
         read.GetEmployeeByIdAsync(request.Id, ct);
 }
 
+public record GetEmployeeByEmailQuery(string Email) : IRequest<EmployeeDto?>;
+
+public sealed class GetEmployeeByEmailQueryHandler(IDirectoryReadService read)
+    : IRequestHandler<GetEmployeeByEmailQuery, EmployeeDto?>
+{
+    public Task<EmployeeDto?> Handle(GetEmployeeByEmailQuery request, CancellationToken ct) =>
+        read.GetEmployeeByEmailAsync(request.Email, ct);
+}
+
 public record CreateEmployeeCommand(CreateEmployeeRequest Body, Guid? ChangedBy) : IRequest<EmployeeDto>;
 
 public sealed class CreateEmployeeCommandHandler(IDirectoryWriteService write)

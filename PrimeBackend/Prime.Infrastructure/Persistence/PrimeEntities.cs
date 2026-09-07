@@ -41,6 +41,24 @@ public class ServicePrimeIndicatorEntity
     public string? TemplateStableId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
+    public ICollection<EmployeeServiceIndicatorPonderationEntity> EmployeePonderations { get; set; } =
+        new List<EmployeeServiceIndicatorPonderationEntity>();
+}
+
+/// <summary>
+/// Override optionnel Prime/Challenge d'un indicateur service pour un agent.
+/// Null = héritage du % de l'indicateur service.
+/// </summary>
+public class EmployeeServiceIndicatorPonderationEntity
+{
+    public Guid Id { get; set; }
+    public string EmployeeId { get; set; } = "";
+    public Guid ServicePrimeIndicatorId { get; set; }
+    public ServicePrimeIndicatorEntity Indicator { get; set; } = null!;
+    public decimal? PonderationPrimePct { get; set; }
+    public decimal? PonderationChallengePct { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? UpdatedAt { get; set; }
 }
 
 /// <summary>Pondération Prime/Challenge d'une ligne RACC/SAV du gabarit, par service.</summary>

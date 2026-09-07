@@ -77,6 +77,7 @@ internal static class DocumentationSchemaBootstrap
 
         await ApplyPerformanceIndexesAsync(db, logger, cancellationToken).ConfigureAwait(false);
         await ApplyDirectoryUsersHrProfileColumnsAsync(db, logger, cancellationToken).ConfigureAwait(false);
+        await ApplyTemplateVariableMappingColumnsAsync(db, logger, cancellationToken).ConfigureAwait(false);
         await EnsureDefaultOrganisationUnitsAsync(db, logger, cancellationToken).ConfigureAwait(false);
     }
 
@@ -140,6 +141,32 @@ internal static class DocumentationSchemaBootstrap
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Documentation schema bootstrap — colonnes HR profile directory_users non appliquées.");
+        }
+    }
+
+    internal static async Task ApplyTemplateVariableMappingColumnsAsync(
+        DocumentationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql =
+            """
+            ALTER TABLE documentation.document_template_variables
+              ADD COLUMN IF NOT EXISTS source_field_key character varying(128);
+            ALTER TABLE documentation.document_template_variables
+              ADD COLUMN IF NOT EXISTS mapping_confidence character varying(16);
+            ALTER TABLE documentation.document_template_variables
+              ADD COLUMN IF NOT EXISTS mapping_confirmed boolean NOT NULL DEFAULT false;
+            """;
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(sql, cancellationToken).ConfigureAwait(false);
+            logger.LogInformation("Documentation schema bootstrap — colonnes mapping variables de modèle vérifiées.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Documentation schema bootstrap — colonnes mapping variables de modèle non appliquées.");
         }
     }
 

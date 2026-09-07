@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import {
   AlertTriangle,
   CheckCircle2,
+  Download,
   FileSpreadsheet,
   LayoutTemplate,
   MousePointer,
@@ -13,7 +14,9 @@ import { LucideIconComponent } from '@/shared/lucide-icon.component';
 import { PrimeCardComponent } from '../components/prime-card.component';
 import { PrimeTemplatePreviewComponent } from '../components/prime-template-preview.component';
 import { parsePrimeTemplateExcel } from '../lib/excel-fiche-template.parser';
+import { attachExcelSheetAppearance } from '../lib/extract-excel-sheet-appearance';
 import { parsePrimeFicheGrid } from '../lib/prime-fiche-grid.parser';
+import { downloadPrimeFicheStandardTemplate } from '../lib/prime-fiche-template-download';
 import type { ParsedPrimeTemplate, StoredPrimeTemplate } from '../models/prime-template.model';
 import { loadStoredTemplates, persistTemplates, toPreviewStoredTemplate } from '../models/prime-template.model';
 import type { PrimeFicheGridImportResult, PrimeFicheTemplateSchema } from '../models/prime-fiche-template.schema';
@@ -25,22 +28,25 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
   standalone: true,
   imports: [LucideIconComponent, PrimeCardComponent, PrimeTemplatePreviewComponent],
   template: `
-    <div class="p-6 sm:p-8 space-y-6 max-w-6xl mx-auto pb-16">
+    <div class="p-3 sm:p-4 xl:p-5 space-y-6 w-full max-w-none pb-16">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 class="text-2xl font-bold tracking-tight text-primary sm:text-3xl flex items-center gap-2">
             <app-lucide-icon [icon]="icons.layout" className="w-8 h-8 text-blue-600 shrink-0" />
-            Template Builder — fiche PRIME
+            Modèles de fiches PRIME
           </h1>
           <p class="text-muted mt-2 max-w-3xl">
-            Importez une fiche exemplaire (.xlsx). Le fichier est analysé sur votre poste : feuilles, aperçu,
-            formules et indices de structure (RACC / SAV). Vous pouvez enregistrer le gabarit pour la réutiliser en saisie.
+            Importez un fichier Excel de référence, vérifiez son aperçu et ses formules, puis enregistrez-le pour
+            l’utiliser lors des prochaines saisies.
           </p>
         </div>
       </div>
 
-      <app-prime-card title="Importer un fichier Excel" description="Format .xlsx — classeur type « Exemplaire Prime »">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+      <app-prime-card
+        title="Importer un fichier Excel"
+        description="Format .xlsx v2 — téléchargez le modèle standard ou importez votre propre classeur."
+      >
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:flex-wrap">
           <input
             #fileInput
             type="file"
@@ -48,6 +54,15 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
             class="hidden"
             (change)="onFileSelected($event)"
           />
+          <button
+            type="button"
+            (click)="downloadStandardTemplate()"
+            [disabled]="templateDownloadBusy()"
+            class="inline-flex items-center justify-center gap-2 rounded-lg border border-default bg-card px-4 py-2.5 text-sm font-semibold text-primary shadow-sm transition-colors hover:bg-input/40 disabled:opacity-50"
+          >
+            <app-lucide-icon [icon]="icons.download" className="w-4 h-4" />
+            Télécharger le modèle standard
+          </button>
           <button
             type="button"
             (click)="fileInput.click()"
@@ -90,7 +105,7 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
               class="mb-4 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
             >
               <app-lucide-icon [icon]="icons.pointer" className="w-4 h-4" />
-              Définir comme template actif (saisie)
+              Utiliser ce modèle pour la saisie
             </button>
           } @else {
             <p class="text-sm font-medium text-rose-600 dark:text-rose-400 mb-2">Schéma grille non valide (v1 ou v2).</p>
@@ -153,7 +168,7 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
             </div>
           </app-prime-card>
 
-          <app-prime-card title="Template détecté" description="Synthèse automatique">
+          <app-prime-card title="Modèle détecté" description="Synthèse automatique">
             <dl class="grid grid-cols-1 gap-2 text-sm">
               <div class="flex justify-between gap-2 border-b border-default/60 py-2">
                 <dt class="text-muted">Fichier</dt>
@@ -219,9 +234,9 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
         </app-prime-card>
 
         <app-prime-card
-          className="mt-6"
+          className="mt-6 p-0 overflow-hidden"
           [title]="'Aperçu — ' + p.previewSheetName"
-          description="Aperçu feuille Excel (mêmes rendu et recalcul que partout dans Prime)"
+          description="Même rendu que le fichier Excel d’origine (couleurs, fusions, formats, valeurs recalculées)"
         >
           @if (previewTemplate(); as tpl) {
             <app-prime-template-preview [tpl]="tpl" />
@@ -264,10 +279,10 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
           }
         </app-prime-card>
 
-        <app-prime-card className="mt-6" title="Sauvegarder le template" description="Enregistrement sur cet appareil pour réutilisation ultérieure">
+        <app-prime-card className="mt-6" title="Enregistrer le modèle" description="Rendez ce modèle disponible pour les prochaines saisies">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div class="flex-1">
-              <label class="mb-1 block text-sm font-medium text-muted">Nom du template</label>
+              <label class="mb-1 block text-sm font-medium text-muted">Nom du modèle</label>
               <input
                 type="text"
                 [class]="inputClass"
@@ -283,7 +298,7 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
               class="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-600/55 disabled:text-white"
             >
               <app-lucide-icon [icon]="icons.save" className="w-4 h-4" />
-              Sauvegarder le template
+              Enregistrer le modèle
             </button>
           </div>
           @if (saveBanner()) {
@@ -296,7 +311,7 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
                   class="inline-flex w-fit items-center justify-center gap-2 rounded-lg border border-blue-500/50 bg-blue-600/15 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-600/25 dark:text-blue-300"
                 >
                   <app-lucide-icon [icon]="icons.sheet" className="w-4 h-4" />
-                  Ouvrir la fiche PRIME (saisie)
+                  Créer une période avec ce modèle
                 </button>
               }
             </div>
@@ -304,9 +319,9 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
         </app-prime-card>
       }
 
-      <app-prime-card title="Templates enregistrés" description="Gabarits déjà sauvegardés sur cet appareil">
+      <app-prime-card title="Modèles enregistrés" description="Modèles disponibles pour la saisie">
         @if (!stored().length) {
-          <p class="text-sm text-muted">Aucun template sauvegardé pour le moment.</p>
+          <p class="text-sm text-muted">Aucun modèle enregistré pour le moment.</p>
         } @else {
           <ul class="divide-y divide-default rounded-lg border border-default overflow-hidden">
             @for (t of stored(); track t.id) {
@@ -329,10 +344,11 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
                     <button
                       type="button"
                       (click)="activateStored(t)"
-                      class="rounded-lg border border-blue-500/40 bg-blue-600/10 p-2 text-blue-600 hover:bg-blue-600/20 dark:text-blue-400"
-                      title="Utiliser pour la saisie"
+                      class="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/40 bg-blue-600/10 px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-600/20 dark:text-blue-400"
+                      title="Utiliser ce modèle pour la saisie"
                     >
                       <app-lucide-icon [icon]="icons.pointer" className="w-4 h-4" />
+                      Utiliser
                     </button>
                   }
                   <button
@@ -359,6 +375,7 @@ export class TemplateManagerComponent {
 
   readonly icons = {
     upload: Upload,
+    download: Download,
     sheet: FileSpreadsheet,
     layout: LayoutTemplate,
     check: CheckCircle2,
@@ -377,9 +394,10 @@ export class TemplateManagerComponent {
   readonly parseError = signal<string | null>(null);
   readonly saveName = signal('');
   readonly saveBanner = signal<string | null>(null);
-  /** Affiche le bouton « Ouvrir la fiche PRIME » après activation / sauvegarde avec grille. */
+  /** Affiche l’action de création de période après activation d’un modèle valide. */
   readonly saisieCtaVisible = signal(false);
   readonly stored = signal<StoredPrimeTemplate[]>(loadStoredTemplates());
+  readonly templateDownloadBusy = signal(false);
 
   /** Même rendu Excel que les autres aperçus fiches Prime. */
   readonly previewTemplate = computed(() => {
@@ -393,6 +411,8 @@ export class TemplateManagerComponent {
         formulas: p.formulas,
         calcSheets: p.calcSheets,
         calcSheetOrigins: p.calcSheetOrigins,
+        sheetAppearance: p.sheetAppearance,
+        ficheGridSchema: this.gridImport()?.schema ?? null,
       },
       p.fileName || 'Aperçu template',
     );
@@ -428,7 +448,7 @@ export class TemplateManagerComponent {
     if (!s) return;
     this.activeTpl.setActiveSchema(s);
     this.saveBanner.set(
-      `Grille v${s.templateFormatVersion} définie comme template actif pour « Fiche PRIME — saisie ».`,
+      `Modèle v${s.templateFormatVersion} prêt pour la saisie de la partie commune.`,
     );
     this.saisieCtaVisible.set(true);
     this.nav.requestView('/prime-saisie');
@@ -444,6 +464,19 @@ export class TemplateManagerComponent {
 
   goToSaisie(): void {
     this.nav.requestView('/prime-saisie');
+  }
+
+  async downloadStandardTemplate(): Promise<void> {
+    if (this.templateDownloadBusy()) return;
+    this.templateDownloadBusy.set(true);
+    this.parseError.set(null);
+    try {
+      await downloadPrimeFicheStandardTemplate();
+    } catch (e) {
+      this.parseError.set(e instanceof Error ? e.message : 'Impossible de télécharger le modèle standard.');
+    } finally {
+      this.templateDownloadBusy.set(false);
+    }
   }
 
   onFileSelected(ev: Event): void {
@@ -464,23 +497,26 @@ export class TemplateManagerComponent {
 
     const reader = new FileReader();
     reader.onload = () => {
-      try {
-        const buf = reader.result as ArrayBuffer;
-        const result = parsePrimeTemplateExcel(file.name, buf);
-        this.parsed.set(result);
-        this.gridImport.set(parsePrimeFicheGrid(file.name, buf));
-        const base = file.name.replace(/\.xlsx$/i, '');
-        if (!this.saveName().trim()) {
-          this.saveName.set(base);
+      void (async () => {
+        try {
+          const buf = reader.result as ArrayBuffer;
+          const result = parsePrimeTemplateExcel(file.name, buf);
+          await attachExcelSheetAppearance(result, buf);
+          this.parsed.set(result);
+          this.gridImport.set(parsePrimeFicheGrid(file.name, buf));
+          const base = file.name.replace(/\.xlsx$/i, '');
+          if (!this.saveName().trim()) {
+            this.saveName.set(base);
+          }
+        } catch (e) {
+          console.error(e);
+          this.parseError.set(
+            'Impossible de lire ce fichier Excel. Vérifiez qu’il n’est pas corrompu ou protégé.',
+          );
+          this.parsed.set(null);
+          this.gridImport.set(null);
         }
-      } catch (e) {
-        console.error(e);
-        this.parseError.set(
-          'Impossible de lire ce fichier Excel. Vérifiez qu’il n’est pas corrompu ou protégé.',
-        );
-        this.parsed.set(null);
-        this.gridImport.set(null);
-      }
+      })();
     };
     reader.onerror = () => {
       this.parseError.set('Erreur de lecture du fichier.');

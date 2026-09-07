@@ -9,16 +9,27 @@ import {
 import { KyntusSessionService } from '../../../core/session/kyntus-session.service';
 import { KyntusPageHeaderComponent } from '../../../shared/components/ui/kyntus-page-header.component';
 import { KyntusEmptyStateComponent } from '../../../shared/components/ui/kyntus-empty-state.component';
+import { KyntusSelectSyncDirective } from '../../../shared/directives/kyntus-select-sync.directive';
+import { PrimeOrgApiService } from '../../prime/services/prime-org-api.service';
+import type { OperationalDepartmentNode, OrgCelluleNode, OrgPoleNode, OrgServiceNode } from '../../prime/models/org-tree.types';
+import {
+  cellulesForPole,
+  findOperationalDeptForPole,
+  polesForOperationalDept,
+  resolveCelluleNode,
+  resolvePoleNode,
+  servicesForCellule,
+} from '../../../core/org/operational-org-picker';
 
 @Component({
   selector: 'app-formation-formateur-initial',
   standalone: true,
-  imports: [CommonModule, FormsModule, KyntusPageHeaderComponent, KyntusEmptyStateComponent],
+  imports: [CommonModule, FormsModule, KyntusPageHeaderComponent, KyntusEmptyStateComponent, KyntusSelectSyncDirective],
   template: `
     <section class="ky-page-shell ffi-page">
       <app-kyntus-page-header
         title="Suivi initiale (formateur)"
-        subtitle="Saisie quiz (titre + notes), validation dès J-7, prolongation et rejet"
+        subtitle="Saisie quiz (titre + notes), affectation org à la validation, prolongation et rejet"
       >
         <div actions>
           @if (!batchOpen() && paths().length > 0) {
@@ -131,7 +142,7 @@ import { KyntusEmptyStateComponent } from '../../../shared/components/ui/kyntus-
                   <button
                     type="button"
                     class="ky-btn-primary ffi-btn"
-                    (click)="validate(p)"
+                    (click)="openValidate(p)"
                     [disabled]="!canValidate(p) || isPanelOpen(p.id)"
                     [title]="validateHint(p)"
                   >
@@ -178,6 +189,96 @@ import { KyntusEmptyStateComponent } from '../../../shared/components/ui/kyntus-
                 </ul>
               } @else {
                 <p class="ffi-empty-quiz">Aucun résultat quiz.</p>
+              }
+
+              @if (validatePathId() === p.id) {
+                <div class="ffi-panel">
+                  <p class="ffi-panel-title">Affectation organisationnelle</p>
+                  <p class="ffi-panel-hint">
+                    Pôle, cellule et service du futur pilote — le RH verra ces champs préremplis et pourra les ajuster.
+                  </p>
+                  @if (orgLoading()) {
+                    <p class="ffi-panel-hint">Chargement de la structure…</p>
+                  } @else if (orgError()) {
+                    <p class="ffi-feedback ffi-feedback-error">{{ orgError() }}</p>
+                  } @else {
+                    <div class="ffi-org-grid">
+                      <label class="ffi-field">
+                        <span>Département</span>
+                        <select
+                          class="ky-input"
+                          [kyntusSelectSync]="orgDepartmentId()"
+                          (kyntusSelectSyncChange)="patchOrgDepartment($event)"
+                        >
+                          <option value="">Choisir…</option>
+                          @for (d of orgDepartments(); track d.id) {
+                            <option [value]="d.id">{{ d.name }}</option>
+                          }
+                        </select>
+                      </label>
+                      <label class="ffi-field">
+                        <span>Pôle</span>
+                        <select
+                          class="ky-input"
+                          [disabled]="!orgDepartmentId() && orgUnassignedPoles().length === 0"
+                          [kyntusSelectSync]="orgPoleId()"
+                          (kyntusSelectSyncChange)="patchOrgPole($event)"
+                        >
+                          <option value="">Choisir…</option>
+                          @for (pole of orgPoleOptions(); track pole.id) {
+                            <option [value]="pole.id">{{ pole.name }}</option>
+                          }
+                        </select>
+                      </label>
+                      <label class="ffi-field">
+                        <span>Cellule</span>
+                        <select
+                          class="ky-input"
+                          [disabled]="!orgPoleId()"
+                          [kyntusSelectSync]="orgCelluleId()"
+                          (kyntusSelectSyncChange)="patchOrgCellule($event)"
+                        >
+                          <option value="">Choisir…</option>
+                          @for (c of orgCelluleOptions(); track c.id) {
+                            <option [value]="c.id">{{ c.name }}</option>
+                          }
+                        </select>
+                      </label>
+                      <label class="ffi-field">
+                        <span>Service</span>
+                        <select
+                          class="ky-input"
+                          [disabled]="!orgCelluleId()"
+                          [kyntusSelectSync]="orgServiceId()"
+                          (kyntusSelectSyncChange)="patchOrgService($event)"
+                        >
+                          <option value="">Choisir…</option>
+                          @for (s of orgServiceOptions(); track s.id) {
+                            <option [value]="s.id">{{ s.name }}</option>
+                          }
+                        </select>
+                      </label>
+                    </div>
+                  }
+                  <div class="ffi-panel-actions">
+                    <button
+                      type="button"
+                      class="ky-btn-primary ffi-btn"
+                      [disabled]="!canConfirmValidate() || validating()"
+                      (click)="confirmValidate(p)"
+                    >
+                      {{ validating() ? 'Validation…' : 'Confirmer la validation' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="ky-btn-secondary ffi-btn"
+                      [disabled]="validating()"
+                      (click)="cancelValidate()"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
               }
 
               @if (extendPathId() === p.id) {
@@ -398,6 +499,25 @@ import { KyntusEmptyStateComponent } from '../../../shared/components/ui/kyntus-
       min-width: 10rem;
     }
     .ffi-panel-grow { flex: 1 1 100%; }
+    .ffi-panel-title {
+      margin: 0;
+      flex: 1 1 100%;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .ffi-panel-hint {
+      margin: 0;
+      flex: 1 1 100%;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .ffi-org-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.55rem 0.75rem;
+      flex: 1 1 100%;
+    }
     .ffi-reason {
       resize: vertical;
       min-height: 3.2rem;
@@ -503,6 +623,7 @@ import { KyntusEmptyStateComponent } from '../../../shared/components/ui/kyntus-
 export class FormationFormateurInitialComponent implements OnInit {
   private readonly api = inject(FormationTrainingService);
   private readonly session = inject(KyntusSessionService);
+  private readonly orgApi = inject(PrimeOrgApiService);
 
   readonly paths = signal<InitialTrainingPathDto[]>([]);
   readonly batchOpen = signal(false);
@@ -514,9 +635,35 @@ export class FormationFormateurInitialComponent implements OnInit {
   readonly extending = signal(false);
   readonly rejectPathId = signal<string | null>(null);
   readonly rejecting = signal(false);
+  readonly validatePathId = signal<string | null>(null);
+  readonly validating = signal(false);
   readonly feedback = signal('');
   readonly feedbackKind = signal<'info' | 'error'>('info');
   readonly pendingRemove = signal<{ pathId: string; resultId: string } | null>(null);
+
+  readonly orgDepartments = signal<OperationalDepartmentNode[]>([]);
+  readonly orgUnassignedPoles = signal<OrgPoleNode[]>([]);
+  readonly orgLoading = signal(false);
+  readonly orgError = signal('');
+  readonly orgDepartmentId = signal('');
+  readonly orgPoleId = signal('');
+  readonly orgCelluleId = signal('');
+  readonly orgServiceId = signal('');
+
+  readonly orgPoleOptions = computed(() => {
+    const deptId = this.orgDepartmentId();
+    if (deptId) return polesForOperationalDept(this.orgDepartments(), deptId);
+    return [
+      ...this.orgDepartments().flatMap((d) => d.poles),
+      ...this.orgUnassignedPoles(),
+    ];
+  });
+  readonly orgCelluleOptions = computed((): OrgCelluleNode[] =>
+    cellulesForPole(this.orgDepartments(), this.orgUnassignedPoles(), this.orgPoleId()),
+  );
+  readonly orgServiceOptions = computed((): OrgServiceNode[] =>
+    servicesForCellule(this.orgDepartments(), this.orgUnassignedPoles(), this.orgCelluleId()),
+  );
 
   readonly statusLabels = INITIAL_TRAINING_STATUS_LABELS;
   readonly passThreshold = 70;
@@ -540,6 +687,23 @@ export class FormationFormateurInitialComponent implements OnInit {
 
   ngOnInit(): void {
     void this.reload();
+    this.loadOrgTree();
+  }
+
+  private loadOrgTree(): void {
+    this.orgLoading.set(true);
+    this.orgError.set('');
+    this.orgApi.loadOverview().subscribe({
+      next: (overview) => {
+        this.orgDepartments.set(overview.operationalDepartments ?? []);
+        this.orgUnassignedPoles.set(overview.unassignedPoles ?? []);
+        this.orgLoading.set(false);
+      },
+      error: () => {
+        this.orgLoading.set(false);
+        this.orgError.set('Structure organisationnelle indisponible. Réessayez plus tard.');
+      },
+    });
   }
 
   openBatch(): void {
@@ -649,7 +813,94 @@ export class FormationFormateurInitialComponent implements OnInit {
     if (!this.canValidateByDate(path)) {
       return 'Disponible à partir de J-7 avant la fin prévue (ou prolonger)';
     }
-    return 'Envoyer en validation RH';
+    return 'Affecter le pôle / cellule / service puis envoyer en validation RH';
+  }
+
+  openValidate(path: InitialTrainingPathDto): void {
+    if (!this.canValidate(path)) return;
+    this.cancelExtend();
+    this.cancelReject();
+    this.clearFeedback();
+    this.validatePathId.set(path.id);
+    this.validating.set(false);
+    this.orgDepartmentId.set(path.orgDepartmentId?.trim() ?? '');
+    this.orgPoleId.set(path.orgPoleId?.trim() ?? '');
+    this.orgCelluleId.set(path.orgCelluleId?.trim() ?? '');
+    this.orgServiceId.set(path.orgServiceId?.trim() ?? '');
+  }
+
+  cancelValidate(): void {
+    this.validatePathId.set(null);
+    this.validating.set(false);
+    this.orgDepartmentId.set('');
+    this.orgPoleId.set('');
+    this.orgCelluleId.set('');
+    this.orgServiceId.set('');
+  }
+
+  patchOrgDepartment(id: string): void {
+    this.orgDepartmentId.set(id);
+    this.orgPoleId.set('');
+    this.orgCelluleId.set('');
+    this.orgServiceId.set('');
+  }
+
+  patchOrgPole(id: string): void {
+    this.orgPoleId.set(id);
+    this.orgCelluleId.set('');
+    this.orgServiceId.set('');
+    const dept = findOperationalDeptForPole(this.orgDepartments(), id);
+    this.orgDepartmentId.set(dept?.id ?? '');
+  }
+
+  patchOrgCellule(id: string): void {
+    this.orgCelluleId.set(id);
+    this.orgServiceId.set('');
+  }
+
+  patchOrgService(id: string): void {
+    this.orgServiceId.set(id);
+  }
+
+  canConfirmValidate(): boolean {
+    return (
+      !this.orgLoading() &&
+      !this.orgError() &&
+      this.orgPoleId().trim().length > 0 &&
+      this.orgCelluleId().trim().length > 0 &&
+      this.orgServiceId().trim().length > 0
+    );
+  }
+
+  async confirmValidate(path: InitialTrainingPathDto): Promise<void> {
+    if (!this.canValidate(path) || !this.canConfirmValidate()) {
+      this.showFeedback('Choisissez le pôle, la cellule et le service.', 'error');
+      return;
+    }
+    const pole = resolvePoleNode(this.orgDepartments(), this.orgUnassignedPoles(), this.orgPoleId());
+    const cellule = resolveCelluleNode(this.orgDepartments(), this.orgUnassignedPoles(), this.orgCelluleId());
+    const service = this.orgServiceOptions().find((s) => s.id === this.orgServiceId());
+    const department = this.orgDepartments().find((d) => d.id === this.orgDepartmentId());
+    this.validating.set(true);
+    try {
+      await this.api.formateurValidate(path.id, {
+        orgDepartmentId: this.orgDepartmentId().trim(),
+        orgPoleId: this.orgPoleId().trim(),
+        orgCelluleId: this.orgCelluleId().trim(),
+        orgServiceId: this.orgServiceId().trim(),
+        orgDepartmentName: department?.name,
+        orgPoleName: pole?.name,
+        orgCelluleName: cellule?.name,
+        orgServiceName: service?.name,
+      });
+      this.cancelValidate();
+      this.clearFeedback();
+      await this.reload();
+    } catch (e) {
+      this.showFeedback(e instanceof Error ? e.message : 'Échec validation formateur', 'error');
+    } finally {
+      this.validating.set(false);
+    }
   }
 
   private async reload(): Promise<void> {
@@ -676,19 +927,9 @@ export class FormationFormateurInitialComponent implements OnInit {
     }
   }
 
-  async validate(path: InitialTrainingPathDto): Promise<void> {
-    if (!this.canValidate(path)) return;
-    try {
-      await this.api.formateurValidate(path.id);
-      this.clearFeedback();
-      await this.reload();
-    } catch (e) {
-      this.showFeedback(e instanceof Error ? e.message : 'Échec validation formateur', 'error');
-    }
-  }
-
   openExtend(path: InitialTrainingPathDto): void {
     this.cancelReject();
+    this.cancelValidate();
     this.clearFeedback();
     this.extendPathId.set(path.id);
     this.extendDate = this.nextDayIso(path.dateFinPrevue);
@@ -737,11 +978,12 @@ export class FormationFormateurInitialComponent implements OnInit {
   }
 
   isPanelOpen(pathId: string): boolean {
-    return this.extendPathId() === pathId || this.rejectPathId() === pathId;
+    return this.extendPathId() === pathId || this.rejectPathId() === pathId || this.validatePathId() === pathId;
   }
 
   openReject(path: InitialTrainingPathDto): void {
     this.cancelExtend();
+    this.cancelValidate();
     this.clearFeedback();
     this.rejectPathId.set(path.id);
     this.rejectReason = '';

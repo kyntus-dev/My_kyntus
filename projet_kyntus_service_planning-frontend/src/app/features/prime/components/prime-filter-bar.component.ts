@@ -30,7 +30,7 @@ export interface PrimeFilterBarFilter {
           <input
             type="text"
             class="block w-full pl-10 pr-3 py-2 border border-default rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 bg-card text-primary placeholder:text-muted"
-            placeholder="Search..."
+            placeholder="Rechercher…"
             (input)="onSearch($any($event.target).value)"
           />
         </div>
@@ -40,7 +40,7 @@ export interface PrimeFilterBarFilter {
         <div class="flex items-center gap-3 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
           <div class="flex items-center text-muted text-sm font-medium">
             <app-lucide-icon [icon]="icons.filter" className="w-4 h-4 mr-1.5" />
-            Filters:
+            Filtres :
           </div>
           @for (filter of filters; track filter.name) {
             <select

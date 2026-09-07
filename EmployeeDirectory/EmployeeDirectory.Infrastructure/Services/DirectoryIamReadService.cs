@@ -1,6 +1,8 @@
 using EmployeeDirectory.Application.Abstractions;
 using EmployeeDirectory.Application.Dtos;
+using EmployeeDirectory.Application.Iam;
 using EmployeeDirectory.Infrastructure.Persistence;
+using Kyntus.Caching;
 using Kyntus.Iam;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +10,8 @@ namespace EmployeeDirectory.Infrastructure.Services;
 
 public sealed class DirectoryIamReadService(
     DirectoryDbContext db,
-    IOrgResponsibilityResolver responsibility) : IIamReadService, IPermissionCatalog, IRebacClient
+    IOrgResponsibilityResolver responsibility,
+    ICacheService cache) : IIamReadService, IPermissionCatalog, IRebacClient
 {
     public async Task<EffectivePermissionsDto> GetEffectivePermissionsAsync(Guid subjectId, string role, CancellationToken ct = default)
     {
@@ -23,14 +26,26 @@ public sealed class DirectoryIamReadService(
         return decision.Allowed;
     }
 
-    public Task<bool> RoleHasActionAsync(string role, string action, string scope, CancellationToken ct = default) =>
-        db.IamPermissions.AsNoTracking()
-            .AnyAsync(p => p.Role == role.Trim() && p.Action == action.Trim() && p.Scope == scope.Trim() && p.IsAllowed, ct);
+    public Task<bool> RoleHasActionAsync(string role, string action, string scope, CancellationToken ct = default)
+    {
+        var r = PlatformAccessCatalog.NormalizeRole(role);
+        var a = (action ?? string.Empty).Trim();
+        var s = PlatformAccessCatalog.NormalizeScope(scope);
+        return db.IamPermissions.AsNoTracking()
+            .AnyAsync(
+                p => p.IsAllowed
+                     && p.Role == r
+                     && (
+                         (p.Action == a && p.Scope == s)
+                         || (p.Action == "*" && p.Scope == "Global")),
+                ct);
+    }
 
     public async Task<IReadOnlyList<string>> GetEffectivePermissionKeysAsync(string role, CancellationToken ct = default)
     {
+        var r = PlatformAccessCatalog.NormalizeRole(role);
         var rows = await db.IamPermissions.AsNoTracking()
-            .Where(p => p.Role == role.Trim() && p.IsAllowed)
+            .Where(p => p.Role == r && p.IsAllowed)
             .Select(p => p.Action + ":" + p.Scope)
             .Distinct()
             .ToListAsync(ct);
@@ -39,13 +54,13 @@ public sealed class DirectoryIamReadService(
 
     public async Task<bool> IsDescendantAsync(Guid viewerId, Guid targetId, CancellationToken ct = default)
     {
-        var read = new DirectoryReadService(db);
+        var read = new DirectoryReadService(db, cache);
         return await read.IsDescendantAsync(viewerId, targetId, ct);
     }
 
     public async Task<IReadOnlyList<string>> GetManagedNodeIdsAsync(Guid employeeId, string kind, CancellationToken ct = default)
     {
-        var read = new DirectoryReadService(db);
+        var read = new DirectoryReadService(db, cache);
         var dto = await read.GetManagedNodesAsync(employeeId, kind, ct);
         return dto.NodeIds;
     }

@@ -96,7 +96,10 @@ public class PeriodeInterditeCongeConfiguration : IEntityTypeConfiguration<Perio
         builder.ToTable("periodes_interdites_conge");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.MoisInterditsJson).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.ScopeKind).HasMaxLength(20).IsRequired();
+        builder.Property(x => x.ScopeId).HasMaxLength(100).IsRequired();
         builder.Property(x => x.UpdatedAt).IsRequired();
+        builder.HasIndex(x => new { x.ScopeKind, x.ScopeId }).IsUnique();
     }
 }
 

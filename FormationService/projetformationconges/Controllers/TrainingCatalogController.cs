@@ -296,10 +296,14 @@ public sealed class TrainingCatalogController(
             enableRangeProcessing: true);
     }
 
-    private string ResolveSigningKey() =>
-        configuration["JwtSettings:Secret"]
-        ?? configuration["Jwt:Key"]
-        ?? "kyntus-learning-media-dev-key";
+    private string ResolveSigningKey()
+    {
+        var key = configuration["JwtSettings:Secret"] ?? configuration["Jwt:Key"];
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidOperationException(
+                "JwtSettings:Secret manquant — signature média e-learning refusée (pas de clé de secours).");
+        return key;
+    }
 
     [HttpGet("me/self-service")]
     public async Task<ActionResult<IReadOnlyList<MySelfServiceCatalogItemDto>>> MySelfService(CancellationToken ct)

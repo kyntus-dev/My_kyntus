@@ -1,6 +1,5 @@
 ﻿import type { DocumentationRole } from '../../features/documentation/interfaces/documentation-role';
 import type { DocumentationTabId } from '../../features/documentation/services/documentation-navigation.service';
-import type { AuditInterfaceSectionId } from '../../features/documentation/services/audit-interface-nav.service';
 import { DOCUMENTATION_ROUTE_BASE } from '../../features/documentation/lib/documentation-route-base';
 import type { MenuItem } from './microservices.config';
 
@@ -67,36 +66,25 @@ const RP_ITEMS: MenuItem[] = [
 ];
 
 const ADMIN_ITEMS: MenuItem[] = [
+  item('nav.docGen', 'doc-gen'),
+  item('nav.templates', 'templates'),
   item('nav.adminConfig', 'admin-config'),
   item('nav.docTypes', 'doc-types'),
   item('nav.permissions', 'permissions'),
   item('nav.storage', 'storage'),
+  {
+    label: 'Workflows',
+    route: docPath('workflow'),
+    documentationTab: 'workflow',
+  },
 ];
 
 const AUDIT_ITEMS: MenuItem[] = [
   {
-    label: 'Journal d’audit',
-    route: docPath('audit-logs'),
-    documentationTab: 'audit-logs',
-    documentationAuditSection: 'journal',
-  },
-  {
-    label: NAV_LABELS['nav.accessHistory'],
-    route: docPath('access-history'),
-    documentationTab: 'access-history',
-    documentationAuditSection: 'access-history',
-  },
-  {
-    label: 'Anomalies',
-    route: docPath('audit-logs'),
-    documentationTab: 'audit-logs',
-    documentationAuditSection: 'anomalies',
-  },
-  {
-    label: 'Reporting',
-    route: docPath('audit-logs'),
-    documentationTab: 'audit-logs',
-    documentationAuditSection: 'reporting',
+    label: 'Audit et conformité',
+    route: '/audit?section=journal',
+    platformAuditSection: 'journal',
+    hat: 'both',
   },
 ];
 
@@ -118,6 +106,83 @@ export function buildDocumentationMenuItemsForRole(role: DocumentationRole): Men
     default:
       return PILOTE_ITEMS;
   }
+}
+
+const SHARED_DOC_TABS: DocumentationTabId[] = ['dashboard', 'notifications', 'settings'];
+
+const ALL_DOC_TABS: DocumentationTabId[] = [
+  'dashboard',
+  'my-docs',
+  'request',
+  'tracking',
+  'notifications',
+  'settings',
+  'team-docs',
+  'team-requests',
+  'hr-mgmt',
+  'hr-doc-history',
+  'doc-gen',
+  'templates',
+  'admin-config',
+  'doc-types',
+  'permissions',
+  'workflow',
+  'storage',
+  'audit-logs',
+  'access-history',
+];
+
+export function documentationTabFromUrl(url: string): DocumentationTabId {
+  const path = (url.split('?')[0] || '').replace(/^\/+/, '');
+  const parts = path.split('/').filter(Boolean);
+  const idx = parts.indexOf('documentation');
+  const child = idx >= 0 ? parts[idx + 1] : undefined;
+  if (child && (ALL_DOC_TABS as string[]).includes(child)) {
+    return child as DocumentationTabId;
+  }
+  return 'dashboard';
+}
+
+/** Onglets autorisés pour un rôle (menu + pages partagées). */
+export function documentationTabsAllowedForRole(role: DocumentationRole): ReadonlySet<DocumentationTabId> {
+  const tabs = new Set<DocumentationTabId>(SHARED_DOC_TABS);
+  for (const item of buildDocumentationMenuItemsForRole(role)) {
+    if (item.documentationTab) tabs.add(item.documentationTab);
+  }
+  if (role === 'Audit') {
+    tabs.add('dashboard');
+  }
+  if (role === 'Admin') {
+    tabs.add('workflow');
+  }
+  return tabs;
+}
+
+export function defaultDocumentationTabForRole(role: DocumentationRole): DocumentationTabId {
+  switch (role) {
+    case 'Pilote':
+      return 'dashboard';
+    case 'Manager':
+    case 'Coach':
+      return 'team-docs';
+    case 'RH':
+      return 'hr-mgmt';
+    case 'RP':
+      return 'dashboard';
+    case 'Admin':
+      return 'admin-config';
+    case 'Audit':
+      return 'dashboard';
+    default:
+      return 'dashboard';
+  }
+}
+
+export function isDocumentationTabAllowedForRole(
+  tab: DocumentationTabId,
+  role: DocumentationRole,
+): boolean {
+  return documentationTabsAllowedForRole(role).has(tab);
 }
 
 export { mapJwtRoleToDocumentationRole } from '../session/kyntus-role-ui.config';

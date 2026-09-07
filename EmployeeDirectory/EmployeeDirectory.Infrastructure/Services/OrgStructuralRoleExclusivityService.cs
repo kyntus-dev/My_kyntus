@@ -252,6 +252,7 @@ public sealed class OrgStructuralRoleExclusivityService(
             IsDeleted = false,
             IdTechnicien = employee.IdTechnicien,
             HtelCode = employee.HtelCode,
+            HtelTechnicienName = employee.HtelTechnicienName,
         }, aggregateId: employee.Id.ToString(), ct: ct);
     }
 }

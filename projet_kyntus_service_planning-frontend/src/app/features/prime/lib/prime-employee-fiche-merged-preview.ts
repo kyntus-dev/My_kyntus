@@ -43,6 +43,7 @@ import {
   type ParsedCellSaisie,
 } from './prime-cell-schema-merge';
 import { isPoleContract } from './prime-pole-saisie-filter';
+import { injectSaisieLiteral } from './prime-fiche-computed-fields';
 
 /** Champs utilisés pour appliquer les pondérations RACC/SAV à l’aperçu fusionné. */
 export interface MergedFichePonderationInput {
@@ -62,12 +63,7 @@ function deepCloneCalcSheets(cs: PrimeTemplateCalcSheets): PrimeTemplateCalcShee
 }
 
 function literalForCalc(raw: string): string | number | null {
-  const t = raw.replace(/\u00a0/g, ' ').trim();
-  if (t === '') return null;
-  const compact = t.replace(/\s/g, '').replace(',', '.');
-  const n = Number(compact);
-  if (Number.isFinite(n) && /^-?\d/.test(compact)) return n;
-  return t;
+  return injectSaisieLiteral(raw);
 }
 
 function ensureCell(matrix: (string | number | null)[][], r: number, c: number): void {
@@ -171,7 +167,7 @@ function maxGridColForLine(ln: PrimeFicheTemplateLine, colRep: number): number {
   return m;
 }
 
-function applyDynamicLineToSheet(
+export function applyDynamicLineToSheet(
   matrix: (string | number | null)[][],
   lineMeta: PrimeFicheTemplateLine,
   rowDy: PrimeFicheLigneDynamic,
@@ -202,7 +198,7 @@ function applyDynamicLineToSheet(
    * propage jusqu'ici via `rowDy.repartitionRdv`. On force `null` pour toute valeur non numérique
    * afin d'éviter le doublon visuel « libellé indicateur recopié en colonne Répartition ».
    */
-  const repLit = literalForCalc(rowDy.repartitionRdv);
+  const repLit = injectSaisieLiteral(rowDy.repartitionRdv, lineMeta.repartitionCell, 'repartition');
   write(r, colRep, typeof repLit === 'number' ? repLit : null);
 
   for (const sect of lineMeta.secteurs) {
@@ -212,16 +208,16 @@ function applyDynamicLineToSheet(
     if (!sv) continue;
     for (let i = 0; i < PRIME_KEYS.length; i++) {
       const k = PRIME_KEYS[i]!;
-      write(r, c0 + i, literalForCalc(sv.core[k] ?? ''));
+      write(r, c0 + i, injectSaisieLiteral(sv.core[k] ?? '', sect.cells?.[k], k));
     }
     for (let i = 0; i < CHALLENGE_KEYS.length; i++) {
       const k = CHALLENGE_KEYS[i]!;
-      write(r, c0 + PRIME_SUBCOLS + i, literalForCalc(sv.core[k] ?? ''));
+      write(r, c0 + PRIME_SUBCOLS + i, injectSaisieLiteral(sv.core[k] ?? '', sect.cells?.[k], k));
     }
     for (const ck of sect.customKpis ?? []) {
       if (ck.gridCol === undefined) continue;
       const val = sv.custom[ck.id] ?? '';
-      write(r, ck.gridCol, literalForCalc(val));
+      write(r, ck.gridCol, injectSaisieLiteral(val, ck.cell));
     }
   }
 }

@@ -25,6 +25,9 @@ public class ExceptionMiddleware
         }
         catch (Exception ex)
         {
+            if (ex is OperationCanceledException && context.RequestAborted.IsCancellationRequested)
+                return;
+
             _logger.LogError(ex, "Une erreur est survenue: {Message}", ex.Message);
             await HandleExceptionAsync(context, ex);
         }

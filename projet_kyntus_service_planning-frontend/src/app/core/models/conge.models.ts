@@ -83,6 +83,8 @@ export interface SoldeCongeDto {
   soldeInitial: number;
   soldeUtilise: number;
   soldeRestant: number;
+  /** Date à partir de laquelle un congé annuel peut commencer (embauche + 6 mois). */
+  dateEligibilite?: string | null;
 }
 
 export interface DemanderCongeCommand {
@@ -105,6 +107,16 @@ export interface RefuserCongeRequest {
 export interface PeriodesInterditesDto {
   mois: number[];
   updatedAt: string;
+  scopeKind?: string;
+  scopeId?: string;
+  isOverride?: boolean;
+  inheritedFrom?: string;
+  scopeLabel?: string | null;
+}
+
+export interface PeriodesInterditesScopesDto {
+  general: PeriodesInterditesDto;
+  overrides: PeriodesInterditesDto[];
 }
 
 export interface QuotaCongeServiceDto {

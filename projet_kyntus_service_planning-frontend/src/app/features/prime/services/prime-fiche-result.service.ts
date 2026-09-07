@@ -98,7 +98,7 @@ export interface ValidationHistoryFeedFilters {
   role?: string;
   period?: string;
   mineOnly?: boolean;
-  action?: 'Approved' | 'Rejected' | '';
+  action?: 'Approved' | 'Rejected' | 'Submitted' | '';
 }
 
 export interface ApproveServiceFicheRequest {

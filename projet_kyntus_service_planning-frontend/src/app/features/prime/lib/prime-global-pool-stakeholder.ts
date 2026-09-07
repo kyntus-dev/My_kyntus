@@ -6,5 +6,5 @@ export function isPrimeGlobalPoolStakeholderRole(
   managerNav: { isSupportManager?: boolean; isOperationalManager?: boolean } = {},
 ): boolean {
   if (managerNav.isSupportManager) return false;
-  return role === 'RH' || role === 'Manager' || role === 'Comptabilité' || role === 'Comptable';
+  return role === 'RH' || role === 'Comptabilité' || role === 'Comptable';
 }

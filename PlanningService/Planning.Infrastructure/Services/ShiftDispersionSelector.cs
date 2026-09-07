@@ -234,7 +234,8 @@ public static class ShiftDispersionSelector
     }
 
     /// <summary>
-    /// Quota samedi = moitié de l'effectif configuré (Lun–Ven).
+    /// Quota samedi = moitié de l'effectif configuré (Lun–Ven),
+    /// sauf si le shift est déjà un template samedi dédié (AppliesToSaturday).
     /// Ex. 20 → 10 ; 19 → 9 ; minimum 1 si le quota semaine est &gt; 0.
     /// </summary>
     public static int SaturdayRequiredCount(int weekRequiredCount)
@@ -242,6 +243,11 @@ public static class ShiftDispersionSelector
         if (weekRequiredCount <= 0) return 0;
         return Math.Max(1, weekRequiredCount / 2);
     }
+
+    public static int EffectiveSaturdayQuota(SubServiceShiftConfig config)
+        => config.AppliesToSaturday
+            ? config.RequiredCount
+            : SaturdayRequiredCount(config.RequiredCount);
 
     public static SubServiceShiftConfig SelectSaturday(
         IReadOnlyList<SubServiceShiftConfig> orderedByStart,
@@ -270,7 +276,7 @@ public static class ShiftDispersionSelector
 
         bool UnderQuota(SubServiceShiftConfig s)
         {
-            var quota = SaturdayRequiredCount(s.RequiredCount);
+            var quota = EffectiveSaturdayQuota(s);
             return quota > 0
                    && shiftCountToday.GetValueOrDefault(s.Id, 0) < quota;
         }
@@ -991,7 +997,7 @@ public static class ShiftDispersionSelector
         foreach (var g in byUser)
         {
             var name = usersById.TryGetValue(g.Key, out var u)
-                ? $"{u.FirstName} {u.LastName}".Trim()
+                ? UserDisplayName.Format(u.FirstName, u.LastName)
                 : $"#{g.Key}";
 
             var ordered = g.OrderBy(a => a.AssignedDate).ToList();
@@ -1038,7 +1044,7 @@ public static class ShiftDispersionSelector
                     var counts = ids
                         .Select(uid => (
                             uid,
-                            name: $"{usersById[uid].FirstName} {usersById[uid].LastName}".Trim(),
+                            name: UserDisplayName.Format(usersById[uid].FirstName, usersById[uid].LastName),
                             n: WorkedCount(assignments, uid, cfg.Id)))
                         .ToList();
                     var min = counts.Min(c => c.n);

@@ -56,6 +56,76 @@ public class EmployeeImportColumnMatcherTests
         Assert.True(EmployeeImportColumnMatcher.IsIgnorableHeader("Colonne 3"));
         Assert.False(EmployeeImportColumnMatcher.IsIgnorableHeader("Email"));
     }
+
+    [Fact]
+    public void MatchVariableSources_high_confidence_for_exact_label()
+    {
+        var fields = EmployeeImportFieldRegistry.DefaultFields
+            .Select(f => new EmployeeImportFieldConfigDto
+            {
+                FieldKey = f.FieldKey,
+                Label = f.Label,
+                Aliases = f.Aliases.ToList(),
+                IsEnabled = true,
+                IsSystemField = true,
+            })
+            .ToList();
+
+        var result = _matcher.MatchVariableSources(
+            [new EmployeeVariableMatchSourceDto { Name = "prenom_employe", DisplayLabel = "Prénom", RawPlaceholder = "(Prénom)" }],
+            fields);
+
+        Assert.Equal("firstName", result[0].SuggestedFieldKey);
+        Assert.Equal("high", result[0].Confidence);
+        Assert.True(result[0].Score >= 0.92);
+    }
+
+    [Fact]
+    public void MatchVariableSources_low_does_not_suggest_field()
+    {
+        var fields = EmployeeImportFieldRegistry.DefaultFields
+            .Select(f => new EmployeeImportFieldConfigDto
+            {
+                FieldKey = f.FieldKey,
+                Label = f.Label,
+                Aliases = f.Aliases.ToList(),
+                IsEnabled = true,
+                IsSystemField = true,
+            })
+            .ToList();
+
+        var result = _matcher.MatchVariableSources(
+            [new EmployeeVariableMatchSourceDto { Name = "salaire_brut", DisplayLabel = "Salaire brut" }],
+            fields);
+
+        Assert.Null(result[0].SuggestedFieldKey);
+        Assert.Equal("low", result[0].Confidence);
+    }
+}
+
+public class EmployeeDocumentFieldValueFlattenerTests
+{
+    [Fact]
+    public void Flatten_includes_system_hr_and_custom_fields()
+    {
+        var user = new UserDto
+        {
+            FirstName = "Sara",
+            LastName = "El Amrani",
+            Email = "sara@kyntus.ma",
+            RoleName = "Pilote",
+            OrgPoleName = "Pôle A",
+            HrProfile = new UserHrProfileDto { Cin = "AB123456", Rib = null },
+            CustomFields = new Dictionary<string, string?> { ["badge_site"] = "B-12" },
+        };
+
+        var values = EmployeeDocumentFieldValueFlattener.Flatten(user);
+        Assert.Equal("Sara", values["firstName"]);
+        Assert.Equal("El Amrani", values["lastName"]);
+        Assert.Equal("AB123456", values["cin"]);
+        Assert.Null(values["rib"]);
+        Assert.Equal("B-12", values["badge_site"]);
+    }
 }
 
 public class EmployeeImportRowMapperTests

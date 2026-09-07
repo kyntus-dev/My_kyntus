@@ -5,14 +5,14 @@ using Prime.Domain.Entities;
 
 namespace Prime.Application.Org;
 
-public record GetServicePrimeIndicatorsQuery(string ServiceId, string SupervisorUserId)
+public record GetServicePrimeIndicatorsQuery(string ServiceId, string SupervisorUserId, string? EmployeeId = null)
     : IRequest<IReadOnlyList<ServicePrimeIndicatorDto>>;
 
 public sealed class GetServicePrimeIndicatorsQueryHandler(IServicePrimeIndicatorsAppService indicators)
     : IRequestHandler<GetServicePrimeIndicatorsQuery, IReadOnlyList<ServicePrimeIndicatorDto>>
 {
     public Task<IReadOnlyList<ServicePrimeIndicatorDto>> Handle(GetServicePrimeIndicatorsQuery request, CancellationToken ct) =>
-        indicators.GetAsync(request.ServiceId, request.SupervisorUserId, ct);
+        indicators.GetAsync(request.ServiceId, request.SupervisorUserId, request.EmployeeId, ct);
 }
 
 public record PutServicePrimeIndicatorsCommand(string ServiceId, string SupervisorUserId, PutServicePrimeIndicatorsRequest Body)
@@ -23,6 +23,33 @@ public sealed class PutServicePrimeIndicatorsCommandHandler(IServicePrimeIndicat
 {
     public Task<IReadOnlyList<ServicePrimeIndicatorDto>> Handle(PutServicePrimeIndicatorsCommand request, CancellationToken ct) =>
         indicators.PutAsync(request.ServiceId, request.SupervisorUserId, request.Body, ct);
+}
+
+public record GetServicePrimeIndicatorAgentOverridesQuery(string ServiceId, string SupervisorUserId)
+    : IRequest<ServicePrimeIndicatorAgentOverridesResponse>;
+
+public sealed class GetServicePrimeIndicatorAgentOverridesQueryHandler(IServicePrimeIndicatorsAppService indicators)
+    : IRequestHandler<GetServicePrimeIndicatorAgentOverridesQuery, ServicePrimeIndicatorAgentOverridesResponse>
+{
+    public Task<ServicePrimeIndicatorAgentOverridesResponse> Handle(
+        GetServicePrimeIndicatorAgentOverridesQuery request,
+        CancellationToken ct) =>
+        indicators.GetAgentOverridesAsync(request.ServiceId, request.SupervisorUserId, ct);
+}
+
+public record PutServicePrimeIndicatorAgentOverridesCommand(
+    string ServiceId,
+    string SupervisorUserId,
+    PutServicePrimeIndicatorAgentOverridesRequest Body)
+    : IRequest<ServicePrimeIndicatorAgentOverridesResponse>;
+
+public sealed class PutServicePrimeIndicatorAgentOverridesCommandHandler(IServicePrimeIndicatorsAppService indicators)
+    : IRequestHandler<PutServicePrimeIndicatorAgentOverridesCommand, ServicePrimeIndicatorAgentOverridesResponse>
+{
+    public Task<ServicePrimeIndicatorAgentOverridesResponse> Handle(
+        PutServicePrimeIndicatorAgentOverridesCommand request,
+        CancellationToken ct) =>
+        indicators.PutAgentOverridesAsync(request.ServiceId, request.SupervisorUserId, request.Body, ct);
 }
 
 public record DownloadPeriodRecapReportQuery(string Period, string ActingUserId) : IRequest<FileExportResultDto>;
@@ -126,6 +153,24 @@ public sealed class GetMyPrimeResultsQueryHandler(IPrimeCoreQueryAppService core
 {
     public Task<IReadOnlyList<PrimeResult>> Handle(GetMyPrimeResultsQuery request, CancellationToken ct) =>
         core.GetMyPrimeResultsAsync(request.EmployeeId, ct);
+}
+
+public record GetPrimeTypesQuery : IRequest<IReadOnlyList<PrimeType>>;
+
+public sealed class GetPrimeTypesQueryHandler(IPrimeCoreQueryAppService core)
+    : IRequestHandler<GetPrimeTypesQuery, IReadOnlyList<PrimeType>>
+{
+    public Task<IReadOnlyList<PrimeType>> Handle(GetPrimeTypesQuery request, CancellationToken ct) =>
+        core.GetPrimeTypesAsync(ct);
+}
+
+public record GetPrimeRulesQuery : IRequest<IReadOnlyList<PrimeRule>>;
+
+public sealed class GetPrimeRulesQueryHandler(IPrimeCoreQueryAppService core)
+    : IRequestHandler<GetPrimeRulesQuery, IReadOnlyList<PrimeRule>>
+{
+    public Task<IReadOnlyList<PrimeRule>> Handle(GetPrimeRulesQuery request, CancellationToken ct) =>
+        core.GetPrimeRulesAsync(ct);
 }
 
 public record GetPrimeDashboardStatsQuery : IRequest<object>;

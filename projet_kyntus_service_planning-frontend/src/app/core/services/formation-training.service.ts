@@ -8,6 +8,7 @@ import type {
   FormationInitialDashboardStatsDto,
   FormationDocumentChecklistItemDto,
   FormationDocumentDefinitionDto,
+  FormateurValidateOrgRequest,
   InitialTrainingPathDto,
   LearningQuizResultExportRowDto,
   LearningQuizStatsDto,
@@ -337,6 +338,14 @@ export class FormationTrainingService {
     );
   }
 
+  getInitialPath(pathId: string): Promise<InitialTrainingPathDto> {
+    return firstValueFrom(
+      this.http.get<InitialTrainingPathDto>(`${PREFIX}/initial-paths/${pathId}`),
+    ).catch((err) => {
+      throw new Error(extractError(err, 'Parcours introuvable'));
+    });
+  }
+
   recordQuiz(pathId: string, body: { quizScore: number; quizPassed: boolean; formateurComment?: string; recordedBy: string; title?: string }): Promise<InitialTrainingPathDto> {
     return firstValueFrom(this.http.post<InitialTrainingPathDto>(`${PREFIX}/initial-paths/${pathId}/quiz-result`, body));
   }
@@ -357,9 +366,9 @@ export class FormationTrainingService {
     });
   }
 
-  formateurValidate(pathId: string): Promise<InitialTrainingPathDto> {
+  formateurValidate(pathId: string, body: FormateurValidateOrgRequest): Promise<InitialTrainingPathDto> {
     return firstValueFrom(
-      this.http.post<InitialTrainingPathDto>(`${PREFIX}/initial-paths/${pathId}/formateur-validate`, {}),
+      this.http.post<InitialTrainingPathDto>(`${PREFIX}/initial-paths/${pathId}/formateur-validate`, body),
     ).catch((err) => {
       throw new Error(extractError(err, 'Échec validation formateur'));
     });

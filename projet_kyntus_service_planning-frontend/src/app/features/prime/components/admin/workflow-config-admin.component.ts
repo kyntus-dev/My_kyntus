@@ -27,9 +27,9 @@ import { formatWorkflowPipeline, rechainWorkflowSteps } from '../../lib/workflow
             <span class="text-muted">Référent technique</span> →
             <span class="text-muted">Superviseur</span> →
             <span class="text-muted">Chef de projet</span>.
-            RH / Manager / Comptabilité valident le fichier synthèse globale. Après ↑↓, recalcul
+            RH puis Comptabilité valident le fichier synthèse globale. Après ↑↓, recalcul
             <span class="text-muted">De → Vers</span> depuis
-            <span class="text-muted">Pending</span>, puis
+            <span class="text-muted">en attente</span>, puis
             <span class="text-muted">Enregistrer le workflow</span>.
           </p>
           @if (pipelinePreview()) {

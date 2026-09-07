@@ -5,7 +5,7 @@ import { map } from 'rxjs/operators';
 import {
   DemandeCongeDto, SoldeCongeDto, DemanderCongeCommand,
   ValiderCongeRequest, RefuserCongeRequest, StatutDemande,
-  PeriodesInterditesDto, QuotaCongeServiceDto, CongeDisponibiliteDto
+  PeriodesInterditesDto, PeriodesInterditesScopesDto, QuotaCongeServiceDto, CongeDisponibiliteDto
 } from '../models/conge.models';
 
 @Injectable({ providedIn: 'root' })
@@ -46,14 +46,47 @@ export class CongeService {
     );
   }
 
-  getPeriodesInterdites(): Observable<PeriodesInterditesDto> {
-    return this.http.get<PeriodesInterditesDto>(`${this.base}/config/periodes-interdites`);
+  getPeriodesInterdites(query?: {
+    scopeKind?: string;
+    scopeId?: string;
+    employeId?: string;
+    departmentId?: string;
+    poleId?: string;
+    celluleId?: string;
+    serviceId?: string;
+  }): Observable<PeriodesInterditesDto> {
+    const params: Record<string, string> = {};
+    if (query?.scopeKind) params['scopeKind'] = query.scopeKind;
+    if (query?.scopeId) params['scopeId'] = query.scopeId;
+    if (query?.employeId) params['employeId'] = query.employeId;
+    if (query?.departmentId) params['departmentId'] = query.departmentId;
+    if (query?.poleId) params['poleId'] = query.poleId;
+    if (query?.celluleId) params['celluleId'] = query.celluleId;
+    if (query?.serviceId) params['serviceId'] = query.serviceId;
+    return this.http.get<PeriodesInterditesDto>(`${this.base}/config/periodes-interdites`, { params });
   }
 
-  updatePeriodesInterdites(mois: number[], updatedBy?: string): Observable<PeriodesInterditesDto> {
+  getPeriodesInterditesScopes(): Observable<PeriodesInterditesScopesDto> {
+    return this.http.get<PeriodesInterditesScopesDto>(`${this.base}/config/periodes-interdites/scopes`);
+  }
+
+  updatePeriodesInterdites(
+    mois: number[],
+    updatedBy?: string,
+    scopeKind?: string,
+    scopeId?: string,
+  ): Observable<PeriodesInterditesDto> {
     return this.http.put<PeriodesInterditesDto>(`${this.base}/config/periodes-interdites`, {
       mois,
-      updatedBy: updatedBy ?? null
+      updatedBy: updatedBy ?? null,
+      scopeKind: scopeKind ?? null,
+      scopeId: scopeId ?? null,
+    });
+  }
+
+  deletePeriodesInterditesScope(scopeKind: string, scopeId: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/config/periodes-interdites`, {
+      params: { scopeKind, scopeId },
     });
   }
 

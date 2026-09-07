@@ -8,11 +8,11 @@ const PARRAINAGE_ROUTE = '/parrainage';
 type ParrainageMenuDef = MenuItem & { parrainageRoles: ParrainageRole[] };
 
 const RH_ITEMS: ParrainageMenuDef[] = [
-  { label: 'Tableau de bord', route: PARRAINAGE_ROUTE, parrainageView: 'rh-dashboard', parrainageRoles: ['RH'] },
-  { label: 'Gestion des parrainages', route: PARRAINAGE_ROUTE, parrainageView: 'rh-management', parrainageRoles: ['RH'] },
-  { label: 'Règles de parrainage', route: PARRAINAGE_ROUTE, parrainageView: 'rh-rules', parrainageRoles: ['RH'] },
-  { label: 'Historique', route: PARRAINAGE_ROUTE, parrainageView: 'rh-history', parrainageRoles: ['RH'] },
-  { label: 'Configuration système', route: PARRAINAGE_ROUTE, parrainageView: 'admin-config', parrainageRoles: ['RH'] },
+  { label: 'Tableau de bord', route: PARRAINAGE_ROUTE, parrainageView: 'rh-dashboard', parrainageRoles: ['RH'], hat: 'team' },
+  { label: 'Gestion des parrainages', route: PARRAINAGE_ROUTE, parrainageView: 'rh-management', parrainageRoles: ['RH'], hat: 'team' },
+  { label: 'Règles de parrainage', route: PARRAINAGE_ROUTE, parrainageView: 'rh-rules', parrainageRoles: ['RH'], hat: 'team' },
+  { label: 'Historique', route: PARRAINAGE_ROUTE, parrainageView: 'rh-history', parrainageRoles: ['RH'], hat: 'team' },
+  { label: 'Configuration système', route: PARRAINAGE_ROUTE, parrainageView: 'admin-config', parrainageRoles: ['RH'], hat: 'team' },
 ];
 
 const PILOTE_ITEMS: ParrainageMenuDef[] = [
@@ -28,7 +28,6 @@ const ADMIN_ITEMS: ParrainageMenuDef[] = [
   { label: 'Configuration du flux', route: PARRAINAGE_ROUTE, parrainageView: 'admin-workflow', parrainageRoles: ['ADMIN'] },
   { label: 'Configuration système', route: PARRAINAGE_ROUTE, parrainageView: 'admin-config', parrainageRoles: ['ADMIN'] },
   { label: 'Paiements', route: PARRAINAGE_ROUTE, parrainageView: 'admin-payments', parrainageRoles: ['ADMIN'] },
-  { label: "Journal d'audit", route: PARRAINAGE_ROUTE, parrainageView: 'admin-audit', parrainageRoles: ['ADMIN'] },
 ];
 
 const PM_ITEMS: ParrainageMenuDef[] = [
@@ -44,39 +43,11 @@ const COMPTA_ITEMS: ParrainageMenuDef[] = [
 
 const AUDIT_ITEMS: ParrainageMenuDef[] = [
   {
-    label: 'Tableau de bord audit',
-    route: PARRAINAGE_ROUTE,
-    parrainageView: 'admin-audit',
-    parrainageAuditSection: 'dashboard',
+    label: 'Audit et conformité',
+    route: '/audit?section=journal',
+    platformAuditSection: 'journal',
     parrainageRoles: ['AUDIT'],
-  },
-  {
-    label: "Journal d'audit",
-    route: PARRAINAGE_ROUTE,
-    parrainageView: 'admin-audit',
-    parrainageAuditSection: 'journal',
-    parrainageRoles: ['AUDIT'],
-  },
-  {
-    label: "Historique d'accès",
-    route: PARRAINAGE_ROUTE,
-    parrainageView: 'admin-audit',
-    parrainageAuditSection: 'access-history',
-    parrainageRoles: ['AUDIT'],
-  },
-  {
-    label: 'Anomalies',
-    route: PARRAINAGE_ROUTE,
-    parrainageView: 'admin-audit',
-    parrainageAuditSection: 'anomalies',
-    parrainageRoles: ['AUDIT'],
-  },
-  {
-    label: 'Reporting',
-    route: PARRAINAGE_ROUTE,
-    parrainageView: 'admin-audit',
-    parrainageAuditSection: 'reporting',
-    parrainageRoles: ['AUDIT'],
+    hat: 'both',
   },
 ];
 

@@ -12,6 +12,8 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<EmployeeEntity> Employees => Set<EmployeeEntity>();
     public DbSet<SupervisorPrimeFicheEntity> SupervisorPrimeFiches => Set<SupervisorPrimeFicheEntity>();
     public DbSet<ServicePrimeIndicatorEntity> ServicePrimeIndicators => Set<ServicePrimeIndicatorEntity>();
+    public DbSet<EmployeeServiceIndicatorPonderationEntity> EmployeeServiceIndicatorPonderations =>
+        Set<EmployeeServiceIndicatorPonderationEntity>();
     public DbSet<ServicePoleLinePonderationEntity> ServicePoleLinePonderations => Set<ServicePoleLinePonderationEntity>();
     public DbSet<CommonLinePonderationEntity> CommonLinePonderations => Set<CommonLinePonderationEntity>();
     public DbSet<SupervisorCellulePrimeDraft> SupervisorCellulePrimeDrafts => Set<SupervisorCellulePrimeDraft>();
@@ -126,6 +128,21 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
             e.HasOne(x => x.Service)
                 .WithMany(x => x.PrimeIndicators)
                 .HasForeignKey(x => x.ServiceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EmployeeServiceIndicatorPonderationEntity>(e =>
+        {
+            e.ToTable("prime_employee_service_indicator_ponderation");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.EmployeeId).HasMaxLength(128).IsRequired();
+            e.Property(x => x.PonderationPrimePct).HasPrecision(9, 4);
+            e.Property(x => x.PonderationChallengePct).HasPrecision(9, 4);
+            e.HasIndex(x => new { x.EmployeeId, x.ServicePrimeIndicatorId }).IsUnique();
+            e.HasIndex(x => x.ServicePrimeIndicatorId);
+            e.HasOne(x => x.Indicator)
+                .WithMany(x => x.EmployeePonderations)
+                .HasForeignKey(x => x.ServicePrimeIndicatorId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

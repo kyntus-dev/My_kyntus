@@ -25,19 +25,17 @@ import {
   type WorkflowValidationMetaDto,
 } from '../services/prime-fiche-result.service';
 import { PRIME_USER_LOAD_ERROR, primeHttpErrorDetail } from '../lib/primeHttpErrorMessage';
+import {
+  primeValidationActionLabel,
+  primeValidationStatusLabel,
+  primeWorkflowTransitionLabel,
+} from '../lib/prime-workflow-labels';
 
 function mapRoleForApi(role: string): string {
   if (role === 'Coach') return 'Référent technique';
   if (role === 'RP') return 'Chef de projet';
   if (role === 'Comptable') return 'Comptabilité';
   return role;
-}
-
-function actionLabel(action: string): string {
-  if (action === 'LineRejected') return 'Rejet ligne synthèse';
-  if (action === 'Paid') return 'Paiement';
-  if (action === 'Unpaid') return 'Paiement annulé';
-  return action === 'Rejected' ? 'Rejet' : 'Approbation';
 }
 
 @Component({
@@ -59,10 +57,9 @@ function actionLabel(action: string): string {
       <div class="prime-page-shell">
         <div class="flex flex-wrap justify-between items-start gap-4">
           <div>
-            <h1 class="prime-page-title">Suivi de validation des fiches PRIME</h1>
+            <h1 class="prime-page-title">Historique des validations</h1>
             <p class="prime-page-subtitle">
-              Retrouvez vos approbations et rejets, et l’état actuel de chaque fiche. Pour valider ou rejeter,
-              utilisez l’écran
+              Consultez les soumissions, approbations et rejets de chaque fiche. Pour prendre une décision, ouvrez
               <button
                 type="button"
                 (click)="goToValidation()"
@@ -77,7 +74,7 @@ function actionLabel(action: string): string {
             (click)="goToValidation()"
             class="shrink-0 rounded-lg border border-default bg-card px-4 py-2 text-sm font-medium text-primary hover:bg-input transition-colors"
           >
-            Aller à Validation
+            Voir les fiches à valider
           </button>
         </div>
 
@@ -120,6 +117,7 @@ function actionLabel(action: string): string {
               (change)="setActionFilter($any($event.target).value)"
             >
               <option value="">Toutes</option>
+              <option value="Submitted">Soumises</option>
               <option value="Approved">Approbations</option>
               <option value="Rejected">Rejets</option>
             </select>
@@ -147,8 +145,8 @@ function actionLabel(action: string): string {
                 @if (items().length === 0) {
                   <tr>
                     <td colspan="8" class="text-center prime-cell-muted py-8">
-                      Aucune action enregistrée pour ces critères. Les validations et rejets effectués à partir de
-                      maintenant apparaîtront ici.
+                      Aucune action enregistrée pour ces critères. Les soumissions, validations et rejets apparaîtront
+                      ici.
                     </td>
                   </tr>
                 } @else {
@@ -177,12 +175,12 @@ function actionLabel(action: string): string {
                           class="text-xs font-semibold"
                           [class.text-emerald-400]="item.action === 'Approved' || item.action === 'Paid'"
                           [class.text-rose-400]="item.action === 'Rejected' || item.action === 'LineRejected'"
-                          [class.text-amber-400]="item.action === 'Unpaid'"
+                          [class.text-amber-400]="item.action === 'Unpaid' || item.action === 'Submitted'"
                         >
                           {{ actionLabel(item.action) }}
                         </span>
                         <div class="text-[11px] text-muted mt-0.5">
-                          {{ item.fromStatus }} → {{ item.toStatus }}
+                          {{ transitionLabel(item.fromStatus, item.toStatus) }}
                         </div>
                         @if (item.comment) {
                           <div class="text-[11px] text-rose-300/90 italic mt-1 max-w-xs truncate" [title]="item.comment">
@@ -196,7 +194,7 @@ function actionLabel(action: string): string {
                         }
                       </td>
                       <td>
-                        <span class="prime-status-badge">{{ item.currentValidationStatus }}</span>
+                        <span class="prime-status-badge">{{ statusLabel(item.currentValidationStatus) }}</span>
                       </td>
                       <td class="text-center">
                         <app-prime-employee-fiche-preview-actions
@@ -229,7 +227,7 @@ function actionLabel(action: string): string {
                           } @else {
                             <div class="mb-3 rounded-lg border border-default/60 bg-card/30 px-3 py-2 text-xs">
                               <span class="text-muted">État actuel de la fiche :</span>
-                              <span class="ml-2 font-semibold text-primary">{{ item.currentValidationStatus }}</span>
+                              <span class="ml-2 font-semibold text-primary">{{ statusLabel(item.currentValidationStatus) }}</span>
                             </div>
                             <app-prime-fiche-validation-timeline
                               [workflowMeta]="workflowMeta()"
@@ -258,7 +256,9 @@ export class PrimeValidationHistoryPageComponent {
   readonly roleService = inject(RoleService);
 
   readonly icons = { history: History, chevronDown: ChevronDown, chevronUp: ChevronUp, alert: AlertCircle };
-  readonly actionLabel = actionLabel;
+  readonly actionLabel = primeValidationActionLabel;
+  readonly statusLabel = primeValidationStatusLabel;
+  readonly transitionLabel = primeWorkflowTransitionLabel;
 
   readonly loading = signal(true);
   readonly errorMessage = signal<string | null>(null);
@@ -266,8 +266,8 @@ export class PrimeValidationHistoryPageComponent {
   readonly workflowMeta = signal<WorkflowValidationMetaDto | null>(null);
   readonly periodOptions = signal<{ label: string; value: string }[]>([]);
   readonly periodFilter = signal('');
-  readonly mineOnly = signal(true);
-  readonly actionFilter = signal<'Approved' | 'Rejected' | ''>('');
+  readonly mineOnly = signal(false);
+  readonly actionFilter = signal<'Approved' | 'Rejected' | 'Submitted' | ''>('');
   readonly expandedFicheId = signal<string | null>(null);
   readonly detailHistoryByFicheId = signal<Record<string, PrimeFicheValidationHistoryDto[]>>({});
   readonly detailLoadingId = signal<string | null>(null);
@@ -312,12 +312,14 @@ export class PrimeValidationHistoryPageComponent {
   }
 
   setActionFilter(value: string): void {
-    const v = value as 'Approved' | 'Rejected' | '';
-    this.actionFilter.set(v === 'Approved' || v === 'Rejected' ? v : '');
+    const v = value as 'Approved' | 'Rejected' | 'Submitted' | '';
+    this.actionFilter.set(
+      v === 'Approved' || v === 'Rejected' || v === 'Submitted' ? v : '',
+    );
   }
 
   goToValidation(): void {
-    this.nav.requestViewWithTab('/prime-validation-hub', 'validate');
+    this.nav.requestView('/validation');
   }
 
   isMyAction(item: PrimeFicheValidationHistoryFeedItemDto): boolean {

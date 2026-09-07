@@ -116,53 +116,38 @@ public class SaturdayRotationIntendedHistoryTests
             .ToDictionaryAsync(h => h.UserId, h => h.WorkedSaturday);
 
         Assert.True(hist[1]);  // débutant toujours intended ON
-        Assert.False(hist[2]); // flip depuis true
-        Assert.True(hist[3]);  // flip depuis false
-        Assert.False(hist[4]); // flip depuis true
+        Assert.False(hist[2]); // G1 sur semaine G2
+        Assert.True(hist[3]);  // G2 sur semaine G2
+        Assert.True(hist[4]);  // G2 sur semaine G2 (groupe prime sur l’historique)
     }
 
     [Fact]
-    public async Task After_holiday_saturday_only_intended_on_employees_work_next_week()
+    public async Task Same_G1_agents_work_together_despite_opposite_histories()
     {
         await using var db = CreateDb();
         await SeedBaseAsync(db);
 
         db.Users.AddRange(
             MakeUser(1, "beg@test.ma", level: 1),
-            MakeUser(2, "was-on@test.ma", level: 2),
-            MakeUser(3, "was-off@test.ma", level: 2),
-            MakeUser(4, "c2@test.ma", level: 2));
+            MakeUser(2, "g1-hist-on@test.ma", level: 2),
+            MakeUser(3, "g1-hist-off@test.ma", level: 2),
+            MakeUser(4, "g2@test.ma", level: 2));
         db.SaturdayGroups.AddRange(
             new SaturdayGroup { UserId = 1, GroupNumber = 1 },
             new SaturdayGroup { UserId = 2, GroupNumber = 1 },
             new SaturdayGroup { UserId = 3, GroupNumber = 1 },
             new SaturdayGroup { UserId = 4, GroupNumber = 2 });
         db.SaturdayHistories.AddRange(
-            new SaturdayHistory { UserId = 2, SubServiceId = 1, WeekCode = "2026-W32", WorkedSaturday = true },
-            new SaturdayHistory { UserId = 3, SubServiceId = 1, WeekCode = "2026-W32", WorkedSaturday = false },
-            new SaturdayHistory { UserId = 4, SubServiceId = 1, WeekCode = "2026-W32", WorkedSaturday = true });
+            new SaturdayHistory { UserId = 2, SubServiceId = 1, WeekCode = "2026-W33", WorkedSaturday = true },
+            new SaturdayHistory { UserId = 3, SubServiceId = 1, WeekCode = "2026-W33", WorkedSaturday = false },
+            new SaturdayHistory { UserId = 4, SubServiceId = 1, WeekCode = "2026-W33", WorkedSaturday = true });
         await db.SaveChangesAsync();
 
         var svc = CreateService(db);
         await SeedShiftsAsync(svc);
 
-        var holidayPlanning = await svc.CreatePlanningAsync(new CreateWeeklyPlanningDto
-        {
-            SubServiceId = 1,
-            WeekCode = "2026-W33",
-            WeekStartDate = new DateOnly(2026, 8, 10),
-            TotalEffectif = 4
-        });
-        await svc.GeneratePlanningFromConfigAsync(new GeneratePlanningFromConfigDto
-        {
-            SubServiceId = 1,
-            WeekCode = "2026-W33",
-            WeeklyPlanningId = holidayPlanning.Id
-        });
-
-        // Sans le fix, W33 sauverait tous false → W34 tout le monde ON.
-        // Avec intended : W33 = {1:T, 2:F, 3:T, 4:F} → W34 flip = {1:T, 2:T, 3:F, 4:T}
-        var nextPlanning = await svc.CreatePlanningAsync(new CreateWeeklyPlanningDto
+        // W34 = semaine paire → G1
+        var planning = await svc.CreatePlanningAsync(new CreateWeeklyPlanningDto
         {
             SubServiceId = 1,
             WeekCode = "2026-W34",
@@ -173,11 +158,11 @@ public class SaturdayRotationIntendedHistoryTests
         {
             SubServiceId = 1,
             WeekCode = "2026-W34",
-            WeeklyPlanningId = nextPlanning.Id
+            WeeklyPlanningId = planning.Id
         });
 
         var satWorkers = await db.ShiftAssignments
-            .Where(a => a.WeeklyPlanningId == nextPlanning.Id
+            .Where(a => a.WeeklyPlanningId == planning.Id
                         && a.IsSaturday
                         && !a.IsOnLeave
                         && !a.IsHoliday
@@ -185,10 +170,10 @@ public class SaturdayRotationIntendedHistoryTests
             .Select(a => a.UserId)
             .ToListAsync();
 
-        Assert.Contains(1, satWorkers); // débutant
-        Assert.Contains(2, satWorkers); // était intended OFF en W33
-        Assert.DoesNotContain(3, satWorkers); // était intended ON en W33
-        Assert.Contains(4, satWorkers);
+        Assert.Contains(1, satWorkers); // débutant toujours ON
+        Assert.Contains(2, satWorkers); // G1
+        Assert.Contains(3, satWorkers); // G1 malgré historique opposé
+        Assert.DoesNotContain(4, satWorkers); // G2 OFF
     }
 
     [Fact]
@@ -336,7 +321,7 @@ public class SaturdayRotationIntendedHistoryTests
             MakeUser(3, "c2@test.ma", level: 2),
             MakeUser(4, "c3@test.ma", level: 2));
         db.SaturdayGroups.AddRange(
-            new SaturdayGroup { UserId = 1, GroupNumber = 1 },
+            new SaturdayGroup { UserId = 1, GroupNumber = 2 },
             new SaturdayGroup { UserId = 2, GroupNumber = 1 },
             new SaturdayGroup { UserId = 3, GroupNumber = 2 },
             new SaturdayGroup { UserId = 4, GroupNumber = 2 });
@@ -345,7 +330,7 @@ public class SaturdayRotationIntendedHistoryTests
             UserId = 1,
             SubServiceId = 1,
             WeekCode = "2026-W29",
-            WorkedSaturday = true // → intended OFF this week
+            WorkedSaturday = false
         });
         await db.SaveChangesAsync();
 
@@ -401,6 +386,30 @@ public class SaturdayRotationIntendedHistoryTests
         Assert.Equal(4, balance.ProjectedSaturdayGroup2);
         Assert.True(balance.IsImbalanced);
         Assert.Equal(2, balance.ImbalanceDelta);
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var (expectedG1, expectedG2) = PlanningService.ResolveSaturdayGroupDates(today);
+        Assert.Equal(expectedG1, balance.Group1SaturdayDate);
+        Assert.Equal(expectedG2, balance.Group2SaturdayDate);
+        Assert.Equal(7, Math.Abs(expectedG2.DayNumber - expectedG1.DayNumber));
+    }
+
+    [Fact]
+    public void Saturday_group_dates_even_iso_week_g1_is_this_saturday()
+    {
+        // Lundi 17/08/2026 = ISO W34 (paire) → G1 = sam. 22/08, G2 = sam. 29/08
+        var (g1, g2) = PlanningService.ResolveSaturdayGroupDates(new DateOnly(2026, 8, 19));
+        Assert.Equal(new DateOnly(2026, 8, 22), g1);
+        Assert.Equal(new DateOnly(2026, 8, 29), g2);
+    }
+
+    [Fact]
+    public void Saturday_group_dates_odd_iso_week_g2_is_this_saturday()
+    {
+        // Lundi 24/08/2026 = ISO W35 (impaire) → G2 = sam. 29/08, G1 = sam. 05/09
+        var (g1, g2) = PlanningService.ResolveSaturdayGroupDates(new DateOnly(2026, 8, 26));
+        Assert.Equal(new DateOnly(2026, 9, 5), g1);
+        Assert.Equal(new DateOnly(2026, 8, 29), g2);
     }
 
     [Fact]

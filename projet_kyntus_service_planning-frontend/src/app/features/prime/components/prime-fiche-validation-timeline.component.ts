@@ -4,6 +4,12 @@ import type {
   WorkflowStepMetaDto,
   WorkflowValidationMetaDto,
 } from '../services/prime-fiche-result.service';
+import {
+  primeRoleLabel,
+  primeValidationActionLabel,
+  primeValidationStatusLabel,
+  primeWorkflowTransitionLabel,
+} from '../lib/prime-workflow-labels';
 
 @Component({
   selector: 'app-prime-fiche-validation-timeline',
@@ -13,7 +19,7 @@ import type {
       @if (currentStatus(); as status) {
         <div class="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs">
           <span class="text-muted">État actuel de la fiche :</span>
-          <span class="ml-2 font-semibold text-primary">{{ status }}</span>
+          <span class="ml-2 font-semibold text-primary">{{ statusLabel(status) }}</span>
         </div>
       }
       @if (workflowMeta(); as meta) {
@@ -26,9 +32,9 @@ import type {
                 [class]="stepDotClass(step)"
               ></span>
               <div class="rounded-lg border border-default/60 bg-card/40 px-3 py-2">
-                <p class="font-medium text-primary">{{ step.approverRole }}</p>
+                <p class="font-medium text-primary">{{ roleLabel(step.approverRole) }}</p>
                 <p class="text-[11px] text-muted">
-                  {{ step.fromStatus }} → {{ step.toStatus }}
+                  {{ transitionLabel(step.fromStatus, step.toStatus) }}
                 </p>
               </div>
             </li>
@@ -38,7 +44,7 @@ import type {
 
       <p class="text-xs font-semibold uppercase tracking-wider text-muted pt-1">Historique des actions</p>
       @if (history().length === 0) {
-        <p class="text-xs text-muted italic">Aucune validation ou rejet enregistré pour cette fiche.</p>
+        <p class="text-xs text-muted italic">Aucune soumission, validation ou rejet enregistré pour cette fiche.</p>
       } @else {
         <ul class="space-y-2">
           @for (h of sortedHistory(); track h.id) {
@@ -49,7 +55,7 @@ import type {
               <div class="flex flex-wrap items-baseline justify-between gap-2">
                 <span class="font-semibold text-primary">
                   {{ h.actorDisplayName || h.actorUserId }}
-                  <span class="font-normal text-muted"> · {{ h.actorRole }}</span>
+                  <span class="font-normal text-muted"> · {{ roleLabel(h.actorRole) }}</span>
                   @if (isMyAction(h)) {
                     <span class="ml-1 text-[10px] uppercase tracking-wide text-indigo-300">· Votre action</span>
                   }
@@ -57,7 +63,7 @@ import type {
                 <time class="text-muted font-mono text-[10px]">{{ formatAt(h.at) }}</time>
               </div>
               <p class="mt-1 text-muted">
-                {{ actionLabel(h.action) }} : {{ h.fromStatus }} → {{ h.toStatus }}
+                {{ actionLabel(h.action) }} : {{ transitionLabel(h.fromStatus, h.toStatus) }}
               </p>
               @if (h.comment) {
                 <p class="mt-1 text-rose-300/90 italic">« {{ h.comment }} »</p>
@@ -87,6 +93,10 @@ export class PrimeFicheValidationTimelineComponent {
       (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
     ),
   );
+  readonly actionLabel = primeValidationActionLabel;
+  readonly statusLabel = primeValidationStatusLabel;
+  readonly transitionLabel = primeWorkflowTransitionLabel;
+  readonly roleLabel = primeRoleLabel;
 
   readonly orderedSteps = (meta: WorkflowValidationMetaDto): WorkflowStepMetaDto[] =>
     [...(meta.steps ?? [])].filter((s) => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
@@ -110,11 +120,9 @@ export class PrimeFicheValidationTimelineComponent {
     const mine = this.isMyAction(h) ? ' ring-1 ring-indigo-400/40' : '';
     if (h.action === 'Rejected')
       return `border-rose-500/40 bg-rose-500/10${mine}`;
+    if (h.action === 'Submitted')
+      return `border-amber-500/40 bg-amber-500/10${mine}`;
     return `border-emerald-500/30 bg-emerald-500/5${mine}`;
-  }
-
-  actionLabel(action: string): string {
-    return action === 'Rejected' ? 'Rejet' : 'Approbation';
   }
 
   hasAmounts(h: PrimeFicheValidationHistoryDto): boolean {
@@ -123,7 +131,7 @@ export class PrimeFicheValidationTimelineComponent {
 
   formatAmount(value: number | null | undefined): string {
     if (value === null || value === undefined) return '—';
-    return `${value.toFixed(2)} MAD`;
+    return `${value.toFixed(2)} DH`;
   }
 
   formatAt(iso: string): string {

@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, OnInit, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { PmDrillBarComponent } from './pm-drill-bar.component';
 import { UiPreferencesService } from '../services/ui-preferences.service';
 import { ParrainageStoreService } from '../services/parrainage-store.service';
@@ -18,7 +19,6 @@ import { AdminToolsPageComponent } from '../pages/admin/admin-tools-page.compone
 import { AdminWorkflowPageComponent } from '../pages/admin/admin-workflow-page.component';
 import { AdminConfigPageComponent } from '../pages/admin/admin-config-page.component';
 import { AdminPaymentsPageComponent } from '../pages/admin/admin-payments-page.component';
-import { AdminAuditPageComponent } from '../pages/admin/admin-audit-page.component';
 import { PmDashboardPageComponent } from '../pages/pm/pm-dashboard-page.component';
 import { PmTeamPageComponent } from '../pages/pm/pm-team-page.component';
 import { PmReferralsPageComponent } from '../pages/pm/pm-referrals-page.component';
@@ -47,7 +47,6 @@ import { GlobalSettingsPageComponent } from '../pages/shared/global-settings-pag
     AdminConfigPageComponent,
     AdminPaymentsPageComponent,
     ComptaPaymentsPageComponent,
-    AdminAuditPageComponent,
     PmDashboardPageComponent,
     PmTeamPageComponent,
     PmReferralsPageComponent,
@@ -87,7 +86,7 @@ import { GlobalSettingsPageComponent } from '../pages/shared/global-settings-pag
               @case ('admin-workflow') { <app-admin-workflow-page /> }
               @case ('admin-config') { <app-admin-config-page /> }
               @case ('admin-payments') { <app-admin-payments-page /> }
-              @case ('admin-audit') { <app-admin-audit-page /> }
+              @case ('admin-audit') { <app-admin-dashboard-page /> }
               @case ('pm-dashboard') { <app-pm-dashboard-page /> }
               @case ('pm-team') { <app-pm-team-page /> }
               @case ('pm-referrals') { <app-pm-referrals-page /> }
@@ -111,12 +110,24 @@ export class ParrainageLayoutComponent implements OnInit {
   readonly nav = inject(ParrainageNavService);
   readonly role = inject(ParrainageRoleService);
   readonly ui = inject(UiPreferencesService);
+  private readonly router = inject(Router);
 
   readonly compact = signal(this.ui.get().compactMode);
 
+  constructor() {
+    effect(() => {
+      if (this.nav.currentView() === 'admin-audit') {
+        void this.router.navigate(['/audit'], {
+          queryParams: { section: 'journal', module: 'parrainage' },
+        });
+      }
+    });
+  }
+
   ngOnInit(): void {
-    const u = this.role.user();
-    void this.store.bootstrap(u.role, u.id, u.projectId);
+    this.role.syncFromSession();
+    const synced = this.role.user();
+    void this.store.bootstrap(synced.role, synced.id, synced.projectId);
   }
 
   showPmDrill(): boolean {

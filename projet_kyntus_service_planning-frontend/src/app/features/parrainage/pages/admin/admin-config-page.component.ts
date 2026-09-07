@@ -102,7 +102,7 @@ export class TierEditorBlockComponent {
               <h2 class="text-sm font-semibold text-primary">Règles de parrainage — primes (DH)</h2>
               <p class="text-xs text-muted mt-1">
                 Deux jeux de règles coexistent : le <strong class="text-primary">mode standard</strong> (par défaut)
-                et le <strong class="text-primary">mode période critique</strong>. Vous basculez le mode actif à tout
+                et le <strong class="text-primary">mode exceptionnel</strong>. Vous basculez le mode actif à tout
                 moment ; les tranches de chaque mode restent éditables ci-dessous.
               </p>
             </div>
@@ -111,7 +111,7 @@ export class TierEditorBlockComponent {
               <span class="font-semibold">Mode appliqué actuellement : </span>
               {{ rules().activeMode === 'STANDARD'
                 ? 'Standard — somme des tranches standard (après enregistrement).'
-                : 'Période critique — somme des tranches « critique » (après enregistrement).' }}
+                : 'Exceptionnel — somme des tranches exceptionnelles (après enregistrement).' }}
             </div>
 
             <div class="grid sm:grid-cols-2 gap-3">
@@ -122,7 +122,7 @@ export class TierEditorBlockComponent {
               </button>
               <button type="button" (click)="setProgramMode('CRITICAL_PERIOD')"
                 [class]="'rounded-xl border p-4 text-left transition-colors ' + (rules().activeMode === 'CRITICAL_PERIOD' ? 'border-rose-500/40 bg-rose-500/10 ring-1 ring-rose-500/25' : 'border-default bg-input hover:border-default')">
-                <span class="text-sm font-semibold text-primary">Mode PÉRIODE CRITIQUE</span>
+                <span class="text-sm font-semibold text-primary">Mode EXCEPTIONNEL</span>
                 <p class="text-xs text-muted mt-1 leading-relaxed">Ex. 500&nbsp;DH à 3&nbsp;mois puis 1&nbsp;000&nbsp;DH à 6&nbsp;mois — configurable.</p>
               </button>
             </div>
@@ -134,8 +134,8 @@ export class TierEditorBlockComponent {
               (tiersChange)="patchRules({ standardTiers: $event })"
             />
             <app-tier-editor-block
-              title="Tranches — période critique"
-              description="Utilisées lorsque la période critique est active (ex. recrutement urgent)."
+              title="Tranches — mode exceptionnel"
+              description="Utilisées lorsque le mode exceptionnel est actif (ex. recrutement urgent)."
               [tiers]="rules().criticalPeriodTiers"
               (tiersChange)="patchRules({ criticalPeriodTiers: $event })"
             />
@@ -176,11 +176,11 @@ export class TierEditorBlockComponent {
             <div class="border border-default rounded-xl p-4 space-y-3">
               <h2 class="text-sm font-semibold text-primary">Audit & accès</h2>
               <div class="grid md:grid-cols-2 gap-3">
-                <label class="text-sm text-primary flex items-center gap-2"><input type="checkbox" [checked]="audit().enabled" (change)="setAudit('enabled', $any($event.target).checked)" />Activer Audit</label>
+                <label class="text-sm text-primary flex items-center gap-2"><input type="checkbox" [checked]="audit().enabled" (change)="setAudit('enabled', $any($event.target).checked)" />Activer l’audit</label>
                 <label class="text-sm text-primary flex items-center gap-2"><input type="checkbox" checked disabled />Lecture seule (fixe)</label>
                 <label class="text-sm text-primary flex items-center gap-2"><input type="checkbox" [checked]="audit().logs" (change)="setAudit('logs', $any($event.target).checked)" />Accès logs</label>
                 <label class="text-sm text-primary flex items-center gap-2"><input type="checkbox" [checked]="audit().history" (change)="setAudit('history', $any($event.target).checked)" />Accès historique</label>
-                <label class="text-sm text-primary flex items-center gap-2"><input type="checkbox" [checked]="audit().export" (change)="setAudit('export', $any($event.target).checked)" />Export</label>
+                <label class="text-sm text-primary flex items-center gap-2"><input type="checkbox" [checked]="audit().export" (change)="setAudit('export', $any($event.target).checked)" />Exporter</label>
               </div>
             </div>
           }

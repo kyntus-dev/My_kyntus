@@ -75,14 +75,14 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
           <h1 class="text-2xl lg:text-3xl font-bold text-primary tracking-tight">Synthèse globale PRIME</h1>
           @if (isComptaOnly()) {
             <p class="text-muted mt-1 max-w-3xl text-sm leading-relaxed">
-              Primes validées par les deux workflows (Manager + RH). Marquez le paiement de chaque
-              prime employé via le bouton <strong>Marquer payé</strong>.
+              Primes validées par la RH. Marquez le paiement de chaque
+              prime pilote via le bouton <strong>Marquer comme payée</strong>.
             </p>
           } @else {
             <p class="text-muted mt-1 max-w-3xl text-sm leading-relaxed">
-              Sélectionnez un périmètre prêt, puis approuvez ou rejetez chaque ligne employé.
+              Sélectionnez un périmètre prêt, puis approuvez ou rejetez chaque ligne pilote.
               Le suivi détaillé (statuts par périmètre, historique) est disponible dans
-              <button type="button" (click)="goToTracking()" class="text-indigo-400 hover:text-indigo-300 underline">
+              <button type="button" (click)="goToTracking()" class="text-[var(--info-text)] hover:opacity-80 underline">
                 Suivi synthèse
               </button>.
             </p>
@@ -128,7 +128,7 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
       </div>
 
       @if (error()) {
-        <div class="rounded-lg border border-rose-500/40 bg-rose-950/40 px-4 py-3 text-sm text-[var(--danger-text)] flex items-start justify-between gap-3">
+        <div class="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger-text)] flex items-start justify-between gap-3">
           <span>{{ error() }}</span>
           <button type="button" (click)="error.set(null)" class="text-[var(--danger-text)] hover:opacity-80">
             <app-lucide-icon [icon]="icons.close" className="w-4 h-4" />
@@ -147,13 +147,13 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
         </div>
         <div class="rounded-xl border border-default bg-card/60 p-4">
           <p class="text-[11px] uppercase tracking-wider text-muted">Cellules prêtes</p>
-          <p class="mt-1 text-2xl font-bold text-cyan-400">
+          <p class="mt-1 text-2xl font-bold text-[var(--info-text)]">
             {{ kpi().cellulesReady }}<span class="text-muted text-lg">/{{ kpi().cellulesTotal }}</span>
           </p>
         </div>
         <div class="rounded-xl border border-default bg-card/60 p-4">
           <p class="text-[11px] uppercase tracking-wider text-muted">Pôles prêts</p>
-          <p class="mt-1 text-2xl font-bold text-violet-400">
+          <p class="mt-1 text-2xl font-bold text-[var(--info-text)]">
             {{ kpi().polesReady }}<span class="text-muted text-lg">/{{ kpi().polesTotal }}</span>
           </p>
         </div>
@@ -205,7 +205,7 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
                 type="checkbox"
                 [ngModel]="readyOnly()"
                 (ngModelChange)="readyOnly.set($event)"
-                class="rounded border-default bg-card text-indigo-600"
+                class="rounded border-default bg-card text-[var(--info-text)]"
               />
               Périmètres prêts uniquement
             </label>
@@ -221,7 +221,7 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
                   (click)="selectScopeRow(s)"
                   class="w-full text-left px-3 py-3 transition-colors flex flex-col gap-1.5 cursor-pointer"
                   [class]="isSelected(s)
-                    ? 'bg-indigo-600/15 border-l-2 border-indigo-500'
+                    ? 'bg-[var(--info-bg)] border-l-2 border-[var(--info-border)]'
                     : s.ready
                       ? 'hover:bg-input/60 border-l-2 border-transparent'
                       : 'hover:bg-input/40 opacity-80 border-l-2 border-transparent'"
@@ -306,16 +306,16 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
             </div>
 
             @if (!sel.ready) {
-              <div class="px-4 py-3 border-b border-default bg-amber-950/20 flex items-start gap-2 text-xs text-[var(--warning-text)]">
+              <div class="px-4 py-3 border-b border-[var(--warning-border)] bg-[var(--warning-bg)] flex items-start gap-2 text-xs text-[var(--warning-text)]">
                 <app-lucide-icon [icon]="icons.clock" className="w-4 h-4 shrink-0 mt-0.5" />
                 <div>
                   <p class="font-medium">
                     Périmètre non prêt — lecture seule ({{ sel.doneCount }}/{{ sel.totalCount }} fiche(s) validée(s)).
                   </p>
-                  <p class="text-[var(--warning-text)]">
+                  <p class="mt-0.5 opacity-90">
                     Génération possible une fois toutes les fiches du périmètre validées.
                     @if (sel.blockingReason) {
-                      <span class="block mt-0.5">Bloquant : {{ sel.blockingReason }}</span>
+                      <span class="block mt-0.5 font-medium">Bloquant : {{ sel.blockingReason }}</span>
                     }
                   </p>
                 </div>
@@ -323,9 +323,9 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
             }
 
             @if (preparing()) {
-              <div class="px-4 py-3 border-b border-default bg-indigo-950/20 flex items-center gap-2 text-xs text-indigo-200">
+              <div class="px-4 py-3 border-b border-[var(--info-border)] bg-[var(--info-bg)] flex items-center gap-2 text-xs text-[var(--info-text)]">
                 <app-lucide-icon [icon]="icons.loader" className="w-4 h-4 animate-spin" />
-                Ouverture de la fiche de synthèse (workflow 2) — les fiches employé sont déjà validées (workflow 1).
+                Ouverture de la fiche de synthèse — les fiches pilotes sont déjà validées.
               </div>
             }
 
@@ -356,16 +356,16 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
               </div>
             }
 
-            @if (scopeSynthesisId() && (isRhOrManager() || currentRole() === 'Admin')) {
-              <div class="px-4 py-3 border-b border-default bg-indigo-950/20 text-xs text-indigo-200">
-                <p class="font-medium">Validation par ligne — workflow synthèse</p>
-                <p class="text-indigo-300/80 mt-0.5">
-                  Les fiches employé sont validées. Validez ou rejetez chaque ligne via <strong>Approuver</strong> / <strong>Rejeter</strong>.
-                  Une ligne est définitivement validée lorsque RH et Manager l'ont approuvée.
+            @if (scopeSynthesisId() && isRhActor()) {
+              <div class="px-4 py-3 border-b border-[var(--info-border)] bg-[var(--info-bg)] text-xs text-[var(--info-text)]">
+                <p class="font-semibold">Validation par ligne — workflow synthèse</p>
+                <p class="mt-0.5 opacity-90">
+                  Les fiches pilotes sont validées. Approuvez ou rejetez chaque ligne.
+                  Une ligne est définitivement validée lorsque la RH l'a approuvée, puis la Comptabilité.
                 </p>
               </div>
             } @else if (synthesisPrepareError()) {
-              <div class="px-4 py-3 border-b border-default bg-rose-950/20 text-xs text-[var(--danger-text)]">
+              <div class="px-4 py-3 border-b border-[var(--danger-border)] bg-[var(--danger-bg)] text-xs text-[var(--danger-text)]">
                 {{ synthesisPrepareError() }}
               </div>
             }
@@ -380,7 +380,7 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
                   </span>
                   <span class="text-[11px] font-mono text-muted">{{ paymentSummary().paid }}/{{ paymentSummary().total }} payée(s)</span>
                 </div>
-                <span class="text-[11px] text-muted">Seules les primes validées par RH + Manager sont payables.</span>
+                <span class="text-[11px] text-muted">Seules les primes validées par la RH sont payables.</span>
               </div>
             }
 
@@ -392,15 +392,15 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
                   <p class="text-primary font-semibold">{{ sum.lineCount }}</p>
                 </div>
                 <div>
-                  <p class="text-[10px] uppercase tracking-wider text-muted">Plafond prime</p>
+                  <p class="text-[10px] uppercase tracking-wider text-muted">Total Prime</p>
                   <p class="text-primary font-semibold font-mono">{{ sum.totalPrime | number: '1.0-2' }}</p>
                 </div>
                 <div>
-                  <p class="text-[10px] uppercase tracking-wider text-muted">Plafond challenge</p>
+                  <p class="text-[10px] uppercase tracking-wider text-muted">Total Challenge</p>
                   <p class="text-primary font-semibold font-mono">{{ sum.totalChallenge | number: '1.0-2' }}</p>
                 </div>
                 <div>
-                  <p class="text-[10px] uppercase tracking-wider text-muted">Total plafond</p>
+                  <p class="text-[10px] uppercase tracking-wider text-muted">Total général</p>
                   <p class="text-primary font-semibold font-mono">{{ sum.totalAmount | number: '1.0-2' }}</p>
                 </div>
                 <div>
@@ -446,7 +446,7 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
                     type="text"
                     [ngModel]="lineSearch()"
                     (ngModelChange)="lineSearch.set($event)"
-                    placeholder="Rechercher un employé…"
+                    placeholder="Rechercher un pilote…"
                     class="w-full rounded-lg border border-default bg-input pl-8 pr-3 py-1.5 text-xs text-primary focus:border-indigo-500 focus:outline-none"
                   />
                 </div>
@@ -472,21 +472,21 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
               <div class="overflow-auto max-h-[460px]">
                 <table class="w-full text-sm">
                   <thead class="sticky top-0 bg-card z-10">
-                    <tr class="border-b border-default text-left text-muted">
-                      <th class="py-2 px-3 font-medium">Employé</th>
-                      <th class="py-2 px-3 font-medium text-right">Plafond Prime</th>
-                      <th class="py-2 px-3 font-medium text-right">Plafond Challenge</th>
-                      <th class="py-2 px-3 font-medium text-right">Total plafond</th>
-                      <th class="py-2 px-3 font-medium text-right">Absences</th>
-                      <th class="py-2 px-3 font-medium text-right">Sanction</th>
-                      <th class="py-2 px-3 font-medium text-right">Régularisation</th>
-                      <th class="py-2 px-3 font-medium text-right">Total net</th>
+                    <tr class="border-b border-default text-left text-primary">
+                      <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Pilote</th>
+                      <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted text-right">Montant Prime</th>
+                      <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted text-right">Montant Challenge</th>
+                      <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted text-right">Total</th>
+                      <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted text-right">Absences</th>
+                      <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted text-right">Sanction</th>
+                      <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted text-right">Régularisation</th>
+                      <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted text-right">Total net</th>
                       @if (canPay()) {
-                        <th class="py-2 px-3 font-medium">Paiement</th>
+                        <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Paiement</th>
                       }
-                      <th class="py-2 px-3 font-medium text-center min-w-[5rem]">Fiche</th>
+                      <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted text-center min-w-[5rem]">Fiche</th>
                       @if (!isComptaOnly()) {
-                        <th class="py-2 px-3 font-medium">Statut / Actions</th>
+                        <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Statut / Actions</th>
                       }
                 </tr>
               </thead>
@@ -497,9 +497,9 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
                           <div class="text-primary">{{ l.employeeDisplayName }}</div>
                           <div class="text-[10px] text-muted">{{ l.serviceName }}</div>
                     </td>
-                        <td class="py-2 px-3 font-mono text-right text-muted">{{ l.primeAmount != null ? (l.primeAmount | number: '1.0-2') : '—' }}</td>
-                        <td class="py-2 px-3 font-mono text-right text-muted">{{ l.challengeAmount != null ? (l.challengeAmount | number: '1.0-2') : '—' }}</td>
-                        <td class="py-2 px-3 font-mono text-right text-muted">{{ l.totalAmount != null ? (l.totalAmount | number: '1.0-2') : '—' }}</td>
+                        <td class="py-2 px-3 font-mono text-right text-primary">{{ l.primeAmount != null ? (l.primeAmount | number: '1.0-2') : '—' }}</td>
+                        <td class="py-2 px-3 font-mono text-right text-primary">{{ l.challengeAmount != null ? (l.challengeAmount | number: '1.0-2') : '—' }}</td>
+                        <td class="py-2 px-3 font-mono text-right text-primary">{{ l.totalAmount != null ? (l.totalAmount | number: '1.0-2') : '—' }}</td>
                         <td class="py-2 px-3 font-mono text-right">
                           @if (l.absenceDayCount > 0) {
                             <span class="inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-[var(--warning-text)]">{{ l.absenceDayCount }} j.</span>
@@ -545,7 +545,7 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
                                     </div>
                                   </div>
                                 } @else if (l.paymentStatus !== 'Paid') {
-                                  <button type="button" class="block mt-1 text-[11px] text-[var(--success-text)]" (click)="startPay(l.lineId!)">Marquer payé</button>
+                                  <button type="button" class="block mt-1 text-[11px] text-[var(--success-text)]" (click)="startPay(l.lineId!)">Marquer comme payée</button>
                         } @else {
                                   <button type="button" class="block mt-1 text-[11px] text-muted" (click)="unsetPay(l.lineId!)">Annuler paiement</button>
                                 }
@@ -577,11 +577,6 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
                                 RH : {{ l.rhRejectionReason }}
                               </span>
                             }
-                            @if (l.managerRejectionReason) {
-                              <span class="text-[10px] text-[var(--danger-text)] max-w-[160px] truncate" [title]="'Manager : ' + l.managerRejectionReason">
-                                Manager : {{ l.managerRejectionReason }}
-                              </span>
-                            }
                             @if (canActOnLine()) {
                               @if (!l.lineId) {
                                 <span class="text-[10px] text-muted italic">Initialisation de la ligne…</span>
@@ -608,9 +603,9 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
                                     </div>
                                   </div>
                                 } @else if (canRejectLine(l)) {
-                                  <button type="button" class="rounded-md border border-rose-500/60 bg-rose-950/30 px-2.5 py-1 text-[11px] font-medium text-[var(--danger-text)] hover:bg-rose-950/50 shadow-sm" (click)="startReject(l.lineId!)">
+                                  <button type="button" class="rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--danger-text)] hover:opacity-90 shadow-sm" (click)="startReject(l.lineId!)">
                                     Rejeter
-                            </button>
+                                  </button>
                           }
                               }
                           }
@@ -629,7 +624,7 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
             <div class="p-12 flex flex-col items-center justify-center text-center gap-3">
               <app-lucide-icon [icon]="icons.chevron" className="w-10 h-10 text-muted" />
               <p class="text-sm text-muted max-w-xs">
-                Sélectionnez un périmètre prêt à gauche pour afficher le détail des employés et générer la synthèse.
+                Sélectionnez un périmètre prêt à gauche pour afficher le détail des pilotes et générer la synthèse.
               </p>
           </div>
         </app-prime-card>
@@ -789,7 +784,7 @@ export class PrimeGlobalPoolPageComponent implements OnInit {
     const comptaOnly = this.isComptaOnly();
     return this.lines()
       .filter((l) => {
-        // Comptable : uniquement le résultat final (lignes validées par RH + Manager).
+        // Comptable : uniquement le résultat final (lignes validées par la RH).
         if (comptaOnly) return (l.lineStatus ?? '') === 'Approved';
         if (status === 'all') return true;
         const ls = l.lineStatus ?? 'PendingReview';
@@ -822,11 +817,11 @@ export class PrimeGlobalPoolPageComponent implements OnInit {
     );
   });
 
-  /** Manager + RH validés → la diffusion (et le paiement) sont débloqués. */
+  /** Validation RH → la diffusion (et le paiement) sont débloqués. */
   readonly distributionUnlocked = computed(() => !!this.selectedInbox()?.poolDistributionUnlocked);
 
   readonly paymentSummary = computed(() => {
-    // Le paiement ne concerne que les primes validées par les deux workflows (lignes Approved).
+    // Le paiement ne concerne que les primes validées par la RH (lignes Approved).
     const approved = this.lines().filter((l) => l.lineStatus === 'Approved');
     const total = approved.length;
     const paid = approved.filter((l) => l.paymentStatus === 'Paid').length;
@@ -1022,36 +1017,19 @@ export class PrimeGlobalPoolPageComponent implements OnInit {
   }
 
   /**
-   * Libellé détaillé dérivé des deux décisions (RH + Manager) : tant que les deux
-   * n'ont pas tranché, on indique qui a déjà décidé et qui reste en attente.
+   * Libellé dérivé de la décision RH.
    */
   lineDecisionLabel(l: GlobalSynthesisLineDto): string {
     const rh = l.rhDecision;
-    const mgr = l.managerDecision;
-    const rhPending = rh === 'Pending';
-    const mgrPending = mgr === 'Pending';
-
-    if (rhPending && mgrPending) return 'En attente';
-
-    if (rhPending || mgrPending) {
-      const decidedRole = rhPending ? 'Manager' : 'RH';
-      const decision = rhPending ? mgr : rh;
-      const waitingRole = rhPending ? 'RH' : 'Manager';
-      const verb = decision === 'Approved' ? 'Approuvé' : 'Rejeté';
-      return `${verb} par ${decidedRole} - en attente ${waitingRole}`;
-    }
-
-    if (rh === 'Approved' && mgr === 'Approved') return 'Validée';
-    if (rh === 'Rejected' && mgr === 'Rejected') return 'Rejetée (RH + Manager)';
-    if (rh === 'Rejected') return 'Rejetée (RH)';
-    return 'Rejetée (Manager)';
+    if (rh === 'Pending') return 'En attente RH';
+    if (rh === 'Approved') return 'Validée';
+    return 'Rejetée (RH)';
   }
 
   lineDecisionBadgeClass(l: GlobalSynthesisLineDto): string {
     const rh = l.rhDecision;
-    const mgr = l.managerDecision;
-    if (rh === 'Pending' || mgr === 'Pending') return 'bg-amber-500/10 text-[var(--warning-text)]';
-    if (rh === 'Approved' && mgr === 'Approved') return 'bg-[var(--success-bg)] text-[var(--success-text)]';
+    if (rh === 'Pending') return 'bg-amber-500/10 text-[var(--warning-text)]';
+    if (rh === 'Approved') return 'bg-[var(--success-bg)] text-[var(--success-text)]';
     return 'bg-[var(--danger-bg)] text-[var(--danger-text)]';
   }
 
@@ -1083,14 +1061,14 @@ export class PrimeGlobalPoolPageComponent implements OnInit {
     });
   }
 
-  /** Génération / régénération manuelle réservée à l'Admin (RH/Manager : préparation auto). */
+  /** Génération / régénération manuelle réservée à l'Admin (RH : préparation auto). */
   canGenerate(): boolean {
     return this.currentRole() === 'Admin';
   }
 
-  isRhOrManager(): boolean {
+  isRhActor(): boolean {
     const r = this.currentRole();
-    return r === 'RH' || r === 'Manager';
+    return r === 'RH' || r === 'Admin';
   }
 
   canEditAbsenceConfig(): boolean {
@@ -1100,7 +1078,7 @@ export class PrimeGlobalPoolPageComponent implements OnInit {
 
   canEditRegularization(l: GlobalSynthesisLineDto): boolean {
     if (!l.lineId || !this.canEditAbsenceConfig()) return false;
-    return l.rhDecision === 'Pending' && l.managerDecision === 'Pending';
+    return l.rhDecision === 'Pending';
   }
 
   saveRegularization(lineId: string, value: number | string): void {
@@ -1169,7 +1147,7 @@ export class PrimeGlobalPoolPageComponent implements OnInit {
   }
 
   canActOnLine(): boolean {
-    return (this.isRhOrManager() || this.currentRole() === 'Admin') && !!this.scopeSynthesisId();
+    return this.isRhActor() && !!this.scopeSynthesisId();
   }
 
   canPreviewLine(l: GlobalSynthesisLineDto): boolean {
@@ -1183,22 +1161,21 @@ export class PrimeGlobalPoolPageComponent implements OnInit {
 
   myDecision(l: GlobalSynthesisLineDto): 'Pending' | 'Approved' | 'Rejected' {
     const r = this.currentRole();
-    if (r === 'RH') return l.rhDecision;
-    if (r === 'Manager') return l.managerDecision;
+    if (r === 'RH' || r === 'Admin') return l.rhDecision;
     return 'Pending';
   }
 
   canApproveLine(l: GlobalSynthesisLineDto): boolean {
     if (!l.lineId) return false;
     const r = this.currentRole();
-    if (r === 'Admin') return l.rhDecision === 'Pending' || l.managerDecision === 'Pending';
+    if (r === 'Admin') return l.rhDecision === 'Pending';
     return this.myDecision(l) === 'Pending';
   }
 
   canRejectLine(l: GlobalSynthesisLineDto): boolean {
     if (!l.lineId) return false;
     const r = this.currentRole();
-    if (r === 'Admin') return l.rhDecision === 'Pending' || l.managerDecision === 'Pending';
+    if (r === 'Admin') return l.rhDecision === 'Pending';
     return this.myDecision(l) === 'Pending';
   }
 

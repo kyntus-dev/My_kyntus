@@ -231,7 +231,7 @@ public class PlanningReinforcementRequestService : IPlanningReinforcementRequest
                     x.Status is PlanningReinforcementVolunteerStatus.Accepted
                         or PlanningReinforcementVolunteerStatus.Selected);
                 var declined = g.Count(x => x.Status == PlanningReinforcementVolunteerStatus.Declined);
-                var name = $"{first.FirstName} {first.LastName}".Trim();
+                var name = UserDisplayName.Format(first.FirstName, first.LastName);
                 if (string.IsNullOrWhiteSpace(name))
                     name = first.Email ?? $"#{g.Key}";
 
@@ -858,7 +858,7 @@ public class PlanningReinforcementRequestService : IPlanningReinforcementRequest
     private static string DisplayName(User? user, int fallbackId)
     {
         if (user == null) return $"#{fallbackId}";
-        var name = $"{user.FirstName} {user.LastName}".Trim();
+        var name = UserDisplayName.Format(user.FirstName, user.LastName);
         return string.IsNullOrWhiteSpace(name) ? (user.Email ?? $"#{fallbackId}") : name;
     }
 

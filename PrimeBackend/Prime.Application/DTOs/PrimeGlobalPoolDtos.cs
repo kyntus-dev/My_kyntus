@@ -250,7 +250,7 @@ public sealed class EmployeePrimePaymentTrackingDto
     public string PaymentStatus { get; init; } = "Unpaid";
     public DateTimeOffset? PaidAt { get; init; }
     public string? PaymentReference { get; init; }
-    /// <summary>True si la ligne est validée par RH + Manager : la fiche est consultable/téléchargeable.</summary>
+    /// <summary>True si la ligne est validée par la RH : la fiche est consultable/téléchargeable.</summary>
     public bool CanViewFiche { get; init; }
 }
 

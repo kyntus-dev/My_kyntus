@@ -24,8 +24,8 @@ import { cn } from '@/lib/utils';
       <div class="prime-page-shell">
         <div class="flex justify-between items-center">
           <div>
-            <h1 class="prime-page-title">Prime Types</h1>
-            <p class="text-muted mt-1">Manage bonus categories and definitions.</p>
+            <h1 class="prime-page-title">Types de prime</h1>
+            <p class="text-muted mt-1">Gérer les catégories et définitions de primes.</p>
           </div>
           <button
             type="button"
@@ -33,7 +33,7 @@ import { cn } from '@/lib/utils';
             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
           >
             <app-lucide-icon [icon]="icons.plus" className="w-4 h-4" />
-            New Prime Type
+            Nouveau type de prime
           </button>
         </div>
 
@@ -44,10 +44,10 @@ import { cn } from '@/lib/utils';
             <table class="w-full text-sm text-left">
               <thead class="text-xs text-muted uppercase bg-card border-b border-default">
                 <tr>
-                  <th class="px-6 py-3 font-medium tracking-wider">Name</th>
-                  <th class="px-6 py-3 font-medium tracking-wider">Category</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Nom</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Catégorie</th>
                   <th class="px-6 py-3 font-medium tracking-wider">Département op.</th>
-                  <th class="px-6 py-3 font-medium tracking-wider">Status</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Statut</th>
                   <th class="px-6 py-3 font-medium tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
@@ -55,7 +55,7 @@ import { cn } from '@/lib/utils';
                 @if (filteredTypes().length === 0) {
                   <tr>
                     <td colspan="5" class="px-6 py-8 text-center text-muted">
-                      No data available
+                      Aucune donnée disponible
                     </td>
                   </tr>
                 } @else {
@@ -71,21 +71,21 @@ import { cn } from '@/lib/utils';
                         <span
                           class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-card border border-default text-primary"
                         >
-                          {{ item.type }}
+                          {{ categoryLabel(item.type) }}
                         </span>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-primary">
                         {{ getDeptName(item.departmentId ?? item.poleId) }}
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-primary">
-                        <span [class]="statusBadgeClass(item.status)">{{ item.status }}</span>
+                        <span [class]="statusBadgeClass(item.status)">{{ statusLabel(item.status) }}</span>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-primary text-right">
                         <div class="flex items-center justify-end gap-2">
                           <button
                             type="button"
                             class="p-1.5 text-muted hover:text-blue-500 hover:bg-blue-600/10 rounded-md transition-colors"
-                            title="Edit"
+                            title="Modifier"
                           >
                             <app-lucide-icon [icon]="icons.edit" className="w-4 h-4" />
                           </button>
@@ -93,7 +93,7 @@ import { cn } from '@/lib/utils';
                             <button
                               type="button"
                               class="p-1.5 text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-md transition-colors"
-                              title="Disable"
+                              title="Désactiver"
                             >
                               <app-lucide-icon [icon]="icons.powerOff" className="w-4 h-4" />
                             </button>
@@ -101,7 +101,7 @@ import { cn } from '@/lib/utils';
                             <button
                               type="button"
                               class="p-1.5 text-muted hover:text-emerald-500 hover:bg-emerald-500/10 rounded-md transition-colors"
-                              title="Enable"
+                              title="Activer"
                             >
                               <app-lucide-icon [icon]="icons.power" className="w-4 h-4" />
                             </button>
@@ -109,7 +109,7 @@ import { cn } from '@/lib/utils';
                           <button
                             type="button"
                             class="p-1.5 text-muted hover:text-rose-500 hover:bg-rose-500/10 rounded-md transition-colors"
-                            title="Delete"
+                            title="Supprimer"
                           >
                             <app-lucide-icon [icon]="icons.trash" className="w-4 h-4" />
                           </button>
@@ -126,29 +126,29 @@ import { cn } from '@/lib/utils';
         <app-prime-modal
           [isOpen]="isModalOpen()"
           (onClose)="closeModal()"
-          title="Add Prime Type"
+          title="Ajouter un type de prime"
         >
           <form (ngSubmit)="handleAddType($event)" class="space-y-4">
             <div>
-              <label class="block text-sm font-medium text-muted mb-1">Name</label>
+              <label class="block text-sm font-medium text-muted mb-1">Nom</label>
               <input
                 type="text"
                 class="w-full px-3 py-2 border border-default rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-input text-primary placeholder:text-muted"
-                placeholder="e.g. Performance Bonus"
+                placeholder="Ex. : Prime de performance"
                 required
               />
             </div>
             <div>
-              <label class="block text-sm font-medium text-muted mb-1">Category</label>
+              <label class="block text-sm font-medium text-muted mb-1">Catégorie</label>
               <select
                 class="w-full px-3 py-2 border border-default rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-input text-primary"
                 required
               >
-                <option value="">Select a category</option>
+                <option value="">Sélectionner une catégorie</option>
                 <option value="Performance">Performance</option>
-                <option value="Quality">Quality</option>
-                <option value="Attendance">Attendance</option>
-                <option value="Exceptional">Exceptional</option>
+                <option value="Quality">Qualité</option>
+                <option value="Attendance">Assiduité</option>
+                <option value="Exceptional">Exceptionnelle</option>
               </select>
             </div>
             <div>
@@ -157,7 +157,7 @@ import { cn } from '@/lib/utils';
                 class="w-full px-3 py-2 border border-default rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-input text-primary"
                 required
               >
-                <option value="">Select a department</option>
+                <option value="">Sélectionner un département</option>
                 @for (d of departments(); track d.id) {
                   <option [value]="d.id">{{ d.name }}</option>
                 }
@@ -168,7 +168,7 @@ import { cn } from '@/lib/utils';
               <textarea
                 rows="3"
                 class="w-full px-3 py-2 border border-default rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-input text-primary placeholder:text-muted"
-                placeholder="Brief description of this bonus type..."
+                placeholder="Brève description de ce type de prime…"
               ></textarea>
             </div>
             <div class="pt-4 flex justify-end gap-3">
@@ -177,13 +177,13 @@ import { cn } from '@/lib/utils';
                 (click)="closeModal()"
                 class="px-4 py-2 text-primary hover:bg-app rounded-lg font-medium transition-colors border border-default"
               >
-                Cancel
+                Annuler
               </button>
               <button
                 type="submit"
                 class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm"
               >
-                Save Prime Type
+                Enregistrer le type de prime
               </button>
             </div>
           </form>
@@ -244,7 +244,24 @@ export class PrimeTypesPageComponent implements OnInit {
   }
 
   getDeptName(id: string): string {
-    return this.departments().find((d) => d.id === id)?.name ?? 'Unknown';
+    return this.departments().find((d) => d.id === id)?.name ?? 'Inconnu';
+  }
+
+  categoryLabel(type: string): string {
+    switch (type) {
+      case 'Quality':
+        return 'Qualité';
+      case 'Attendance':
+        return 'Assiduité';
+      case 'Exceptional':
+        return 'Exceptionnelle';
+      default:
+        return type;
+    }
+  }
+
+  statusLabel(status: PrimeType['status']): string {
+    return status === 'Active' ? 'Actif' : status === 'Inactive' ? 'Inactif' : status;
   }
 
   openModal(): void {

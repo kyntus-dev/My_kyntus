@@ -582,73 +582,17 @@ public sealed class AllowanceRuleEngineService(
     AllowanceRequestService requests,
     AllowanceScopeService scope)
 {
+    // Conservés pour la future implémentation Phase 4 (éligibilité Planning/Congés).
     private static readonly HashSet<string> PlanningTypeCodes = ["HOURS_OT", "HOURS_NIGHT"];
     private static readonly HashSet<string> CongesTypeCodes = ["ATTENDANCE"];
 
-    /// <summary>Phase 4 — génère des propositions Draft à partir des règles actives (Planning/Congés).</summary>
-    public async Task<int> GenerateProposalsAsync(string period, string businessDepartmentId, string actorUserId, CancellationToken ct)
+    /// <summary>Phase 4 — désactivé tant que l’éligibilité Planning/Congés n’est pas branchée.</summary>
+    public Task<int> GenerateProposalsAsync(string period, string businessDepartmentId, string actorUserId, CancellationToken ct)
     {
-        var rules = await db.AllowanceRules.AsNoTracking()
-            .Include(r => r.AllowanceType)
-            .Where(r => r.IsActive && r.BusinessDepartmentId == businessDepartmentId)
-            .ToListAsync(ct);
-        if (rules.Count == 0) return 0;
-
-        var managedIds = await scope.GetDirectReportIdsAsync(actorUserId, ct);
-        if (managedIds.Count == 0) return 0;
-
-        var employees = await db.Employees.AsNoTracking()
-            .Where(e => e.BusinessDepartmentId == businessDepartmentId
-                        && e.BusinessDepartmentKind == "Support"
-                        && managedIds.Contains(e.Id))
-            .ToListAsync(ct);
-
-        var created = 0;
-        foreach (var rule in rules)
-        {
-            if (!MatchesDataSource(rule)) continue;
-
-            foreach (var emp in employees)
-            {
-                if (!await EmployeeEligibleForRuleAsync(emp.Id, rule, period, ct)) continue;
-
-                if (await db.AllowanceRequests.AnyAsync(r =>
-                        r.EmployeeId == emp.Id && r.Period == period && r.AllowanceTypeId == rule.AllowanceTypeId
-                        && r.Status != AllowanceRequestStatuses.Rejected, ct))
-                    continue;
-
-                var amount = rule.AllowanceType.DefaultAmount ?? 0m;
-                if (amount <= 0) continue;
-
-                await requests.CreateAsync(actorUserId, new CreateAllowanceRequestBody
-                {
-                    EmployeeId = emp.Id,
-                    AllowanceTypeId = rule.AllowanceTypeId,
-                    Period = period,
-                    Amount = amount,
-                    Reason = $"Proposition auto ({rule.DataSource})",
-                    Source = "Auto",
-                }, ct);
-                created++;
-            }
-        }
-        return created;
+        // Empêche les propositions auto pour tous (EmployeeEligibleForRuleAsync était un stub toujours true).
+        _ = (db, requests, scope, period, businessDepartmentId, actorUserId, ct, PlanningTypeCodes, CongesTypeCodes);
+        return Task.FromResult(0);
     }
-
-    private static bool MatchesDataSource(AllowanceRuleEntity rule)
-    {
-        var code = rule.AllowanceType?.Code ?? "";
-        return rule.DataSource switch
-        {
-            "Planning" => PlanningTypeCodes.Contains(code),
-            "Conges" => CongesTypeCodes.Contains(code),
-            _ => true,
-        };
-    }
-
-    /// <summary>Stub Phase 4 — à enrichir avec appels Planning/Congés réels.</summary>
-    private Task<bool> EmployeeEligibleForRuleAsync(string employeeId, AllowanceRuleEntity rule, string period, CancellationToken ct) =>
-        Task.FromResult(true);
 }
 
 public sealed class AllowanceOperationsAppService(

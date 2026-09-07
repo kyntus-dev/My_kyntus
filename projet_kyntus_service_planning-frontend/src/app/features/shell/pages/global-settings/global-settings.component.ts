@@ -1,14 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { KyntusThemeService } from '../../../../core/theme/kyntus-theme.service';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
+import { personInitials } from '../../../../core/session/person-display-name.util';
 import {
   KyntusUserPreferencesService,
 } from '../../../../core/settings/kyntus-user-preferences.service';
 import type { KyntusNotificationPreferences } from '../../../../core/settings/kyntus-user-preferences.model';
 import { NavigationActionsService } from '../../../../core/navigation/navigation-actions.service';
 import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
-import { Moon, Sun, Shield, ExternalLink } from 'lucide';
+import { DesktopPushService } from '../../../../core/notifications/desktop-push.service';
+import { Moon, Sun, Shield, ExternalLink, Bell } from 'lucide';
 
 interface AdminLink {
   label: string;
@@ -42,17 +44,37 @@ export class GlobalSettingsComponent {
   readonly theme = inject(KyntusThemeService);
   readonly session = inject(KyntusSessionService);
   readonly prefs = inject(KyntusUserPreferencesService);
+  readonly desktopPush = inject(DesktopPushService);
   private readonly nav = inject(NavigationActionsService);
+  private readonly router = inject(Router);
 
-  readonly icons = { moon: Moon, sun: Sun, shield: Shield, external: ExternalLink };
+  readonly icons = { moon: Moon, sun: Sun, shield: Shield, external: ExternalLink, bell: Bell };
   readonly notifPrefLabels = NOTIF_PREF_LABELS;
 
   readonly user = computed(() => this.session.getStoredUser());
   readonly role = computed(() => this.session.getRole());
+  readonly displayName = computed(() => this.session.getDisplayName());
+  readonly initials = computed(() => personInitials(this.user() ?? {}));
 
   readonly adminLinks = computed(() => {
     const role = (this.role() || '').toLowerCase();
     const links: AdminLink[] = [
+      {
+        label: 'Administration globale',
+        description: 'Accès par rôle, organisation et configuration des modules',
+        action: async () => {
+          await this.router.navigateByUrl('/admin');
+        },
+        roles: ['admin', 'rh'],
+      },
+      {
+        label: 'Audit et conformité',
+        description: 'Journal unifié, anomalies et reporting',
+        action: async () => {
+          await this.router.navigateByUrl('/audit');
+        },
+        roles: ['admin', 'audit'],
+      },
       {
         label: 'Configuration PRIME',
         description: 'Règles, workflows et paramètres système PRIME',
@@ -84,8 +106,24 @@ export class GlobalSettingsComponent {
   }
 
   toggleNotifPref(key: keyof KyntusNotificationPreferences): void {
+    if (this.prefs.isLockedPref(key)) return;
     const current = this.prefs.preferences().notifications[key];
     this.prefs.setNotificationPref(key, !current);
+  }
+
+  desktopStatusLabel(): string {
+    switch (this.desktopPush.status()) {
+      case 'subscribed':
+        return 'Activées sur cet appareil';
+      case 'denied':
+        return 'Bloquées par le navigateur';
+      case 'unsupported':
+        return 'Non disponibles sur ce navigateur';
+      case 'ready':
+        return 'Permission accordée — abonnement à confirmer';
+      default:
+        return 'Non activées sur cet appareil';
+    }
   }
 
   async openAdminLink(link: AdminLink): Promise<void> {

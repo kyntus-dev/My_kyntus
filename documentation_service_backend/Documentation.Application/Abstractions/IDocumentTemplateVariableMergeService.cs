@@ -1,3 +1,5 @@
+using Documentation.Domain.Entities;
+
 namespace Documentation.Application.Abstractions;
 
 public interface IDocumentTemplateVariableMergeService
@@ -5,6 +7,13 @@ public interface IDocumentTemplateVariableMergeService
     Task<Dictionary<string, string>> MergeAsync(
         Guid? beneficiaryUserId,
         Guid? documentRequestId,
+        IReadOnlyDictionary<string, string>? source,
+        CancellationToken ct = default);
+
+    Task<DocumentVariableMergeResult> MergeForTemplateAsync(
+        Guid? beneficiaryUserId,
+        Guid? documentRequestId,
+        IReadOnlyList<DocumentTemplateVariable> templateVariables,
         IReadOnlyDictionary<string, string>? source,
         CancellationToken ct = default);
 

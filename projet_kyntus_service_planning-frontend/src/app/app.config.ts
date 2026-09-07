@@ -1,4 +1,6 @@
-import { APP_INITIALIZER, ApplicationConfig } from '@angular/core';
+import { registerLocaleData } from '@angular/common';
+import localeFr from '@angular/common/locales/fr';
+import { APP_INITIALIZER, ApplicationConfig, LOCALE_ID } from '@angular/core';
 import {
   KyntusThemeService,
   kyntusThemeInitFactory,
@@ -15,7 +17,6 @@ import {
   DocumentationIdentityService,
   documentationIdentityInitFactory,
 } from './core/services/documentation-identity.service';
-import { parrainageIdentityInterceptor } from './features/parrainage/interceptors/parrainage-identity.interceptor';
 import { primeIdentityInterceptor } from './features/prime/interceptors/prime-identity.interceptor';
 import {
   KyntusNotificationInitService,
@@ -27,15 +28,19 @@ import {
 } from './core/session/kyntus-idle-logout.service';
 import { EMPLOYEE_IMPORT_HOST } from './features/users/pages/employee-import-guided/employee-import-host.context';
 import { KyntusSessionService } from './core/session/kyntus-session.service';
+import { DirectoryFacadeService } from './core/directory/directory-facade.service';
+
+registerLocaleData(localeFr);
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    { provide: LOCALE_ID, useValue: 'fr-FR' },
     provideRouter(routes),
+    DirectoryFacadeService,
     provideHttpClient(
       withInterceptorsFromDi(),
       withInterceptors([
         primeIdentityInterceptor,
-        parrainageIdentityInterceptor,
       ]),
     ),
     {

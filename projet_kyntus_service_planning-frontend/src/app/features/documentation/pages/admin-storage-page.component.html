@@ -1,12 +1,12 @@
 @if (role$ | async; as role) {
   @if (!isAdmin(role)) {
-    <app-admin-shell title="Storage Configuration" description="Accès refusé pour ce rôle." iconName="hard-drive">
+    <app-admin-shell title="Configuration du stockage" description="Accès refusé pour ce rôle." iconName="hard-drive">
       <div class="card-navy p-6">
         <p class="text-primary">Seul le rôle `Admin` peut modifier la configuration de stockage.</p>
       </div>
     </app-admin-shell>
   } @else if (loading || !draft) {
-    <app-admin-shell title="Storage Configuration" description="Chargement de la configuration…" iconName="hard-drive">
+    <app-admin-shell title="Configuration du stockage" description="Chargement de la configuration…" iconName="hard-drive">
       <div class="card-navy p-6">
         <p class="text-primary">Veuillez patienter.</p>
       </div>

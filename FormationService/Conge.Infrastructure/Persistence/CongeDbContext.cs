@@ -25,5 +25,22 @@ public class CongeDbContext : DbContext, IUnitOfWork
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-           => await base.SaveChangesAsync(cancellationToken);
+    {
+        MarkNewDecisionsAsAdded();
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// DetectChanges traite une entité liée avec Guid déjà généré comme existante (Modified/UPDATE).
+    /// Les décisions sont immuables : Modified = ligne neuve → INSERT.
+    /// </summary>
+    private void MarkNewDecisionsAsAdded()
+    {
+        ChangeTracker.DetectChanges();
+        foreach (var entry in ChangeTracker.Entries<DemandeCongeDecision>())
+        {
+            if (entry.State == EntityState.Modified)
+                entry.State = EntityState.Added;
+        }
+    }
 }

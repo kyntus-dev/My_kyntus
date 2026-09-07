@@ -295,15 +295,30 @@ public static class PlanningSchemaPatches
 
     public static async Task EnsureUserHtelColumnsAsync(AppDbContext db, CancellationToken ct = default)
     {
+        // Colonnes d'abord, seules : un échec d'index unique ne doit pas rollback l'ALTER
+        // (PostgreSQL exécute un batch multi-statements dans une seule transaction).
         await db.Database.ExecuteSqlRawAsync(
             """
             ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "IdTechnicien" integer NULL;
             ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "HtelCode" character varying(128) NULL;
-            CREATE UNIQUE INDEX IF NOT EXISTS "IX_Users_IdTechnicien"
-                ON "Users" ("IdTechnicien")
-                WHERE "IdTechnicien" IS NOT NULL;
+            ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "HtelTechnicienName" character varying(256) NULL;
             """,
             ct);
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_Users_IdTechnicien"
+                    ON "Users" ("IdTechnicien")
+                    WHERE "IdTechnicien" IS NOT NULL;
+                """,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Index unique Users.IdTechnicien ignoré: {ex.Message}");
+        }
     }
 
     /// <summary>Colonne Users.SaturdayWorkMode (null = défaut Niveau).</summary>
@@ -521,6 +536,35 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>Email expéditeur admin (From + nom affiché) et connexion SMTP admin.</summary>
+    public static async Task EnsurePlanningSenderFromColumnsAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "PlanningAutoGenerateSettings"
+              ADD COLUMN IF NOT EXISTS "SenderFromEmail" character varying(256) NULL;
+            ALTER TABLE "PlanningAutoGenerateSettings"
+              ADD COLUMN IF NOT EXISTS "SenderDisplayName" character varying(128) NULL;
+            ALTER TABLE "PlanningAutoGenerateSettings"
+              ADD COLUMN IF NOT EXISTS "SmtpHost" character varying(256) NULL;
+            ALTER TABLE "PlanningAutoGenerateSettings"
+              ADD COLUMN IF NOT EXISTS "SmtpPort" integer NOT NULL DEFAULT 587;
+            ALTER TABLE "PlanningAutoGenerateSettings"
+              ADD COLUMN IF NOT EXISTS "SmtpUser" character varying(256) NULL;
+            ALTER TABLE "PlanningAutoGenerateSettings"
+              ADD COLUMN IF NOT EXISTS "SmtpPassword" character varying(512) NULL;
+            ALTER TABLE "PlanningAutoGenerateSettings"
+              ADD COLUMN IF NOT EXISTS "SmtpEnableSsl" boolean NOT NULL DEFAULT TRUE;
+            ALTER TABLE "PlanningAutoGenerateSettings"
+              ADD COLUMN IF NOT EXISTS "MailSendMode" character varying(16) NOT NULL DEFAULT 'Smtp';
+            ALTER TABLE "PlanningAutoGenerateSettings"
+              ADD COLUMN IF NOT EXISTS "MailApiProvider" character varying(32) NOT NULL DEFAULT 'Brevo';
+            ALTER TABLE "PlanningAutoGenerateSettings"
+              ADD COLUMN IF NOT EXISTS "MailApiKey" character varying(512) NULL;
+            """,
+            ct);
+    }
+
     /// <summary>
     /// Multi-modes de shifts : profils, flag cellule, FK mode, matrices hebdomadaires.
     /// Idempotent. Convertit le template existant en « Mode par défaut » si multi-mode activé plus tard.
@@ -662,5 +706,67 @@ public static class PlanningSchemaPatches
               ADD COLUMN IF NOT EXISTS "RecipientUserIdsJson" text NULL;
             """,
             ct);
+    }
+
+    /// <summary>Index lecture fréquents (grille, demandes exceptionnelles, users actifs).</summary>
+    public static async Task EnsurePerfIndexesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_ShiftAssignments_WeeklyPlanningId_AssignedDate"
+              ON "ShiftAssignments" ("WeeklyPlanningId", "AssignedDate");
+            CREATE INDEX IF NOT EXISTS "IX_PlanningExceptionalRequests_Status"
+              ON "PlanningExceptionalRequests" ("Status");
+            DO $$ BEGIN
+              IF EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'Users'
+              ) AND EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'Users' AND column_name = 'IsActive'
+              ) THEN
+                CREATE INDEX IF NOT EXISTS "IX_Users_IsActive"
+                  ON "Users" ("IsActive");
+              END IF;
+            END $$;
+            """,
+            ct);
+    }
+
+    /// <summary>
+    /// Shifts samedi optionnels : même Label autorisé weekday + samedi
+    /// (index unique étendu avec AppliesToSaturday).
+    /// </summary>
+    public static async Task EnsureSaturdayShiftConfigColumnAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        // Colonne d'abord, seule : un échec d'index ne doit pas rollback l'ALTER
+        // (PostgreSQL exécute un batch multi-statements dans une seule transaction).
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "SubServiceShiftConfigs"
+              ADD COLUMN IF NOT EXISTS "AppliesToSaturday" boolean NOT NULL DEFAULT false;
+            """,
+            ct);
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                DROP INDEX IF EXISTS "IX_SubServiceShiftConfigs_Template_SubService_Mode_Label";
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_SubServiceShiftConfigs_Template_SubService_Mode_Sat_Label"
+                  ON "SubServiceShiftConfigs" ("SubServiceId", "ShiftModeProfileId", "AppliesToSaturday", "Label")
+                  WHERE "IsTemplate" = TRUE;
+
+                DROP INDEX IF EXISTS "IX_SubServiceShiftConfigs_Snapshot_SubService_Week_Mode_Label";
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_SubServiceShiftConfigs_Snapshot_SubService_Week_Mode_Sat_Label"
+                  ON "SubServiceShiftConfigs" ("SubServiceId", "WeekCode", "ShiftModeProfileId", "AppliesToSaturday", "Label")
+                  WHERE "IsTemplate" = FALSE AND "WeekCode" IS NOT NULL;
+                """,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Index unique AppliesToSaturday ignoré: {ex.Message}");
+        }
     }
 }

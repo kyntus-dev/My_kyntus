@@ -15,11 +15,18 @@ export type PrimeFicheTemplateFormatVersion =
 /** Alias historique (= v1). */
 export const PRIME_FICHE_TEMPLATE_FORMAT_VERSION = PRIME_FICHE_TEMPLATE_FORMAT_V1;
 
+export type PrimeFicheCellValueUnit = 'percent' | 'number';
+
 export interface PrimeFicheCellCapture {
   address: string;
   formula?: string;
   /** Valeur texte ou nombre affiché / figé dans le fichier. */
   defaultValue: string;
+  /**
+   * Unité Excel de la cellule : `percent` = fraction (0.2 = 20 %), `number` = valeur brute
+   * (plafond / montant DH, ou % stockés comme 20).
+   */
+  valueUnit?: PrimeFicheCellValueUnit;
 }
 
 /** KPI additionnel : une colonne après le bloc Prime+Challenge (en-tête = ligne 2 Excel). */
@@ -55,6 +62,8 @@ export interface PrimeFicheTemplateLine {
   bareme: string;
   groupe: string;
   repartitionRdv: string;
+  /** Capture Excel de la colonne Répartition (formule / unité %), si présente. */
+  repartitionCell?: PrimeFicheCellCapture;
   secteurs: PrimeFicheTemplateSecteurSlice[];
   /** Ligne 0-based sur la feuille grille (données) — rempli au parse Excel pour réinjection calcSheets. */
   sourceRowIndex?: number;

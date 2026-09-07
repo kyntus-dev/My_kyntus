@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Kyntus.Iam;
+using Kyntus.Identity.Jwt;
 using Kyntus.Messaging.Contracts;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +31,7 @@ public class UserService : IUserService
     private readonly ILogger<UserService> _logger;
     private readonly IEmployeeFieldService _fieldService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IRebacClient _rebac;
 
     public UserService(
            AppDbContext context,
@@ -41,7 +44,8 @@ public class UserService : IUserService
            IConfiguration configuration,
            ILogger<UserService> logger,
            IEmployeeFieldService fieldService,
-           IHttpContextAccessor httpContextAccessor)
+           IHttpContextAccessor httpContextAccessor,
+           IRebacClient rebac)
     {
         _context = context;
         _employePublisher = employePublisher;
@@ -54,6 +58,7 @@ public class UserService : IUserService
         _logger = logger;
         _fieldService = fieldService;
         _httpContextAccessor = httpContextAccessor;
+        _rebac = rebac;
     }
 
     public async Task<List<UserDto>> GetAllUsersAsync()
@@ -61,7 +66,7 @@ public class UserService : IUserService
         var users = await _context.Users
             .Include(u => u.Role)
             .Include(u => u.SubService)
-                .ThenInclude(ss => ss != null ? ss.Service : null!)
+                .ThenInclude(ss => ss!.Service)
                     .ThenInclude(s => s.Floor)
             .Include(u => u.ManagedSubServices)
                 .ThenInclude(us => us.SubService)
@@ -99,7 +104,7 @@ public class UserService : IUserService
         var user = await _context.Users
             .Include(u => u.Role)
             .Include(u => u.SubService)
-                .ThenInclude(ss => ss != null ? ss.Service : null!)
+                .ThenInclude(ss => ss!.Service)
                     .ThenInclude(s => s.Floor)
             .Include(u => u.ManagedSubServices)
                 .ThenInclude(us => us.SubService)
@@ -118,6 +123,19 @@ public class UserService : IUserService
         var orgCtx = await LoadOrgNameContextAsync();
         return ToDto(user, customByUser.GetValueOrDefault(user.Id), orgCtx, hrProfile);
     }
+
+    public async Task<UserDto?> GetUserByGuidAsync(Guid employeeGuid)
+    {
+        if (employeeGuid == Guid.Empty)
+            return null;
+
+        var id = await _context.Users.AsNoTracking()
+            .Where(u => u.Guid == employeeGuid)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync();
+        return id == 0 ? null : await GetUserByIdAsync(id);
+    }
+
     public async Task SyncUserRoleToAuthAsync(int userId, CancellationToken ct = default)
     {
         var user = await _context.Users
@@ -809,7 +827,107 @@ public class UserService : IUserService
             UserId = user.Id,
             Email = user.Email,
             TemporaryPassword = password,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
         };
+    }
+
+    public async Task<ResetPasswordsByGroupResultDto> ResetPasswordsByGroupAsync(
+        ResetPasswordsByGroupRequest request,
+        CancellationToken ct = default)
+    {
+        var scope = (request.Scope ?? string.Empty).Trim();
+        var nodeId = (request.NodeId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(scope) || string.IsNullOrWhiteSpace(nodeId))
+            throw new ArgumentException("Le type de groupe et l’identifiant sont requis.");
+
+        var normalized = scope.ToLowerInvariant() switch
+        {
+            "pole" or "etage" => "Pole",
+            "cellule" => "Cellule",
+            "service" or "sousservice" or "sous-service" => "Service",
+            _ => throw new ArgumentException("Groupe invalide. Utilisez Pole, Cellule ou Service."),
+        };
+
+        var hintGuids = new HashSet<Guid>();
+        foreach (var raw in request.EmployeeGuids ?? [])
+        {
+            if (Guid.TryParse(raw, out var g))
+                hintGuids.Add(g);
+        }
+
+        var query = _context.Users
+            .AsNoTracking()
+            .Include(u => u.Role)
+            .Include(u => u.SubService)!.ThenInclude(s => s!.Service)!.ThenInclude(sv => sv.Floor)
+            .Where(u => u.IsActive && (u.Role == null || u.Role.Name != "Admin"));
+
+        query = normalized switch
+        {
+            "Pole" => query.Where(u =>
+                hintGuids.Contains(u.Guid)
+                || (u.SubService != null
+                    && u.SubService.Service != null
+                    && u.SubService.Service.Floor != null
+                    && u.SubService.Service.Floor.PrimePoleId == nodeId)),
+            "Cellule" => query.Where(u =>
+                hintGuids.Contains(u.Guid)
+                || (u.SubService != null
+                    && u.SubService.Service != null
+                    && u.SubService.Service.PrimeCelluleId == nodeId)),
+            "Service" => query.Where(u =>
+                hintGuids.Contains(u.Guid)
+                || (u.SubService != null && u.SubService.PrimeServiceId == nodeId)),
+            _ => query.Where(_ => false),
+        };
+
+        var matched = await query.ToListAsync(ct);
+
+        const int maxBatch = 200;
+        if (matched.Count > maxBatch)
+            throw new InvalidOperationException(
+                $"Ce groupe contient {matched.Count} employés (max {maxBatch}). Choisissez une cellule ou un service plus petit.");
+
+        var result = new ResetPasswordsByGroupResultDto
+        {
+            Scope = normalized,
+            NodeId = nodeId,
+            TargetedCount = matched.Count,
+        };
+
+        foreach (var user in matched)
+        {
+            try
+            {
+                var reset = await ResetPasswordAsync(user.Id, ct);
+                if (reset is null)
+                {
+                    result.FailedCount++;
+                    result.Errors.Add($"{user.Email} : introuvable.");
+                    continue;
+                }
+
+                result.ResetCount++;
+                result.Items.Add(reset);
+            }
+            catch (Exception ex)
+            {
+                result.FailedCount++;
+                result.Errors.Add($"{user.Email} : {ex.Message}");
+                _logger.LogWarning(ex, "Group password reset failed for {Email}", user.Email);
+            }
+        }
+
+        _logger.LogInformation(
+            "PasswordResetGroup: Scope={Scope} Node={Node} Targeted={Targeted} Reset={Reset} Failed={Failed} Actor={Actor}",
+            normalized,
+            nodeId,
+            result.TargetedCount,
+            result.ResetCount,
+            result.FailedCount,
+            _httpContextAccessor.HttpContext?.User?.Identity?.Name ?? "unknown");
+
+        return result;
     }
 
     private async Task<bool> ResetAuthPasswordAsync(User user, string newPassword, CancellationToken ct)
@@ -1380,10 +1498,13 @@ public class UserService : IUserService
     }
     public async Task<UserDto?> GetUserByAuthIdAsync(int authUserId)
     {
+        if (authUserId <= 0)
+            return null;
+
         var user = await _context.Users
             .Include(u => u.Role)
             .Include(u => u.SubService)
-                .ThenInclude(ss => ss != null ? ss.Service : null)
+                .ThenInclude(ss => ss!.Service)
             .Include(u => u.ManagedSubServices)
                 .ThenInclude(us => us.SubService)
                     .ThenInclude(s => s.Service)
@@ -1410,7 +1531,7 @@ public class UserService : IUserService
         var user = await _context.Users
             .Include(u => u.Role)
             .Include(u => u.SubService)
-                .ThenInclude(ss => ss != null ? ss.Service : null)
+                .ThenInclude(ss => ss!.Service)
             .Include(u => u.ManagedSubServices)
                 .ThenInclude(us => us.SubService)
                     .ThenInclude(s => s.Service)
@@ -1430,7 +1551,7 @@ public class UserService : IUserService
 
     public async Task<UserDto?> GetOrLinkUserForAuthAsync(int authUserId, string? email)
     {
-        var user = await GetUserByAuthIdAsync(authUserId);
+        var user = authUserId > 0 ? await GetUserByAuthIdAsync(authUserId) : null;
         if (user is not null)
             return user;
 
@@ -1443,7 +1564,7 @@ public class UserService : IUserService
         if (row is null)
             return null;
 
-        if (row.AuthUserId != authUserId)
+        if (authUserId > 0 && row.AuthUserId != authUserId)
         {
             row.AuthUserId = authUserId;
             await _context.SaveChangesAsync();
@@ -1451,7 +1572,7 @@ public class UserService : IUserService
                 authUserId, row.Email, row.Id);
         }
 
-        return await GetUserByAuthIdAsync(authUserId)
+        return (authUserId > 0 ? await GetUserByAuthIdAsync(authUserId) : null)
             ?? await GetUserByEmailAsync(email);
     }
 
@@ -1465,6 +1586,16 @@ public class UserService : IUserService
         var linked = await GetOrLinkUserForAuthAsync(authUserId, email);
         if (linked is not null)
             return linked;
+
+        if (subjectId is { } sid && sid != Guid.Empty)
+        {
+            var byGuidId = await _context.Users.AsNoTracking()
+                .Where(u => u.Guid == sid)
+                .Select(u => u.Id)
+                .FirstOrDefaultAsync(ct);
+            if (byGuidId > 0)
+                return await GetUserByIdAsync(byGuidId);
+        }
 
         if (authUserId <= 0 || string.IsNullOrWhiteSpace(email))
             return null;
@@ -1692,22 +1823,30 @@ public class UserService : IUserService
 
     private async Task<OrgNameContext> LoadOrgNameContextAsync()
     {
-        var depts = await _directoryOrg.GetOperationalDepartmentsAsync();
-        var poleToDept = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var deptIdToName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var dept in depts)
+        try
         {
-            if (!string.IsNullOrWhiteSpace(dept.Id))
-                deptIdToName[dept.Id.Trim()] = dept.Name?.Trim() ?? dept.Code?.Trim() ?? dept.Id;
-            foreach (var poleId in dept.PoleIds ?? [])
+            var depts = await _directoryOrg.GetOperationalDepartmentsAsync();
+            var poleToDept = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var deptIdToName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var dept in depts)
             {
-                if (string.IsNullOrWhiteSpace(poleId)) continue;
-                poleToDept[poleId.Trim()] = dept.Name?.Trim() ?? dept.Code?.Trim() ?? dept.Id;
+                if (!string.IsNullOrWhiteSpace(dept.Id))
+                    deptIdToName[dept.Id.Trim()] = dept.Name?.Trim() ?? dept.Code?.Trim() ?? dept.Id;
+                foreach (var poleId in dept.PoleIds ?? [])
+                {
+                    if (string.IsNullOrWhiteSpace(poleId)) continue;
+                    poleToDept[poleId.Trim()] = dept.Name?.Trim() ?? dept.Code?.Trim() ?? dept.Id;
+                }
             }
-        }
 
-        var employeeDeptIds = await _directoryOrg.GetEmployeeOperationalBusinessDepartmentIdsAsync();
-        return new OrgNameContext(poleToDept, deptIdToName, employeeDeptIds.ToDictionary(k => k.Key, v => v.Value));
+            var employeeDeptIds = await _directoryOrg.GetEmployeeOperationalBusinessDepartmentIdsAsync();
+            return new OrgNameContext(poleToDept, deptIdToName, employeeDeptIds.ToDictionary(k => k.Key, v => v.Value));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Impossible de charger le contexte org Directory — noms vides.");
+            return EmptyOrgNameContext;
+        }
     }
 
     private static UserDto ToDto(
@@ -1730,18 +1869,22 @@ public class UserService : IUserService
             OrgCelluleName = cellule,
             OrgServiceName = service,
             OrgOperationalDepartmentName = ResolveOperationalDepartmentName(u, orgCtx),
-            ManagedSubServices = u.ManagedSubServices?.Select(us => new SubServiceSimpleDto
-            {
-                Id = us.SubService.Id,
-                Name = us.SubService.Name,
-                ServiceName = us.SubService.Service?.Name ?? string.Empty
-            }).ToList() ?? new(),
-            ManagedServices = u.ManagedServices?.Select(us => new ServiceSimpleDto
-            {
-                Id = us.Service.Id,
-                Name = us.Service.Name,
-                FloorName = us.Service.Floor?.Name ?? string.Empty
-            }).ToList() ?? new(),
+            ManagedSubServices = u.ManagedSubServices?
+                .Where(us => us.SubService != null)
+                .Select(us => new SubServiceSimpleDto
+                {
+                    Id = us.SubService.Id,
+                    Name = us.SubService.Name,
+                    ServiceName = us.SubService.Service?.Name ?? string.Empty
+                }).ToList() ?? new(),
+            ManagedServices = u.ManagedServices?
+                .Where(us => us.Service != null)
+                .Select(us => new ServiceSimpleDto
+                {
+                    Id = us.Service.Id,
+                    Name = us.Service.Name,
+                    FloorName = us.Service.Floor?.Name ?? string.Empty
+                }).ToList() ?? new(),
             FirstName = u.FirstName,
             LastName = u.LastName,
             Email = u.Email,
@@ -2052,40 +2195,77 @@ public class UserService : IUserService
 
         var target = await _context.Users
             .Include(u => u.SubService)
-                .ThenInclude(ss => ss != null ? ss.Service : null!)
+                .ThenInclude(ss => ss!.Service)
             .FirstOrDefaultAsync(u => u.Id == targetUserId, ct);
         if (target is null) return null;
 
         var role = actorRole.Trim();
-        if (!IsHrOrAdminRole(role))
+        if (!ContractualLevelAccess.IsPrivileged(role))
         {
-            var actor = await _context.Users.AsNoTracking()
-                .Include(u => u.ManagedSubServices)
-                    .ThenInclude(us => us.SubService)
-                        .ThenInclude(s => s.Service)
-                .FirstOrDefaultAsync(u => u.Guid == actorSubjectId, ct);
-            if (actor is null)
-                throw new UnauthorizedAccessException();
+            if (!ContractualLevelAccess.IsAllowedOperationalRole(role))
+                throw new UnauthorizedAccessException(ContractualLevelAccess.RoleDeniedMessage);
 
-            if (KyntusRoleNames.IsSuperviseur(role))
+            var actor = await ResolveContractualLevelActorAsync(actorSubjectId, ct);
+            if (actor is null)
+                throw new UnauthorizedAccessException(ContractualLevelAccess.ActorNotFoundMessage);
+
+            var rebacAllowed = false;
+            var rebacUnavailable = false;
+            try
             {
-                if (!await IsUserInSupervisorCelluleAsync(actor, target, ct))
-                    throw new UnauthorizedAccessException();
+                rebacAllowed = await _rebac.CanActOnAsync(actor.Guid, target.Guid, ct);
             }
-            else if (KyntusRoleNames.IsReferentTechnique(role))
+            catch (Exception ex)
             {
-                if (!await IsUserInReferentServiceResponsibilityAsync(actor, target, ct))
-                    throw new UnauthorizedAccessException();
+                rebacUnavailable = true;
+                _logger.LogWarning(ex, "Directory CanActOn indisponible pour le niveau contractuel.");
             }
-            else
-            {
-                throw new UnauthorizedAccessException();
-            }
+
+            var localOk = KyntusRoleNames.IsSuperviseur(role)
+                ? await IsUserInSupervisorCelluleAsync(actor, target, ct)
+                : await IsUserInReferentServiceResponsibilityAsync(actor, target, ct);
+
+            if (!ContractualLevelAccess.AllowUpdate(rebacAllowed, rebacUnavailable, localOk))
+                throw new UnauthorizedAccessException(ContractualLevelAccess.DeniedMessage);
         }
 
         target.Level = level;
         await _context.SaveChangesAsync(ct);
         return await GetUserByIdAsync(targetUserId);
+    }
+
+    private async Task<User?> ResolveContractualLevelActorAsync(Guid actorSubjectId, CancellationToken ct)
+    {
+        var principal = _httpContextAccessor.HttpContext?.User;
+        var jwtEmail = principal.GetEmail();
+        var jwtAuthUserId = principal.GetAuthUserId();
+
+        var query = _context.Users.AsNoTracking()
+            .Include(u => u.SubService)
+                .ThenInclude(ss => ss!.Service)
+            .Include(u => u.ManagedSubServices)
+                .ThenInclude(us => us.SubService)
+                    .ThenInclude(s => s.Service);
+
+        if (jwtAuthUserId is > 0)
+        {
+            var byAuth = await query.FirstOrDefaultAsync(u => u.AuthUserId == jwtAuthUserId, ct);
+            if (byAuth is not null)
+                return byAuth;
+        }
+
+        if (!string.IsNullOrWhiteSpace(jwtEmail))
+        {
+            var needle = jwtEmail.Trim().ToLowerInvariant();
+            var byEmail = await query.FirstOrDefaultAsync(u => u.Email.ToLower() == needle, ct);
+            if (byEmail is not null)
+                return byEmail;
+        }
+
+        if (actorSubjectId != Guid.Empty)
+            return await query.FirstOrDefaultAsync(u => u.Guid == actorSubjectId, ct);
+
+        return null;
     }
 
     private static bool IsHrOrAdminRole(string role) =>
@@ -2211,6 +2391,23 @@ public class UserService : IUserService
     {
         await UpdateUserAsync(planningUserId, previousState);
         await _fieldService.UpsertCustomFieldsAsync(planningUserId, previousCustomFields, isCreate: false);
+    }
+
+    public async Task RestoreSubServicePlacementAsync(int planningUserId, int subServiceId, CancellationToken ct = default)
+    {
+        var user = await _context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == planningUserId, ct);
+        if (user is null)
+            return;
+
+        user.SubServiceId = subServiceId;
+        await _context.SaveChangesAsync(ct);
+
+        if (IsDirectoryWriteMaster())
+            await _directoryEmployeeWrite.TryUpdateEmployeeAsync(user, ct);
+        else
+            await _directoryEmployeeEnsure.TryEnsureFromPlanningAsync(user);
     }
 
     private async Task RollbackImportUserAsync(User user) =>

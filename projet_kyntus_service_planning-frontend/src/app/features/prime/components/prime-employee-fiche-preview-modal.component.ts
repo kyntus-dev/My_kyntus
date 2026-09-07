@@ -36,7 +36,7 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
         (click)="close()"
       >
         <div
-          class="max-w-[min(96vw,1400px)] w-full max-h-[min(90vh,900px)] flex flex-col rounded-xl border border-default bg-input shadow-xl"
+          class="w-[min(98vw,calc(100vw-1.5rem))] max-w-none max-h-[min(92vh,960px)] flex flex-col rounded-xl border border-default bg-input shadow-xl"
           (click)="$event.stopPropagation()"
         >
           <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-default shrink-0">
@@ -56,7 +56,7 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
                 class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-600/20 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-600/30 disabled:opacity-40"
               >
                 <app-lucide-icon [icon]="icons.download" className="w-3.5 h-3.5" />
-                {{ downloadBusy() ? 'Export…' : 'Télécharger .xlsx' }}
+                {{ downloadBusy() ? 'Téléchargement…' : 'Télécharger .xlsx' }}
               </button>
               <button
                 type="button"
@@ -74,7 +74,7 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
           } @else {
             @if (banner()) {
               <div
-                class="mx-4 mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 shrink-0"
+                class="mx-4 mt-3 prime-banner prime-banner--warning rounded-lg px-3 py-2 text-xs shrink-0"
                 role="status"
               >
                 {{ banner() }}
@@ -90,9 +90,9 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
                 }
               </div>
             }
-            <div class="flex-1 min-h-0 overflow-auto p-3">
+            <div class="flex-1 min-h-0 overflow-auto p-3 excel-preview-modal-body">
               @if (previewTpl(); as tpl) {
-                <app-prime-template-preview [tpl]="tpl" />
+                <app-prime-template-preview [tpl]="tpl" [computedRows]="previewRows()" />
               }
             </div>
           }
@@ -119,6 +119,7 @@ export class PrimeEmployeeFichePreviewModalComponent {
   readonly busy = signal(false);
   readonly downloadBusy = signal(false);
   readonly previewTpl = signal<StoredPrimeTemplate | null>(null);
+  readonly previewRows = signal<string[][]>([]);
   readonly errors = signal<string[]>([]);
   readonly banner = signal<string | null>(null);
   readonly canDownload = signal(false);
@@ -156,6 +157,7 @@ export class PrimeEmployeeFichePreviewModalComponent {
   private load(ficheId: string): void {
     this.busy.set(true);
     this.previewTpl.set(null);
+    this.previewRows.set([]);
     this.errors.set([]);
     this.banner.set(null);
     this.canDownload.set(false);
@@ -166,6 +168,7 @@ export class PrimeEmployeeFichePreviewModalComponent {
         this.loadedContext = context;
         this.errors.set(preview.errors);
         if (preview.rows.length || preview.previewTemplate) {
+          this.previewRows.set(preview.rows);
           this.previewTpl.set(
             preview.previewTemplate ??
               toPreviewStoredTemplate(
@@ -177,6 +180,7 @@ export class PrimeEmployeeFichePreviewModalComponent {
               ),
           );
         } else {
+          this.previewRows.set([]);
           this.previewTpl.set(null);
         }
         if (!context.previewAvailable) {
@@ -207,6 +211,7 @@ export class PrimeEmployeeFichePreviewModalComponent {
     this.busy.set(false);
     this.downloadBusy.set(false);
     this.previewTpl.set(null);
+    this.previewRows.set([]);
     this.errors.set([]);
     this.banner.set(null);
     this.canDownload.set(false);

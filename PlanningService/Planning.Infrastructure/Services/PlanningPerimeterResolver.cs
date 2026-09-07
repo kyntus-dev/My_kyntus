@@ -1,3 +1,4 @@
+using Kyntus.Caching;
 using Microsoft.EntityFrameworkCore;
 using Planning.Domain.Entities;
 using Planning.Infrastructure.Persistence;
@@ -14,19 +15,59 @@ public interface IPlanningPerimeterResolver
     Task<HashSet<int>> GetManagedSubServiceIdsAsync(int userId, CancellationToken ct = default);
 }
 
-public sealed class PlanningPerimeterResolver(AppDbContext db) : IPlanningPerimeterResolver
+public sealed class PlanningPerimeterResolver(AppDbContext db, ICacheService? cache = null) : IPlanningPerimeterResolver
 {
     public async Task<HashSet<int>> GetManagedSubServiceIdsAsync(User manager, CancellationToken ct = default)
     {
+        if (cache is null)
+            return (await LoadManagedIdsAsync(manager, ct)).ToHashSet();
+
+        var cached = await cache.GetOrCreateAsync(
+            KyntusCacheKeys.PlanningPerimeter(manager.Id),
+            token => LoadManagedIdsAsync(manager, token),
+            KyntusCacheTtl.Entity,
+            ct);
+        return cached.ToHashSet();
+    }
+
+    public async Task<HashSet<int>> GetManagedSubServiceIdsAsync(int userId, CancellationToken ct = default)
+    {
+        if (cache is null)
+        {
+            var user = await db.Users.AsNoTracking()
+                .Include(u => u.ManagedSubServices)
+                .Include(u => u.ManagedServices)
+                .FirstOrDefaultAsync(u => u.Id == userId, ct);
+            if (user is null) return [];
+            return (await LoadManagedIdsAsync(user, ct)).ToHashSet();
+        }
+
+        var cached = await cache.GetOrCreateAsync(
+            KyntusCacheKeys.PlanningPerimeter(userId),
+            async token =>
+            {
+                var user = await db.Users.AsNoTracking()
+                    .Include(u => u.ManagedSubServices)
+                    .Include(u => u.ManagedServices)
+                    .FirstOrDefaultAsync(u => u.Id == userId, token);
+                if (user is null) return [];
+                return await LoadManagedIdsAsync(user, token);
+            },
+            KyntusCacheTtl.Entity,
+            ct);
+        return cached.ToHashSet();
+    }
+
+    private async Task<List<int>> LoadManagedIdsAsync(User manager, CancellationToken ct)
+    {
         var subServiceIds = manager.ManagedSubServices?
             .Select(s => s.SubServiceId)
-            .ToList() ?? new List<int>();
+            .ToList() ?? [];
 
         var serviceIds = manager.ManagedServices?
             .Select(s => s.ServiceId)
-            .ToList() ?? new List<int>();
+            .ToList() ?? [];
 
-        // Si les navs ne sont pas chargées, recharger depuis la DB.
         if (subServiceIds.Count == 0 && serviceIds.Count == 0)
         {
             subServiceIds = await db.UserSubServices.AsNoTracking()
@@ -48,16 +89,6 @@ public sealed class PlanningPerimeterResolver(AppDbContext db) : IPlanningPerime
             subServiceIds = subServiceIds.Union(fromServices).ToList();
         }
 
-        return subServiceIds.ToHashSet();
-    }
-
-    public async Task<HashSet<int>> GetManagedSubServiceIdsAsync(int userId, CancellationToken ct = default)
-    {
-        var user = await db.Users
-            .Include(u => u.ManagedSubServices)
-            .Include(u => u.ManagedServices)
-            .FirstOrDefaultAsync(u => u.Id == userId, ct);
-        if (user is null) return [];
-        return await GetManagedSubServiceIdsAsync(user, ct);
+        return subServiceIds;
     }
 }

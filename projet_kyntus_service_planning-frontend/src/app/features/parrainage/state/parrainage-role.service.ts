@@ -8,6 +8,11 @@ export class ParrainageRoleService {
   private readonly session = inject(KyntusSessionService);
   readonly user = signal<ParrainageUser>(this.resolveUser());
 
+  /** Réaligne le rôle UI sur le JWT courant (à appeler au boot shell / refresh menu). */
+  syncFromSession(): void {
+    this.user.set(this.resolveUser());
+  }
+
   loginAsRole(role: ParrainageRole): void {
     this.user.set(this.buildUser(role));
   }

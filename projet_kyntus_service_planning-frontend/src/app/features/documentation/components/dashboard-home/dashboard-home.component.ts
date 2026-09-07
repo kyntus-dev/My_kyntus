@@ -1,5 +1,6 @@
 import { CommonModule, NgComponentOutlet } from '@angular/common';
-import { Component, OnDestroy, OnInit, Type, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, Type, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 
 import type { DocumentationRole } from '../../interfaces/documentation-role';
@@ -18,8 +19,6 @@ const DASHBOARD_LOADERS: Partial<Record<DocumentationRole, DashboardLoader>> = {
   RP: () => import('../rp-dashboard/rp-dashboard.component').then((m) => m.RpDashboardComponent),
   Admin: () =>
     import('../admin-dashboard/admin-dashboard.component').then((m) => m.AdminDashboardComponent),
-  Audit: () =>
-    import('../audit-journal-page/audit-journal-page.component').then((m) => m.AuditJournalPageComponent),
 };
 
 @Component({
@@ -35,6 +34,8 @@ export class DashboardHomeComponent implements OnInit, OnDestroy {
 
   private sub?: Subscription;
   private loadToken = 0;
+
+  private readonly router = inject(Router);
 
   constructor(private readonly nav: DocumentationNavigationService) {}
 
@@ -53,6 +54,10 @@ export class DashboardHomeComponent implements OnInit, OnDestroy {
   }
 
   private async loadDashboardForRole(role: DocumentationRole): Promise<void> {
+    if (role === 'Audit') {
+      void this.router.navigate(['/audit'], { queryParams: { section: 'journal', module: 'documentation' } });
+      return;
+    }
     const token = ++this.loadToken;
     const loader = DASHBOARD_LOADERS[role];
     if (!loader) {
@@ -68,8 +73,6 @@ export class DashboardHomeComponent implements OnInit, OnDestroy {
     this.dashboardComponent.set(component);
     if (role === 'Coach' || role === 'Manager' || role === 'RP') {
       this.dashboardInputs.set({ role });
-    } else if (role === 'Audit') {
-      this.dashboardInputs.set({ title: 'Journal d’audit' });
     } else {
       this.dashboardInputs.set({});
     }

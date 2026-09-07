@@ -89,7 +89,27 @@ export interface TemplateVariableDto {
   sourcePriority?: number;
   normalizedName?: string | null;
   rawPlaceholder?: string | null;
+  sourceFieldKey?: string | null;
+  mappingConfidence?: 'high' | 'medium' | 'low' | string | null;
+  mappingConfirmed?: boolean;
+  mappingUnavailable?: boolean;
+  suggestedFieldKey?: string | null;
+  suggestedFieldLabel?: string | null;
+  mappingScore?: number | null;
   sortOrder: number;
+}
+
+export interface TemplateVariableResolutionDto {
+  name: string;
+  formScope: string;
+  sourceFieldKey?: string | null;
+  displayLabel?: string | null;
+  isRequired: boolean;
+  filledFromDb: boolean;
+  needsRhInput: boolean;
+  unavailableMapping: boolean;
+  dbValue?: string | null;
+  resolvedValue: string;
 }
 
 export interface InternalEnginePlaceholderDto {

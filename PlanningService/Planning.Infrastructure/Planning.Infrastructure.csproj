@@ -7,13 +7,16 @@
     <ProjectReference Include="..\..\Kyntus.Iam\Kyntus.Iam.csproj" />
     <ProjectReference Include="..\..\Kyntus.Identity.Jwt\Kyntus.Identity.Jwt.csproj" />
     <ProjectReference Include="..\..\Kyntus.Messaging.Outbox\Kyntus.Messaging.Outbox.csproj" />
+    <ProjectReference Include="..\..\Kyntus.Caching\Kyntus.Caching.csproj" />
+    <ProjectReference Include="..\..\Shared.Kernel\Shared.Kernel.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />
-    <PackageReference Include="MassTransit" Version="8.1.3" />
-    <PackageReference Include="MassTransit.RabbitMQ" Version="8.1.3" />
+    <PackageReference Include="MailKit" Version="4.14.1" />
+    <PackageReference Include="MassTransit" Version="8.3.6" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.6" />
     <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.2.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">

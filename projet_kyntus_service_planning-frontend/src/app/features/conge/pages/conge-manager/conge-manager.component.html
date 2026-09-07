@@ -10,6 +10,10 @@
     </div>
   </app-kyntus-page-header>
 
+  <p class="cm-readonly-hint" *ngIf="!canValidateLeaves()">
+    Consultation uniquement : la validation des congés n’est pas activée pour votre rôle.
+  </p>
+
   <div class="cm-stats-grid">
     <div class="cm-stat-card pending">
       <span class="cm-stat-value">{{ nbActionnable }}</span>

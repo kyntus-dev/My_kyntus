@@ -3,7 +3,6 @@ import type { Employee, Role } from '../models';
 import { PRIME_AUTHORIZED_ROLES } from '../models';
 import {
   employeesForUiRole,
-  employeeMatchesUiRole,
   pickDefaultEmployeeForRole,
   resolveEmployeeForRole,
 } from '../lib/prime-demo-users';
@@ -12,16 +11,13 @@ import { mapJwtRoleToPrimeRole } from '../../../core/session/kyntus-role-ui.conf
 import { findEmployeeByLoginEmail } from '../lib/prime-demo-users';
 import { primeApiGet } from '../services/prime-http';
 
-const ROLE_STORAGE_KEY = 'prime.demoRole';
-const USER_STORAGE_KEY = 'prime.demoUserId';
-
 @Injectable({ providedIn: 'root' })
 export class RoleService {
   private readonly session = inject(KyntusSessionService);
   readonly currentRole = signal<Role>('Superviseur');
   readonly employees = signal<Employee[]>([]);
-  /** Identité démo sélectionnée dans la barre (mode développeur). */
-  readonly selectedUserId = signal<string | null>(RoleService.readStoredUserId());
+  /** Utilisateur courant aligné sur l’email JWT (plus de sessionStorage démo). */
+  readonly selectedUserId = signal<string | null>(null);
 
   readonly employeesForCurrentRole = computed(() =>
     employeesForUiRole(this.employees(), this.currentRole()),
@@ -50,24 +46,19 @@ export class RoleService {
   }
 
   setRole(role: Role): void {
-    this.currentRole.set(role);
-    try {
-      sessionStorage.setItem(ROLE_STORAGE_KEY, role);
-    } catch {
-      /* ignore */
+    // Rôle UI = JWT uniquement en prod ; setRole reste pour compat écrans internes RH.
+    const fromJwt = mapJwtRoleToPrimeRole(this.session.getRole());
+    if (fromJwt && PRIME_AUTHORIZED_ROLES.includes(fromJwt)) {
+      this.currentRole.set(fromJwt);
+    } else {
+      this.currentRole.set(role);
     }
-    this.applyDefaultUserForRole(role);
+    this.applyDefaultUserForRole(this.currentRole());
   }
 
   setUserId(userId: string): void {
     const id = userId.trim();
     this.selectedUserId.set(id || null);
-    try {
-      if (id) sessionStorage.setItem(USER_STORAGE_KEY, id);
-      else sessionStorage.removeItem(USER_STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
   }
 
   /** Rôle par défaut pour l’écran Organisation RH. */
@@ -78,6 +69,12 @@ export class RoleService {
   private applyDefaultUserForRole(role: Role): void {
     const list = this.employees();
     if (list.length === 0) return;
+    const email = this.session.getEmail();
+    const byEmail = email ? findEmployeeByLoginEmail(list, email) : undefined;
+    if (byEmail) {
+      this.setUserId(byEmail.id);
+      return;
+    }
     const picked = pickDefaultEmployeeForRole(list, role);
     if (picked) this.setUserId(picked.id);
   }
@@ -92,36 +89,13 @@ export class RoleService {
       this.setUserId(byEmail.id);
       return;
     }
-    const stored = this.selectedUserId();
-    if (stored && !list.some((e) => e.id === stored)) {
-      try {
-        sessionStorage.removeItem(USER_STORAGE_KEY);
-      } catch {
-        /* ignore */
-      }
-      this.selectedUserId.set(null);
-    }
     const resolved = resolveEmployeeForRole(list, role, this.selectedUserId(), email);
-    if (!stored || stored !== resolved.id) this.setUserId(resolved.id);
+    this.setUserId(resolved.id);
   }
 
   private readInitialRole(): Role {
     const fromJwt = mapJwtRoleToPrimeRole(this.session.getRole());
     if (fromJwt && PRIME_AUTHORIZED_ROLES.includes(fromJwt)) return fromJwt;
-    try {
-      const saved = sessionStorage.getItem(ROLE_STORAGE_KEY) as Role | null;
-      if (saved && PRIME_AUTHORIZED_ROLES.includes(saved)) return saved;
-    } catch {
-      /* ignore */
-    }
     return 'Superviseur';
-  }
-
-  private static readStoredUserId(): string | null {
-    try {
-      return sessionStorage.getItem(USER_STORAGE_KEY);
-    } catch {
-      return null;
-    }
   }
 }

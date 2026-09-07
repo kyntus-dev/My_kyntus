@@ -41,6 +41,8 @@ public static class AuthDatabaseInitializer
         try
         {
             EnsureSubjectIdColumn(db);
+            EnsureAccessAuditTable(db);
+            EnsurePushTables(db);
         }
         catch (Exception ex)
         {
@@ -59,7 +61,8 @@ public static class AuthDatabaseInitializer
                 new Role { Id = 7, Name = "Audit", Description = "Auditeur interne", CreatedAt = DateTime.UtcNow },
                 new Role { Id = 8, Name = "Formateur", Description = "Équipe formation — parcours initiale", CreatedAt = DateTime.UtcNow },
                 new Role { Id = 9, Name = "Superviseur", Description = "Superviseur de cellule PRIME", CreatedAt = DateTime.UtcNow },
-                new Role { Id = 10, Name = "Qualiticien", Description = "Qualiticien — planification formation continue", CreatedAt = DateTime.UtcNow });
+                new Role { Id = 10, Name = "Qualiticien", Description = "Qualiticien — planification formation continue", CreatedAt = DateTime.UtcNow },
+                new Role { Id = 11, Name = "Comptabilité", Description = "Comptabilité — synthèse globale / paiement", CreatedAt = DateTime.UtcNow });
             db.SaveChanges();
             Console.WriteLine("Auth roles seeded.");
         }
@@ -83,6 +86,15 @@ public static class AuthDatabaseInitializer
             EnsureDemoUsers(db, passwordHasher, configuration, subjectIdResolver);
             SyncDemoPasswords(db, passwordHasher, configuration);
             DeactivateLegacyMockUsers(db);
+        }
+
+        try
+        {
+            EnsureComptabiliteRole(db);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WARNING: Comptabilité role seed skipped: {ex.Message}");
         }
 
         try
@@ -142,6 +154,56 @@ public static class AuthDatabaseInitializer
             db.SaveChanges();
             Console.WriteLine($"Auth SubjectId realigned ({changed}).");
         }
+    }
+
+    static void EnsureAccessAuditTable(AuthDbContext db)
+    {
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "AccessAuditEvents" (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "At" timestamp with time zone NOT NULL,
+                "EventType" character varying(32) NOT NULL,
+                "Email" character varying(160) NOT NULL,
+                "UserId" integer NULL,
+                "IpAddress" character varying(64) NULL,
+                "UserAgent" character varying(512) NULL,
+                "Message" character varying(256) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_AccessAuditEvents_At" ON "AccessAuditEvents" ("At");
+            """);
+        Console.WriteLine("Auth access audit table ensured.");
+    }
+
+    static void EnsurePushTables(AuthDbContext db)
+    {
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "PushSubscriptions" (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "AuthUserId" integer NOT NULL,
+                "Endpoint" character varying(1024) NOT NULL,
+                "P256dh" character varying(256) NOT NULL,
+                "Auth" character varying(256) NOT NULL,
+                "UserAgent" character varying(512) NULL,
+                "CreatedAt" timestamp with time zone NOT NULL,
+                "LastSeenAt" timestamp with time zone NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_PushSubscriptions_Endpoint" ON "PushSubscriptions" ("Endpoint");
+            CREATE INDEX IF NOT EXISTS "IX_PushSubscriptions_AuthUserId" ON "PushSubscriptions" ("AuthUserId");
+
+            CREATE TABLE IF NOT EXISTS "PushInboxItems" (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "AuthUserId" integer NOT NULL,
+                "Title" character varying(80) NOT NULL,
+                "Body" character varying(140) NOT NULL,
+                "Tag" character varying(32) NOT NULL,
+                "Url" character varying(200) NOT NULL,
+                "IsRead" boolean NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_PushInboxItems_AuthUserId_CreatedAt"
+                ON "PushInboxItems" ("AuthUserId", "CreatedAt");
+            """);
+        Console.WriteLine("Auth push tables ensured.");
     }
 
     static void EnsureSubjectIdColumn(AuthDbContext db)
@@ -335,6 +397,34 @@ public static class AuthDatabaseInitializer
             throw new InvalidOperationException(
                 $"DemoSeed:Passwords:{roleKey} est requis pour le seed démo (appsettings ou KYNTUS_DEMO_SEED_*).");
         return password;
+    }
+
+    static void EnsureComptabiliteRole(AuthDbContext db)
+    {
+        var role = db.Roles.FirstOrDefault(r => r.Name == "Comptabilité")
+                   ?? db.Roles.FirstOrDefault(r => r.Name == "Comptable");
+        if (role == null)
+        {
+            var nextId = (db.Roles.Max(r => (int?)r.Id) ?? 0) + 1;
+            db.Roles.Add(new Role
+            {
+                Id = nextId,
+                Name = "Comptabilité",
+                Description = "Comptabilité — synthèse globale / paiement",
+                CreatedAt = DateTime.UtcNow,
+            });
+            db.SaveChanges();
+            Console.WriteLine("Auth role Comptabilité added.");
+            return;
+        }
+
+        if (role.Name == "Comptable")
+        {
+            role.Name = "Comptabilité";
+            role.Description = "Comptabilité — synthèse globale / paiement";
+            db.SaveChanges();
+            Console.WriteLine("Auth role Comptable renamed to Comptabilité.");
+        }
     }
 
     static void EnsureSuperviseurAccount(

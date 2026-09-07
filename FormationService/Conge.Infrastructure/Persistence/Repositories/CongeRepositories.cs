@@ -74,7 +74,18 @@ public class DemandeCongeRepository : IDemandeCongeRepository
         => await _context.DemandeConges.AddAsync(demande, ct);
 
     public void Update(DemandeConge demande)
-        => _context.DemandeConges.Update(demande);
+    {
+        var entry = _context.Entry(demande);
+        if (entry.State == EntityState.Detached)
+            _context.Attach(demande);
+
+        foreach (var decision in demande.Decisions)
+        {
+            var dEntry = _context.Entry(decision);
+            if (dEntry.State is EntityState.Detached or EntityState.Modified)
+                dEntry.State = EntityState.Added;
+        }
+    }
     public async Task<bool> ExistsCongeEnChevauchementAsync(Guid employeId, DateTime debut, DateTime fin, CancellationToken ct = default)
         => await _context.DemandeConges.AnyAsync(d =>
             d.EmployeId == employeId &&
@@ -253,7 +264,7 @@ public class PeriodeInterditeRepository : IPeriodeInterditeRepository
 
     public async Task<PeriodeInterditeConge> GetOrCreateAsync(CancellationToken ct = default)
     {
-        var row = await _context.PeriodesInterdites.FirstOrDefaultAsync(ct);
+        var row = await FindGeneralAsync(ct);
         if (row is not null) return row;
 
         row = PeriodeInterditeConge.CreerParDefaut();
@@ -262,8 +273,41 @@ public class PeriodeInterditeRepository : IPeriodeInterditeRepository
         return row;
     }
 
+    public async Task<PeriodeInterditeConge?> GetByScopeAsync(
+        string scopeKind,
+        string? scopeId,
+        CancellationToken ct = default)
+    {
+        var kind = PeriodeInterditeScopeKinds.Normalize(scopeKind);
+        var id = PeriodeInterditeScopeKinds.NormalizeScopeId(kind, scopeId);
+        if (kind == PeriodeInterditeScopeKinds.General)
+            return await FindGeneralAsync(ct);
+
+        return await _context.PeriodesInterdites
+            .FirstOrDefaultAsync(p => p.ScopeKind == kind && p.ScopeId == id, ct);
+    }
+
+    public async Task<IReadOnlyList<PeriodeInterditeConge>> GetAllAsync(CancellationToken ct = default)
+        => await _context.PeriodesInterdites.AsNoTracking().ToListAsync(ct);
+
+    public Task AddAsync(PeriodeInterditeConge config, CancellationToken ct = default)
+        => _context.PeriodesInterdites.AddAsync(config, ct).AsTask();
+
     public void Update(PeriodeInterditeConge config)
         => _context.PeriodesInterdites.Update(config);
+
+    public void Remove(PeriodeInterditeConge config)
+        => _context.PeriodesInterdites.Remove(config);
+
+    private async Task<PeriodeInterditeConge?> FindGeneralAsync(CancellationToken ct)
+    {
+        var general = PeriodeInterditeScopeKinds.General;
+        return await _context.PeriodesInterdites.FirstOrDefaultAsync(
+            p => p.ScopeKind == general && (p.ScopeId == null || p.ScopeId == ""),
+            ct)
+            ?? await _context.PeriodesInterdites.FirstOrDefaultAsync(
+                p => p.Id == PeriodeInterditeConge.GeneralId, ct);
+    }
 }
 
 public class QuotaCongeServiceRepository : IQuotaCongeServiceRepository

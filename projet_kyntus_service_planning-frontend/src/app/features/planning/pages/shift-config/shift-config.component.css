@@ -1057,3 +1057,38 @@
   }
 }
 
+.saturday-toggle {
+  margin: 16px 4px 0;
+}
+
+.saturday-hint {
+  display: block;
+  margin: 4px 4px 8px;
+  max-width: 52rem;
+}
+
+.saturday-card {
+  border-color: color-mix(in srgb, var(--blue-600) 22%, var(--border-color));
+}
+
+.saturday-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.saturday-help {
+  margin: 0 16px 8px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.saved-sat-title {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--blue-600);
+}
+

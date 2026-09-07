@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Prime.Application.Abstractions;
 using Prime.Application.LegacyRead;
@@ -8,6 +9,8 @@ namespace Prime.API.Controllers;
 
 [ApiController]
 [Route("api/audit")]
+[Authorize(Roles = "Admin,Audit")]
+[Obsolete("Utiliser /api/prime/admin/audit-logs et /api/prime/admin/anomalies.")]
 public sealed class AuditPrimeController(IMediator mediator, IPrimeAdminReadAppService? admin) : ControllerBase
 {
     [HttpGet("dashboard")]

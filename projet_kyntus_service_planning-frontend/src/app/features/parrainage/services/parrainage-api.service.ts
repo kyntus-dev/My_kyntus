@@ -334,7 +334,11 @@ export class ParrainageApiService {
   }
 
   async addAudit(entry: { action: string; userId?: string; userLabel?: string; details?: string }): Promise<void> {
-    await firstValueFrom(this.http.post<void>(`${PREFIX}/audit`, entry));
+    try {
+      await firstValueFrom(this.http.post<void>(`${PREFIX}/audit`, entry));
+    } catch {
+      /* écriture réservée Admin — le métier continue d’auditer côté serveur */
+    }
   }
 
   async getAnomalies(): Promise<AnomaliesResult> {

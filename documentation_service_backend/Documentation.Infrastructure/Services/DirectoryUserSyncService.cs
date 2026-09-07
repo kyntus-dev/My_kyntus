@@ -1,3 +1,4 @@
+using Documentation.Infrastructure.Context;
 using Documentation.Infrastructure.Persistence;
 using Documentation.Domain.Entities;
 using Kyntus.Messaging.Contracts;
@@ -34,7 +35,7 @@ public sealed class DirectoryUserSyncService(
         bool skipOrgStructureFields,
         CancellationToken ct)
     {
-        var tenantId = configuration["Documentation:DefaultTenantId"] ?? "atlas-tech-demo";
+        var tenantId = DocumentationTenantAccessor.ResolveConfiguredDefault(configuration);
         var email = msg.Email.Trim().ToLowerInvariant();
         var roleName = KyntusPortalRoleMapping.ToDocumentationRoleName(msg.Role);
         if (!Enum.TryParse<AppRole>(roleName, ignoreCase: true, out var appRole))
@@ -129,7 +130,7 @@ public sealed class DirectoryUserSyncService(
         if (msg.IsDeleted)
             return;
 
-        var tenantId = configuration["Documentation:DefaultTenantId"] ?? "atlas-tech-demo";
+        var tenantId = DocumentationTenantAccessor.ResolveConfiguredDefault(configuration);
         var row = await db.DirectoryUsers.FirstOrDefaultAsync(
             u => u.TenantId == tenantId && u.Id == msg.EmployeeId, ct);
         if (row is null)
@@ -153,7 +154,7 @@ public sealed class DirectoryUserSyncService(
         if (msg.Removed || string.IsNullOrWhiteSpace(msg.EmployeeId))
             return;
 
-        var tenantId = configuration["Documentation:DefaultTenantId"] ?? "atlas-tech-demo";
+        var tenantId = DocumentationTenantAccessor.ResolveConfiguredDefault(configuration);
         var roleName = !string.IsNullOrWhiteSpace(msg.NewRole)
             ? msg.NewRole
             : msg.Kind switch
@@ -221,7 +222,7 @@ public sealed class DirectoryUserSyncService(
 
     public async Task UpsertOrganisationUnitAsync(OrgNodeCreatedMessage msg, CancellationToken ct)
     {
-        var tenantId = configuration["Documentation:DefaultTenantId"] ?? "atlas-tech-demo";
+        var tenantId = DocumentationTenantAccessor.ResolveConfiguredDefault(configuration);
         var id = KyntusStableGuid.FromPrimeOrgId(msg.NodeId);
         var unitType = msg.Level switch
         {

@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { describe, expect, it } from 'vitest';
 import { emptySecteurPairValues } from '../models/prime-fiche-ligne.model';
 import { PRIME_FICHE_TEMPLATE_FORMAT_V1, PRIME_FICHE_TEMPLATE_FORMAT_V2 } from '../models/prime-fiche-template.schema';
 import {
@@ -68,7 +69,7 @@ describe('parsePrimeFicheGrid', () => {
     expect(res.schema?.templateFormatVersion).toBe(PRIME_FICHE_TEMPLATE_FORMAT_V2);
     expect(res.schema?.lines.length).toBe(1);
     expect(res.schema?.lines[0].stableId).toBe('v2:row:3');
-    expect(res.schema?.lines[0].repartitionRdv).toBe('12%');
+    expect(res.schema?.lines[0].repartitionRdv).toBe('0.12');
   });
 
   it('v2: ignores single blank rows between data blocks (new contract section)', () => {
@@ -225,5 +226,19 @@ describe('parsePrimeFicheGrid', () => {
     expect(defaults.bonusAtteintChallenge).toBe('');
     expect(defaults.montantChallenge).toBe('');
     expect(validateSecteurCoreFields(defaults, 0)).toBeNull();
+  });
+
+  it('capture la formule Montant et l’unité % de la pondération', () => {
+    const ws = buildMinimalValidGridSheet();
+    ws['L3'] = { t: 'n', v: 0, f: 'G3*J3' };
+    ws['J3'] = { t: 'n', v: 0.2, z: '0.00%', w: '20.00%' };
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Fiche');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+    const res = parsePrimeFicheGrid('formula.xlsx', buf);
+    expect(res.diagnostics.errors.length).toBe(0);
+    const sect = res.schema!.lines[0].secteurs[0];
+    expect(sect.cells?.montantPrime?.formula).toBeTruthy();
+    expect(sect.cells?.ponderationPrime?.valueUnit).toBe('percent');
   });
 });

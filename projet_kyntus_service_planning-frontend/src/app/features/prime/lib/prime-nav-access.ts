@@ -43,8 +43,8 @@ export function isPrimePathAllowedForRole(
     return false;
   }
 
-  if (path === '/global-pool' && !['Admin', 'RH', 'Manager', 'Comptabilité'].includes(role)) return false;
-  if (path === '/synthesis-tracking' && !['Admin', 'RH', 'Manager'].includes(role)) return false;
+  if (path === '/global-pool' && !['Admin', 'RH', 'Comptabilité'].includes(role)) return false;
+  if (path === '/synthesis-tracking' && !['Admin', 'RH'].includes(role)) return false;
   return true;
 }
 

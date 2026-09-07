@@ -25,6 +25,8 @@ export const DASHBOARD_ROUTES = {
   prime: '/prime',
   parrainage: '/parrainage',
   documentation: '/documentation',
+  admin: '/admin',
+  audit: '/audit',
 } as const;
 
 /** Cible de navigation profonde depuis le tableau de bord global. */
@@ -69,11 +71,18 @@ export function parrainageRhManagementTarget(): DashboardNavTarget {
 }
 
 export function primeAdminAnomaliesTarget(): DashboardNavTarget {
-  return { route: DASHBOARD_ROUTES.prime, primeAdminSection: 'anomalies' };
+  return { route: DASHBOARD_ROUTES.admin, queryParams: { section: 'anomalies' } };
 }
 
 export function primeAuditAnomaliesTarget(): DashboardNavTarget {
-  return { route: DASHBOARD_ROUTES.prime, primeAuditSection: 'anomalies' };
+  return { route: DASHBOARD_ROUTES.audit, queryParams: { section: 'anomalies', module: 'prime' } };
+}
+
+export function platformAuditJournalTarget(module?: string): DashboardNavTarget {
+  return {
+    route: DASHBOARD_ROUTES.audit,
+    queryParams: module ? { section: 'journal', module } : { section: 'journal' },
+  };
 }
 
 export function dashboardNavAction(

@@ -237,7 +237,7 @@ export class NotificationDataService {
     if (!this.pollingStarted) {
       this.pollingStarted = true;
       this.subscriptions.add(this.identity.contextRevision$.subscribe(() => this.reloadFromApi()));
-      this.subscriptions.add(interval(120_000).subscribe(() => this.reloadFromApi()));
+      this.subscriptions.add(interval(300_000).subscribe(() => this.reloadFromApi()));
     }
     this.reloadFromApi();
   }
@@ -304,9 +304,9 @@ export class NotificationDataService {
   }
 
   private effectiveRole(): string {
-    const fromIdentity = this.identity.getCurrentRole();
-    if (fromIdentity) return fromIdentity;
-    return mapJwtRoleToDocumentationRole(this.session.getRole()).toLowerCase();
+    const fromJwt = mapJwtRoleToDocumentationRole(this.session.getRole()).toLowerCase();
+    if (fromJwt) return fromJwt;
+    return this.identity.getCurrentRole();
   }
 
   private persistRead(): void {

@@ -19,41 +19,60 @@ public static class PlanningStartup
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var maxRetries = 10;
+            var canConnect = false;
             for (var i = 0; i < maxRetries; i++)
             {
                 try
                 {
-                    await db.Database.MigrateAsync();
-                    await PlanningSchemaPatches.EnsureOutboxTableAsync(db);
-                    await PlanningSchemaPatches.EnsurePlanningNotificationsTableAsync(db);
-                    await PlanningSchemaPatches.EnsureUserHrProfilesTableAsync(db);
-                    await PlanningSchemaPatches.EnsureDateDebutFormationColumnAsync(db);
-                    await PlanningSchemaPatches.EnsureNumeroCarteAutoentrepreneurColumnAsync(db);
-                    await PlanningSchemaPatches.EnsureEmailPersonnelColumnAsync(db);
-                    await PlanningSchemaPatches.EnsureCongeSourceDemandeIdColumnAsync(db);
-                    await PlanningSchemaPatches.EnsureShiftTemplateAndValidationSchemaAsync(db);
-                    await PlanningSchemaPatches.EnsureShiftKindColumnAsync(db);
-                    await PlanningSchemaPatches.EnsureBreakSlotsAndCriticalCellAsync(db);
-                    await PlanningSchemaPatches.EnsurePlanningChangeRequestsTableAsync(db);
-                    await PlanningSchemaPatches.EnsurePlanningExceptionalRequestsTableAsync(db);
-                    await PlanningSchemaPatches.EnsureShiftAssignmentExceptionalFlagAsync(db);
-                    await PlanningSchemaPatches.EnsurePlanningReinforcementRequestsTableAsync(db);
-                    await PlanningSchemaPatches.EnsurePendingRequestReminderColumnsAsync(db);
-                    await PlanningSchemaPatches.EnsureEmployeeImportSourceFileColumnsAsync(db);
-                    await PlanningSchemaPatches.EnsureUserHtelColumnsAsync(db);
-                    await PlanningSchemaPatches.EnsureUserSaturdayWorkModeColumnAsync(db);
-                    await PlanningSchemaPatches.EnsureUserSpecialCaseColumnsAsync(db);
-                    await PlanningSchemaPatches.EnsureUserPlateauTrainingColumnAsync(db);
-                    await PlanningSchemaPatches.EnsureShiftModeProfilesSchemaAsync(db);
-                    await PlanningSchemaPatches.EnsureMediaAndTicketCommentsAsync(db);
-                    Console.WriteLine("✅ Migrations appliquées avec succès.");
-                    break;
+                    canConnect = await db.Database.CanConnectAsync();
+                    if (canConnect)
+                        break;
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"⏳ Attente DB... tentative {i + 1}/{maxRetries}: {ex.Message}");
-                    Thread.Sleep(3000);
                 }
+
+                Thread.Sleep(3000);
+            }
+
+            if (canConnect)
+            {
+                try
+                {
+                    await db.Database.MigrateAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"⚠️ MigrateAsync ignoré (patches SQL suivent): {ex.Message}");
+                }
+
+                await TryPatch("outbox", () => PlanningSchemaPatches.EnsureOutboxTableAsync(db));
+                await TryPatch("planning-notifications", () => PlanningSchemaPatches.EnsurePlanningNotificationsTableAsync(db));
+                await TryPatch("user-hr-profiles", () => PlanningSchemaPatches.EnsureUserHrProfilesTableAsync(db));
+                await TryPatch("date-debut-formation", () => PlanningSchemaPatches.EnsureDateDebutFormationColumnAsync(db));
+                await TryPatch("numero-carte-autoentrepreneur", () => PlanningSchemaPatches.EnsureNumeroCarteAutoentrepreneurColumnAsync(db));
+                await TryPatch("email-personnel", () => PlanningSchemaPatches.EnsureEmailPersonnelColumnAsync(db));
+                await TryPatch("conge-source-demande", () => PlanningSchemaPatches.EnsureCongeSourceDemandeIdColumnAsync(db));
+                await TryPatch("shift-template", () => PlanningSchemaPatches.EnsureShiftTemplateAndValidationSchemaAsync(db));
+                await TryPatch("shift-kind", () => PlanningSchemaPatches.EnsureShiftKindColumnAsync(db));
+                await TryPatch("break-slots", () => PlanningSchemaPatches.EnsureBreakSlotsAndCriticalCellAsync(db));
+                await TryPatch("planning-change-requests", () => PlanningSchemaPatches.EnsurePlanningChangeRequestsTableAsync(db));
+                await TryPatch("planning-exceptional-requests", () => PlanningSchemaPatches.EnsurePlanningExceptionalRequestsTableAsync(db));
+                await TryPatch("shift-assignment-exceptional", () => PlanningSchemaPatches.EnsureShiftAssignmentExceptionalFlagAsync(db));
+                await TryPatch("planning-reinforcement-requests", () => PlanningSchemaPatches.EnsurePlanningReinforcementRequestsTableAsync(db));
+                await TryPatch("pending-request-reminders", () => PlanningSchemaPatches.EnsurePendingRequestReminderColumnsAsync(db));
+                await TryPatch("planning-sender-from", () => PlanningSchemaPatches.EnsurePlanningSenderFromColumnsAsync(db));
+                await TryPatch("employee-import-source-file", () => PlanningSchemaPatches.EnsureEmployeeImportSourceFileColumnsAsync(db));
+                await TryPatch("user-htel", () => PlanningSchemaPatches.EnsureUserHtelColumnsAsync(db));
+                await TryPatch("user-saturday-work-mode", () => PlanningSchemaPatches.EnsureUserSaturdayWorkModeColumnAsync(db));
+                await TryPatch("user-special-case", () => PlanningSchemaPatches.EnsureUserSpecialCaseColumnsAsync(db));
+                await TryPatch("user-plateau-training", () => PlanningSchemaPatches.EnsureUserPlateauTrainingColumnAsync(db));
+                await TryPatch("shift-mode-profiles", () => PlanningSchemaPatches.EnsureShiftModeProfilesSchemaAsync(db));
+                await TryPatch("saturday-shift-config", () => PlanningSchemaPatches.EnsureSaturdayShiftConfigColumnAsync(db));
+                await TryPatch("media-ticket-comments", () => PlanningSchemaPatches.EnsureMediaAndTicketCommentsAsync(db));
+                await TryPatch("perf-indexes", () => PlanningSchemaPatches.EnsurePerfIndexesAsync(db));
+                Console.WriteLine("✅ Patches schéma Planning appliqués.");
             }
         }
 
@@ -135,5 +154,17 @@ public static class PlanningStartup
                 }
             });
         });
+    }
+
+    private static async Task TryPatch(string name, Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Patch {name} ignoré: {ex.Message}");
+        }
     }
 }

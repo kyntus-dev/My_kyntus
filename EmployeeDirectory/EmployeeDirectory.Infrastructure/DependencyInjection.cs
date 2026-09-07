@@ -4,6 +4,7 @@ using EmployeeDirectory.Infrastructure.Messaging;
 using EmployeeDirectory.Infrastructure.Messaging.Consumers;
 using EmployeeDirectory.Infrastructure.Persistence;
 using EmployeeDirectory.Infrastructure.Services;
+using Kyntus.Caching;
 using Kyntus.Iam;
 using Kyntus.Messaging.Outbox;
 using MassTransit;
@@ -24,12 +25,23 @@ public static class DependencyInjection
         var useSqlite = conn.StartsWith("DataSource=", StringComparison.OrdinalIgnoreCase)
             || string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Testing", StringComparison.OrdinalIgnoreCase);
 
+        services.AddSingleton<SlowQueryCommandInterceptor>();
         if (useSqlite)
-            services.AddDbContext<DirectoryDbContext>(o => o.UseSqlite(conn));
+            services.AddDbContext<DirectoryDbContext>((sp, o) =>
+            {
+                o.UseSqlite(conn);
+                o.AddInterceptors(sp.GetRequiredService<SlowQueryCommandInterceptor>());
+            });
         else
-            services.AddDbContext<DirectoryDbContext>(o => o.UseNpgsql(conn));
+            services.AddDbContext<DirectoryDbContext>((sp, o) =>
+            {
+                o.UseNpgsql(conn);
+                o.AddInterceptors(sp.GetRequiredService<SlowQueryCommandInterceptor>());
+            });
         services.AddKyntusOutbox<DirectoryDbContext>();
         services.AddKyntusIam();
+        services.AddKyntusCaching(configuration);
+        services.AddScoped<IDirectoryCacheInvalidator, DirectoryCacheInvalidator>();
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<DirectoryDbContext>());
 
         services.AddScoped<IDirectoryReadService, DirectoryReadService>();
@@ -55,6 +67,7 @@ public static class DependencyInjection
         services.AddScoped<DirectoryHierarchyService>();
         services.AddScoped<IOrgResponsibilityResolver, OrgResponsibilityResolver>();
         services.AddScoped<IIamReadService, DirectoryIamReadService>();
+        services.AddScoped<IIamAdminService, DirectoryIamAdminService>();
         services.AddScoped<IPermissionCatalog, DirectoryIamReadService>();
         services.AddScoped<IRebacClient, DirectoryIamReadService>();
 

@@ -1,4 +1,5 @@
 ﻿using Conge.Application.DTOs;
+using Conge.Application.Services;
 using Conge.Domain.Enums;
 using Conge.Domain.Interfaces;
 using Kyntus.Iam;
@@ -12,14 +13,17 @@ public class GetDemandesByManagerHandler
     private readonly IDemandeCongeRepository _demandeRepo;
     private readonly IEmployeSnapshotRepository _employeRepo;
     private readonly IRebacClient? _rebac;
+    private readonly CongeValidationFinalizer _finalizer;
 
     public GetDemandesByManagerHandler(
         IDemandeCongeRepository demandeRepo,
         IEmployeSnapshotRepository employeRepo,
+        CongeValidationFinalizer finalizer,
         IRebacClient? rebac = null)
     {
         _demandeRepo = demandeRepo;
         _employeRepo = employeRepo;
+        _finalizer = finalizer;
         _rebac = rebac;
     }
 
@@ -34,8 +38,18 @@ public class GetDemandesByManagerHandler
         IEnumerable<Domain.Entities.DemandeConge> demandes;
         if (IsRhOrAdmin(manager.Role))
         {
-            // File RH : en attente de validation RH
-            demandes = await _demandeRepo.GetByStatutAsync(StatutDemande.EnAttenteRh, ct);
+            var rhStep = await _finalizer.CollapsePendingRhIfDisabledAsync(ct);
+            if (rhStep)
+            {
+                demandes = await _demandeRepo.GetByStatutAsync(StatutDemande.EnAttenteRh, ct);
+            }
+            else
+            {
+                var year = DateTime.UtcNow.Year;
+                var validees = await _demandeRepo.GetByStatutAsync(StatutDemande.Validee, ct);
+                demandes = validees.Where(d =>
+                    d.DateDemande.Year >= year - 1 || d.DateDebut.Year >= year);
+            }
         }
         else
         {

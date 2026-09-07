@@ -1,0 +1,40 @@
+# Copier vers docker-compose.override.yml (gitignoré) pour activer
+# les seeds event-only en local. Jamais déployer ce fichier sur le serveur.
+# Usage : Copy-Item docker-compose.override.example.yml docker-compose.override.yml
+#         docker compose up -d --build
+
+services:
+  auth-backend:
+    environment:
+      KYNTUS_DEMO_ENRICHMENT: "true"
+      KYNTUS_AUTH_DEMO_AUDIT_SEED: "true"
+
+  planning-backend:
+    environment:
+      KYNTUS_DEMO_ENRICHMENT: "true"
+      KYNTUS_PLANNING_DEMO_SEED: "true"
+
+  formation-backend:
+    environment:
+      KYNTUS_DEMO_ENRICHMENT: "true"
+      KYNTUS_FORMATION_DEMO_SEED: "true"
+
+  documentation-backend:
+    environment:
+      KYNTUS_DEMO_ENRICHMENT: "true"
+      Documentation__DemoDataSeed: "true"
+
+  conge-backend:
+    environment:
+      KYNTUS_DEMO_ENRICHMENT: "true"
+      KYNTUS_CONGE_DEMO_SEED: "true"
+
+  prime-backend:
+    environment:
+      KYNTUS_DEMO_ENRICHMENT: "true"
+      Prime__EnrichDemoData: "true"
+
+  parrainage-backend:
+    environment:
+      KYNTUS_DEMO_ENRICHMENT: "true"
+      Parrainage__SeedDemoData: "true"

@@ -178,6 +178,65 @@ public class EmployeeImportController(IEmployeeImportService importService, IEmp
         return File(file.Content, contentType, file.FileName);
     }
 
+    [HttpPost("history/{jobId:guid}/rollback")]
+    public async Task<ActionResult<EmployeeImportRollbackResultDto>> RollbackJob(Guid jobId, CancellationToken ct)
+    {
+        var denied = DenyUnlessHrOrAdmin();
+        if (denied is not null) return denied;
+
+        try
+        {
+            return Ok(await importService.RollbackJobAsync(jobId, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("history/rollback-by-time")]
+    public async Task<ActionResult<EmployeeImportRollbackResultDto>> RollbackByTime(
+        [FromBody] EmployeeImportRollbackByTimeRequest request,
+        CancellationToken ct)
+    {
+        var denied = DenyUnlessHrOrAdmin();
+        if (denied is not null) return denied;
+
+        if (request is null || request.StartedAt == default)
+            return BadRequest(new { message = "startedAt requis." });
+
+        try
+        {
+            return Ok(await importService.RollbackJobByStartedAtAsync(
+                request.StartedAt,
+                request.FileNameContains,
+                ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("history/{jobId:guid}/restore-placements")]
+    public async Task<ActionResult<EmployeeImportPlacementRestoreResultDto>> RestorePlacements(
+        Guid jobId,
+        [FromQuery] bool dryRun = true,
+        CancellationToken ct = default)
+    {
+        var denied = DenyUnlessHrOrAdmin();
+        if (denied is not null) return denied;
+
+        try
+        {
+            return Ok(await importService.RestorePlacementsAfterImportAsync(jobId, dryRun, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("history/{jobId:guid}/errors.csv")]
     public async Task<IActionResult> ExportErrors(Guid jobId, CancellationToken ct)
     {

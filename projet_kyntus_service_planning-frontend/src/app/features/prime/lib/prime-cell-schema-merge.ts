@@ -286,7 +286,9 @@ export function parseCellSaisieJson(json: string): ParsedCellSaisie {
     const pp = o['plafondPrime'];
     const pc = o['plafondChallenge'];
     if (typeof pp === 'string') out.plafondPrime = pp;
+    else if (typeof pp === 'number' && Number.isFinite(pp)) out.plafondPrime = String(pp);
     if (typeof pc === 'string') out.plafondChallenge = pc;
+    else if (typeof pc === 'number' && Number.isFinite(pc)) out.plafondChallenge = String(pc);
     let sawDynamic = false;
     for (const r of rows) {
       const idRaw = r['indicatorId'];

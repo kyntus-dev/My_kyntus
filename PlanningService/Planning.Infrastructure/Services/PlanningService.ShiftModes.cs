@@ -29,6 +29,12 @@ public partial class PlanningService
             if (mode.Shifts.Count > 8)
                 throw new InvalidOperationException(
                     $"Le mode « {mode.Title} » ne peut pas dépasser 8 shifts.");
+            if (!dto.UseDistinctSaturdayShifts)
+                mode.SaturdayShifts = new List<ShiftConfigItemDto>();
+
+            if (mode.SaturdayShifts is { Count: > 8 })
+                throw new InvalidOperationException(
+                    $"Le mode « {mode.Title} » : le samedi ne peut pas dépasser 8 shifts.");
 
             ValidateModePercentages(mode);
         }
@@ -147,6 +153,7 @@ public partial class PlanningService
                 isTemplate,
                 profile.Id,
                 modeDto.Shifts,
+                modeDto.SaturdayShifts,
                 profile.MinPresencePercent,
                 profile.IsCriticalCell);
         }
@@ -164,9 +171,16 @@ public partial class PlanningService
 
     private static void ValidateModePercentages(ShiftModeProfileSaveDto mode)
     {
-        if (mode.Shifts.Count == 0) return;
+        ValidateShiftPercentList(mode.Title, mode.Shifts);
+        if (mode.SaturdayShifts is { Count: > 0 })
+            ValidateShiftPercentList(mode.Title + " (samedi)", mode.SaturdayShifts);
+    }
 
-        var dupLabels = mode.Shifts
+    private static void ValidateShiftPercentList(string title, List<ShiftConfigItemDto> shifts)
+    {
+        if (shifts.Count == 0) return;
+
+        var dupLabels = shifts
             .Select(s => (s.Label ?? string.Empty).Trim())
             .GroupBy(l => l, StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Count() > 1)
@@ -174,17 +188,17 @@ public partial class PlanningService
             .ToList();
         if (dupLabels.Count > 0)
             throw new InvalidOperationException(
-                $"Le mode « {mode.Title} » : libellés de shift en double ({string.Join(", ", dupLabels)}). Chaque shift d’un mode doit avoir un nom unique.");
+                $"Le mode « {title} » : libellés de shift en double ({string.Join(", ", dupLabels)}). Chaque shift d’un mode doit avoir un nom unique.");
 
-        var missing = mode.Shifts.Where(s => !s.Percentage.HasValue).ToList();
+        var missing = shifts.Where(s => !s.Percentage.HasValue).ToList();
         if (missing.Count > 0)
             throw new InvalidOperationException(
-                $"Le mode « {mode.Title} » : indiquer le pourcentage pour tous les shifts.");
+                $"Le mode « {title} » : indiquer le pourcentage pour tous les shifts.");
 
-        var sum = mode.Shifts.Sum(s => s.Percentage!.Value);
+        var sum = shifts.Sum(s => s.Percentage!.Value);
         if (Math.Abs(sum - 100m) > 0.6m)
             throw new InvalidOperationException(
-                $"Les pourcentages du mode « {mode.Title} » doivent totaliser ~100 % (actuellement {sum}).");
+                $"Les pourcentages du mode « {title} » doivent totaliser ~100 % (actuellement {sum}).");
     }
 
     private async Task UpsertModeShiftConfigsAsync(
@@ -192,6 +206,7 @@ public partial class PlanningService
         bool isTemplate,
         int modeProfileId,
         List<ShiftConfigItemDto> shifts,
+        List<ShiftConfigItemDto>? saturdayShifts,
         int modeMinPresence,
         bool isCriticalCell)
     {
@@ -219,50 +234,57 @@ public partial class PlanningService
             : Math.Clamp(modeMinPresence, 50, 100);
 
         var incoming = new List<(ShiftConfigItemDto Shift, int Index, SubServiceShiftConfig Built)>();
-        for (var i = 0; i < shifts.Count; i++)
+
+        void AddModeIncoming(IReadOnlyList<ShiftConfigItemDto> items, bool saturday)
         {
-            var shift = shifts[i];
-            var startTime = TimeOnly.Parse(shift.StartTime);
-            var breakDuration = shift.BreakDurationMinutes > 0
-                ? shift.BreakDurationMinutes
-                : BreakSlotPlanner.BreakDurationMinutes;
-
-            var breakSlots = BreakSlotPlanner.NormalizeSlots(
-                startTime, isCriticalCell, shift.BreakSlots);
-            var (breakStart, breakEnd) = BreakSlotPlanner.SyncRange(breakSlots, breakDuration);
-
-            var percentage = Math.Round(shift.Percentage ?? 0m, 1);
-
-            incoming.Add((shift, i, new SubServiceShiftConfig
+            for (var i = 0; i < items.Count; i++)
             {
-                SubServiceId = dto.SubServiceId,
-                ShiftModeProfileId = modeProfileId,
-                WeekCode = isTemplate ? null : dto.WeekCode,
-                WeekStartDate = isTemplate ? null : dto.WeekStartDate,
-                IsTemplate = isTemplate,
-                Label = shift.Label,
-                StartTime = startTime,
-                WorkHours = shift.WorkHours,
-                BreakDurationMinutes = breakDuration,
-                BreakRangeStart = breakStart,
-                BreakRangeEnd = breakEnd,
-                BreakSlotsJson = BreakSlotPlanner.SerializeSlots(breakSlots),
-                IsCriticalCell = isCriticalCell,
-                // Multi-mode template : quotas en % ; RequiredCount calculé à la génération.
-                RequiredCount = 0,
-                Percentage = percentage,
-                MinPresencePercent = cellMinPresence,
-                DisplayOrder = shift.DisplayOrder > 0 ? shift.DisplayOrder : i + 1,
-                CreatedAt = DateTime.UtcNow
-            }));
+                var shift = items[i];
+                var startTime = TimeOnly.Parse(shift.StartTime);
+                var breakDuration = shift.BreakDurationMinutes > 0
+                    ? shift.BreakDurationMinutes
+                    : BreakSlotPlanner.BreakDurationMinutes;
+
+                var breakSlots = BreakSlotPlanner.NormalizeSlots(
+                    startTime, isCriticalCell, shift.BreakSlots);
+                var (breakStart, breakEnd) = BreakSlotPlanner.SyncRange(breakSlots, breakDuration);
+
+                var percentage = Math.Round(shift.Percentage ?? 0m, 1);
+
+                incoming.Add((shift, incoming.Count, new SubServiceShiftConfig
+                {
+                    SubServiceId = dto.SubServiceId,
+                    ShiftModeProfileId = modeProfileId,
+                    WeekCode = isTemplate ? null : dto.WeekCode,
+                    WeekStartDate = isTemplate ? null : dto.WeekStartDate,
+                    IsTemplate = isTemplate,
+                    AppliesToSaturday = saturday,
+                    Label = shift.Label,
+                    StartTime = startTime,
+                    WorkHours = shift.WorkHours,
+                    BreakDurationMinutes = breakDuration,
+                    BreakRangeStart = breakStart,
+                    BreakRangeEnd = breakEnd,
+                    BreakSlotsJson = BreakSlotPlanner.SerializeSlots(breakSlots),
+                    IsCriticalCell = isCriticalCell,
+                    RequiredCount = 0,
+                    Percentage = percentage,
+                    MinPresencePercent = cellMinPresence,
+                    DisplayOrder = shift.DisplayOrder > 0 ? shift.DisplayOrder : i + 1,
+                    CreatedAt = DateTime.UtcNow
+                }));
+            }
         }
+
+        AddModeIncoming(shifts, false);
+        AddModeIncoming(saturdayShifts ?? new List<ShiftConfigItemDto>(), true);
 
         var builtList = incoming.Select(x => x.Built).ToList();
         LevelBalanceEvaluator.ApplyShiftKindsFromStartTimes(builtList);
 
         for (var i = 0; i < incoming.Count; i++)
         {
-            var kindRaw = shifts[i].ShiftKind;
+            var kindRaw = incoming[i].Shift.ShiftKind;
             if (!string.IsNullOrWhiteSpace(kindRaw)
                 && Enum.TryParse<ShiftKind>(kindRaw, ignoreCase: true, out var parsed))
             {
@@ -279,7 +301,8 @@ public partial class PlanningService
         {
             var label = item.Built.Label?.Trim() ?? string.Empty;
             var match = unmatchedExisting.FirstOrDefault(e =>
-                string.Equals(e.Label?.Trim(), label, StringComparison.OrdinalIgnoreCase));
+                e.AppliesToSaturday == item.Built.AppliesToSaturday
+                && string.Equals(e.Label?.Trim(), label, StringComparison.OrdinalIgnoreCase));
             if (match == null) continue;
             pairs.Add((match, item.Built));
             unmatchedExisting.Remove(match);
@@ -288,23 +311,35 @@ public partial class PlanningService
 
         foreach (var item in incoming.Where(x => !pairedIncoming.Contains(x.Index)))
         {
-            var match = unmatchedExisting.FirstOrDefault(e => e.DisplayOrder == item.Built.DisplayOrder);
+            var match = unmatchedExisting.FirstOrDefault(e =>
+                e.AppliesToSaturday == item.Built.AppliesToSaturday
+                && e.DisplayOrder == item.Built.DisplayOrder);
             if (match == null) continue;
             pairs.Add((match, item.Built));
             unmatchedExisting.Remove(match);
             pairedIncoming.Add(item.Index);
         }
 
-        var remainingIncoming = incoming.Where(x => !pairedIncoming.Contains(x.Index)).ToList();
-        var byPos = Math.Min(remainingIncoming.Count, unmatchedExisting.Count);
-        for (var i = 0; i < byPos; i++)
+        void PairRemainingByPosition(bool saturday)
         {
-            pairs.Add((unmatchedExisting[i], remainingIncoming[i].Built));
-            pairedIncoming.Add(remainingIncoming[i].Index);
+            var remainingIncoming = incoming
+                .Where(x => !pairedIncoming.Contains(x.Index) && x.Built.AppliesToSaturday == saturday)
+                .ToList();
+            var remainingExisting = unmatchedExisting
+                .Where(e => e.AppliesToSaturday == saturday)
+                .ToList();
+            var byPos = Math.Min(remainingIncoming.Count, remainingExisting.Count);
+            for (var i = 0; i < byPos; i++)
+            {
+                pairs.Add((remainingExisting[i], remainingIncoming[i].Built));
+                unmatchedExisting.Remove(remainingExisting[i]);
+                pairedIncoming.Add(remainingIncoming[i].Index);
+            }
         }
-        unmatchedExisting.RemoveRange(0, byPos);
+        PairRemainingByPosition(false);
+        PairRemainingByPosition(true);
 
-        foreach (var item in remainingIncoming.Skip(byPos))
+        foreach (var item in incoming.Where(x => !pairedIncoming.Contains(x.Index)))
             toAdd.Add(item.Built);
 
         if (isTemplate && unmatchedExisting.Count > 0)
@@ -323,6 +358,7 @@ public partial class PlanningService
             row.WeekCode = desired.WeekCode;
             row.WeekStartDate = desired.WeekStartDate;
             row.IsTemplate = desired.IsTemplate;
+            row.AppliesToSaturday = desired.AppliesToSaturday;
             row.Label = desired.Label;
             row.StartTime = desired.StartTime;
             row.WorkHours = desired.WorkHours;
@@ -389,6 +425,9 @@ public partial class PlanningService
         if (configs.Count == 0 && !(multi && profiles.Any(p => p.IsActive)))
             return null;
 
+        var weekday = configs.Where(c => !c.AppliesToSaturday).ToList();
+        var saturday = configs.Where(c => c.AppliesToSaturday).ToList();
+
         var dto = new WeekShiftConfigResponseDto
         {
             SubServiceId = subServiceId,
@@ -399,14 +438,16 @@ public partial class PlanningService
                 : configs.FirstOrDefault()?.WeekStartDate ?? DateOnly.MinValue,
             IsTemplate = isTemplate,
             IsCriticalCell = multi
-                ? profiles.Any(p => p.IsActive && p.IsCriticalCell) || configs.Any(c => c.IsCriticalCell)
-                : configs.Any(c => c.IsCriticalCell),
-            MinPresencePercent = configs.FirstOrDefault()?.MinPresencePercent is int mp && mp > 0
+                ? profiles.Any(p => p.IsActive && p.IsCriticalCell) || weekday.Any(c => c.IsCriticalCell)
+                : weekday.Any(c => c.IsCriticalCell),
+            MinPresencePercent = weekday.FirstOrDefault()?.MinPresencePercent is int mp && mp > 0
                 ? mp
                 : (multi ? 0 : 70),
             MultiShiftModesEnabled = multi,
-            TotalEffectif = configs.Sum(c => c.RequiredCount),
-            Shifts = configs.Select(MapToShiftConfigResponseDto).ToList()
+            TotalEffectif = weekday.Sum(c => c.RequiredCount),
+            Shifts = weekday.Select(MapToShiftConfigResponseDto).ToList(),
+            UseDistinctSaturdayShifts = saturday.Count > 0,
+            SaturdayShifts = saturday.Select(MapToShiftConfigResponseDto).ToList()
         };
 
         if (multi)
@@ -422,7 +463,12 @@ public partial class PlanningService
                 IsActive = p.IsActive,
                 MinPresencePercent = p.MinPresencePercent,
                 IsCriticalCell = p.IsCriticalCell,
-                Shifts = configs
+                Shifts = weekday
+                    .Where(c => c.ShiftModeProfileId == p.Id)
+                    .OrderBy(c => c.DisplayOrder)
+                    .Select(MapToShiftConfigResponseDto)
+                    .ToList(),
+                SaturdayShifts = saturday
                     .Where(c => c.ShiftModeProfileId == p.Id)
                     .OrderBy(c => c.DisplayOrder)
                     .Select(MapToShiftConfigResponseDto)
@@ -518,7 +564,7 @@ public partial class PlanningService
                 return new WeeklyEmployeeShiftModeDto
                 {
                     UserId = u.Id,
-                    FullName = $"{u.FirstName} {u.LastName}".Trim(),
+                    FullName = UserDisplayName.Format(u.FirstName, u.LastName),
                     Level = u.Level,
                     SaturdayWorkMode = u.SaturdayWorkMode,
                     ShiftModeProfileId = hasMode ? modeId : null,
@@ -980,12 +1026,15 @@ public partial class PlanningService
     {
         foreach (var group in snapshotConfigs
                      .Where(c => c.ShiftModeProfileId.HasValue)
-                     .GroupBy(c => c.ShiftModeProfileId!.Value))
+                     .GroupBy(c => (ModeId: c.ShiftModeProfileId!.Value, Saturday: c.AppliesToSaturday)))
         {
-            headcountByMode.TryGetValue(group.Key, out var headcount);
+            headcountByMode.TryGetValue(group.Key.ModeId, out var headcount);
+            var pool = group.Key.Saturday
+                ? ShiftDispersionSelector.SaturdayRequiredCount(headcount)
+                : headcount;
             var ordered = group.OrderBy(c => c.DisplayOrder).ThenBy(c => c.Id).ToList();
             var percentages = ordered.Select(c => c.Percentage).ToList();
-            var counts = ShiftModeQuotaAllocator.AllocateModeRequiredCounts(percentages, headcount);
+            var counts = ShiftModeQuotaAllocator.AllocateModeRequiredCounts(percentages, pool);
             for (var i = 0; i < ordered.Count; i++)
                 ordered[i].RequiredCount = counts[i];
         }

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Prime.Application.Abstractions;
 using Prime.Application.DTOs;
@@ -9,9 +10,11 @@ namespace Prime.API.Controllers;
 /// <summary>API d'administration de la matrice RBAC (Phase 1.4).</summary>
 [ApiController]
 [Route("api/prime/admin/rbac")]
+[Authorize(Roles = "Admin")]
 public sealed class RbacAdminController(IMediator mediator, IRbacAdminService? rbacAdmin) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<List<RbacPermissionDto>>> List(CancellationToken ct)
     {
         if (rbacAdmin is null) return StatusCode(503, new { error = "Base de données non configurée." });

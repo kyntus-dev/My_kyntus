@@ -21,6 +21,7 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  Users,
   X,
 } from 'lucide';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
@@ -55,6 +56,7 @@ import {
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { KyntusPromptService } from '../../../shared/components/kyntus-prompt/kyntus-prompt.service';
 import { KyntusPageHeaderComponent } from '../../../shared/components/ui/kyntus-page-header.component';
+import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { KyntusSessionService } from '../../../core/session/kyntus-session.service';
 import { evaluatePilotRotationEligibility } from '../../../core/directory/pilot-rotation-eligibility.util';
 import type { OperationalDepartmentNode, OrgCelluleNode, OrgPoleNode } from '../models/org-tree.types';
@@ -1672,90 +1674,112 @@ export type StructureLogEntry = {
                 </app-prime-card>
 
                 <app-prime-card
-                  className="p-0 flex flex-col max-h-[min(42vh,22rem)]"
-                  title="Aperçu du périmètre"
-                  description="Membres du périmètre sélectionné."
+                  className="p-0 flex flex-col org-context-panel"
+                  [title]="structureContextPanelTab() === 'apercu' ? 'Aperçu du périmètre' : 'Journal d’activité'"
+                  [description]="
+                    structureContextPanelTab() === 'apercu'
+                      ? 'Membres du périmètre sélectionné.'
+                      : 'Événements du périmètre sélectionné.'
+                  "
                   [hasAction]="false"
                 >
-                  <div class="flex-1 min-h-0 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4">
-                    <ul class="space-y-2">
-                      @for (m of structureContextMembers(); track m.id) {
-                        <li
-                          class="flex items-center gap-3 rounded-lg border px-3 py-2"
-                          [class]="
-                            'org-member-card org-member-card--' + memberPerimeterRole(m)
-                          "
-                        >
-                          @if (m.avatar) {
-                            <img
-                              [src]="m.avatar"
-                              alt=""
-                              class="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-[var(--border-color)]"
-                            />
-                          } @else {
-                            <span
-                              class="org-member-avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
-                              >{{ employeeInitials(m) }}</span
-                            >
-                          }
-                          <span class="min-w-0 flex-1">
-                            <span class="block text-sm font-medium text-primary truncate"
-                              >{{ m.firstName }} {{ m.lastName }}</span
-                            >
-                            <span
-                              class="org-role-badge mt-0.5 inline-flex"
-                              [attr.data-role]="memberPerimeterRole(m)"
-                              >{{ memberPerimeterRoleLabel(memberPerimeterRole(m)) }}</span
-                            >
-                          </span>
-                          @if (selection(); as apercuSel) {
-                            @if (apercuSel.kind !== 'metierDepartment') {
-                              <button
-                                type="button"
-                                (click)="removeMemberFromPerimeter(m)"
-                                [disabled]="saving()"
-                                class="shrink-0 inline-flex items-center gap-1 text-xs text-[var(--danger-text)] hover:opacity-80 disabled:opacity-50"
-                                title="Retirer du périmètre"
-                              >
-                                <app-lucide-icon [icon]="icons.trash" className="w-3.5 h-3.5" />
-                                Retirer
-                              </button>
-                            }
-                          }
-                        </li>
-                      } @empty {
-                        <li class="text-sm text-muted py-4 text-center">Aucun employé dans ce périmètre.</li>
-                      }
-                    </ul>
+                  <div class="org-context-tabs" role="tablist" aria-label="Navigation aperçu et journal">
+                    <button
+                      type="button"
+                      role="tab"
+                      [attr.aria-selected]="structureContextPanelTab() === 'apercu'"
+                      (click)="structureContextPanelTab.set('apercu')"
+                      class="org-context-tab"
+                      [class.org-context-tab--active]="structureContextPanelTab() === 'apercu'"
+                    >
+                      <app-lucide-icon [icon]="icons.users" className="w-3.5 h-3.5" />
+                      Aperçu du périmètre
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      [attr.aria-selected]="structureContextPanelTab() === 'journal'"
+                      (click)="structureContextPanelTab.set('journal')"
+                      class="org-context-tab"
+                      [class.org-context-tab--active]="structureContextPanelTab() === 'journal'"
+                    >
+                      <app-lucide-icon [icon]="icons.activity" className="w-3.5 h-3.5" />
+                      Journal d’activité
+                    </button>
                   </div>
-                </app-prime-card>
 
-                <app-prime-card
-                  className="p-0 flex flex-col max-h-[min(36vh,18rem)]"
-                  title="Journal d’activité"
-                  description="Événements du périmètre sélectionné."
-                  [hasAction]="false"
-                >
-                  <div class="flex-1 min-h-0 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4">
-                    <ul class="space-y-3">
-                      @for (entry of visibleStructureActivityLog(); track $index) {
-                        <li class="flex gap-3 text-sm">
-                          <app-lucide-icon
-                            [icon]="icons.activity"
-                            className="w-4 h-4 shrink-0 text-muted mt-0.5"
-                          />
-                          <div class="min-w-0">
-                            <p class="text-xs text-muted">{{ entry.at }}</p>
-                            <p class="text-primary leading-snug">{{ entry.message }}</p>
-                          </div>
-                        </li>
-                      } @empty {
-                        <li class="flex gap-3 text-sm text-muted">
-                          <app-lucide-icon [icon]="icons.activity" className="w-4 h-4 shrink-0" />
-                          <p>Aucun événement pour l’instant. Les enregistrements apparaîtront ici.</p>
-                        </li>
-                      }
-                    </ul>
+                  <div class="org-context-body">
+                    @if (structureContextPanelTab() === 'apercu') {
+                      <ul class="space-y-2">
+                        @for (m of structureContextMembers(); track m.id) {
+                          <li
+                            class="flex items-center gap-3 rounded-lg border px-3 py-2"
+                            [class]="
+                              'org-member-card org-member-card--' + memberPerimeterRole(m)
+                            "
+                          >
+                            @if (m.avatar) {
+                              <img
+                                [src]="m.avatar"
+                                alt=""
+                                class="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-[var(--border-color)]"
+                              />
+                            } @else {
+                              <span
+                                class="org-member-avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                                >{{ employeeInitials(m) }}</span
+                              >
+                            }
+                            <span class="min-w-0 flex-1">
+                              <span class="block text-sm font-medium text-primary truncate"
+                                >{{ m.firstName }} {{ m.lastName }}</span
+                              >
+                              <span
+                                class="org-role-badge mt-0.5 inline-flex"
+                                [attr.data-role]="memberPerimeterRole(m)"
+                                >{{ memberPerimeterRoleLabel(memberPerimeterRole(m)) }}</span
+                              >
+                            </span>
+                            @if (selection(); as apercuSel) {
+                              @if (apercuSel.kind !== 'metierDepartment') {
+                                <button
+                                  type="button"
+                                  (click)="removeMemberFromPerimeter(m)"
+                                  [disabled]="saving()"
+                                  class="shrink-0 inline-flex items-center gap-1 text-xs text-[var(--danger-text)] hover:opacity-80 disabled:opacity-50"
+                                  title="Retirer du périmètre"
+                                >
+                                  <app-lucide-icon [icon]="icons.trash" className="w-3.5 h-3.5" />
+                                  Retirer
+                                </button>
+                              }
+                            }
+                          </li>
+                        } @empty {
+                          <li class="text-sm text-muted py-4 text-center">Aucun employé dans ce périmètre.</li>
+                        }
+                      </ul>
+                    } @else {
+                      <ul class="space-y-3">
+                        @for (entry of visibleStructureActivityLog(); track $index) {
+                          <li class="flex gap-3 text-sm">
+                            <app-lucide-icon
+                              [icon]="icons.activity"
+                              className="w-4 h-4 shrink-0 text-muted mt-0.5"
+                            />
+                            <div class="min-w-0">
+                              <p class="text-xs text-muted">{{ entry.at }}</p>
+                              <p class="text-primary leading-snug">{{ entry.message }}</p>
+                            </div>
+                          </li>
+                        } @empty {
+                          <li class="flex gap-3 text-sm text-muted">
+                            <app-lucide-icon [icon]="icons.activity" className="w-4 h-4 shrink-0" />
+                            <p>Aucun événement pour l’instant. Les enregistrements apparaîtront ici.</p>
+                          </li>
+                        }
+                      </ul>
+                    }
                   </div>
                 </app-prime-card>
               </div>
@@ -2065,6 +2089,57 @@ export type StructureLogEntry = {
         color: var(--blue-600);
       }
 
+      .org-context-panel {
+        min-height: 22rem;
+      }
+      .org-context-tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.35rem;
+        margin: 0 1rem;
+        padding: 0.35rem;
+        border-radius: 0.65rem;
+        border: 1px solid var(--border-color);
+        background: color-mix(in srgb, var(--bg-input) 65%, transparent);
+      }
+      @media (min-width: 640px) {
+        .org-context-tabs {
+          margin: 0 1.5rem;
+        }
+      }
+      .org-context-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        border-radius: 0.45rem;
+        padding: 0.55rem 0.65rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .org-context-tab:hover {
+        color: var(--text-primary);
+      }
+      .org-context-tab--active {
+        background: var(--bg-card);
+        color: var(--text-primary);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+      }
+      .org-context-body {
+        flex: 1 1 auto;
+        min-height: 14rem;
+        max-height: min(48vh, 26rem);
+        overflow-y: auto;
+        padding: 1rem;
+      }
+      @media (min-width: 640px) {
+        .org-context-body {
+          padding: 1rem 1.5rem 1.5rem;
+        }
+      }
+
       @media (max-width: 768px) {
         .org-tabs {
           width: 100%;
@@ -2091,6 +2166,7 @@ export class OrganisationManagementComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(KyntusToastService);
 
   readonly icons = {
     refresh: RefreshCw,
@@ -2104,6 +2180,7 @@ export class OrganisationManagementComponent implements OnInit {
     plus: Plus,
     pencil: Pencil,
     close: X,
+    users: Users,
   };
 
   readonly rotationHistoryOpen = signal(false);
@@ -2128,6 +2205,7 @@ export class OrganisationManagementComponent implements OnInit {
   readonly expandedDeptIds = signal<Set<string>>(new Set());
   readonly expandedPoleIds = signal<Set<string>>(new Set());
   readonly selection = signal<OrgTreeSelection | null>(null);
+  readonly structureContextPanelTab = signal<'apercu' | 'journal'>('apercu');
   readonly search = signal('');
 
   readonly newMetierDeptName = signal('');
@@ -2415,7 +2493,15 @@ export class OrganisationManagementComponent implements OnInit {
     const poleId = this.newPoleDeptId().trim();
     const name = this.newPoleName().trim();
     if (!poleId || !name || this.newPoleNameConflict()) return;
-    this.runMutation(this.orgApi.createStructureCellule(poleId, name), () => this.newPoleName.set(''), 'Cellule ajoutée');
+    this.runMutation(
+      this.orgApi.createStructureCellule(poleId, name),
+      (created) => {
+        this.newPoleName.set('');
+        const id = (created as { id?: string } | null)?.id?.trim();
+        if (id) this.optimisticAddCellule(poleId, { id, name });
+      },
+      'Cellule ajoutée',
+    );
   }
 
   submitNewCellule(): void {
@@ -2424,7 +2510,11 @@ export class OrganisationManagementComponent implements OnInit {
     if (!celluleId || !name || this.newCellNameConflict()) return;
     this.runMutation(
       this.orgApi.createStructureService(celluleId, name),
-      () => this.newCellName.set(''),
+      (created) => {
+        this.newCellName.set('');
+        const id = (created as { id?: string } | null)?.id?.trim();
+        if (id) this.optimisticAddService(celluleId, { id, name });
+      },
       'Service ajouté',
     );
   }
@@ -3039,6 +3129,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   private resetStructureDrafts(): void {
+    this.structureContextPanelTab.set('apercu');
     this.draftEmployeeId.set('');
     this.draftPilotId.set('');
     this.draftPilotTeamId.set('');
@@ -3200,6 +3291,7 @@ export class OrganisationManagementComponent implements OnInit {
       this.orgApi.clearEmployeeOrgPlacement(m.id, { level, nodeId: sel.id }),
       undefined,
       `${m.firstName} ${m.lastName} retiré du périmètre`,
+      () => this.optimisticDetachEmployee(m.id),
     );
   }
 
@@ -3868,16 +3960,98 @@ export class OrganisationManagementComponent implements OnInit {
       this.orgApi.removeStructurePilot(celluleId, employeeId),
       undefined,
       'Pilote retiré',
+      () => this.optimisticDetachEmployee(employeeId),
     );
   }
 
-  private runMutation(obs: Observable<unknown>, onOk?: () => void, logMessage?: string): void {
+  private optimisticDetachEmployee(employeeId: string): void {
+    const d = this.data();
+    if (!d) return;
+    this.data.set({
+      ...d,
+      employees: d.employees.map((e) =>
+        e.id === employeeId
+          ? {
+              ...e,
+              role: 'Employee' as Employee['role'],
+              serviceId: '',
+              celluleId: '',
+              poleId: '',
+              parentId: undefined,
+            }
+          : e,
+      ),
+    });
+  }
+
+  private optimisticAddCellule(poleId: string, cellule: { id: string; name: string }): void {
+    const d = this.data();
+    if (!d) return;
+    const patchPoles = <T extends { id: string; cellules?: Array<{ id: string; name: string; services?: unknown[] }> }>(
+      poles: T[],
+    ): T[] =>
+      poles.map((p) =>
+        p.id === poleId
+          ? {
+              ...p,
+              cellules: [...(p.cellules ?? []), { id: cellule.id, name: cellule.name, services: [] }],
+            }
+          : p,
+      );
+
+    this.data.set({
+      ...d,
+      operationalDepartments: d.operationalDepartments.map((dept) => ({
+        ...dept,
+        poles: patchPoles(dept.poles ?? []),
+      })),
+      unassignedPoles: patchPoles(d.unassignedPoles ?? []),
+    });
+  }
+
+  private optimisticAddService(celluleId: string, service: { id: string; name: string }): void {
+    const d = this.data();
+    if (!d) return;
+    const patchPoles = <
+      T extends { cellules?: Array<{ id: string; name: string; services?: Array<{ id: string; name: string }> }> },
+    >(
+      poles: T[],
+    ): T[] =>
+      poles.map((p) => ({
+        ...p,
+        cellules: (p.cellules ?? []).map((c) =>
+          c.id === celluleId
+            ? { ...c, services: [...(c.services ?? []), { id: service.id, name: service.name }] }
+            : c,
+        ),
+      }));
+
+    this.data.set({
+      ...d,
+      operationalDepartments: d.operationalDepartments.map((dept) => ({
+        ...dept,
+        poles: patchPoles(dept.poles ?? []),
+      })),
+      unassignedPoles: patchPoles(d.unassignedPoles ?? []),
+    });
+  }
+
+  private runMutation(
+    obs: Observable<unknown>,
+    onOk?: (result?: unknown) => void,
+    logMessage?: string,
+    optimistic?: () => void,
+  ): void {
     this.error.set(null);
     this.saving.set(true);
+    optimistic?.();
     obs.pipe(finalize(() => this.saving.set(false))).subscribe({
       next: (result: unknown) => {
-        onOk?.();
-        if (logMessage) this.pushStructureLog(logMessage);
+        onOk?.(result);
+        if (logMessage) {
+          this.pushStructureLog(logMessage);
+          this.showMutationSuccessToast(logMessage);
+        }
         for (const msg of this.formatRevokedLog(result)) {
           this.pushStructureLog(msg);
         }
@@ -3885,9 +4059,21 @@ export class OrganisationManagementComponent implements OnInit {
         this.draftPilotId.set('');
         this.structureRolePickerOpen.set(false);
         this.structurePilotPickerOpen.set(false);
+        this.orgApi.invalidateOverviewCache();
         this.load(true);
       },
-      error: (err: unknown) => this.error.set(primeHttpErrorMessage(err)),
+      error: (err: unknown) => {
+        this.error.set(primeHttpErrorMessage(err));
+        // Annule l’optimiste en rechargement serveur.
+        this.orgApi.invalidateOverviewCache();
+        this.load(true);
+      },
     });
+  }
+
+  private showMutationSuccessToast(logMessage: string): void {
+    const base = logMessage.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    const message = /\b(avec succès|succès)\b/i.test(base) ? base : `${base} avec succès`;
+    this.toast.success(message);
   }
 }

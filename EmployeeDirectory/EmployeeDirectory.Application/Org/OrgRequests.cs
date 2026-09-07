@@ -162,3 +162,29 @@ public sealed class ClearStructureRoleCommandHandler(IDirectoryWriteService writ
         return Unit.Value;
     }
 }
+
+public record GetEmployeeIdsWithAssignmentsAfterQuery(
+    IReadOnlyList<Guid> EmployeeIds,
+    DateTime After) : IRequest<IReadOnlyList<Guid>>;
+
+public sealed class GetEmployeeIdsWithAssignmentsAfterQueryHandler(IDirectoryReadService read)
+    : IRequestHandler<GetEmployeeIdsWithAssignmentsAfterQuery, IReadOnlyList<Guid>>
+{
+    public Task<IReadOnlyList<Guid>> Handle(
+        GetEmployeeIdsWithAssignmentsAfterQuery request,
+        CancellationToken ct) =>
+        read.GetEmployeeIdsWithAssignmentsAfterAsync(request.EmployeeIds, request.After, ct);
+}
+
+public record UndoImportAssignmentWindowCommand(
+    UndoImportAssignmentWindowRequest Body,
+    Guid? ChangedBy) : IRequest<UndoImportAssignmentWindowResult>;
+
+public sealed class UndoImportAssignmentWindowCommandHandler(IDirectoryWriteService write)
+    : IRequestHandler<UndoImportAssignmentWindowCommand, UndoImportAssignmentWindowResult>
+{
+    public Task<UndoImportAssignmentWindowResult> Handle(
+        UndoImportAssignmentWindowCommand request,
+        CancellationToken ct) =>
+        write.UndoImportAssignmentWindowAsync(request.Body, request.ChangedBy, ct);
+}

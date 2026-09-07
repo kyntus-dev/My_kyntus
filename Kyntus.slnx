@@ -152,6 +152,8 @@
 
   <Project Path="Kyntus.Messaging.Outbox/Kyntus.Messaging.Outbox.csproj" />
 
+  <Project Path="Kyntus.Caching/Kyntus.Caching.csproj" />
+
   <Project Path="Messaging.Contracts/Messaging.Contracts.csproj" />
 
   <Project Path="Shared.Kernel/Shared.Kernel.csproj" />

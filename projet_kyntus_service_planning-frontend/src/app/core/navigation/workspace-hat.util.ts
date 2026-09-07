@@ -38,6 +38,8 @@ const BOTH_PATHS = new Set([
   '/assistance',
   '/mes-newsletters',
   '/documentation',
+  '/admin',
+  '/audit',
 ]);
 
 const DOC_SELF_TABS = new Set(['my-docs', 'request', 'tracking']);

@@ -5,8 +5,13 @@ namespace Conge.Domain.Interfaces;
 
 public interface IPeriodeInterditeRepository
 {
+    /// <summary>Config générale (créée si absente).</summary>
     Task<PeriodeInterditeConge> GetOrCreateAsync(CancellationToken ct = default);
+    Task<PeriodeInterditeConge?> GetByScopeAsync(string scopeKind, string? scopeId, CancellationToken ct = default);
+    Task<IReadOnlyList<PeriodeInterditeConge>> GetAllAsync(CancellationToken ct = default);
+    Task AddAsync(PeriodeInterditeConge config, CancellationToken ct = default);
     void Update(PeriodeInterditeConge config);
+    void Remove(PeriodeInterditeConge config);
 }
 
 public interface IQuotaCongeServiceRepository

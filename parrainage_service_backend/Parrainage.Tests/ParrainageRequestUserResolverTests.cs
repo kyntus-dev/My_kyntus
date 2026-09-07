@@ -1,8 +1,7 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
-using Parrainage.Application.Abstractions;
 using Parrainage.Infrastructure.Services;
 using Xunit;
 
@@ -10,45 +9,46 @@ namespace ParrainageBackend.Tests;
 
 public sealed class ParrainageRequestUserResolverTests
 {
-    private readonly ParrainageRequestUserResolver _resolver = new(
-        new HttpContextAccessor(),
-        new ServiceCollection().BuildServiceProvider(),
-        new TestHostEnvironment { EnvironmentName = Environments.Development },
-        NullLogger<ParrainageRequestUserResolver>.Instance);
-
     [Fact]
-    public void Resolve_UsesHeaders_WhenPresent()
+    public void Resolve_Throws_WhenUnauthenticated_EvenWithHeaders()
     {
-        var ctx = new DefaultHttpContext();
-        ctx.Request.Headers[IParrainageRequestUserResolver.HeaderRole] = "RH";
-        ctx.Request.Headers[IParrainageRequestUserResolver.HeaderUserId] = "rh-1";
+        var accessor = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
+        var resolver = new ParrainageRequestUserResolver(
+            accessor,
+            new ServiceCollection().BuildServiceProvider(),
+            NullLogger<ParrainageRequestUserResolver>.Instance);
 
-        var user = _resolver.Resolve(ctx.Request);
+        accessor.HttpContext!.Request.Headers["X-Parrainage-Role"] = "RH";
+        accessor.HttpContext.Request.Headers["X-Parrainage-User-Id"] = "rh-1";
 
-        Assert.Equal("rh-1", user.UserId);
-        Assert.Equal("RH", user.Role);
-        Assert.False(user.IsDefault);
+        Assert.Throws<UnauthorizedAccessException>(() => resolver.Resolve(accessor.HttpContext.Request));
     }
 
     [Fact]
-    public void Resolve_FallsBackToPilote_WhenHeadersMissing()
+    public void Resolve_IgnoresSpoofHeaders_WhenJwtPresent()
     {
-        var ctx = new DefaultHttpContext();
-        var user = _resolver.Resolve(ctx.Request);
+        var identity = new ClaimsIdentity(
+            [
+                new Claim(ClaimTypes.NameIdentifier, "jwt-user-1"),
+                new Claim(ClaimTypes.Role, "Employee"),
+                new Claim("role", "Employee"),
+            ],
+            authenticationType: "Bearer");
+        var ctx = new DefaultHttpContext { User = new ClaimsPrincipal(identity) };
+        ctx.Request.Headers["X-Parrainage-Role"] = "RH";
+        ctx.Request.Headers["X-Parrainage-User-Id"] = "spoof-rh";
 
-        Assert.Equal("emp-1", user.UserId);
-        Assert.Equal("PILOTE", user.Role);
-        Assert.True(user.IsDefault);
-    }
+        var accessor = new HttpContextAccessor { HttpContext = ctx };
+        var resolver = new ParrainageRequestUserResolver(
+            accessor,
+            new ServiceCollection().BuildServiceProvider(),
+            NullLogger<ParrainageRequestUserResolver>.Instance);
 
-    [Fact]
-    public void Resolve_QueryOverrides_WhenHeadersMissing()
-    {
-        var ctx = new DefaultHttpContext();
-        var user = _resolver.Resolve(ctx.Request, queryRole: "ADMIN", queryUserId: "admin-1");
+        var user = resolver.Resolve(ctx.Request);
 
-        Assert.Equal("admin-1", user.UserId);
-        Assert.Equal("ADMIN", user.Role);
+        Assert.Equal("jwt-user-1", user.UserId);
+        Assert.Equal("PILOTE", user.Role); // Employee → PILOTE via mapping
+        Assert.NotEqual("spoof-rh", user.UserId);
     }
 
     [Fact]
@@ -60,36 +60,8 @@ public sealed class ParrainageRequestUserResolverTests
     }
 
     [Fact]
-    public void ResolveEffectiveRole_PrefersHeaderRh_WhenJwtPortalIsPilote()
+    public void ResolveEffectiveRole_PrefersPrivilegedSecondary_WhenPrimaryIsPilote()
     {
         Assert.Equal("RH", ParrainageRequestUserResolver.ResolveEffectiveRole("PILOTE", "RH"));
-    }
-
-    [Fact]
-    public void Resolve_UsesHeaders_InProduction_WhenJwtAbsent()
-    {
-        var resolver = new ParrainageRequestUserResolver(
-            new HttpContextAccessor(),
-            new ServiceCollection().BuildServiceProvider(),
-            new TestHostEnvironment { EnvironmentName = Environments.Production },
-            NullLogger<ParrainageRequestUserResolver>.Instance);
-
-        var ctx = new DefaultHttpContext();
-        ctx.Request.Headers[IParrainageRequestUserResolver.HeaderRole] = "RH";
-        ctx.Request.Headers[IParrainageRequestUserResolver.HeaderUserId] = "rh-1";
-
-        var user = resolver.Resolve(ctx.Request);
-
-        Assert.Equal("rh-1", user.UserId);
-        Assert.Equal("RH", user.Role);
-        Assert.False(user.IsDefault);
-    }
-
-    private sealed class TestHostEnvironment : IHostEnvironment
-    {
-        public string EnvironmentName { get; set; } = Environments.Development;
-        public string ApplicationName { get; set; } = "Tests";
-        public string ContentRootPath { get; set; } = string.Empty;
-        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = null!;
     }
 }

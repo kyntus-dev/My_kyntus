@@ -30,7 +30,7 @@ import { RoleService } from '../../state/role.service';
   ],
   template: `
     @if (loading()) {
-      <div class="p-8 text-muted">Loading your primes...</div>
+      <div class="p-8 text-muted">Chargement de vos primes…</div>
     } @else {
       <div class="prime-page-shell">
         <div class="flex items-start justify-between">
@@ -48,7 +48,7 @@ import { RoleService } from '../../state/role.service';
 
         <app-prime-card title="Ma fiche de prime & paiement" className="p-0 card-navy">
           <p class="px-6 pt-4 text-xs text-muted">
-            Votre fiche devient consultable et téléchargeable une fois validée par RH + Manager. Le suivi du paiement
+            Votre fiche devient consultable et téléchargeable une fois validée par la RH. Le suivi du paiement
             est mis à jour par la comptabilité.
           </p>
           <div class="overflow-x-auto">
@@ -111,7 +111,7 @@ import { RoleService } from '../../state/role.service';
                           [employeeLabel]="user().firstName + ' ' + user().lastName"
                           [period]="row.period"
                           [disabled]="!row.canViewFiche"
-                          [disabledHint]="row.canViewFiche ? '' : 'Disponible après validation RH + Manager.'"
+                          [disabledHint]="row.canViewFiche ? '' : 'Disponible après validation RH.'"
                         />
                       </td>
                     </tr>

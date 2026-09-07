@@ -10,7 +10,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { Building2, Check, Plus, RefreshCw, Trash2, Users } from 'lucide';
+import { Activity, Building2, Check, Plus, RefreshCw, Trash2, Users } from 'lucide';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
 import { PrimeCardComponent } from '../../components/prime-card.component';
 import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
@@ -20,6 +20,7 @@ import {
 import type { Employee } from '../../models';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { employeeSupportDepartmentLabel } from '../../../../core/org/user-org-perimeter';
+import { DirectoryFacadeService } from '../../../../core/directory/directory-facade.service';
 
 interface BusinessDepartmentDto {
   id: string;
@@ -45,7 +46,14 @@ interface DirectoryEmployeeDto {
   businessDepartmentKind?: string | null;
 }
 
+interface SupportActivityEntry {
+  at: string;
+  message: string;
+  departmentId?: string;
+}
+
 type PageTab = 'list' | 'assignments';
+type ContextPanelTab = 'apercu' | 'journal';
 
 @Component({
   selector: 'app-business-departments-page',
@@ -54,8 +62,8 @@ type PageTab = 'list' | 'assignments';
   template: `
     <div class="ky-page-shell dept-page">
       <app-kyntus-page-header
-        title="Départements métier"
-        subtitle="Organisation support : équipes plates sans pôle, cellule ou service. Même structure, même rythme visuel que les autres modules."
+        title="Structure support"
+        subtitle="Équipes plates Support (sans pôle, cellule ni service) — créez les départements, affectez le manager et l’équipe."
       >
         <button
           actions
@@ -92,17 +100,15 @@ type PageTab = 'list' | 'assignments';
         </div>
       }
 
-      <div class="flex flex-wrap gap-2 border-b border-default pb-2" role="tablist">
+      <div class="dept-tabs" role="tablist">
         @for (t of pageTabs; track t.id) {
           <button
             type="button"
             role="tab"
             [attr.aria-selected]="activeTab() === t.id"
             (click)="activeTab.set(t.id)"
-            class="rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            class="dept-tab"
             [class.dept-tab--active]="activeTab() === t.id"
-            [class.bg-card]="activeTab() !== t.id"
-            [class.text-muted]="activeTab() !== t.id"
           >
             {{ t.label }}
           </button>
@@ -115,7 +121,7 @@ type PageTab = 'list' | 'assignments';
         <app-prime-card className="p-0" title="Créer un département Support" description="Équipe plate — code, nom, puis affectations dans l’onglet suivant.">
           <div class="px-4 sm:px-6 py-4 space-y-4 border-b border-default">
             <p class="text-xs text-muted rounded-lg border border-[var(--info-border)] bg-[var(--info-bg)] px-3 py-2">
-              Type fixe : <span class="font-medium text-[var(--info-text)]">Support (équipe plate)</span> — manager → N-1 directs, module Allowances.
+              Type fixe : <span class="font-medium text-[var(--info-text)]">Support (équipe plate)</span> — manager → N-1 directs, module Primes Support.
             </p>
             <div class="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-end">
               <label class="text-sm text-muted flex flex-col gap-1 min-w-[8rem]">
@@ -178,28 +184,24 @@ type PageTab = 'list' | 'assignments';
           </div>
         </app-prime-card>
       } @else {
-        <div
-          class="w-full grid grid-cols-1 xl:grid-cols-3 gap-6 xl:gap-8 items-stretch xl:items-start"
-        >
+        <div class="dept-assign-grid">
           <app-prime-card
-            className="min-w-0 p-0 flex flex-col xl:min-h-[28rem]"
-            title="Départements métier"
+            className="min-w-0 p-0 flex flex-col dept-panel"
+            title="Départements Support"
             description="Sélectionnez un département dans la liste."
             [hasAction]="false"
           >
-            <ul class="divide-y divide-default max-h-[min(70vh,32rem)] overflow-y-auto -m-6 mt-0">
+            <ul class="dept-list">
               @for (d of filteredDepartments(); track d.id) {
                 <li>
                   <button
                     type="button"
                     (click)="selectDepartment(d)"
-                    class="w-full text-left px-4 py-3 hover:bg-input/50 transition-colors"
-                    [class.dept-item--selected]="selectedId() === d.id"
+                    class="dept-list-item"
+                    [class.dept-list-item--selected]="selectedId() === d.id"
                   >
                     <div class="flex items-center gap-2 min-w-0">
-                      <span
-                        class="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-[var(--info-bg)] text-[var(--info-text)]"
-                      >Support</span>
+                      <span class="dept-chip">Support</span>
                       <span class="min-w-0 truncate font-medium text-primary">{{ d.name }}</span>
                     </div>
                     <p class="text-xs text-muted mt-1 truncate">{{ d.code }} · {{ teamCount(d) }} membre(s) · {{ employeeLabel(d.managerEmployeeId) }}</p>
@@ -212,16 +214,16 @@ type PageTab = 'list' | 'assignments';
           </app-prime-card>
 
           <app-prime-card
-            className="min-w-0 p-0 flex flex-col xl:min-h-[28rem] shadow-md shadow-black/20"
+            className="min-w-0 p-0 flex flex-col dept-panel"
             title="Détail du département"
             description="Choisissez un employé puis enregistrez. Le rôle devient Manager automatiquement."
             [hasAction]="false"
           >
             <div class="flex min-h-[20rem] flex-1 flex-col p-4 sm:p-6">
               @if (selectedDept(); as dept) {
-                <header class="space-y-1 border-b border-default/80 pb-4 mb-6">
+                <header class="space-y-1 border-b border-default pb-4 mb-6">
                   <p class="text-xs font-semibold uppercase tracking-wider text-muted">Support — équipe plate</p>
-                  <h2 class="text-2xl font-semibold tracking-tight text-primary">{{ dept.name }}</h2>
+                  <h2 class="text-xl sm:text-2xl font-semibold tracking-tight text-primary">{{ dept.name }}</h2>
                 </header>
 
                 <div class="space-y-3">
@@ -232,7 +234,7 @@ type PageTab = 'list' | 'assignments';
                         <span class="text-muted">Sélection :</span>
                         <strong class="ml-1">{{ employeeLabel(draftEmployeeId()) }}</strong>
                       </span>
-                      <button type="button" (click)="beginRepickDetailEmployee()" class="text-xs font-medium text-[var(--electric-blue)] hover:opacity-80">Changer</button>
+                      <button type="button" (click)="beginRepickDetailEmployee()" class="dept-link">Changer</button>
                     </div>
                   }
                   <input
@@ -246,7 +248,7 @@ type PageTab = 'list' | 'assignments';
                     @for (e of filteredDetailAssignables(); track e.id) {
                       <li>
                         <button type="button" (click)="pickDetailEmployee(e.id)" class="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-input/60 transition-colors">
-                          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--info-bg)] text-xs font-semibold text-[var(--info-text)]">{{ employeeInitials(e) }}</span>
+                          <span class="dept-avatar">{{ employeeInitials(e) }}</span>
                           <span class="min-w-0">
                             <span class="block font-medium text-primary truncate">{{ e.firstName }} {{ e.lastName }}</span>
                             <span class="block text-xs text-muted truncate">{{ e.role }}@if (employeeOrgHint(e.id); as hint) { · {{ hint }} }</span>
@@ -278,7 +280,7 @@ type PageTab = 'list' | 'assignments';
                           <span class="text-muted">Sélection :</span>
                           <strong class="ml-1">{{ employeeLabel(draftMemberId()) }}</strong>
                         </span>
-                        <button type="button" (click)="draftMemberId.set('')" class="text-xs font-medium text-indigo-400 hover:text-indigo-300">Changer</button>
+                        <button type="button" (click)="draftMemberId.set('')" class="dept-link">Changer</button>
                       </div>
                     }
                     <input
@@ -293,7 +295,7 @@ type PageTab = 'list' | 'assignments';
                       @for (e of filteredMemberCandidates(); track e.id) {
                         <li>
                           <button type="button" (click)="pickMemberEmployee(e.id)" [disabled]="!dept.managerEmployeeId" class="w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-input/60 disabled:opacity-40">
-                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-input/40 text-[11px] font-semibold text-primary">{{ employeeInitials(e) }}</span>
+                            <span class="dept-avatar dept-avatar--sm">{{ employeeInitials(e) }}</span>
                             <span class="min-w-0">
                               <span class="block font-medium text-primary truncate">{{ e.firstName }} {{ e.lastName }}</span>
                               <span class="block text-xs text-muted truncate">{{ e.role }}@if (employeeOrgHint(e.id); as hint) { · {{ hint }} }</span>
@@ -304,54 +306,124 @@ type PageTab = 'list' | 'assignments';
                         <li class="px-3 py-3 text-sm text-muted">Aucun résultat</li>
                       }
                     </ul>
-                    <button type="button" (click)="addSelectedMember(dept)" [disabled]="saving() || !dept.managerEmployeeId || !draftMemberId()" class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-input px-4 py-2.5 text-sm font-medium text-primary hover:bg-input disabled:opacity-50">
+                    <button type="button" (click)="addSelectedMember(dept)" [disabled]="saving() || !dept.managerEmployeeId || !draftMemberId()" class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-default bg-card px-4 py-2.5 text-sm font-medium text-primary hover:bg-input disabled:opacity-50">
                       <app-lucide-icon [icon]="icons.check" className="w-4 h-4" /> Ajouter à l’équipe
                     </button>
                   </div>
               } @else {
-                <div class="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-default/35 bg-card/20 px-8 py-14 text-center min-h-[18rem]">
+                <div class="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-default px-8 py-14 text-center min-h-[18rem]">
                   <p class="text-sm text-muted max-w-md leading-relaxed">Sélectionnez un département dans la liste pour afficher le formulaire d’affectation.</p>
                 </div>
               }
             </div>
           </app-prime-card>
 
-          <div class="min-w-0 space-y-4 xl:space-y-5 flex flex-col">
+          <div class="min-w-0 flex flex-col gap-4">
             <app-prime-card className="p-0" title="Indicateurs" description="Périmètre du département sélectionné." [hasAction]="false">
               @if (selectedDept(); as dept) {
-                <div class="space-y-4 p-4 sm:p-6 -mt-1">
+                <div class="space-y-3 px-4 py-4 sm:px-6">
+                  <p class="text-xs text-muted flex items-center gap-2">
+                    <app-lucide-icon [icon]="icons.building" className="w-3.5 h-3.5 shrink-0" />
+                    <span class="truncate font-medium text-primary">{{ dept.name }}</span>
+                  </p>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div class="rounded-lg border border-default bg-input/50 px-3 py-3">
+                    <div class="dept-kpi">
                       <p class="text-[11px] uppercase tracking-wide text-muted">Effectif</p>
                       <p class="text-2xl font-semibold text-primary tabular-nums">{{ teamMembers().length }}</p>
+                      <p class="text-[11px] text-muted mt-1">Membres rattachés</p>
                     </div>
-                    <div class="rounded-lg border border-default bg-input/50 px-3 py-3">
+                    <div class="dept-kpi">
                       <p class="text-[11px] uppercase tracking-wide text-muted">Manager</p>
-                      <p class="text-sm font-medium text-primary truncate">{{ employeeLabel(dept.managerEmployeeId) }}</p>
+                      <p class="text-sm font-medium text-primary truncate leading-snug mt-1">{{ employeeLabel(dept.managerEmployeeId) }}</p>
+                      <p class="text-[11px] text-muted mt-1">Titulaire du département</p>
                     </div>
                   </div>
                 </div>
+              } @else {
+                <p class="px-4 py-6 sm:px-6 text-sm text-muted">Sélectionnez un département pour voir les indicateurs.</p>
               }
             </app-prime-card>
 
-            <app-prime-card className="p-0 flex flex-col max-h-[min(42vh,22rem)]" title="Aperçu du périmètre" description="Membres du département sélectionné." [hasAction]="false">
-              <div class="-m-6 flex-1 min-h-0 overflow-y-auto p-4">
-                <ul class="space-y-2">
-                  @for (m of teamMembers(); track m.id) {
-                    <li class="flex items-center gap-3 rounded-lg border border-default/80 bg-card/40 px-3 py-2">
-                      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-500/25 text-xs font-semibold text-indigo-100">{{ memberInitials(m) }}</span>
-                      <span class="min-w-0 flex-1">
-                        <span class="block text-sm font-medium text-primary truncate">{{ m.firstName }} {{ m.lastName }}</span>
-                        <span class="block text-xs text-muted truncate">{{ m.role }}</span>
-                      </span>
-                      @if (m.id !== selectedDept()?.managerEmployeeId) {
-                        <button type="button" (click)="removeFromTeam(m)" [disabled]="saving()" class="shrink-0 text-xs text-red-400 hover:text-red-300 disabled:opacity-50">Retirer</button>
-                      }
-                    </li>
-                  } @empty {
-                    <li class="text-sm text-muted py-4 text-center">Aucun employé dans ce périmètre.</li>
-                  }
-                </ul>
+            <app-prime-card
+              className="p-0 flex flex-col dept-context-panel"
+              [title]="contextPanelTab() === 'apercu' ? 'Aperçu du périmètre' : 'Journal d’activité'"
+              [description]="
+                contextPanelTab() === 'apercu'
+                  ? 'Membres du département sélectionné.'
+                  : 'Événements du département sélectionné.'
+              "
+              [hasAction]="false"
+            >
+              <div class="dept-context-tabs" role="tablist" aria-label="Navigation aperçu et journal">
+                <button
+                  type="button"
+                  role="tab"
+                  [attr.aria-selected]="contextPanelTab() === 'apercu'"
+                  (click)="contextPanelTab.set('apercu')"
+                  class="dept-context-tab"
+                  [class.dept-context-tab--active]="contextPanelTab() === 'apercu'"
+                >
+                  <app-lucide-icon [icon]="icons.users" className="w-3.5 h-3.5" />
+                  Aperçu du périmètre
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  [attr.aria-selected]="contextPanelTab() === 'journal'"
+                  (click)="contextPanelTab.set('journal')"
+                  class="dept-context-tab"
+                  [class.dept-context-tab--active]="contextPanelTab() === 'journal'"
+                >
+                  <app-lucide-icon [icon]="icons.activity" className="w-3.5 h-3.5" />
+                  Journal d’activité
+                </button>
+              </div>
+
+              <div class="dept-context-body">
+                @if (contextPanelTab() === 'apercu') {
+                  <ul class="space-y-2">
+                    @for (m of teamMembers(); track m.id) {
+                      <li class="dept-member-card" [class.dept-member-card--manager]="m.id === selectedDept()?.managerEmployeeId">
+                        <span class="dept-avatar">{{ memberInitials(m) }}</span>
+                        <span class="min-w-0 flex-1">
+                          <span class="block text-sm font-medium text-primary truncate">{{ m.firstName }} {{ m.lastName }}</span>
+                          <span class="dept-role-badge mt-0.5 inline-flex">
+                            {{ m.id === selectedDept()?.managerEmployeeId ? 'Manager' : m.role }}
+                          </span>
+                        </span>
+                        @if (m.id !== selectedDept()?.managerEmployeeId) {
+                          <button
+                            type="button"
+                            (click)="removeFromTeam(m)"
+                            [disabled]="saving()"
+                            class="shrink-0 text-xs text-[var(--danger-text)] hover:opacity-80 disabled:opacity-50"
+                          >
+                            Retirer
+                          </button>
+                        }
+                      </li>
+                    } @empty {
+                      <li class="text-sm text-muted py-6 text-center">Aucun employé dans ce périmètre.</li>
+                    }
+                  </ul>
+                } @else {
+                  <ul class="space-y-3">
+                    @for (entry of visibleActivityLog(); track $index) {
+                      <li class="flex gap-3 text-sm">
+                        <app-lucide-icon [icon]="icons.activity" className="w-4 h-4 shrink-0 text-muted mt-0.5" />
+                        <div class="min-w-0">
+                          <p class="text-xs text-muted">{{ entry.at }}</p>
+                          <p class="text-primary leading-snug">{{ entry.message }}</p>
+                        </div>
+                      </li>
+                    } @empty {
+                      <li class="flex gap-3 text-sm text-muted py-4">
+                        <app-lucide-icon [icon]="icons.activity" className="w-4 h-4 shrink-0" />
+                        <p>Aucun événement pour l’instant. Les enregistrements apparaîtront ici.</p>
+                      </li>
+                    }
+                  </ul>
+                }
               </div>
             </app-prime-card>
           </div>
@@ -375,6 +447,27 @@ type PageTab = 'list' | 'assignments';
       .dept-toolbar label {
         margin: 0;
       }
+      .dept-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 0.5rem;
+      }
+      .dept-tab {
+        border-radius: 0.5rem;
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        background: var(--bg-card);
+        border: 1px solid transparent;
+        transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+      }
+      .dept-tab:hover {
+        color: var(--text-primary);
+        background: var(--bg-input);
+      }
       .dept-tab--active {
         background: var(--ky-gradient, var(--soft-blue));
         color: #f1f5f9;
@@ -393,6 +486,150 @@ type PageTab = 'list' | 'assignments';
       .dept-page :is(.ky-btn-primary, .ky-btn-secondary) {
         white-space: nowrap;
       }
+      .dept-assign-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+        align-items: start;
+      }
+      @media (min-width: 1280px) {
+        .dept-assign-grid {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr);
+          gap: 1.5rem;
+        }
+      }
+      .dept-panel {
+        min-height: 28rem;
+      }
+      .dept-list {
+        max-height: min(70vh, 32rem);
+        overflow-y: auto;
+        border-top: 1px solid var(--border-color);
+      }
+      .dept-list-item {
+        width: 100%;
+        text-align: left;
+        padding: 0.85rem 1rem;
+        border-bottom: 1px solid var(--border-color);
+        transition: background 0.15s ease, box-shadow 0.15s ease;
+      }
+      .dept-list-item:hover {
+        background: color-mix(in srgb, var(--bg-input) 70%, transparent);
+      }
+      .dept-list-item--selected {
+        background: var(--info-bg);
+        box-shadow: inset 3px 0 0 var(--info-text);
+      }
+      .dept-chip {
+        flex-shrink: 0;
+        border-radius: 0.25rem;
+        padding: 0.15rem 0.4rem;
+        font-size: 0.5625rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        background: var(--info-bg);
+        color: var(--info-text);
+      }
+      .dept-link {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--info-text);
+      }
+      .dept-link:hover {
+        opacity: 0.85;
+      }
+      .dept-avatar {
+        display: inline-flex;
+        height: 2.25rem;
+        width: 2.25rem;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9999px;
+        background: var(--info-bg);
+        color: var(--info-text);
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+      .dept-avatar--sm {
+        height: 2rem;
+        width: 2rem;
+        font-size: 0.6875rem;
+      }
+      .dept-kpi {
+        border-radius: 0.5rem;
+        border: 1px solid var(--border-color);
+        background: color-mix(in srgb, var(--bg-input) 55%, transparent);
+        padding: 0.75rem;
+      }
+      .dept-context-panel {
+        min-height: 22rem;
+      }
+      .dept-context-tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.35rem;
+        margin: 0 1rem;
+        padding: 0.35rem;
+        border-radius: 0.65rem;
+        border: 1px solid var(--border-color);
+        background: color-mix(in srgb, var(--bg-input) 65%, transparent);
+      }
+      @media (min-width: 640px) {
+        .dept-context-tabs {
+          margin: 0 1.5rem;
+        }
+      }
+      .dept-context-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        border-radius: 0.45rem;
+        padding: 0.55rem 0.65rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .dept-context-tab:hover {
+        color: var(--text-primary);
+      }
+      .dept-context-tab--active {
+        background: var(--bg-card);
+        color: var(--text-primary);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+      }
+      .dept-context-body {
+        flex: 1 1 auto;
+        min-height: 14rem;
+        max-height: min(48vh, 26rem);
+        overflow-y: auto;
+        padding: 1rem;
+      }
+      @media (min-width: 640px) {
+        .dept-context-body {
+          padding: 1rem 1.5rem 1.5rem;
+        }
+      }
+      .dept-member-card {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--border-color);
+        background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+        padding: 0.55rem 0.75rem;
+      }
+      .dept-member-card--manager {
+        border-color: color-mix(in srgb, var(--info-border) 80%, var(--border-color));
+        background: color-mix(in srgb, var(--info-bg) 55%, transparent);
+      }
+      .dept-role-badge {
+        font-size: 0.6875rem;
+        color: var(--text-muted);
+      }
     `,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -400,8 +637,17 @@ type PageTab = 'list' | 'assignments';
 export class BusinessDepartmentsPageComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly confirm = inject(KyntusConfirmService);
+  private readonly directoryFacade = inject(DirectoryFacadeService);
 
-  readonly icons = { refresh: RefreshCw, plus: Plus, check: Check, trash: Trash2, users: Users, building: Building2 };
+  readonly icons = {
+    refresh: RefreshCw,
+    plus: Plus,
+    check: Check,
+    trash: Trash2,
+    users: Users,
+    building: Building2,
+    activity: Activity,
+  };
 
   readonly pageTabs: { id: PageTab; label: string }[] = [
     { id: 'list', label: 'Liste des départements' },
@@ -409,6 +655,7 @@ export class BusinessDepartmentsPageComponent implements OnInit {
   ];
 
   readonly activeTab = signal<PageTab>('list');
+  readonly contextPanelTab = signal<ContextPanelTab>('apercu');
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly search = signal('');
@@ -417,6 +664,7 @@ export class BusinessDepartmentsPageComponent implements OnInit {
 
   readonly departments = signal<BusinessDepartmentDto[]>([]);
   readonly employees = signal<DirectoryEmployeeDto[]>([]);
+  readonly activityLog = signal<SupportActivityEntry[]>([]);
 
   readonly selectedId = signal<string | null>(null);
   readonly formCode = signal('');
@@ -487,6 +735,13 @@ export class BusinessDepartmentsPageComponent implements OnInit {
       .slice(0, 25);
   });
 
+  readonly visibleActivityLog = computed(() => {
+    const all = this.activityLog();
+    const deptId = this.selectedId();
+    if (!deptId) return all;
+    return all.filter((e) => !e.departmentId || e.departmentId === deptId);
+  });
+
   ngOnInit(): void {
     void this.reload();
   }
@@ -537,6 +792,7 @@ export class BusinessDepartmentsPageComponent implements OnInit {
     this.draftMemberId.set('');
     this.detailEmpSearch.set('');
     this.memberSearch.set('');
+    this.contextPanelTab.set('apercu');
   }
 
   openAssignments(deptId: string): void {
@@ -547,10 +803,14 @@ export class BusinessDepartmentsPageComponent implements OnInit {
 
   async reload(): Promise<void> {
     this.loading.set(true);
+    this.directoryFacade.invalidate();
     try {
       const [depts, emps] = await Promise.all([
-        firstValueFrom(this.http.get<BusinessDepartmentDto[]>('/api/directory/business-departments')),
-        firstValueFrom(this.http.get<DirectoryEmployeeDto[]>('/api/directory/employees')),
+        firstValueFrom(this.http.get<BusinessDepartmentDto[]>('/api/directory/business-departments', {
+          params: { _nc: String(Date.now()) },
+          headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+        })),
+        firstValueFrom(this.directoryFacade.getEmployees<DirectoryEmployeeDto[]>()),
       ]);
       this.departments.set(depts);
       this.employees.set(emps);
@@ -563,6 +823,7 @@ export class BusinessDepartmentsPageComponent implements OnInit {
         if (dept) this.draftEmployeeId.set(dept.managerEmployeeId ?? '');
         else if (supportDepts.length) this.selectDepartment(supportDepts[0]);
       }
+      this.ensureActivitySeed(supportDepts);
     } catch {
       this.notify('Impossible de charger les données.', false);
     } finally {
@@ -572,12 +833,14 @@ export class BusinessDepartmentsPageComponent implements OnInit {
 
   async create(): Promise<void> {
     if (!this.canCreate()) return;
+    const code = this.formCode().trim();
+    const name = this.formName().trim();
     this.saving.set(true);
     try {
       await firstValueFrom(
         this.http.post('/api/directory/business-departments', {
-          code: this.formCode().trim(),
-          name: this.formName().trim(),
+          code,
+          name,
           kind: 'Support',
         }),
       );
@@ -585,6 +848,10 @@ export class BusinessDepartmentsPageComponent implements OnInit {
       this.formName.set('');
       this.notify('Département créé.', true);
       await this.reload();
+      const created = this.departments().find(
+        (d) => d.code.toLowerCase() === code.toLowerCase() && d.name.toLowerCase() === name.toLowerCase(),
+      );
+      this.pushActivity(`Département « ${name} » créé.`, created?.id);
     } catch {
       this.notify('Erreur lors de la création.', false);
     } finally {
@@ -611,6 +878,12 @@ export class BusinessDepartmentsPageComponent implements OnInit {
         this.http.post(`/api/directory/business-departments/${deptId}/manager`, { employeeId }),
       );
       this.notify('Manager enregistré — rôle Manager appliqué automatiquement.', true);
+      this.pushActivity(
+        current && current !== employeeId
+          ? `Manager remplacé : ${this.employeeLabel(current)} → ${this.employeeLabel(employeeId)}.`
+          : `Manager affecté : ${this.employeeLabel(employeeId)}.`,
+        deptId,
+      );
       await this.reload();
     } catch {
       this.notify('Erreur lors de l’affectation du manager.', false);
@@ -620,11 +893,13 @@ export class BusinessDepartmentsPageComponent implements OnInit {
   }
 
   async clearManager(deptId: string): Promise<void> {
+    const previous = this.employeeLabel(this.departments().find((d) => d.id === deptId)?.managerEmployeeId);
     this.saving.set(true);
     try {
       await firstValueFrom(this.http.delete(`/api/directory/business-departments/${deptId}/manager`));
       this.draftEmployeeId.set('');
       this.notify('Manager retiré.', true);
+      this.pushActivity(`Manager retiré (${previous}).`, deptId);
       await this.reload();
     } catch {
       this.notify('Erreur.', false);
@@ -663,6 +938,7 @@ export class BusinessDepartmentsPageComponent implements OnInit {
       );
       this.memberSearch.set('');
       this.notify(`${emp.firstName} ${emp.lastName} ajouté(e) à l’équipe.`, true);
+      this.pushActivity(`${emp.firstName} ${emp.lastName} ajouté(e) à l’équipe.`, dept.id);
       await this.reload();
     } catch {
       this.notify('Erreur lors du rattachement.', false);
@@ -672,6 +948,13 @@ export class BusinessDepartmentsPageComponent implements OnInit {
   }
 
   async removeFromTeam(emp: DirectoryEmployeeDto): Promise<void> {
+    const deptId = emp.businessDepartmentId ?? this.selectedId() ?? undefined;
+    // Mise à jour immédiate de l’UI (le reload confirme ensuite).
+    this.employees.update((list) =>
+      list.map((e) =>
+        e.id === emp.id ? { ...e, businessDepartmentId: null, parentId: null } : e,
+      ),
+    );
     this.saving.set(true);
     try {
       await firstValueFrom(
@@ -688,9 +971,11 @@ export class BusinessDepartmentsPageComponent implements OnInit {
         }),
       );
       this.notify('Collaborateur retiré du département.', true);
+      this.pushActivity(`${emp.firstName} ${emp.lastName} retiré(e) du périmètre.`, deptId);
       await this.reload();
     } catch {
       this.notify('Erreur lors du retrait.', false);
+      await this.reload();
     } finally {
       this.saving.set(false);
     }
@@ -713,5 +998,27 @@ export class BusinessDepartmentsPageComponent implements OnInit {
   private notify(msg: string, ok: boolean): void {
     this.flash.set(msg);
     this.flashOk.set(ok);
+  }
+
+  private pushActivity(message: string, departmentId?: string | null): void {
+    const at = new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+    this.activityLog.update((list) =>
+      [{ at, message, departmentId: departmentId ?? undefined }, ...list].slice(0, 40),
+    );
+  }
+
+  private activitySeeded = false;
+
+  private ensureActivitySeed(depts: BusinessDepartmentDto[]): void {
+    if (this.activitySeeded || this.activityLog().length > 0 || depts.length === 0) return;
+    const first = depts[0];
+    this.activityLog.set([
+      {
+        at: new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }),
+        message: `Périmètre Support prêt — ${depts.length} département(s) actif(s).`,
+        departmentId: first?.id,
+      },
+    ]);
+    this.activitySeeded = true;
   }
 }

@@ -26,7 +26,6 @@ public class PrimeController(IMediator mediator, IPrimeCoreQueryAppService? core
         };
     }
 
-    [AllowAnonymous]
     [HttpGet("departments")]
     public async Task<ActionResult<List<Department>>> GetPoles(CancellationToken ct)
     {
@@ -34,7 +33,6 @@ public class PrimeController(IMediator mediator, IPrimeCoreQueryAppService? core
         return Ok(await mediator.Send(new GetLegacyDepartmentsQuery(), ct));
     }
 
-    [AllowAnonymous]
     [HttpGet("org/operational-departments")]
     public async Task<ActionResult<OperationalOrgTreeDto>> GetOperationalDepartments(CancellationToken ct)
     {
@@ -42,7 +40,6 @@ public class PrimeController(IMediator mediator, IPrimeCoreQueryAppService? core
         return Ok(await mediator.Send(new GetOperationalDepartmentsQuery(), ct));
     }
 
-    [AllowAnonymous]
     [HttpGet("employees")]
     public async Task<ActionResult<List<Employee>>> GetEmployees(CancellationToken ct)
     {
@@ -51,10 +48,18 @@ public class PrimeController(IMediator mediator, IPrimeCoreQueryAppService? core
     }
 
     [HttpGet("types")]
-    public ActionResult<List<PrimeType>> GetPrimeTypes() => Ok(new List<PrimeType>());
+    public async Task<ActionResult<List<PrimeType>>> GetPrimeTypes(CancellationToken ct)
+    {
+        if (core is null) return StatusCode(503, new { error = "Base de données non configurée." });
+        return Ok(await mediator.Send(new GetPrimeTypesQuery(), ct));
+    }
 
     [HttpGet("rules")]
-    public ActionResult<List<PrimeRule>> GetPrimeRules() => Ok(new List<PrimeRule>());
+    public async Task<ActionResult<List<PrimeRule>>> GetPrimeRules(CancellationToken ct)
+    {
+        if (core is null) return StatusCode(503, new { error = "Base de données non configurée." });
+        return Ok(await mediator.Send(new GetPrimeRulesQuery(), ct));
+    }
 
     [HttpGet("results")]
     public async Task<ActionResult<List<PrimeResult>>> GetPrimeResults(CancellationToken ct)

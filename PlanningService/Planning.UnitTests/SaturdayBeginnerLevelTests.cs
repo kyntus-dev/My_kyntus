@@ -109,7 +109,7 @@ public class SaturdayBeginnerLevelTests
             MakeUser(3, "conf2@test.ma", level: 2));
         db.SaturdayGroups.AddRange(
             new SaturdayGroup { UserId = 1, GroupNumber = 1 },
-            new SaturdayGroup { UserId = 2, GroupNumber = 1 },
+            new SaturdayGroup { UserId = 2, GroupNumber = 2 },
             new SaturdayGroup { UserId = 3, GroupNumber = 1 });
         db.SaturdayHistories.AddRange(
             new SaturdayHistory

@@ -551,6 +551,22 @@ public static class PrimeSchemaPatches
                   WHERE table_schema = 'public' AND table_name = 'prime_employee_fiche_validation_history');
                 """,
                 ct),
+            "prime_workflow_step" => ScalarBoolAsync(
+                db,
+                """
+                SELECT EXISTS (
+                  SELECT 1 FROM information_schema.tables
+                  WHERE table_schema = 'public' AND table_name = 'prime_workflow_step');
+                """,
+                ct),
+            "prime_rbac_permission" => ScalarBoolAsync(
+                db,
+                """
+                SELECT EXISTS (
+                  SELECT 1 FROM information_schema.tables
+                  WHERE table_schema = 'public' AND table_name = 'prime_rbac_permission');
+                """,
+                ct),
             "prime_global_pool_scope_synthesis" => ScalarBoolAsync(
                 db,
                 """
@@ -573,6 +589,46 @@ public static class PrimeSchemaPatches
                 SELECT EXISTS (
                   SELECT 1 FROM information_schema.tables
                   WHERE table_schema = 'public' AND table_name = 'prime_absence_sanction_config');
+                """,
+                ct),
+            "prime_common_line_ponderation" => ScalarBoolAsync(
+                db,
+                """
+                SELECT EXISTS (
+                  SELECT 1 FROM information_schema.tables
+                  WHERE table_schema = 'public' AND table_name = 'prime_common_line_ponderation');
+                """,
+                ct),
+            "prime_service" => ScalarBoolAsync(
+                db,
+                """
+                SELECT EXISTS (
+                  SELECT 1 FROM information_schema.tables
+                  WHERE table_schema = 'public' AND table_name = 'prime_service');
+                """,
+                ct),
+            "prime_service_pole_line_ponderation" => ScalarBoolAsync(
+                db,
+                """
+                SELECT EXISTS (
+                  SELECT 1 FROM information_schema.tables
+                  WHERE table_schema = 'public' AND table_name = 'prime_service_pole_line_ponderation');
+                """,
+                ct),
+            "prime_service_prime_indicator" => ScalarBoolAsync(
+                db,
+                """
+                SELECT EXISTS (
+                  SELECT 1 FROM information_schema.tables
+                  WHERE table_schema = 'public' AND table_name = 'prime_service_prime_indicator');
+                """,
+                ct),
+            "prime_employee_service_indicator_ponderation" => ScalarBoolAsync(
+                db,
+                """
+                SELECT EXISTS (
+                  SELECT 1 FROM information_schema.tables
+                  WHERE table_schema = 'public' AND table_name = 'prime_employee_service_indicator_ponderation');
                 """,
                 ct),
             _ => Task.FromResult(false),
@@ -614,6 +670,136 @@ public static class PrimeSchemaPatches
             ALTER TABLE prime_employee ADD COLUMN IF NOT EXISTS "SuperviseurId" character varying(128) NULL;
             """,
             ct);
+    }
+
+    /// <summary>
+    /// Répare le circuit opérationnel des fiches et ses permissions.
+    /// Certaines bases ont conservé le flux V3 qui démarrait directement par le Superviseur.
+    /// </summary>
+    public static async Task EnsureOperationalValidationWorkflowAsync(
+        PrimeDbContext db,
+        CancellationToken ct = default)
+    {
+        if (!await TableExistsAsync(db, "prime_workflow_step", ct) ||
+            !await TableExistsAsync(db, "prime_rbac_permission", ct))
+            return;
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE prime_workflow_step
+            SET "IsActive" = FALSE, "UpdatedAt" = NOW()
+            WHERE "ApproverRole" IN ('RH', 'Manager', 'Comptabilité', 'Comptable', 'Admin', 'Audit', 'Pilote');
+
+            INSERT INTO prime_workflow_step (
+                "Id", "SortOrder", "ApproverRole", "FromStatus", "ToStatus",
+                "IsActive", "SlaHours", "CapturesAmountsOnApproval", "TerminalApproved",
+                "CreatedAt", "UpdatedAt")
+            VALUES (
+                gen_random_uuid(), 1, 'Référent technique', 'Pending', 'Référent technique Approved',
+                TRUE, 48, TRUE, FALSE, NOW(), NULL)
+            ON CONFLICT ("FromStatus", "ApproverRole", "ToStatus")
+            DO UPDATE SET
+                "SortOrder" = EXCLUDED."SortOrder",
+                "IsActive" = TRUE,
+                "SlaHours" = EXCLUDED."SlaHours",
+                "CapturesAmountsOnApproval" = TRUE,
+                "TerminalApproved" = FALSE,
+                "UpdatedAt" = NOW();
+
+            UPDATE prime_workflow_step
+            SET "SortOrder" = 2,
+                "FromStatus" = 'Référent technique Approved',
+                "ToStatus" = 'Superviseur Approved',
+                "IsActive" = TRUE,
+                "TerminalApproved" = FALSE,
+                "UpdatedAt" = NOW()
+            WHERE "ApproverRole" = 'Superviseur';
+
+            UPDATE prime_workflow_step
+            SET "SortOrder" = 3,
+                "FromStatus" = 'Superviseur Approved',
+                "ToStatus" = 'Chef de projet Approved',
+                "IsActive" = TRUE,
+                "TerminalApproved" = TRUE,
+                "UpdatedAt" = NOW()
+            WHERE "ApproverRole" IN ('Chef de projet', 'RP');
+
+            INSERT INTO prime_rbac_permission (
+                "Id", "Role", "Action", "Scope", "IsAllowed", "CreatedAt", "UpdatedAt")
+            VALUES
+                (gen_random_uuid(), 'Référent technique', 'Read', 'Service', TRUE, NOW(), NULL),
+                (gen_random_uuid(), 'Référent technique', 'Validate', 'Service', TRUE, NOW(), NULL),
+                (gen_random_uuid(), 'Coach', 'Read', 'Service', TRUE, NOW(), NULL),
+                (gen_random_uuid(), 'Coach', 'Validate', 'Service', TRUE, NOW(), NULL),
+                (gen_random_uuid(), 'Superviseur', 'Read', 'Cellule', TRUE, NOW(), NULL),
+                (gen_random_uuid(), 'Superviseur', 'Validate', 'Cellule', TRUE, NOW(), NULL),
+                (gen_random_uuid(), 'Chef de projet', 'Read', 'Pole', TRUE, NOW(), NULL),
+                (gen_random_uuid(), 'Chef de projet', 'Validate', 'Pole', TRUE, NOW(), NULL),
+                (gen_random_uuid(), 'RP', 'Read', 'Pole', TRUE, NOW(), NULL),
+                (gen_random_uuid(), 'RP', 'Validate', 'Pole', TRUE, NOW(), NULL)
+            ON CONFLICT ("Role", "Action", "Scope")
+            DO UPDATE SET "IsAllowed" = TRUE, "UpdatedAt" = NOW();
+            """,
+            ct);
+    }
+
+    /// <summary>
+    /// Synthèse globale : RH puis Comptabilité. Désactive les étapes Manager sans toucher au circuit fiches.
+    /// </summary>
+    public static async Task EnsureRhThenComptaGlobalPoolWorkflowAsync(
+        PrimeDbContext db,
+        CancellationToken ct = default)
+    {
+        if (!await TableExistsAsync(db, "prime_global_pool_workflow_step", ct))
+            return;
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE prime_global_pool_workflow_step
+            SET "IsActive" = FALSE, "UpdatedAt" = NOW()
+            WHERE "ApproverRole" = 'Manager';
+
+            INSERT INTO prime_global_pool_workflow_step (
+                "Id", "SortOrder", "ApproverRole", "IsRequired", "IsActive", "CreatedAt", "UpdatedAt")
+            SELECT gen_random_uuid(), 1, 'RH', TRUE, TRUE, NOW(), NULL
+            WHERE EXISTS (SELECT 1 FROM prime_global_pool_workflow_step)
+              AND NOT EXISTS (
+                  SELECT 1 FROM prime_global_pool_workflow_step WHERE "ApproverRole" = 'RH');
+
+            UPDATE prime_global_pool_workflow_step
+            SET "SortOrder" = 1, "IsRequired" = TRUE, "IsActive" = TRUE, "UpdatedAt" = NOW()
+            WHERE "ApproverRole" = 'RH';
+
+            INSERT INTO prime_global_pool_workflow_step (
+                "Id", "SortOrder", "ApproverRole", "IsRequired", "IsActive", "CreatedAt", "UpdatedAt")
+            SELECT gen_random_uuid(), 2, 'Comptabilité', TRUE, TRUE, NOW(), NULL
+            WHERE EXISTS (SELECT 1 FROM prime_global_pool_workflow_step)
+              AND NOT EXISTS (
+                  SELECT 1 FROM prime_global_pool_workflow_step
+                  WHERE "ApproverRole" IN ('Comptabilité', 'Comptable'));
+
+            UPDATE prime_global_pool_workflow_step
+            SET "SortOrder" = 2, "IsRequired" = TRUE, "IsActive" = TRUE, "UpdatedAt" = NOW()
+            WHERE "ApproverRole" IN ('Comptabilité', 'Comptable');
+            """,
+            ct);
+
+        if (await TableExistsAsync(db, "prime_rbac_permission", ct))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO prime_rbac_permission (
+                    "Id", "Role", "Action", "Scope", "IsAllowed", "CreatedAt", "UpdatedAt")
+                VALUES
+                    (gen_random_uuid(), 'RH', 'Read', 'Global', TRUE, NOW(), NULL),
+                    (gen_random_uuid(), 'Comptabilité', 'Read', 'Global', TRUE, NOW(), NULL),
+                    (gen_random_uuid(), 'Comptable', 'Read', 'Global', TRUE, NOW(), NULL),
+                    (gen_random_uuid(), 'Admin', 'Read', 'Global', TRUE, NOW(), NULL)
+                ON CONFLICT ("Role", "Action", "Scope")
+                DO UPDATE SET "IsAllowed" = TRUE, "UpdatedAt" = NOW();
+                """,
+                ct);
+        }
     }
 
     public static async Task EnsureOutboxTableAsync(PrimeDbContext db, CancellationToken ct = default)
@@ -855,6 +1041,67 @@ public static class PrimeSchemaPatches
                   AND c."ScopeId" = p."ServiceId"
                   AND c."TemplateStableId" = p."TemplateStableId"
                   AND c."EffectiveTo" IS NULL);
+            """,
+            ct);
+    }
+
+    /// <summary>Index lecture fréquents (pondérations + fiches période/statut).</summary>
+    public static async Task EnsurePerfIndexesAsync(PrimeDbContext db, CancellationToken ct = default)
+    {
+        if (await TableExistsAsync(db, "prime_common_line_ponderation", ct))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                CREATE INDEX IF NOT EXISTS "IX_prime_common_line_ponderation_scope_template_active"
+                  ON prime_common_line_ponderation ("ScopeType", "ScopeId", "TemplateId", "EffectiveFrom")
+                  WHERE "EffectiveTo" IS NULL;
+                CREATE INDEX IF NOT EXISTS "IX_prime_common_line_ponderation_scope_from_to"
+                  ON prime_common_line_ponderation ("ScopeType", "ScopeId", "EffectiveFrom", "EffectiveTo");
+                """,
+                ct);
+        }
+
+        if (await TableExistsAsync(db, "prime_employee_prime_service_fiche", ct))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                CREATE INDEX IF NOT EXISTS "IX_prime_employee_prime_service_fiche_Period_ValidationStatus"
+                  ON prime_employee_prime_service_fiche ("Period", "ValidationStatus");
+                """,
+                ct);
+        }
+    }
+
+    /// <summary>Overrides pondération indicateur par agent (partie service).</summary>
+    public static async Task EnsureEmployeeServiceIndicatorPonderationTableAsync(
+        PrimeDbContext db,
+        CancellationToken ct = default)
+    {
+        if (!await TableExistsAsync(db, "prime_service_prime_indicator", ct))
+            return;
+        if (await TableExistsAsync(db, "prime_employee_service_indicator_ponderation", ct))
+            return;
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS prime_employee_service_indicator_ponderation (
+                "Id" uuid NOT NULL,
+                "EmployeeId" character varying(128) NOT NULL,
+                "ServicePrimeIndicatorId" uuid NOT NULL,
+                "PonderationPrimePct" numeric(9,4) NULL,
+                "PonderationChallengePct" numeric(9,4) NULL,
+                "CreatedAt" timestamp with time zone NOT NULL,
+                "UpdatedAt" timestamp with time zone NULL,
+                CONSTRAINT "PK_prime_employee_service_indicator_ponderation" PRIMARY KEY ("Id"),
+                CONSTRAINT "FK_prime_employee_service_indicator_ponderation_indicator"
+                    FOREIGN KEY ("ServicePrimeIndicatorId")
+                    REFERENCES prime_service_prime_indicator ("Id")
+                    ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_prime_employee_service_indicator_ponderation_employee_ind"
+                ON prime_employee_service_indicator_ponderation ("EmployeeId", "ServicePrimeIndicatorId");
+            CREATE INDEX IF NOT EXISTS "IX_prime_employee_service_indicator_ponderation_indicator"
+                ON prime_employee_service_indicator_ponderation ("ServicePrimeIndicatorId");
             """,
             ct);
     }

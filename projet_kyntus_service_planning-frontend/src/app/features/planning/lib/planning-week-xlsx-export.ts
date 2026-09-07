@@ -1,23 +1,16 @@
 import type * as ExcelJSTypes from 'exceljs';
-import type {
-  DayAssignment,
-  EmployeePlanning,
-  WeeklyPlanningResponse,
-} from '../services/planning.service';
+import type { WeeklyPlanningResponse } from '../services/planning.service';
 import { contractLevelLabel } from '../../../core/hr/user-hr-display.util';
-
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
-
-const DAY_LABELS: Record<string, string> = {
-  Monday: 'Lundi',
-  Tuesday: 'Mardi',
-  Wednesday: 'Mercredi',
-  Thursday: 'Jeudi',
-  Friday: 'Vendredi',
-  Saturday: 'Samedi',
-};
-
-type AbsenceLabelFn = (value: string | null) => string;
+import {
+  PLANNING_EXPORT_DAYS,
+  PLANNING_EXPORT_DAY_LABELS,
+  type AbsenceLabelFn,
+  buildShiftColorMap,
+  formatExportCell,
+  formatExportDateHeader,
+  getExportAssignment,
+  resolveExportTheme,
+} from './planning-week-export.util';
 
 async function loadExcelJS(): Promise<typeof import('exceljs')> {
   const mod = await import('exceljs');
@@ -46,73 +39,6 @@ async function downloadWorkbook(wb: ExcelJSTypes.Workbook, fileName: string): Pr
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function normalizeDayKey(day: string | null | undefined): string {
-  return (day ?? '').trim().toLowerCase();
-}
-
-function dayKeyAliases(day: string): Set<string> {
-  const groups = [
-    ['monday', 'lundi'],
-    ['tuesday', 'mardi'],
-    ['wednesday', 'mercredi'],
-    ['thursday', 'jeudi'],
-    ['friday', 'vendredi'],
-    ['saturday', 'samedi'],
-    ['sunday', 'dimanche'],
-  ];
-  const key = normalizeDayKey(day);
-  for (const g of groups) {
-    if (g.includes(key)) return new Set(g);
-  }
-  return new Set([key]);
-}
-
-function getAssignment(employee: EmployeePlanning, day: string): DayAssignment | null {
-  const aliases = dayKeyAliases(day);
-  return employee.days.find((d) => aliases.has(normalizeDayKey(d.day))) ?? null;
-}
-
-function formatDateHeader(weekStartDate: string, day: string): string {
-  const offsets: Record<string, number> = {
-    Monday: 0,
-    Tuesday: 1,
-    Wednesday: 2,
-    Thursday: 3,
-    Friday: 4,
-    Saturday: 5,
-  };
-  const d = new Date(weekStartDate);
-  if (Number.isNaN(d.getTime())) {
-    return DAY_LABELS[day] ?? day;
-  }
-  d.setDate(d.getDate() + (offsets[day] ?? 0));
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  return `${DAY_LABELS[day] ?? day} ${dd}/${mm}`;
-}
-
-function formatCell(a: DayAssignment | null, getAbsenceLabel: AbsenceLabelFn): string {
-  if (!a) return 'OFF';
-  if (a.isOnLeave) return getAbsenceLabel(a.absenceType);
-  if (a.isHoliday) {
-    return a.holidayName?.trim() ? `Férié — ${a.holidayName.trim()}` : 'Férié';
-  }
-  if (!a.startTime && !a.shiftLabel) return 'OFF';
-
-  const parts: string[] = [];
-  if (a.startTime && a.endTime) parts.push(`${a.startTime}–${a.endTime}`);
-  else if (a.startTime) parts.push(a.startTime);
-  if (a.shiftLabel) parts.push(a.shiftLabel);
-  if (a.shiftModeTitle) {
-    parts.push(a.isModeOverride ? `${a.shiftModeTitle} (Switch)` : a.shiftModeTitle);
-  }
-  if (a.breakTime) parts.push(`Pause ${a.breakTime}`);
-  if (a.isExceptionalRequest) parts.push('DE');
-  if (a.isManagerOverride && !a.isExceptionalRequest) parts.push('Modifié');
-  if (a.slotLabel) parts.push(a.slotLabel);
-  return parts.join(' | ') || 'OFF';
-}
-
 function slugPart(value: string): string {
   return (
     value
@@ -124,14 +50,37 @@ function slugPart(value: string): string {
   );
 }
 
+function applyFill(
+  cell: ExcelJSTypes.Cell,
+  theme: { fill: string; font: string },
+  bold = false,
+): void {
+  cell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: `FF${theme.fill}` },
+  };
+  cell.font = {
+    ...(cell.font ?? {}),
+    color: { argb: `FF${theme.font}` },
+    bold,
+    size: 10,
+  };
+}
+
 /**
- * Exporte la grille hebdomadaire (employés × Lun–Sam) en .xlsx.
+ * Exporte la grille hebdomadaire (employés × Lun–Sam) en .xlsx coloré.
  */
 export async function downloadPlanningWeekExcel(
   planning: WeeklyPlanningResponse,
-  options?: { getAbsenceLabel?: AbsenceLabelFn },
+  options?: {
+    getAbsenceLabel?: AbsenceLabelFn;
+    shiftColorMap?: Record<string, string>;
+    statusLabel?: string;
+  },
 ): Promise<void> {
   const getAbsenceLabel = options?.getAbsenceLabel ?? ((v) => (v ? String(v) : 'Congé'));
+  const colorMap = options?.shiftColorMap ?? buildShiftColorMap(planning);
 
   const ExcelJS = await loadExcelJS();
   if (typeof ExcelJS?.Workbook !== 'function') {
@@ -139,28 +88,42 @@ export async function downloadPlanningWeekExcel(
   }
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'MyKyntus';
+  wb.creator = 'Kyntus';
   wb.created = new Date();
 
   const sheet = wb.addWorksheet('Planning');
-  const dayHeaders = DAYS.map((d) => formatDateHeader(planning.weekStartDate, d));
+  const dayHeaders = PLANNING_EXPORT_DAYS.map(d => formatExportDateHeader(planning.weekStartDate, d));
 
-  sheet.getColumn(1).width = 28;
+  sheet.getColumn(1).width = 30;
   sheet.getColumn(2).width = 12;
-  for (let i = 0; i < DAYS.length; i++) sheet.getColumn(3 + i).width = 28;
-  sheet.getColumn(3 + DAYS.length).width = 36;
+  for (let i = 0; i < PLANNING_EXPORT_DAYS.length; i++) sheet.getColumn(3 + i).width = 26;
+  sheet.getColumn(3 + PLANNING_EXPORT_DAYS.length).width = 36;
 
   const meta = sheet.addRow([
     `Planning — ${planning.subServiceName}`,
     planning.weekCode,
-    `Statut : ${planning.status}`,
-    `${planning.assignments.length} employés`,
+    `Statut : ${options?.statusLabel ?? planning.status}`,
+    `${planning.assignments.length} agents`,
   ]);
-  meta.font = { bold: true, size: 12 };
+  meta.font = { bold: true, size: 13, color: { argb: 'FF1E3A5F' } };
+  meta.getCell(1).fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFDBEAFE' },
+  };
 
-  const header = sheet.addRow(['Employé', 'Niveau', ...dayHeaders, 'Note']);
-  header.font = { bold: true };
-  header.alignment = { vertical: 'middle', wrapText: true };
+  const header = sheet.addRow(['Nom Prénom', 'Niveau', ...dayHeaders, 'Note']);
+  header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  header.alignment = { vertical: 'middle', wrapText: true, horizontal: 'center' };
+  header.eachCell(cell => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1D4ED8' },
+    };
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  });
+  header.height = 22;
 
   const sorted = [...planning.assignments].sort((a, b) =>
     a.fullName.localeCompare(b.fullName, 'fr', { sensitivity: 'base' }),
@@ -170,10 +133,23 @@ export async function downloadPlanningWeekExcel(
     const row = sheet.addRow([
       emp.fullName,
       contractLevelLabel(emp.level),
-      ...DAYS.map((day) => formatCell(getAssignment(emp, day), getAbsenceLabel)),
+      ...PLANNING_EXPORT_DAYS.map(day =>
+        formatExportCell(getExportAssignment(emp, day), getAbsenceLabel),
+      ),
       emp.managerComment?.trim() || '',
     ]);
-    row.alignment = { vertical: 'top', wrapText: true };
+    row.alignment = { vertical: 'middle', wrapText: true };
+    row.height = 36;
+    row.getCell(1).font = { bold: true, size: 10 };
+
+    PLANNING_EXPORT_DAYS.forEach((day, i) => {
+      const assignment = getExportAssignment(emp, day);
+      applyFill(row.getCell(3 + i), resolveExportTheme(assignment, colorMap));
+    });
+    const noteCell = row.getCell(3 + PLANNING_EXPORT_DAYS.length);
+    if (emp.managerComment?.trim()) {
+      applyFill(noteCell, { fill: 'FEF3C7', font: '92400E' });
+    }
   }
 
   const synthesis = planning.coverageReport?.daySynthesis;
@@ -188,10 +164,17 @@ export async function downloadPlanningWeekExcel(
       { header: 'Niveau %', key: 'level', width: 12 },
       { header: 'Rotation %', key: 'rot', width: 12 },
     ];
-    syn.getRow(1).font = { bold: true };
+    syn.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    syn.getRow(1).eachCell(cell => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1D4ED8' },
+      };
+    });
     for (const d of synthesis) {
       syn.addRow({
-        day: DAY_LABELS[d.day] ?? d.day,
+        day: PLANNING_EXPORT_DAY_LABELS[d.day] ?? d.day,
         date: d.date,
         present: d.presentCount ?? '',
         leave: d.leaveCount,

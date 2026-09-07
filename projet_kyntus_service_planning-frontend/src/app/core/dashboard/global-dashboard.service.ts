@@ -29,9 +29,12 @@ import {
   parrainageRhManagementTarget,
   primeAdminAnomaliesTarget,
   primeAuditAnomaliesTarget,
+  platformAuditJournalTarget,
   type DashboardNavTarget,
 } from './global-dashboard.navigation';
 import { KyntusNotificationHubService, type KyntusNotification } from '../notifications/kyntus-notification-hub.service';
+import { KyntusSessionService } from '../session/kyntus-session.service';
+import { PlatformAccessService } from '../platform-access/platform-access.service';
 import {
   DASHBOARD_BY_CLUSTER,
   healthModulesForCluster,
@@ -131,6 +134,8 @@ export class GlobalDashboardService {
   private readonly navActions = inject(NavigationActionsService);
   private readonly router = inject(Router);
   private readonly notifHub = inject(KyntusNotificationHubService);
+  private readonly session = inject(KyntusSessionService);
+  private readonly access = inject(PlatformAccessService);
 
   private readonly snapshotCacheMs = 5 * 60_000;
   private readonly apiTimeoutMs = 4_000;
@@ -150,32 +155,36 @@ export class GlobalDashboardService {
       return of(this.buildSnapshot(cluster, role, visibleModuleIds, EMPTY_METRICS, []));
     }
 
-    const cacheKey = `${cluster}|${role}|${authId ?? 'anon'}`;
-    const cached = this.snapshotCache.get(cacheKey);
-    const fresh$ = this.buildFreshSnapshot$(role, authId, cluster, visibleModuleIds).pipe(
-      shareReplay({ bufferSize: 1, refCount: false }),
+    return from(this.access.ensureLoaded()).pipe(
+      switchMap(() => {
+        const cacheKey = `${cluster}|${role}|${authId ?? 'anon'}|cv${this.canValidateLeaves() ? 1 : 0}`;
+        const cached = this.snapshotCache.get(cacheKey);
+        const fresh$ = this.buildFreshSnapshot$(role, authId, cluster, visibleModuleIds).pipe(
+          shareReplay({ bufferSize: 1, refCount: false }),
+        );
+
+        if (cached && cached.expiresAt > Date.now()) {
+          return cached.stream;
+        }
+
+        if (cached) {
+          const staleThenFresh$ = merge(cached.stream.pipe(take(1)), fresh$).pipe(
+            shareReplay({ bufferSize: 1, refCount: false }),
+          );
+          this.snapshotCache.set(cacheKey, {
+            expiresAt: Date.now() + this.snapshotCacheMs,
+            stream: staleThenFresh$,
+          });
+          return staleThenFresh$;
+        }
+
+        this.snapshotCache.set(cacheKey, {
+          expiresAt: Date.now() + this.snapshotCacheMs,
+          stream: fresh$,
+        });
+        return fresh$;
+      }),
     );
-
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.stream;
-    }
-
-    if (cached) {
-      const staleThenFresh$ = merge(cached.stream.pipe(take(1)), fresh$).pipe(
-        shareReplay({ bufferSize: 1, refCount: false }),
-      );
-      this.snapshotCache.set(cacheKey, {
-        expiresAt: Date.now() + this.snapshotCacheMs,
-        stream: staleThenFresh$,
-      });
-      return staleThenFresh$;
-    }
-
-    this.snapshotCache.set(cacheKey, {
-      expiresAt: Date.now() + this.snapshotCacheMs,
-      stream: fresh$,
-    });
-    return fresh$;
   }
 
   private buildFreshSnapshot$(
@@ -332,12 +341,13 @@ export class GlobalDashboardService {
       );
     }
 
-    if (['employee', 'superviseur'].includes(cluster) && ctx.employeGuid) {
+    const leaveId = this.session.getSubjectId()?.trim() || ctx.employeGuid?.trim();
+    if (['employee', 'superviseur'].includes(cluster) && leaveId) {
       priority.empConges = this.dashCall(
-        this.congeService.getDemandesByEmploye(ctx.employeGuid, StatutDemande.EnAttente),
+        this.congeService.getDemandesByEmploye(leaveId, StatutDemande.EnAttente),
         [],
       );
-      priority.solde = this.dashCall(this.congeService.getSolde(ctx.employeGuid), null);
+      priority.solde = this.dashCall(this.congeService.getSolde(leaveId), null);
     }
 
     // Requêtes lourdes — chargées après les KPIs prioritaires
@@ -558,7 +568,7 @@ export class GlobalDashboardService {
       case 'parrainageSubmitted':
         return parrainageRhManagementTarget();
       case 'parrainageAudit':
-        return { route: DASHBOARD_ROUTES.parrainage, parrainageView: 'admin-audit' };
+        return platformAuditJournalTarget('parrainage');
       case 'docPending':
         return this.documentationPendingTarget(cluster);
       case 'formationsPending':
@@ -571,7 +581,7 @@ export class GlobalDashboardService {
       case 'unreadNotifications':
         return { route: DASHBOARD_ROUTES.notifications };
       case 'auditDocEvents':
-        return { route: DASHBOARD_ROUTES.documentation, documentationTab: 'audit-logs' };
+        return platformAuditJournalTarget('documentation');
       case 'activeEmployees':
         return { route: DASHBOARD_ROUTES.organisation };
       default:
@@ -616,12 +626,12 @@ export class GlobalDashboardService {
         return { action: this.navAction(this.primeValidationTarget(role)) };
       case 'parrainage':
         if (cluster === 'audit') {
-          return { action: this.navAction({ route: DASHBOARD_ROUTES.parrainage, parrainageView: 'admin-audit' }) };
+          return { action: this.navAction(platformAuditJournalTarget('parrainage')) };
         }
         return { action: this.navAction(parrainageRhManagementTarget()) };
       case 'documentation':
         if (cluster === 'audit') {
-          return { action: this.navAction({ route: DASHBOARD_ROUTES.documentation, documentationTab: 'audit-logs' }) };
+          return { action: this.navAction(platformAuditJournalTarget('documentation')) };
         }
         return { action: this.navAction(this.documentationPendingTarget(cluster)) };
       case 'formation':
@@ -789,7 +799,7 @@ export class GlobalDashboardService {
           actionLabel: 'Traiter',
         });
       }
-      if (mods.has('conges') && m.pendingCongesRh > 5) {
+      if (mods.has('conges') && m.pendingCongesRh > 5 && this.canValidateLeaves()) {
         alerts.push({
           severity: 'warn',
           title: 'Congés',
@@ -801,7 +811,7 @@ export class GlobalDashboardService {
     }
 
     if (cluster === 'manager') {
-      if (mods.has('conges') && m.managerPendingConges > 0) {
+      if (mods.has('conges') && m.managerPendingConges > 0 && this.canValidateLeaves()) {
         alerts.push({
           severity: 'warn',
           title: 'Congés équipe',
@@ -850,7 +860,7 @@ export class GlobalDashboardService {
     };
 
     if (cluster === 'adminRh') {
-      if (mods.has('conges') && m.pendingCongesRh > 0) {
+      if (mods.has('conges') && m.pendingCongesRh > 0 && this.canValidateLeaves()) {
         push({
           id: 'conges-rh',
           label: 'Valider les congés RH',
@@ -943,7 +953,7 @@ export class GlobalDashboardService {
     }
 
     if (cluster === 'manager') {
-      if (mods.has('conges') && m.managerPendingConges > 0) {
+      if (mods.has('conges') && m.managerPendingConges > 0 && this.canValidateLeaves()) {
         push({
           id: 'conges-manager',
           label: 'Valider congés équipe',
@@ -1037,7 +1047,7 @@ export class GlobalDashboardService {
           module: moduleLabel('parrainage'),
           moduleId: 'parrainage',
           count: m.parrainageAudit,
-          action: this.navAction({ route: DASHBOARD_ROUTES.parrainage, parrainageView: 'admin-audit' }),
+          action: this.navAction(platformAuditJournalTarget('parrainage')),
         });
       }
       push({
@@ -1046,7 +1056,7 @@ export class GlobalDashboardService {
         detail: `${m.auditDocEvents} événement(s) cette semaine`,
         module: moduleLabel('documentation'),
         moduleId: 'documentation',
-        action: this.navAction({ route: DASHBOARD_ROUTES.documentation, documentationTab: 'audit-logs' }),
+        action: this.navAction(platformAuditJournalTarget('documentation')),
       });
     }
 
@@ -1183,6 +1193,11 @@ export class GlobalDashboardService {
           };
       }
     });
+  }
+
+  private canValidateLeaves(): boolean {
+    if (!this.access.hasCatalog()) return true;
+    return this.access.canValidate('conges.validation');
   }
 
   private buildQuickActions(actionItems: GlobalActionItem[]): { label: string; route?: string; action?: () => void }[] {

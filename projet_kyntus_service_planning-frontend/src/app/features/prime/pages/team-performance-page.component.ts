@@ -34,6 +34,7 @@ import { isPrimeGlobalPoolStakeholderRole } from '../lib/prime-global-pool-stake
 import { buildPrimeDepartmentManagerNav } from '../lib/prime-manager-nav';
 import { mapPrimeResultToFicheDto } from '../lib/map-prime-result-to-fiche-dto';
 import { PrimeService } from '../services/prime.service';
+import { primeValidationStatusShortLabel } from '../lib/prime-workflow-labels';
 
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
@@ -129,9 +130,9 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendCompone
             <div class="h-80 w-full" echarts [options]="workflowChartOptions()" [initOpts]="chartInit"></div>
           </app-prime-card>
 
-          <app-prime-card title="Écart d'avancement par agent">
+          <app-prime-card title="Écart d'avancement par pilote">
             <p class="text-sm text-muted mb-3">
-              Compare les fiches validées, en attente et rejetées pour détecter les agents à accompagner.
+              Compare les fiches validées, en attente et rejetées pour identifier les pilotes à accompagner.
             </p>
             <div class="h-80 w-full" echarts [options]="agentChartOptions()" [initOpts]="chartInit"></div>
           </app-prime-card>
@@ -391,7 +392,7 @@ export class TeamPerformancePageComponent {
     const blocked = this.scopedResults().filter((r) => r.validationStatus === 'Rejected' || r.isReadyForValidation !== true).length;
     return [
       {
-        label: 'Agent à accompagner',
+        label: 'Pilote à accompagner',
         value: weakest?.name ?? '—',
         detail: weakest ? `${weakest.pending + weakest.rejected} fiche(s) à suivre` : 'Aucune donnée exploitable.',
       },
@@ -483,7 +484,7 @@ export class TeamPerformancePageComponent {
 
   formatAmount(value: number | null | undefined): string {
     if (value === null || value === undefined) return '—';
-    return `${value.toFixed(2)} MAD`;
+    return `${value.toFixed(2)} DH`;
   }
 
   statusBadgeClass(status: string): string {
@@ -495,12 +496,6 @@ export class TeamPerformancePageComponent {
   }
 
   statusLabel(status: string): string {
-    if (status === 'RH Approved') return 'RH validé';
-    if (status === 'Rejected') return 'Rejeté';
-    if (status === 'Pending') return 'En attente';
-    if (status === 'Référent technique Approved') return 'Réf. technique validé';
-    if (status === 'Superviseur Approved') return 'Superviseur validé';
-    if (status === 'Chef de projet Approved') return 'Chef de projet validé';
-    return status;
+    return primeValidationStatusShortLabel(status);
   }
 }

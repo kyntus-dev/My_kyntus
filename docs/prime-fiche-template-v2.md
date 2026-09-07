@@ -43,4 +43,4 @@ Identiques à la v1 pour le texte normalisé (Résultat, KPI Point MIN, …), ma
 
 ## Référence fichier
 
-Exemple dans le dépôt : `docs/samples/EXEMPLAIRE PRIME1.xlsx`.
+Exemple dans le dépôt : `docs/samples/EXEMPLAIRE PRIME1.xlsx` (copie servie au téléchargement SPA : `public/assets/prime/fiche-prime-modele-standard.xlsx`).

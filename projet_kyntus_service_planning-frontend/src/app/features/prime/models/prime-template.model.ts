@@ -1,3 +1,5 @@
+import type { ExcelSheetAppearance } from '../lib/excel-sheet-appearance';
+import { isExcelSheetAppearance } from '../lib/excel-sheet-appearance';
 import type { PrimeFicheGridImportResult, PrimeFicheTemplateSchema } from './prime-fiche-template.schema';
 
 /** Coin haut-gauche de la plage `!ref` d’une feuille (indices Excel 0-based). */
@@ -60,6 +62,8 @@ export interface ParsedPrimeTemplate {
   calcSheets?: PrimeTemplateCalcSheets;
   /** Coin haut-gauche de `!ref` par feuille (indices Excel 0-based) — alignement schéma / HyperFormula. */
   calcSheetOrigins?: Record<string, PrimeCalcSheetOrigin>;
+  /** Mise en forme native de la feuille d’aperçu (couleurs, fusions, formats). */
+  sheetAppearance?: ExcelSheetAppearance;
 }
 
 /** Template sauvegardé côté client (en attendant API). */
@@ -83,6 +87,8 @@ export interface PrimeTemplateCalcSnapshotV1 {
   calcSheets: PrimeTemplateCalcSheets;
   /** Par feuille : décalage de la matrice compacte vs indices Excel (défaut 0,0 si absent). */
   calcSheetOrigins?: Record<string, PrimeCalcSheetOrigin>;
+  /** Styles Excel d’origine (optionnel — templates anciens sans ce champ). */
+  sheetAppearance?: ExcelSheetAppearance;
 }
 
 function defaultOriginsForSheets(calcSheets: PrimeTemplateCalcSheets): Record<string, PrimeCalcSheetOrigin> {
@@ -105,6 +111,9 @@ export function serializeTemplateCalcSnapshotV1(tpl: StoredPrimeTemplate): strin
     formulas: Array.isArray(tpl.formulas) ? tpl.formulas : [],
     calcSheets: cs,
     calcSheetOrigins: { ...defaultOriginsForSheets(cs), ...origins },
+    ...(tpl.sheetAppearance && isExcelSheetAppearance(tpl.sheetAppearance)
+      ? { sheetAppearance: tpl.sheetAppearance }
+      : {}),
   };
   return JSON.stringify(snap);
 }
@@ -141,6 +150,7 @@ export function parseTemplateCalcSnapshotV1(raw: string | null | undefined): Pri
       formulas: Array.isArray(o.formulas) ? (o.formulas as DetectedFormulaCell[]) : [],
       calcSheets: cs,
       calcSheetOrigins: mergedOrigins,
+      sheetAppearance: isExcelSheetAppearance(o.sheetAppearance) ? o.sheetAppearance : undefined,
     };
   } catch {
     return null;
@@ -169,6 +179,7 @@ export function storedTemplateFromCalcSnapshotForPreview(
     calcSheets: snap.calcSheets,
     calcSheetOrigins: snap.calcSheetOrigins ?? defaultOriginsForSheets(snap.calcSheets),
     ficheGridSchema: schema,
+    sheetAppearance: snap.sheetAppearance,
   };
 }
 
@@ -223,6 +234,8 @@ export function toPreviewStoredTemplate(
     formulas?: DetectedFormulaCell[];
     calcSheets?: PrimeTemplateCalcSheets;
     calcSheetOrigins?: Record<string, PrimeCalcSheetOrigin>;
+    sheetAppearance?: ExcelSheetAppearance;
+    ficheGridSchema?: PrimeFicheTemplateSchema | null;
   },
   displayName = 'Aperçu',
 ): StoredPrimeTemplate {
@@ -241,6 +254,8 @@ export function toPreviewStoredTemplate(
     validation: { ok: true, errors: [], warnings: [] },
     calcSheets: source.calcSheets,
     calcSheetOrigins: source.calcSheetOrigins,
+    sheetAppearance: source.sheetAppearance,
+    ficheGridSchema: source.ficheGridSchema ?? null,
     id: '__preview__',
     displayName,
     savedAt: new Date().toISOString(),

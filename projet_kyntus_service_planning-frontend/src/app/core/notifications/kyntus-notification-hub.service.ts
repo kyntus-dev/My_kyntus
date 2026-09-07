@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal, DestroyRef } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom, interval, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -76,6 +77,16 @@ const PRIME_PATHS: Record<string, string> = {
   teamPerformanceUpdated: '/team-performance',
 };
 
+interface DesktopInboxEntry {
+  id: string;
+  title: string;
+  body: string;
+  tag: string;
+  url: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
 const CONTRACT_DISMISSED_KEY = 'kyntus_contract_notif_dismissed';
 
 function contractDismissKey(n: ContractNotification): string {
@@ -117,11 +128,13 @@ export class KyntusNotificationHubService {
   private readonly congeService = inject(CongeService);
   private readonly userService = inject(UserService);
   private readonly router = inject(Router);
+  private readonly http = inject(HttpClient);
 
   private readonly contractItems = signal<ContractNotification[]>([]);
   private readonly planningItems = signal<PlanningNotification[]>([]);
   private readonly newsletterItems = signal<NewsletterNotification[]>([]);
   private readonly congeItems = signal<KyntusNotification[]>([]);
+  private readonly inboxItems = signal<DesktopInboxEntry[]>([]);
   private readonly docTick = signal(0);
   private readonly contractDismissed = signal<Set<string>>(this.loadContractDismissed());
 
@@ -132,6 +145,18 @@ export class KyntusNotificationHubService {
     const jwtRole = this.session.getRole();
 
     if (prefs.prime) {
+      for (const n of this.inboxItems().filter((x) => x.tag === 'prime')) {
+        items.push({
+          id: `prime-inbox-${n.id}`,
+          source: 'prime',
+          title: n.title || 'PRIME',
+          body: n.body,
+          read: n.isRead,
+          createdAt: new Date(n.createdAt),
+          severity: n.body.toLowerCase().includes('refus') ? 'warning' : 'success',
+          action: { route: n.url?.startsWith('/') ? n.url : '/prime' },
+        });
+      }
       for (const n of this.primeUi.localNotifications()) {
         items.push({
           id: `prime-${n.id}`,
@@ -198,7 +223,7 @@ export class KyntusNotificationHubService {
               ? 'formation'
               : 'planning';
       const prefKey = prefKeyForSource(src);
-      if (!prefs[prefKey]) continue;
+      if (src !== 'planning' && !prefs[prefKey]) continue;
 
       const isManagerAudience = src === 'reclamation' && n.message.toLowerCase().includes('soumise');
       items.push({
@@ -278,13 +303,16 @@ export class KyntusNotificationHubService {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.docTick.update((v) => v + 1));
 
-    interval(30_000)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.refreshContracts());
-
-    interval(60_000)
+    interval(300_000)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
+        if (this.session.isAuthenticated()) this.refreshContracts();
+      });
+
+    interval(300_000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (!this.session.isAuthenticated()) return;
         if (this.userPrefs.isSourceEnabled('parrainage')) {
           void this.refreshParrainageNotifications();
         }
@@ -294,13 +322,12 @@ export class KyntusNotificationHubService {
         if (this.userPrefs.isSourceEnabled('prime')) {
           void this.primeUi.refreshFromApi();
         }
+        void this.refreshDesktopInbox();
       });
-
-    this.refreshContracts();
-    void this.primeUi.refreshFromApi();
   }
 
   bootstrapAfterLogin(): void {
+    if (!this.session.isAuthenticated()) return;
     if (this.userPrefs.isSourceEnabled('documentation')) {
       this.docNotif.ensureLoaded();
     }
@@ -308,6 +335,19 @@ export class KyntusNotificationHubService {
     void this.refreshConges();
     this.refreshContracts();
     void this.primeUi.refreshFromApi();
+    void this.refreshDesktopInbox();
+  }
+
+  private async refreshDesktopInbox(): Promise<void> {
+    if (!this.session.isAuthenticated()) return;
+    try {
+      const rows = await firstValueFrom(
+        this.http.get<DesktopInboxEntry[]>('/api/Auth/push/inbox').pipe(catchError(() => of([]))),
+      );
+      this.inboxItems.set(rows ?? []);
+    } catch {
+      this.inboxItems.set([]);
+    }
   }
 
   private planningAction(
@@ -404,6 +444,7 @@ export class KyntusNotificationHubService {
   }
 
   refreshContracts(): void {
+    if (!this.session.isAuthenticated()) return;
     if (!this.userPrefs.isSourceEnabled('contracts')) return;
     this.contractService.getNotifications().subscribe({
       next: (data) => this.contractItems.set(data.slice(0, 10)),
@@ -430,7 +471,7 @@ export class KyntusNotificationHubService {
       const planningUser = await firstValueFrom(
         this.userService.getCurrentUser().pipe(catchError(() => of(null))),
       );
-      const employeGuid = planningUser?.guid?.trim();
+      const employeGuid = this.session.getSubjectId()?.trim() || planningUser?.guid?.trim();
       if (!employeGuid) {
         this.congeItems.set([]);
         return;
@@ -478,6 +519,16 @@ export class KyntusNotificationHubService {
   }
 
   markAsRead(id: string): void {
+    if (id.startsWith('prime-inbox-')) {
+      const inboxId = id.replace('prime-inbox-', '');
+      this.inboxItems.update((list) =>
+        list.map((n) => (n.id === inboxId ? { ...n, isRead: true } : n)),
+      );
+      void firstValueFrom(
+        this.http.post(`/api/Auth/push/inbox/${inboxId}/read`, {}).pipe(catchError(() => of(null))),
+      );
+      return;
+    }
     if (id.startsWith('prime-api-')) {
       this.primeUi.markApiAsRead(id.replace('prime-api-', ''));
       return;
@@ -525,6 +576,13 @@ export class KyntusNotificationHubService {
 
   markAllAsRead(): void {
     this.primeUi.markAllAsRead();
+    for (const n of this.inboxItems()) {
+      if (n.isRead) continue;
+      void firstValueFrom(
+        this.http.post(`/api/Auth/push/inbox/${n.id}/read`, {}).pipe(catchError(() => of(null))),
+      );
+    }
+    this.inboxItems.update((list) => list.map((n) => ({ ...n, isRead: true })));
     this.parrainageStore.notifications.update((list) => list.map((n) => ({ ...n, read: true })));
     this.docNotif.markAllRead();
     this.planningNotif.markAllRead();
@@ -540,6 +598,14 @@ export class KyntusNotificationHubService {
     const action = n.action;
     if (!action) return;
 
+    if (action.primeAdminSection === 'anomalies') {
+      await this.router.navigate(['/admin'], { queryParams: { section: 'anomalies' } });
+      return;
+    }
+    if (action.primeAdminSection === 'logs') {
+      await this.router.navigate(['/audit'], { queryParams: { section: 'journal', module: 'prime' } });
+      return;
+    }
     if (action.primeAdminSection) {
       await this.nav.applyMenuItem({
         label: 'PRIME',
@@ -552,8 +618,21 @@ export class KyntusNotificationHubService {
       await this.nav.openPrimePath(action.primePath);
       return;
     }
+    if (action.parrainageView === 'admin-audit') {
+      await this.router.navigate(['/audit'], { queryParams: { section: 'journal', module: 'parrainage' } });
+      return;
+    }
     if (action.parrainageView) {
       await this.nav.openParrainageView(action.parrainageView);
+      return;
+    }
+    if (action.documentationTab === 'audit-logs' || action.documentationTab === 'access-history') {
+      await this.router.navigate(['/audit'], {
+        queryParams: {
+          section: action.documentationTab === 'access-history' ? 'access-history' : 'journal',
+          module: 'documentation',
+        },
+      });
       return;
     }
     if (action.documentationTab) {

@@ -30,5 +30,5 @@ internal static class PilotagePerformanceRoster
         new(Guid.Parse("33333333-3333-4333-8333-333333333008"), "Rania", "Karimi", "rania.karimi@contactcentre.ma", "Pilote"),
     ];
 
-    internal static string DisplayName(Employee e) => $"{e.FirstName} {e.LastName}";
+    internal static string DisplayName(Employee e) => UserDisplayName.Format(e.FirstName, e.LastName);
 }

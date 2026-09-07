@@ -34,6 +34,10 @@ export class ParrainageStoreService {
   readonly systemConfig = signal<SystemConfig>({ ...DEFAULT_SYSTEM_CONFIG });
   readonly auditLog = signal<AuditLogEntry[]>([]);
 
+  private canLoadAudit(role?: RoleFilter): boolean {
+    return role === 'ADMIN' || role === 'AUDIT';
+  }
+
   async bootstrap(role: RoleFilter, userId: string, projectId?: string): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
@@ -44,7 +48,7 @@ export class ParrainageStoreService {
         this.api.getHistory(),
         this.api.getNotificationPreferences(),
         this.api.getConfig(),
-        this.api.getAudit(),
+        this.canLoadAudit(role) ? this.api.getAudit() : Promise.resolve([] as AuditLogEntry[]),
         this.api.getOrgNodes(),
       ]);
       setOrgNodes(mapApiOrgNodes(orgRows));
@@ -68,7 +72,7 @@ export class ParrainageStoreService {
       this.api.getReferrals(),
       this.api.getHistory(),
       this.api.getNotifications(role, userId, projectId),
-      this.api.getAudit(),
+      this.canLoadAudit(role) ? this.api.getAudit() : Promise.resolve([] as AuditLogEntry[]),
     ]);
     this.referrals.set(referrals);
     this.history.set(history);

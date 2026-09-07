@@ -4,6 +4,7 @@ import { isSupportManagerPrimePath, isOperationalManagerPrimePath } from '../lib
 import { isAllowancesPath, resolveManagerPrimeTrack } from '../lib/prime-manager-track';
 import type { PrimeDepartmentManagerNav } from '../lib/prime-manager-nav';
 import { KyntusPermissionsService } from '../../../core/services/kyntus-permissions.service';
+import { KyntusSessionService } from '../../../core/session/kyntus-session.service';
 import {
   PrimeAdminService,
   type RbacAction,
@@ -40,10 +41,9 @@ const PATH_REQUIREMENTS: Record<string, { action: UiPermissionAction; scope?: Rb
   '/team-performance': { action: 'Read' },
   '/superviseur/scope': { action: 'Read', scope: 'Cellule' },
   '/chef-projet/scope': { action: 'Read', scope: 'Pole' },
+  '/referent-technique/scope': { action: 'Read', scope: 'Service' },
   '/prime-cellule-indicateurs': { action: 'Read', scope: 'Cellule' },
   '/prime-saisie': { action: 'Edit', scope: 'Cellule' },
-  '/prime-fiches-agents': { action: 'Edit', scope: 'Cellule' },
-  '/prime-validation-hub': { action: 'Validate', scope: 'Cellule' },
   '/prime-fiches-pilotes': { action: 'Edit', scope: 'Cellule' },
   '/prime-fiche-import': { action: 'Edit', scope: 'Cellule' },
   '/prime-saisie-cellule': { action: 'Edit', scope: 'Cellule' },
@@ -88,6 +88,7 @@ const FALLBACK_ALLOW: Record<string, Partial<Record<UiPermissionAction, RbacScop
 export class PrimeUiPermissionsService {
   private readonly admin = inject(PrimeAdminService);
   private readonly kyntusPermissions = inject(KyntusPermissionsService);
+  private readonly session = inject(KyntusSessionService);
   private readonly rows = signal<RbacPermissionDto[]>([]);
   private readonly iamKeys = signal<string[]>([]);
   private readonly loaded = signal(false);
@@ -108,6 +109,12 @@ export class PrimeUiPermissionsService {
     this.kyntusPermissions.loadEffectivePermissions().subscribe({
       next: (p) => this.iamKeys.set(p.permissions ?? []),
     });
+    const role = (this.session.getRole() ?? '').trim();
+    if (!/^admin$/i.test(role)) {
+      this.rows.set([]);
+      this.loaded.set(true);
+      return;
+    }
     this.admin.listRbac().subscribe({
       next: (rows) => {
         this.rows.set(rows);

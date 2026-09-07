@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Kyntus.Identity.Jwt;
 using Kyntus.Messaging.Contracts;
 using Microsoft.AspNetCore.Http;
@@ -7,17 +8,14 @@ using Parrainage.Infrastructure.Persistence;
 
 namespace Parrainage.Infrastructure.Services;
 
+/// <summary>
+/// Identité Parrainage = JWT uniquement (pas d'en-têtes / query spoofables).
+/// </summary>
 public sealed class ParrainageRequestUserResolver(
     IHttpContextAccessor httpContextAccessor,
     IServiceProvider serviceProvider,
-    IHostEnvironment hostEnvironment,
     ILogger<ParrainageRequestUserResolver> logger) : IParrainageRequestUserResolver
 {
-    private static readonly HashSet<string> AllowedRoles = new(StringComparer.Ordinal)
-    {
-        "PILOTE", "RH", "ADMIN", "MANAGER", "COACH", "RP", "AUDIT", "COMPTA", "COMPTABILITE",
-    };
-
     public ParrainageResolvedUser Resolve(
         string? headerUserId,
         string? headerRole,
@@ -36,86 +34,17 @@ public sealed class ParrainageRequestUserResolver(
         string? queryUserId = null,
         string? queryProjectId = null)
     {
+        // Les paramètres header*/query* sont ignorés volontairement (anti-spoofing).
+        _ = (request, headerUserId, headerRole, headerProjectId, queryRole, queryUserId);
+
         var fromJwt = TryResolveFromJwt(queryProjectId);
-        var fromHeaders = request is not null
-            ? TryResolveFromHeaders(request, headerUserId, headerRole, headerProjectId, queryRole, queryUserId, queryProjectId)
-            : TryResolveFromHeaderValues(headerUserId, headerRole, headerProjectId, queryRole, queryUserId, queryProjectId);
-
-        if (fromJwt is not null || fromHeaders is not null)
+        if (fromJwt is null)
         {
-            var role = ResolveEffectiveRole(fromJwt?.Role, fromHeaders?.Role);
-            var userId = FirstNonEmpty(
-                fromJwt is { IsDefault: false } ? fromJwt.UserId : null,
-                fromHeaders?.UserId,
-                fromJwt?.UserId);
-            var projectId = FirstNonEmpty(fromHeaders?.ProjectId, fromJwt?.ProjectId, queryProjectId);
-            var isDefault = fromJwt?.IsDefault != false && fromHeaders is null;
-
-            if (fromJwt is not null && fromHeaders is not null && role != fromJwt.Role)
-            {
-                logger.LogDebug(
-                    "PARRAINAGE : rôle effectif {Role} (JWT={JwtRole}, en-tête={HeaderRole}).",
-                    role,
-                    fromJwt.Role,
-                    fromHeaders.Role);
-            }
-
-            return new ParrainageResolvedUser(
-                userId ?? (hostEnvironment.IsDevelopment() ? "emp-1" : "unknown"),
-                role,
-                projectId,
-                isDefault);
+            logger.LogWarning("PARRAINAGE : JWT absent ou incomplet — accès refusé.");
+            throw new UnauthorizedAccessException("Authentification JWT requise pour le module Parrainage.");
         }
 
-        if (hostEnvironment.IsDevelopment())
-        {
-            logger.LogDebug("PARRAINAGE : en-têtes identité absents — défaut PILOTE/emp-1 (mode dev).");
-            return new ParrainageResolvedUser("emp-1", "PILOTE", queryProjectId, true);
-        }
-
-        logger.LogWarning("PARRAINAGE : identité non résolue (JWT et en-têtes absents).");
-        return new ParrainageResolvedUser("unknown", "PILOTE", queryProjectId, true);
-    }
-
-    private ParrainageResolvedUser? TryResolveFromHeaders(
-        HttpRequest request,
-        string? headerUserId,
-        string? headerRole,
-        string? headerProjectId,
-        string? queryRole,
-        string? queryUserId,
-        string? queryProjectId) =>
-        TryResolveFromHeaderValues(
-            FirstNonEmpty(request.Headers[IParrainageRequestUserResolver.HeaderUserId].FirstOrDefault(), headerUserId),
-            FirstNonEmpty(request.Headers[IParrainageRequestUserResolver.HeaderRole].FirstOrDefault(), headerRole),
-            FirstNonEmpty(request.Headers[IParrainageRequestUserResolver.HeaderProjectId].FirstOrDefault(), headerProjectId),
-            queryRole,
-            queryUserId,
-            queryProjectId);
-
-    private ParrainageResolvedUser? TryResolveFromHeaderValues(
-        string? headerUserId,
-        string? headerRole,
-        string? headerProjectId,
-        string? queryRole,
-        string? queryUserId,
-        string? queryProjectId)
-    {
-        var userId = FirstNonEmpty(headerUserId, queryUserId);
-        var roleRaw = FirstNonEmpty(headerRole, queryRole);
-        var projectId = FirstNonEmpty(headerProjectId, queryProjectId);
-
-        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(roleRaw))
-            return null;
-
-        var role = IParrainageRequestUserResolver.NormalizeRole(roleRaw);
-        if (!AllowedRoles.Contains(role))
-        {
-            logger.LogWarning("PARRAINAGE : rôle en-tête inconnu « {Role} » — défaut PILOTE.", roleRaw);
-            role = "PILOTE";
-        }
-
-        return new ParrainageResolvedUser(userId.Trim(), role, projectId, false);
+        return fromJwt;
     }
 
     private ParrainageResolvedUser? TryResolveFromJwt(string? queryProjectId)
@@ -138,8 +67,8 @@ public sealed class ParrainageRequestUserResolver(
             .FirstOrDefault(u => u.Email.ToLower() == needle);
         if (row is null)
         {
-            logger.LogWarning(
-                "PARRAINAGE : aucun utilisateur portail pour {Email} — repli sur les claims JWT.",
+            logger.LogDebug(
+                "PARRAINAGE : aucun utilisateur portail pour {Email} — claims JWT.",
                 email);
             return ResolveFromJwtClaims(principal, queryProjectId);
         }
@@ -152,7 +81,7 @@ public sealed class ParrainageRequestUserResolver(
     }
 
     private static ParrainageResolvedUser? ResolveFromJwtClaims(
-        System.Security.Claims.ClaimsPrincipal principal,
+        ClaimsPrincipal principal,
         string? queryProjectId)
     {
         var jwtRole = ResolveJwtParrainageRole(principal);
@@ -161,11 +90,13 @@ public sealed class ParrainageRequestUserResolver(
 
         var userId = FirstNonEmpty(
             principal.GetSubjectId()?.ToString(),
-            principal.GetAuthUserId()?.ToString());
+            principal.GetAuthUserId()?.ToString(),
+            principal.FindFirst("sub")?.Value,
+            principal.FindFirst(ClaimTypes.NameIdentifier)?.Value);
         if (string.IsNullOrWhiteSpace(userId))
-            userId = "unknown";
+            return null;
 
-        return new ParrainageResolvedUser(userId, jwtRole, queryProjectId, true);
+        return new ParrainageResolvedUser(userId, jwtRole, queryProjectId, false);
     }
 
     internal static string ResolveEffectiveRole(string? primaryRole, string? secondaryRole)
@@ -185,7 +116,7 @@ public sealed class ParrainageRequestUserResolver(
         return "PILOTE";
     }
 
-    private static string? ResolveJwtParrainageRole(System.Security.Claims.ClaimsPrincipal principal)
+    private static string? ResolveJwtParrainageRole(ClaimsPrincipal principal)
     {
         var raw = principal.GetAuthRole();
         if (string.IsNullOrWhiteSpace(raw))

@@ -300,7 +300,17 @@ public sealed class DocumentWorkflowGenerationAppService(
                 throw new DocumentationApiException(400, "La demande doit être approuvée avant génération du document.");
         }
 
-        var merged = await variableMerge.MergeAsync(req.BeneficiaryUserId, req.DocumentRequestId, req.Variables, ct);
+        var templateVariables = await db.DocumentTemplateVariables.AsNoTracking()
+            .Where(v => v.TemplateVersionId == version.Id)
+            .OrderBy(v => v.SortOrder)
+            .ToListAsync(ct);
+        var mergeResult = await variableMerge.MergeForTemplateAsync(
+            req.BeneficiaryUserId,
+            req.DocumentRequestId,
+            templateVariables,
+            req.Variables,
+            ct);
+        var merged = mergeResult.Values;
         var versionId = version.Id;
         var titleFallback = template.DocumentType?.Name ?? template.Name;
         if (string.IsNullOrWhiteSpace(titleFallback))
@@ -316,10 +326,9 @@ public sealed class DocumentWorkflowGenerationAppService(
         }
         else
         {
-            var variableRows = await db.DocumentTemplateVariables.AsNoTracking()
-                .Where(v => v.TemplateVersionId == versionId)
+            var variableRows = templateVariables
                 .Select(v => new { v.VariableName, v.VariableType, v.IsRequired, v.ValidationRule })
-                .ToListAsync(ct);
+                .ToList();
             requiredVariableCount = variableRows.Count(v => v.IsRequired);
             var specs = variableRows
                 .Where(v => !string.IsNullOrWhiteSpace(v.VariableName))

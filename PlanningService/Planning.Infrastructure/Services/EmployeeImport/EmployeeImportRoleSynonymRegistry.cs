@@ -30,6 +30,9 @@ public static class EmployeeImportRoleSynonymRegistry
         ["chef de projet"] = EmployeeImportRoleNames.ChefDeProjet,
         ["rh"] = "RH",
         ["audit"] = "Audit",
+        ["comptable"] = "Comptabilité",
+        ["comptabilite"] = "Comptabilité",
+        ["comptabilité"] = "Comptabilité",
     };
 
     public static bool IsImportForbiddenRoleName(string? roleName)
@@ -101,7 +104,7 @@ public static class EmployeeImportRoleSynonymRegistry
             return EmployeeImportOrgDepth.Service;
 
         var normalized = EmployeeImportColumnMatcher.Normalize(canonicalRoleName);
-        if (normalized is "rh" or "audit" or "admin")
+        if (normalized is "rh" or "audit" or "admin" or "comptabilite" or "comptable")
             return EmployeeImportOrgDepth.None;
 
         return EmployeeImportOrgDepth.None;

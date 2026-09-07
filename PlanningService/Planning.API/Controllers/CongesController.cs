@@ -1,12 +1,18 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Planning.Application.Conges;
 using Planning.Application.DTOs;
 
 namespace Planning.API.Controllers;
 
+/// <summary>
+/// Absences opérationnelles Planning (/api/Conges).
+/// Les écritures sont réservées Admin/RH : le workflow soldes/quotas passe par /api/conges (service Congé).
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class CongesController(IMediator mediator) : ControllerBase
 {
     [HttpGet("subservice/{subServiceId}")]
@@ -27,6 +33,7 @@ public class CongesController(IMediator mediator) : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin,RH")]
     public async Task<IActionResult> Create([FromBody] CreateCongeDto dto, CancellationToken ct)
     {
         try
@@ -41,6 +48,7 @@ public class CongesController(IMediator mediator) : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin,RH")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         if (!await mediator.Send(new DeletePlanningCongeCommand(id), ct))
@@ -49,6 +57,7 @@ public class CongesController(IMediator mediator) : ControllerBase
     }
 
     [HttpPost("saturday-slot")]
+    [Authorize(Roles = "Admin,RH,Superviseur,Manager")]
     public async Task<IActionResult> SetSaturdaySlot([FromBody] SetSaturdaySlotDto dto, CancellationToken ct)
     {
         try

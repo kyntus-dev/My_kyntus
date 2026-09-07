@@ -21,6 +21,8 @@ import { AllowanceInboxBadgeService } from '../../features/prime/services/allowa
 import { NavigationActionsService } from '../../core/navigation/navigation-actions.service';
 
 import { AuthService } from '../../core/services/auth.service';
+import { UserService } from '../users/services/user.service';
+import { personInitials } from '../../core/session/person-display-name.util';
 import { KyntusThemeService } from '../../core/theme/kyntus-theme.service';
 import { LucideIconComponent } from '../../shared/lucide-icon.component';
 import { GlobalSearchComponent } from './components/global-search.component';
@@ -42,6 +44,8 @@ import type { Role as PrimeRole } from '../prime/models';
 
 import { ParrainageNavService } from '../parrainage/state/parrainage-nav.service';
 
+import { ParrainageRoleService } from '../parrainage/state/parrainage-role.service';
+
 import { AuditSectionService } from '../parrainage/state/audit-section.service';
 
 import { isProjectLeadRole } from '../prime/lib/projectLeadRole';
@@ -50,6 +54,7 @@ import { isOrganisationMenuEntryActive } from '../../core/navigation/organisatio
 import { DocumentationNavigationService } from '../documentation/services/documentation-navigation.service';
 
 import { AuditInterfaceNavService } from '../documentation/services/audit-interface-nav.service';
+import { PlatformAccessService } from '../../core/platform-access/platform-access.service';
 
 
 
@@ -82,6 +87,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
 
   private readonly auth = inject(AuthService);
+  private readonly users = inject(UserService);
 
   private readonly sanitizer = inject(DomSanitizer);
 
@@ -101,6 +107,8 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
   private readonly parrainageNav = inject(ParrainageNavService);
 
+  private readonly parrainageRole = inject(ParrainageRoleService);
+
   private readonly parrainageAudit = inject(AuditSectionService);
 
   private readonly docNav = inject(DocumentationNavigationService);
@@ -112,6 +120,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   readonly notifInit = inject(KyntusNotificationInitService);
   readonly shellUi = inject(KyntusShellUiService);
   readonly workspace = inject(WorkspaceHatService);
+  private readonly platformAccess = inject(PlatformAccessService);
 
   readonly icons = {
     bell: Bell,
@@ -181,6 +190,11 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
       if (!this.role) return;
       this.refreshGroups();
     });
+    effect(() => {
+      this.platformAccess.permissionKeys();
+      if (!this.role) return;
+      this.refreshGroups();
+    });
   }
 
 
@@ -211,12 +225,26 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.session.syncStoredUserFromAccessToken();
+    this.parrainageRole.syncFromSession();
+
+    this.users.getCurrentUser().subscribe({
+      next: (profile) => {
+        this.session.patchStoredUser({
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          email: profile.email?.trim() || this.session.getEmail(),
+        });
+        this.currentUser = { ...this.currentUser, ...this.session.getStoredUser() };
+      },
+    });
 
     this.notifInit.connectIfAuthenticated();
 
     this.refreshGroups();
 
     void this.deptContext.load().finally(() => this.refreshGroups());
+    void this.platformAccess.ensureLoaded().finally(() => this.refreshGroups());
 
     this.updateModuleClass(this.router.url);
 
@@ -284,7 +312,11 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
     if (path.startsWith('/prime')) {
       const activePrime = this.primeNav.activePath();
       const byPrimePath = groups.find((g) =>
-        g.children.some((c) => c.primePath !== undefined && c.primePath === activePrime),
+        g.children.some(
+          (c) =>
+            c.primePath !== undefined &&
+            (c.primePath === activePrime || (c.primeActiveAliases?.includes(activePrime) ?? false)),
+        ),
       );
       if (byPrimePath) {
         next.add(byPrimePath.id);
@@ -308,7 +340,9 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
       if (
         matchChild ||
         (g.id === 'parrainage' && path.startsWith('/parrainage')) ||
-        (g.id === 'documentation' && path.startsWith('/documentation'))
+        (g.id === 'documentation' && path.startsWith('/documentation')) ||
+        (g.id === 'administration' && path.startsWith('/admin')) ||
+        (g.id === 'audit-conformite' && path.startsWith('/audit'))
       ) {
         next.add(g.id);
         break; // une seule section ouverte → pas de surcharge visuelle
@@ -341,8 +375,14 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
     if (item.isSectionHeader) return false;
 
     const path = this.router.url.split('?')[0];
+    const section = this.router.parseUrl(this.router.url).queryParams['section'] ?? '';
 
-
+    if (item.platformAdminSection !== undefined && path.startsWith('/admin')) {
+      return (section || 'overview') === item.platformAdminSection;
+    }
+    if (item.platformAuditSection !== undefined && path.startsWith('/audit')) {
+      return (section || 'dashboard') === item.platformAuditSection;
+    }
 
     if (item.parrainageView !== undefined && path.startsWith('/parrainage')) {
 
@@ -410,9 +450,8 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
       }
 
       if (item.primePath !== undefined) {
-
-        return this.primeNav.activePath() === item.primePath;
-
+        const activePrime = this.primeNav.activePath();
+        return activePrime === item.primePath || (item.primeActiveAliases?.includes(activePrime) ?? false);
       }
 
     }
@@ -479,12 +518,12 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
 
 
+  get displayName(): string {
+    return this.session.getDisplayName();
+  }
+
   get userInitials(): string {
-
-    const name: string = this.currentUser?.username || 'KY';
-
-    return name.substring(0, 2).toUpperCase();
-
+    return personInitials(this.currentUser ?? this.session.getStoredUser() ?? {});
   }
 
 

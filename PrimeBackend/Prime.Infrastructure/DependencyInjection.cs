@@ -1,3 +1,4 @@
+using Kyntus.Caching;
 using Kyntus.Iam;
 using Kyntus.Messaging.Outbox;
 using MassTransit;
@@ -6,9 +7,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Prime.Application.Abstractions;
 using Prime.Infrastructure.Messaging;
-using Prime.Application.Abstractions;
 using Prime.Infrastructure.Persistence;
 using Prime.Infrastructure.Services;
+using Shared.Kernel.Push;
 
 namespace Prime.Infrastructure;
 
@@ -28,15 +29,23 @@ public static class DependencyInjection
         services.AddScoped<PrimeAdminDbReadService>();
         services.AddScoped<IPrimeAdminReadAppService>(sp => sp.GetRequiredService<PrimeAdminDbReadService>());
         services.AddKyntusOutbox<PrimeDbContext>();
+        services.AddKyntusCaching(configuration);
         services.AddKyntusIam();
+        services.AddDesktopPushClient(configuration);
         services.AddScoped<IPermissionCatalog, PrimePermissionCatalog>();
-        services.AddHttpClient<IRebacClient, DirectoryHttpRebacClient>(c => c.BaseAddress = new Uri(directoryBase));
+        services.AddHttpContextAccessor();
+        services.AddTransient<DirectoryForwardAuthorizationHandler>();
+        services.AddHttpClient<IRebacClient, DirectoryHttpRebacClient>(c =>
+                c.BaseAddress = new Uri(directoryBase.TrimEnd('/') + "/"))
+            .AddHttpMessageHandler<DirectoryForwardAuthorizationHandler>();
         services.AddHttpClient<IPrimeDirectoryAsOfClient, PrimeDirectoryAsOfClient>(c => c.BaseAddress = new Uri(directoryBase));
         services.AddScoped<IOrgStructureEventPublisher, OrgStructureEventPublisher>();
-        services.AddHttpContextAccessor();
         services.AddScoped<PrimeAuditLogService>();
         services.AddScoped<PrimeOrgScopeService>(sp =>
-            new PrimeOrgScopeService(sp.GetService<PrimeDbContext>(), sp.GetService<IRebacClient>()));
+            new PrimeOrgScopeService(
+                sp.GetService<PrimeDbContext>(),
+                sp.GetService<IRebacClient>(),
+                sp.GetService<ICacheService>()));
         services.AddScoped<PrimeRpQueryService>(sp =>
             new PrimeRpQueryService(
                 sp.GetService<PrimeDbContext>(),
@@ -45,12 +54,21 @@ public static class DependencyInjection
         services.AddScoped<IPrimeRpAppService>(sp => sp.GetRequiredService<PrimeRpQueryService>());
 
         var conn = configuration.GetConnectionString("DefaultConnection");
+        services.AddSingleton<SlowQueryCommandInterceptor>();
         if (isTesting || !string.IsNullOrWhiteSpace(conn))
         {
             if (isTesting)
-                services.AddDbContext<PrimeDbContext>(o => o.UseSqlite(conn ?? "DataSource=prime_characterization_test.db"));
+                services.AddDbContext<PrimeDbContext>((sp, o) =>
+                {
+                    o.UseSqlite(conn ?? "DataSource=prime_characterization_test.db");
+                    o.AddInterceptors(sp.GetRequiredService<SlowQueryCommandInterceptor>());
+                });
             else
-                services.AddDbContext<PrimeDbContext>(o => o.UseNpgsql(conn!));
+                services.AddDbContext<PrimeDbContext>((sp, o) =>
+                {
+                    o.UseNpgsql(conn!);
+                    o.AddInterceptors(sp.GetRequiredService<SlowQueryCommandInterceptor>());
+                });
 
             if (!isTesting && configuration.GetValue("Prime:ApplyMigrations", true))
                 services.AddHostedService<PrimeDatabaseInitializer>();

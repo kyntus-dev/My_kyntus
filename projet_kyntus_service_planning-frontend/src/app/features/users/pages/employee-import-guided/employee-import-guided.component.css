@@ -413,6 +413,16 @@
   padding: 0;
 }
 
+.link-btn.danger-link {
+  color: #b42318;
+  margin-left: 10px;
+}
+
+.link-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .file-cell {
   display: inline-flex;
   align-items: center;

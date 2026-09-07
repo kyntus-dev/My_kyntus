@@ -16,6 +16,8 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { GlobalDashboardService } from '../../../../core/dashboard/global-dashboard.service';
 import type { GlobalActionItem, ModuleHealthStatus } from '../../../../core/dashboard/global-dashboard.model';
 import { KyntusNotificationHubService } from '../../../../core/notifications/kyntus-notification-hub.service';
+import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
+import { UserService } from '../../../users/services/user.service';
 
 @Component({
   selector: 'app-unified-dashboard',
@@ -112,6 +114,8 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly globalDashboard = inject(GlobalDashboardService);
   private readonly notifHub = inject(KyntusNotificationHubService);
+  private readonly session = inject(KyntusSessionService);
+  private readonly users = inject(UserService);
 
   private sub = new Subscription();
   private loadStartedAt = 0;
@@ -143,16 +147,30 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
   );
 
   ngOnInit(): void {
-    let user: { username?: string; role?: string } | null = null;
-    try {
-      user = JSON.parse(localStorage.getItem('user') || 'null');
-    } catch {
-      user = null;
-    }
-    this.username.set(user?.username || 'Utilisateur');
-    this.role.set((this.auth.getRole() || user?.role || '').trim());
-    this.greetingLine.set(`Bonjour, ${this.username()}`);
+    this.session.syncStoredUserFromAccessToken();
+    const stored = this.session.getStoredUser();
+    this.applyGreeting();
+    this.role.set((this.auth.getRole() || stored?.role || '').trim());
+    this.sub.add(
+      this.users.getCurrentUser().subscribe({
+        next: (profile) => {
+          this.session.patchStoredUser({
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            email: profile.email?.trim() || this.session.getEmail(),
+          });
+          this.applyGreeting();
+        },
+        error: () => this.applyGreeting(),
+      }),
+    );
     this.loadSnapshot();
+  }
+
+  private applyGreeting(): void {
+    const name = this.session.getDisplayName();
+    this.username.set(name);
+    this.greetingLine.set(`Bonjour, ${name}`);
   }
 
   ngOnDestroy(): void {

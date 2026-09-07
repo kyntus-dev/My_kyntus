@@ -22,9 +22,9 @@ export function getRoleHomeTarget(
 ): RoleHomeTarget {
   switch (role) {
     case 'Admin':
-      return { path: '/', adminSection: 'dashboard' };
+      return { path: '/admin' };
     case 'Audit':
-      return { path: '/', auditSection: 'journal' };
+      return { path: '/audit' };
     case 'RP':
       return { path: '/', rpSection: 'dashboard' };
     case 'Pilote':
@@ -56,6 +56,7 @@ export function resolveAllowedHomePath(
   managerNav: PrimeDepartmentManagerNav = { isSupportManager: false, isOperationalManager: false },
 ): string {
   const path = target.path.trim() || '/';
+  if (path === '/admin' || path === '/audit') return path;
   if (isPrimePathAllowedForRole(path, role, departmentKind, managerNav)) return path;
   if (role === 'Pilote') return '/employee/dashboard';
   if (role === 'Manager') return resolveManagerHomePath(role, managerNav);

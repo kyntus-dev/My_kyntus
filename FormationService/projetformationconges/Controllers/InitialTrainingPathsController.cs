@@ -41,6 +41,13 @@ public sealed class InitialTrainingPathsController(TrainingWorkflowService train
     public Task<IReadOnlyList<InitialTrainingPathDto>> ByEmployee(Guid employeeId, CancellationToken ct) =>
         training.ListInitialByEmployeeAsync(employeeId, ct);
 
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<InitialTrainingPathDto>> GetById(Guid id, CancellationToken ct)
+    {
+        var path = await training.GetInitialPathAsync(id, ct);
+        return path is null ? NotFound() : Ok(path);
+    }
+
     [HttpPost("{id:guid}/quiz-result")]
     [Authorize(Policy = "CanRecordInitialQuiz")]
     public async Task<ActionResult<InitialTrainingPathDto>> QuizResult(
@@ -83,11 +90,14 @@ public sealed class InitialTrainingPathsController(TrainingWorkflowService train
 
     [HttpPost("{id:guid}/formateur-validate")]
     [Authorize]
-    public async Task<ActionResult<InitialTrainingPathDto>> FormateurValidate(Guid id, CancellationToken ct)
+    public async Task<ActionResult<InitialTrainingPathDto>> FormateurValidate(
+        Guid id,
+        [FromBody] FormateurValidateOrgRequest? body,
+        CancellationToken ct)
     {
         try
         {
-            var updated = await training.FormateurValidateAsync(id, User.GetSubjectId(), ct);
+            var updated = await training.FormateurValidateAsync(id, User.GetSubjectId(), body, ct);
             return updated is null ? NotFound() : Ok(updated);
         }
         catch (InvalidOperationException ex)

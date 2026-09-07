@@ -7,6 +7,13 @@ import { AuthGuard } from '../../guard/guards/auth';
 const routes: Routes = [
   {
     path: '',
+    pathMatch: 'full',
+    redirectTo: 'validation',
+  },
+  {
+    path: 'generate',
+    canActivate: [AuthGuard],
+    data: { roles: ['Admin', 'RH'], capability: 'planning.generate' },
     loadComponent: () =>
       import('./pages/planning-generate/planning-generate.component')
         .then(m => m.PlanningGenerateComponent)
@@ -14,7 +21,7 @@ const routes: Routes = [
   {
     path: 'validation',
     canActivate: [AuthGuard],
-    data: { roles: ['Admin', 'RH'] },
+    data: { roles: ['Admin', 'RH', 'Superviseur'], capability: 'planning.validation' },
     loadComponent: () =>
       import('./pages/planning-validation/planning-validation.component')
         .then(m => m.PlanningValidationComponent),
@@ -22,7 +29,7 @@ const routes: Routes = [
   {
     path: 'shift-config',
     canActivate: [AuthGuard],
-    data: { roles: ['Admin', 'RH'] },
+    data: { roles: ['Admin', 'RH', 'Superviseur'], capability: 'planning.shift-config' },
     loadComponent: () =>
       import('./pages/shift-config/shift-config.component')
         .then(m => m.ShiftConfigComponent)

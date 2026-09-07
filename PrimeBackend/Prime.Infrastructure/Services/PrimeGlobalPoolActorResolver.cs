@@ -3,13 +3,15 @@ using Prime.Domain.Entities;
 namespace Prime.Infrastructure.Services;
 
 /// <summary>
-/// Résolution du rôle acteur synthèse globale. Les managers opérationnels sont stockés « Superviseur »
-/// côté Prime (sync Directory) mais agissent en « Manager » via JWT / rôle déclaré.
+/// Résolution du rôle acteur synthèse globale (RH puis Comptabilité).
 /// </summary>
 public static class PrimeGlobalPoolActorResolver
 {
+    public const string ManagerStepGoneMessage =
+        "L'étape Manager n'existe plus : la synthèse est validée par la RH, puis la Comptabilité.";
+
     public static bool IsPoolStakeholderRole(string? role) =>
-        role is "Manager" or "RH" or "Comptable" or "Comptabilité" or "Admin";
+        role is "RH" or "Comptable" or "Comptabilité" or "Admin";
 
     public static bool IsOperationalDepartmentManager(Employee emp) =>
         string.Equals(emp.BusinessDepartmentKind, "Operational", StringComparison.OrdinalIgnoreCase);
@@ -23,16 +25,16 @@ public static class PrimeGlobalPoolActorResolver
         string declaredRole,
         bool managesOperationalDepartment = false)
     {
+        _ = (emp, managesOperationalDepartment);
         if (IsPoolStakeholderRole(realRole))
         {
             if (string.Equals(realRole, "Admin", StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(declaredRole))
-                return declaredRole.Trim();
+            {
+                var declared = declaredRole.Trim();
+                return IsPoolStakeholderRole(declared) ? declared : "Admin";
+            }
             return realRole;
         }
-
-        if (string.Equals(declaredRole, "Manager", StringComparison.Ordinal)
-            && (IsOperationalDepartmentManager(emp) || managesOperationalDepartment))
-            return "Manager";
 
         return null;
     }

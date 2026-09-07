@@ -43,6 +43,73 @@ public class EmployeeImportColumnMatcher
         return results;
     }
 
+    /// <summary>
+    /// Rapproche des variables documentaires (libellé / nom / placeholder) aux champs employés.
+    /// Mêmes seuils que l'import : high ≥ 0.92, medium ≥ 0.75.
+    /// </summary>
+    public IReadOnlyList<EmployeeVariableMatchDto> MatchVariableSources(
+        IReadOnlyList<EmployeeVariableMatchSourceDto> sources,
+        IReadOnlyList<EmployeeImportFieldConfigDto> fields)
+    {
+        var targets = fields
+            .Select(f => new FieldMatchTarget(f.FieldKey, f.Label, f.Aliases))
+            .ToList();
+        var byKey = fields.ToDictionary(f => f.FieldKey, StringComparer.OrdinalIgnoreCase);
+        var usedFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var results = new List<EmployeeVariableMatchDto>(sources.Count);
+
+        foreach (var source in sources)
+        {
+            var candidates = new[]
+                {
+                    source.DisplayLabel,
+                    source.Name,
+                    source.NormalizedName,
+                    source.RawPlaceholder,
+                }
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            FieldScore? best = null;
+            foreach (var candidate in candidates)
+            {
+                var match = FindBestMatch(candidate, targets, usedFields);
+                if (match is not null && (best is null || match.Score > best.Score))
+                    best = match;
+            }
+
+            var confidence = best switch
+            {
+                { Score: >= 0.92 } => "high",
+                { Score: >= 0.75 } => "medium",
+                _ => "low",
+            };
+
+            string? suggestedKey = null;
+            if (best is not null && best.Score >= 0.75)
+            {
+                suggestedKey = best.FieldKey;
+                usedFields.Add(best.FieldKey);
+            }
+
+            byKey.TryGetValue(suggestedKey ?? string.Empty, out var field);
+            results.Add(new EmployeeVariableMatchDto
+            {
+                SourceName = source.Name,
+                SuggestedFieldKey = suggestedKey,
+                SuggestedFieldLabel = field?.Label,
+                Score = best?.Score ?? 0,
+                Confidence = confidence,
+                IsEnabled = field?.IsEnabled ?? false,
+                IsSystemField = field?.IsSystemField ?? false,
+            });
+        }
+
+        return results;
+    }
+
     private static FieldScore? FindBestMatch(
         string header,
         IReadOnlyList<FieldMatchTarget> fields,

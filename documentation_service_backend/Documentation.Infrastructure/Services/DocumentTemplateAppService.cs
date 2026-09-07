@@ -24,6 +24,7 @@ public sealed class DocumentTemplateAppService(
     ITemplatePlaceholderNormalizationService placeholderNormalization,
     IOriginalDocxTemplateRenderService originalDocxTemplateRender,
     IDocumentTemplateManagementService templateManagement,
+    IDocumentTemplateEmployeeMappingService employeeMapping,
     ITemplateBlobStorage templateBlobStorage,
     IRibValidationService ribValidation,
     IOptions<DocumentWorkflowOptions> documentWorkflowOptions,
@@ -107,23 +108,13 @@ public sealed class DocumentTemplateAppService(
         DocumentTemplateVersionResponse? versionDto = null;
         if (cv is not null)
         {
-            var vars = await db.DocumentTemplateVariables.AsNoTracking()
+            var varRows = await db.DocumentTemplateVariables.AsNoTracking()
                 .Where(v => v.TemplateVersionId == cv.Id)
                 .OrderBy(v => v.SortOrder)
-                .Select(v => new DocumentTemplateVariableResponse(
-                    v.Id.ToString(),
-                    v.VariableName,
-                    v.VariableType,
-                    v.IsRequired,
-                    v.DefaultValue,
-                    v.ValidationRule,
-                    v.DisplayLabel,
-                    NormalizeFormScope(v.FormScope),
-                    v.SourcePriority,
-                    v.NormalizedName,
-                    v.RawPlaceholder,
-                    v.SortOrder))
                 .ToListAsync(ct);
+            var vars = await employeeMapping
+                .EnrichAsync(varRows.Select(DocumentTemplateVariableMapper.ToResponse).ToList(), ct)
+                .ConfigureAwait(false);
             versionDto = new DocumentTemplateVersionResponse(
                 cv.Id.ToString(),
                 cv.VersionNumber,
@@ -648,6 +639,10 @@ public sealed class DocumentTemplateAppService(
         else
             vars = body.Variables;
 
+        var mutableVars = vars.ToList();
+        if (template.Kind != DocumentTemplateKind.Static && mutableVars.Count > 0)
+            await employeeMapping.ApplyMatchesAsync(mutableVars, ct);
+
         try
         {
             var version = await CreateTemplateVersionInternalAsync(
@@ -655,7 +650,7 @@ public sealed class DocumentTemplateAppService(
                 body.StructuredContent,
                 status,
                 body.OriginalAssetUri,
-                vars,
+                mutableVars,
                 userContext.UserId,
                 ct);
 
@@ -671,7 +666,10 @@ public sealed class DocumentTemplateAppService(
                 version.VersionNumber,
                 status);
 
-            return MapVersionResponse(version, vars.Select((v, i) => ToVariableResponse(v, i)).ToList());
+            var versionVars = await employeeMapping.EnrichAsync(
+                mutableVars.Select((v, i) => ToVariableResponse(v, i)).ToList(),
+                ct);
+            return MapVersionResponse(version, versionVars);
         }
         catch (Exception ex)
         {
@@ -726,6 +724,8 @@ public sealed class DocumentTemplateAppService(
             .Where(v => IsValidVariableName(v.VariableName))
             .Take(MaxTemplateVariables)
             .ToList();
+        foreach (var (row, input) in rows.Zip(body.Where(v => IsValidVariableName(v.Name.Trim())).Take(MaxTemplateVariables)))
+            DocumentTemplateVariableMapper.ApplyInput(row, input);
         if (rows.Count == 0)
             throw new DocumentationApiException(400, "Aucun nom de variable valide.");
 
@@ -755,8 +755,17 @@ public sealed class DocumentTemplateAppService(
             .ToListAsync(ct);
 
         var grouped = vars.GroupBy(v => v.TemplateVersionId!.Value).ToDictionary(g => g.Key, g => g.ToList());
-        return versions.Select(v => MapVersionResponse(v, grouped.GetValueOrDefault(v.Id, new List<DocumentTemplateVariable>())
-            .Select(MapVariableResponse).ToList())).ToList();
+        var items = new List<DocumentTemplateVersionResponse>(versions.Count);
+        foreach (var version in versions)
+        {
+            var variableResponses = grouped.GetValueOrDefault(version.Id, new List<DocumentTemplateVariable>())
+                .Select(MapVariableResponse)
+                .ToList();
+            var enriched = await employeeMapping.EnrichAsync(variableResponses, ct);
+            items.Add(MapVersionResponse(version, enriched));
+        }
+
+        return items;
     }
 
     public async Task<TemplateTestRunResponse> TestRunTemplateAsync(
@@ -787,12 +796,22 @@ public sealed class DocumentTemplateAppService(
                 version.OriginalAssetUri ?? $"{template.Code}-source");
         }
 
-        var requiredVariables = await db.DocumentTemplateVariables.AsNoTracking()
-            .Where(v => v.TemplateVersionId == versionId && v.IsRequired)
-            .Select(v => v.VariableName)
+        var templateVariables = await db.DocumentTemplateVariables.AsNoTracking()
+            .Where(v => v.TemplateVersionId == versionId)
+            .OrderBy(v => v.SortOrder)
             .ToListAsync(ct);
+        var requiredVariables = templateVariables
+            .Where(v => v.IsRequired)
+            .Select(v => v.VariableName)
+            .ToList();
 
-        var merged = await variableMerge.MergeAsync(body.BeneficiaryUserId, documentRequestId: null, body.SampleData, ct);
+        var mergeResult = await variableMerge.MergeForTemplateAsync(
+            body.BeneficiaryUserId,
+            documentRequestId: null,
+            templateVariables,
+            body.SampleData,
+            ct);
+        var merged = mergeResult.Values;
         await variableMerge.ApplyAiRefinementAsync(
             merged,
             versionId,
@@ -825,6 +844,57 @@ public sealed class DocumentTemplateAppService(
             Variables = body?.Variables ?? new Dictionary<string, string>(),
         };
         return workflowGeneration.GenerateDocumentAsync(wf, ct);
+    }
+
+    public async Task<TemplateEmployeeResolutionResponse> ResolveEmployeeValuesAsync(
+        Guid templateId,
+        ResolveTemplateEmployeeValuesRequest body,
+        CancellationToken ct = default)
+    {
+        EnsureAuthenticated();
+        EnsureRhOrAdmin();
+        var template = await db.DocumentTemplates
+            .Include(t => t.CurrentVersion)
+            .FirstOrDefaultAsync(t => t.Id == templateId, ct);
+        if (template is null)
+            throw new DocumentationApiException(404, "Template introuvable.");
+
+        var version = template.CurrentVersion ?? await db.DocumentTemplateVersions
+            .Where(v => v.TemplateId == template.Id)
+            .OrderByDescending(v => v.VersionNumber)
+            .FirstOrDefaultAsync(ct);
+        if (version is null)
+            throw new DocumentationApiException(400, "Aucune version de modèle n'est disponible.");
+
+        var variables = await db.DocumentTemplateVariables.AsNoTracking()
+            .Where(v => v.TemplateVersionId == version.Id)
+            .OrderBy(v => v.SortOrder)
+            .ToListAsync(ct);
+
+        var detailed = await employeeMapping.ResolveAsync(
+            body.BeneficiaryUserId,
+            variables,
+            body.CurrentValues,
+            ct).ConfigureAwait(false);
+
+        var items = variables.Select(v =>
+        {
+            var resolution = detailed.Resolutions.FirstOrDefault(r =>
+                string.Equals(r.Name, v.VariableName, StringComparison.OrdinalIgnoreCase));
+            return new TemplateVariableResolutionItem(
+                v.VariableName,
+                NormalizeFormScope(v.FormScope),
+                v.SourceFieldKey,
+                v.DisplayLabel,
+                v.IsRequired,
+                resolution?.FilledFromDb ?? false,
+                resolution?.NeedsRhInput ?? string.Equals(NormalizeFormScope(v.FormScope), "hr", StringComparison.Ordinal),
+                resolution?.UnavailableMapping ?? false,
+                resolution?.DbValue,
+                resolution?.ResolvedValue ?? string.Empty);
+        }).ToList();
+
+        return new TemplateEmployeeResolutionResponse(items);
     }
 
     private async Task<(DocumentTemplateVersion? Version, DocumentTemplate? Template)> LoadTemplateCurrentVersionAsync(
@@ -896,6 +966,8 @@ public sealed class DocumentTemplateAppService(
             .Where(v => IsValidVariableName(v.VariableName))
             .Take(MaxTemplateVariables)
             .ToList();
+        foreach (var (row, input) in rows.Zip(variables.Where(v => IsValidVariableName(v.Name.Trim())).Take(MaxTemplateVariables)))
+            DocumentTemplateVariableMapper.ApplyInput(row, input);
         if (rows.Count > 0)
             db.DocumentTemplateVariables.AddRange(rows);
         await db.SaveChangesAsync(ct);
@@ -1033,20 +1105,11 @@ public sealed class DocumentTemplateAppService(
         return null;
     }
 
-    private static DocumentTemplateVariableResponse MapVariableResponse(DocumentTemplateVariable v) =>
-        new(
-            v.Id.ToString(),
-            v.VariableName,
-            v.VariableType,
-            v.IsRequired,
-            v.DefaultValue,
-            v.ValidationRule,
-            v.DisplayLabel,
-            NormalizeFormScope(v.FormScope),
-            v.SourcePriority,
-            v.NormalizedName,
-            v.RawPlaceholder,
-            v.SortOrder);
+    private static DocumentTemplateVariableResponse MapVariableResponse(DocumentTemplateVariable v)
+    {
+        var mapped = DocumentTemplateVariableMapper.ToResponse(v);
+        return mapped with { FormScope = NormalizeFormScope(mapped.FormScope) };
+    }
 
     private static DocumentTemplateVariableResponse ToVariableResponse(TemplateVariableInput v, int order) =>
         new(
@@ -1061,7 +1124,12 @@ public sealed class DocumentTemplateAppService(
             v.SourcePriority ?? GuessSourcePriority(v.FormScope),
             v.NormalizedName,
             v.RawPlaceholder,
-            order);
+            order)
+        {
+            SourceFieldKey = v.SourceFieldKey,
+            MappingConfidence = v.MappingConfidence,
+            MappingConfirmed = v.MappingConfirmed ?? false,
+        };
 
     private static bool IsValidVariableName(string name) =>
         !string.IsNullOrWhiteSpace(name) && name.All(c => char.IsLetterOrDigit(c) || c == '_');

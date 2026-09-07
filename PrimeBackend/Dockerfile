@@ -6,6 +6,8 @@ COPY Messaging.Contracts/Messaging.Contracts.csproj Messaging.Contracts/
 COPY Kyntus.Identity.Jwt/Kyntus.Identity.Jwt.csproj Kyntus.Identity.Jwt/
 COPY Kyntus.Iam/Kyntus.Iam.csproj Kyntus.Iam/
 COPY Kyntus.Messaging.Outbox/Kyntus.Messaging.Outbox.csproj Kyntus.Messaging.Outbox/
+COPY Kyntus.Caching/Kyntus.Caching.csproj Kyntus.Caching/
+COPY Shared.Kernel/Shared.Kernel.csproj Shared.Kernel/
 COPY PrimeBackend/Prime.Domain/Prime.Domain.csproj PrimeBackend/Prime.Domain/
 COPY PrimeBackend/Prime.Application/Prime.Application.csproj PrimeBackend/Prime.Application/
 COPY PrimeBackend/Prime.Infrastructure/Prime.Infrastructure.csproj PrimeBackend/Prime.Infrastructure/
@@ -16,8 +18,11 @@ COPY Messaging.Contracts/ Messaging.Contracts/
 COPY Kyntus.Identity.Jwt/ Kyntus.Identity.Jwt/
 COPY Kyntus.Iam/ Kyntus.Iam/
 COPY Kyntus.Messaging.Outbox/ Kyntus.Messaging.Outbox/
+COPY Kyntus.Caching/ Kyntus.Caching/
+COPY Shared.Kernel/ Shared.Kernel/
 COPY PrimeBackend/ PrimeBackend/
-RUN dotnet publish PrimeBackend/Prime.API/Prime.API.csproj -c Release -o /out
+# ProduceReferenceAssembly=false : évite CopyRefAssembly (MSB3883 / I/O overlay Docker).
+RUN dotnet publish PrimeBackend/Prime.API/Prime.API.csproj -c Release -o /out /p:UseAppHost=false /p:ProduceReferenceAssembly=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app

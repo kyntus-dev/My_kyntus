@@ -89,8 +89,6 @@ export class LoginComponent implements OnInit {
 
     this.authService.login(loginData).subscribe({
      next: (response: any) => {
-  console.log('Connexion réussie', response);
-
   // ✅ Extraire userId depuis le token JWT
   const payload = JSON.parse(atob(response.accessToken.split('.')[1]));
   const nameIdentifier =
@@ -122,8 +120,10 @@ export class LoginComponent implements OnInit {
   }));
 
   // Rediriger vers planning (encode : les refresh tokens Base64 peuvent contenir + / =)
+  // theme= : ports 8201/8200 n’ont pas le même localStorage — le cookie + query conservent le mode choisi.
+  const theme = this.theme.theme();
   const callback =
-    `${KYNTUS_PUBLIC_URLS.planningAuthCallback}?token=${encodeURIComponent(response.accessToken)}&refresh=${encodeURIComponent(response.refreshToken)}`;
+    `${KYNTUS_PUBLIC_URLS.planningAuthCallback}?token=${encodeURIComponent(response.accessToken)}&refresh=${encodeURIComponent(response.refreshToken)}&theme=${encodeURIComponent(theme)}`;
   window.location.href = this.returnUrl
     ? `${callback}&returnUrl=${encodeURIComponent(this.returnUrl)}`
     : callback;

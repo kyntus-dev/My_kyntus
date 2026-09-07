@@ -483,6 +483,18 @@
             </table>
           </div>
 
+          <label class="critical-label saturday-toggle">
+            <input
+              type="checkbox"
+              [ngModel]="useDistinctSaturdayShifts"
+              (ngModelChange)="onDistinctSaturdayChange($event)" />
+            Shifts samedi distincts
+          </label>
+          <span class="hint saturday-hint">
+            Sans cette option, le samedi reprend les horaires de la semaine avec un effectif réduit (moitié).
+            Cochez pour définir des horaires et quotas propres au samedi.
+          </span>
+
           <div class="state-loading" *ngIf="loading">
             <div class="spinner"></div>
             <span>Chargement de la config…</span>
@@ -509,6 +521,145 @@
           </div>
         </div>
 
+        <div class="config-card ky-card saturday-card" *ngIf="useDistinctSaturdayShifts && !loading">
+          <div class="card-header">
+            <div class="ch-left">
+              <span class="card-icon"><app-lucide-icon [icon]="icons.calendar" className="w-5 h-5" /></span>
+              <h2>Shifts samedi</h2>
+              <span class="shifts-count">{{ saturdayShifts.length }} shift(s)</span>
+            </div>
+            <div class="saturday-header-actions">
+              <button type="button" class="ky-btn-secondary btn-add-shift" (click)="copyWeekdayShiftsToSaturday()">
+                Copier la semaine
+              </button>
+              <button
+                type="button"
+                class="ky-btn-secondary btn-add-shift"
+                (click)="addSaturdayShift()"
+                [disabled]="saturdayShifts.length >= 8">
+                <app-lucide-icon [icon]="icons.plus" className="w-4 h-4" />
+                Ajouter
+              </button>
+            </div>
+          </div>
+          <p class="saturday-help">
+            Horaires et effectifs (ou %) utilisés uniquement le samedi. Les jours Lun–Ven restent sur le tableau ci-dessus.
+          </p>
+          <p class="mode-pct-hint" *ngIf="multiShiftModesEnabled && activeMode" [class.mode-pct-ok]="modeSaturdayPctOk(activeMode)">
+            Somme des % samedi : {{ modeSaturdayPercentageSum(activeMode) | number:'1.0-1' }} % (cible 100)
+          </p>
+          <div class="table-wrapper">
+            <table class="prime-table prime-table--dense shifts-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Label</th>
+                  <th>Début</th>
+                  <th>Fin (auto)</th>
+                  <th>Durée travail</th>
+                  <th>Créneaux pause (début → fin +1h)</th>
+                  <th *ngIf="!multiShiftModesEnabled">Nb employés</th>
+                  <th>%</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let shift of saturdayShifts; let i = index" class="shift-row">
+                  <td class="td-order">{{ i + 1 }}</td>
+                  <td class="td-label">
+                    <input type="text" [(ngModel)]="shift.label" (ngModelChange)="touchDraft()" placeholder="Ex: Matin" class="ky-input input-label" />
+                  </td>
+                  <td class="td-start">
+                    <select
+                      [(ngModel)]="shift.startTime"
+                      (ngModelChange)="onStartTimeChange(shift)"
+                      class="ky-input select-time">
+                      <option *ngFor="let opt of startOptions" [value]="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </td>
+                  <td class="td-end">
+                    <span class="end-time-badge">{{ getEndTime(shift) }}</span>
+                  </td>
+                  <td class="td-hours">
+                    <div class="hours-input">
+                      <input type="number" [(ngModel)]="shift.workHours" min="4" max="12" class="ky-input input-hours" />
+                      <span class="hours-unit">h</span>
+                    </div>
+                  </td>
+                  <td class="td-break-slots">
+                    <div class="break-slots">
+                      <button
+                        type="button"
+                        class="break-chip"
+                        *ngFor="let slot of getAllowedBreakStarts(shift)"
+                        [class.break-chip--on]="isBreakSlotSelected(shift, slot)"
+                        (click)="toggleBreakSlot(shift, slot)"
+                        [title]="formatBreakSlotLabel(slot)">
+                        {{ formatBreakSlotLabel(slot) }}
+                      </button>
+                      <button
+                        type="button"
+                        class="break-auto-btn"
+                        (click)="resetBreakSlotsAuto(shift)"
+                        title="Recalculer les créneaux auto">
+                        Auto
+                      </button>
+                    </div>
+                  </td>
+                  <td class="td-count" *ngIf="!multiShiftModesEnabled">
+                    <input
+                      type="number"
+                      [(ngModel)]="shift.requiredCount"
+                      (ngModelChange)="touchDraft()"
+                      min="0"
+                      class="ky-input input-count" />
+                  </td>
+                  <td class="td-pct">
+                    <ng-container *ngIf="multiShiftModesEnabled; else satMonoPct">
+                      <input
+                        type="number"
+                        class="ky-input input-pct"
+                        [(ngModel)]="shift.percentage"
+                        (ngModelChange)="onPercentageChange(shift)"
+                        min="0"
+                        max="100"
+                        step="0.1" />
+                    </ng-container>
+                    <ng-template #satMonoPct>
+                      <span class="pct-badge">{{ getSaturdayPercentage(shift) }}%</span>
+                    </ng-template>
+                  </td>
+                  <td class="td-actions">
+                    <button
+                      type="button"
+                      class="btn-remove-shift"
+                      (click)="removeSaturdayShift(i)"
+                      [disabled]="saturdayShifts.length <= 1"
+                      title="Supprimer ce shift samedi">
+                      <app-lucide-icon [icon]="icons.trash" className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="total-row">
+                  <td colspan="6" class="total-label">Total samedi</td>
+                  <td *ngIf="!multiShiftModesEnabled" class="total-count">
+                    {{ totalSaturdayEffectif }}
+                  </td>
+                  <td class="total-pct">
+                    <ng-container *ngIf="multiShiftModesEnabled && activeMode; else satTotalPct">
+                      {{ modeSaturdayPercentageSum(activeMode) | number:'1.0-1' }}%
+                    </ng-container>
+                    <ng-template #satTotalPct>{{ totalSaturdayEffectif === 0 ? '0%' : '100%' }}</ng-template>
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
         <div class="saved-config-card ky-card" *ngIf="savedConfig">
           <div class="card-header">
             <span class="card-icon"><app-lucide-icon [icon]="icons.coffee" className="w-5 h-5" /></span>
@@ -528,6 +679,18 @@
                 </ng-container>
                 <ng-template #legacyBreak>{{ s.breakRangeStart }} → {{ s.breakRangeEnd }}</ng-template>
               </span>
+              <span class="ss-count">
+                <app-lucide-icon [icon]="icons.users" className="w-3.5 h-3.5 inline" />
+                {{ s.requiredCount }} pers.
+              </span>
+              <span class="ss-pct">{{ s.percentage }}%</span>
+            </div>
+          </div>
+          <div class="saved-shifts" *ngIf="savedConfig.saturdayShifts?.length">
+            <p class="saved-sat-title">Samedi</p>
+            <div class="saved-shift-item" *ngFor="let s of savedConfig.saturdayShifts">
+              <span class="ss-label">{{ s.label }}</span>
+              <span class="ss-time">{{ s.startTime }} → {{ s.endTime }}</span>
               <span class="ss-count">
                 <app-lucide-icon [icon]="icons.users" className="w-3.5 h-3.5 inline" />
                 {{ s.requiredCount }} pers.

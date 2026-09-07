@@ -5,7 +5,7 @@
 .DESCRIPTION
   - status  : liste les fichiers en attente (pending + optionnellement git depuis le mark)
   - add     : ajoute un ou plusieurs chemins à deploy/pending-files.txt
-  - export  : génère un tar Windows + commandes scp / extract serveur
+  - export  : génère un tar Windows + 3 commandes (scp / extract / rebuild)
   - mark    : après déploiement réussi, vide pending et met à jour last-deploy.json
 
 .EXAMPLE
@@ -130,6 +130,51 @@ function Get-DeploySet {
     return ,$existing
 }
 
+function Get-RebuildServices([string[]]$files) {
+    $order = @(
+        'auth-backend',
+        'employee-directory-backend',
+        'planning-backend',
+        'formation-backend',
+        'conge-backend',
+        'prime-backend',
+        'parrainage-backend',
+        'kcq-backend',
+        'kcq-frontend',
+        'api-gateway',
+        'auth-frontend',
+        'planning-frontend'
+    )
+    $hit = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($f in $files) {
+        $n = ($f -replace '/', '\').ToLowerInvariant()
+        $parts = $n -split '\\'
+        if ($parts -contains 'unittests' -or $parts -contains 'tests') { continue }
+
+        if ($n.StartsWith('authservice\')) { [void]$hit.Add('auth-backend') }
+        elseif ($n.StartsWith('employeedirectory\')) { [void]$hit.Add('employee-directory-backend') }
+        elseif ($n.StartsWith('planningservice\')) { [void]$hit.Add('planning-backend') }
+        elseif ($n.StartsWith('formationservice\conge.') -or $n.StartsWith('formationservice\conge\')) { [void]$hit.Add('conge-backend') }
+        elseif ($n.StartsWith('formationservice\')) { [void]$hit.Add('formation-backend') }
+        elseif ($n.StartsWith('primebackend\')) { [void]$hit.Add('prime-backend') }
+        elseif ($n.StartsWith('parrainage_service_backend\')) { [void]$hit.Add('parrainage-backend') }
+        elseif ($n.StartsWith('qualiteservice\frontend\')) { [void]$hit.Add('kcq-frontend') }
+        elseif ($n.StartsWith('qualiteservice\')) { [void]$hit.Add('kcq-backend') }
+        elseif ($n.StartsWith('projet_kyntus_service_planning-frontend\')) { [void]$hit.Add('planning-frontend') }
+        elseif ($n.StartsWith('auth-frontend\')) { [void]$hit.Add('auth-frontend') }
+        elseif ($n.StartsWith('apigateway.api\') -or $n.StartsWith('init\ocelot')) { [void]$hit.Add('api-gateway') }
+        elseif ($n.StartsWith('kyntus.iam\')) {
+            [void]$hit.Add('employee-directory-backend')
+            [void]$hit.Add('planning-backend')
+            [void]$hit.Add('conge-backend')
+            [void]$hit.Add('prime-backend')
+        }
+    }
+    $services = @($order | Where-Object { $hit.Contains($_) })
+    if ($services.Count -eq 0) { $services = @('planning-backend') }
+    return ,$services
+}
+
 function Read-LastDeploy {
     if (-not (Test-Path $lastDeployFile)) {
         return [pscustomobject]@{
@@ -236,20 +281,29 @@ switch ($Action) {
         $remoteTar = "/tmp/$tarName"
         $sizeMb = [math]::Round((Get-Item $tarPath).Length / 1MB, 2)
 
+        $services = Get-RebuildServices @($files)
+        $svcList = ($services -join ' ')
+        $svcCount = $services.Count
+
         Write-Host ''
         Write-Host ("Archive: {0} ({1} Mo) - {2} fichier(s)" -f $tarPath, $sizeMb, $files.Count)
         Write-Host ("Liste:   {0}" -f $listPath)
         Write-Host ''
-        Write-Host '--- Commandes deploiement ---'
+        Write-Host '1. Copier'
+        Write-Host ''
         Write-Host ('scp "{0}" {1}:{2}' -f $tarPath, $hostUser, $remoteTar)
+        Write-Host ''
+        Write-Host '2. Extraire sur le serveur'
+        Write-Host ''
         $extractCmd = 'cd {0}; tar -xf {1}; rm -f {1}' -f $remoteRoot, $remoteTar
         Write-Host ('ssh {0} "{1}"' -f $hostUser, $extractCmd)
         Write-Host ''
-        Write-Host 'Puis rebuild Docker des services touches, ex.:'
-        $rebuildCmd = 'cd {0}; docker compose up -d --build planning-backend' -f $remoteRoot
+        Write-Host ("3. Rebuild des {0} services" -f $svcCount)
+        Write-Host ''
+        $rebuildCmd = 'cd {0}; docker compose up -d --build {1}' -f $remoteRoot, $svcList
         Write-Host ('ssh {0} "{1}"' -f $hostUser, $rebuildCmd)
         Write-Host ''
-        Write-Host 'Apres succes: .\scripts\deploy-delta.ps1 -Action mark -Note ''...'''
+        Write-Host ("Quand les {0} sont Up, dis C FAIT (on marquera le delta ensuite). Ne copie pas le .env." -f $svcCount)
     }
 
     'mark' {
@@ -271,7 +325,12 @@ switch ($Action) {
             lastServicesRebuilt = @()
             fileCount           = $pending.Count
         }
-        ($newMark | ConvertTo-Json -Depth 5) | Set-Content -Path $lastDeployFile -Encoding UTF8
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText(
+            $lastDeployFile,
+            (($newMark | ConvertTo-Json -Depth 5) + [Environment]::NewLine),
+            $utf8NoBom
+        )
 
         $hist = [ordered]@{
             at        = $now
@@ -280,7 +339,11 @@ switch ($Action) {
             note      = $newMark.note
             files     = @($pending)
         }
-        Add-Content -Path $historyFile -Value (($hist | ConvertTo-Json -Compress -Depth 5)) -Encoding UTF8
+        [System.IO.File]::AppendAllText(
+            $historyFile,
+            (($hist | ConvertTo-Json -Compress -Depth 5) + [Environment]::NewLine),
+            $utf8NoBom
+        )
 
         Write-Pending ([System.Collections.Generic.List[string]]::new())
         Write-Host ("Mark enregistre ({0}). Pending vide. Historique: deploy/history.jsonl" -f $now)

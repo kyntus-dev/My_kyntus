@@ -5,6 +5,7 @@
 .cm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .cm-title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin: 0; }
 .cm-sub { font-size: 13px; color: var(--text-muted); margin: 4px 0 0; }
+.cm-readonly-hint { color: var(--text-muted); font-size: 0.88rem; margin: 0 0 14px; }
 .cm-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .cm-stat-card {
   border-radius: var(--radius-md);

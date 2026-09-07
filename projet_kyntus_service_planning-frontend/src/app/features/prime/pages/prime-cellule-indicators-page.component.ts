@@ -3,10 +3,14 @@ import {
   Component,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import {
+  ChevronDown,
+  ChevronRight,
   Copy,
   Plus,
   RotateCcw,
@@ -22,7 +26,13 @@ import { KyntusSelectSyncDirective } from '@/shared/directives/kyntus-select-syn
 import { PrimeCardComponent } from '../components/prime-card.component';
 import { PrimeOrgTreeComponent } from '../components/prime-org-tree.component';
 import { getCellTemplateLinesOrDerived, parsePrimeSchemaFromDraftJson } from '../lib/prime-cell-schema-merge';
-import { PRIME_INPUT_FIELD_CLASS } from '../lib/prime-fiche-sector-field-meta';
+import {
+  CHALLENGE_SECTOR_BAND_CLASS,
+  PRIME_BTN_SECONDARY_CLASS,
+  PRIME_INPUT_FIELD_CLASS,
+  PRIME_SECTOR_BAND_CLASS,
+  PRIME_WARNING_BANNER_CLASS,
+} from '../lib/prime-fiche-sector-field-meta';
 import {
   buildNavBlocksForContract,
   type NavBlock,
@@ -37,6 +47,7 @@ import {
   type EffectiveCommonLinePonderationDto,
   type PutCommonLinePonderationItem,
   type PutServicePrimeIndicatorItem,
+  type ServicePrimeAgentDto,
   type ServicePrimeIndicatorDto,
   type SupervisorPolePrimeDraftListItemDto,
 } from '../services/prime-cell-prime-api.service';
@@ -52,6 +63,19 @@ import { PrimeScopeStore } from '../state/prime-scope.store';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 
 type DraftRow = PutServicePrimeIndicatorItem & { localId: string };
+
+type AgentOverrideDraft = {
+  employeeId: string;
+  indicatorId: string;
+  ponderationPrimePct: number | null;
+  ponderationChallengePct: number | null;
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isPersistedIndicatorId(id: string): boolean {
+  return UUID_RE.test((id ?? '').trim());
+}
 
 type ConfigLevel = 'cellule' | 'service';
 
@@ -80,7 +104,7 @@ type PolePondRow = {
         <div class="flex min-w-0 items-center gap-2 shrink-0">
           <app-lucide-icon [icon]="icons.sliders" className="w-5 h-5 text-blue-600 shrink-0" />
           <h1 class="text-base font-bold tracking-tight text-primary sm:text-lg whitespace-nowrap">
-            Indicateurs &amp; pondérations
+            Indicateurs et pondérations
           </h1>
         </div>
 
@@ -139,28 +163,6 @@ type PolePondRow = {
             Modèle <strong class="text-primary font-medium">{{ uploadedModelHint() }}</strong>
           </span>
         }
-
-        <div class="ml-auto flex flex-wrap items-center gap-2 shrink-0">
-          <button
-            type="button"
-            (click)="save()"
-            [disabled]="!canSaveWeights() || saving() || bulkApplying()"
-            class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
-          >
-            <app-lucide-icon [icon]="icons.save" className="w-3.5 h-3.5" />
-            {{ saving() ? '…' : 'Enregistrer' }}
-          </button>
-          <button
-            type="button"
-            (click)="applyToAllServicesInCell()"
-            [disabled]="!canBulkApplyToCell() || saving() || bulkApplying()"
-            [title]="bulkApplyDisabledReason()"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/50 bg-blue-600/15 px-3 py-1.5 text-sm font-semibold text-primary hover:bg-blue-600/25 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <app-lucide-icon [icon]="icons.copy" className="w-3.5 h-3.5" />
-            Répliquer
-          </button>
-        </div>
       </div>
 
       <ng-template #cellTrail let-c>
@@ -179,15 +181,12 @@ type PolePondRow = {
         </span>
       </ng-template>
 
-      <div class="xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] gap-4 items-start">
+      <div class="xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] gap-4 items-start">
       <div class="space-y-4 min-w-0 order-2 xl:order-1">
 
       @if (pondGuardrailWarnings().length) {
-        <div
-          class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
-          role="alert"
-        >
-          <p class="font-semibold text-primary mb-1">Pondérations — contrôle qualité</p>
+        <div [class]="guardrailBannerClass" role="alert">
+          <p class="prime-banner__title mb-1">Pondérations — contrôle qualité</p>
           <ul class="list-disc pl-5 space-y-0.5 text-xs">
             @for (w of pondGuardrailWarnings(); track w) {
               <li>{{ w }}</li>
@@ -207,25 +206,44 @@ type PolePondRow = {
           title="Partie service — indicateurs"
           [description]="
             configLevel() === 'cellule'
-              ? 'Indicateurs du service actif. Pondération Prime et Challenge sur la même ligne. Enregistrez puis répliquez sur la cellule si besoin.'
+              ? 'Indicateurs du service actif. Pondération Prime et Challenge sur la même ligne.'
               : 'Indicateurs du service : libellé + Pondération Prime / Challenge sur la même ligne.'
           "
         >
-          <div class="mb-3 flex justify-end">
+          <div class="mb-3 flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               (click)="addRow()"
-              [disabled]="saving() || bulkApplying()"
+              [disabled]="savingIndicators() || savingPonderations() || bulkApplying()"
               class="inline-flex items-center gap-2 rounded-lg border border-default bg-card px-3 py-1.5 text-sm font-medium text-primary hover:bg-input/40 disabled:opacity-50"
             >
               <app-lucide-icon [icon]="icons.plus" className="w-4 h-4" />
-              Ajouter une ligne
+              Ajouter un indicateur
+            </button>
+            <button
+              type="button"
+              (click)="saveIndicators()"
+              [disabled]="!canSaveIndicators() || savingIndicators() || bulkApplying()"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              <app-lucide-icon [icon]="icons.save" className="w-3.5 h-3.5" />
+              {{ savingIndicators() ? 'Enregistrement…' : 'Enregistrer les indicateurs' }}
+            </button>
+            <button
+              type="button"
+              (click)="applyToAllServicesInCell()"
+              [disabled]="!canBulkApplyToCell() || savingIndicators() || bulkApplying()"
+              [title]="bulkApplyDisabledReason()"
+              [class]="replicateBtnClass"
+            >
+              <app-lucide-icon [icon]="icons.copy" className="w-3.5 h-3.5" />
+              Appliquer à tous les services
             </button>
           </div>
           @if (rows().length === 0) {
             <p class="text-sm text-muted m-0">
               Aucun indicateur pour ce service. Utilisez
-              <strong class="text-primary">Ajouter une ligne</strong>.
+              <strong class="text-primary">Ajouter un indicateur</strong>.
             </p>
           } @else {
             <div class="overflow-x-auto rounded-lg border border-default">
@@ -238,6 +256,7 @@ type PolePondRow = {
                     <th class="px-3 py-2">Pondération Prime</th>
                     <th class="px-3 py-2">Pondération Challenge</th>
                     <th class="px-3 py-2">Actif</th>
+                    <th class="px-3 py-2">Pilotes</th>
                     <th class="px-3 py-2 w-10"></th>
                   </tr>
                 </thead>
@@ -312,6 +331,32 @@ type PolePondRow = {
                       <td class="px-3 py-2">
                         <button
                           type="button"
+                          (click)="toggleAgentPanel(r)"
+                          [disabled]="!isPersistedRow(r)"
+                          [title]="
+                            isPersistedRow(r)
+                              ? 'Pondérations optionnelles par pilote'
+                              : 'Enregistrez l’indicateur avant de personnaliser par pilote.'
+                          "
+                          class="inline-flex items-center gap-1 rounded border border-default bg-card px-2 py-1 text-xs font-medium text-primary hover:bg-input/40 disabled:opacity-50"
+                        >
+                          <app-lucide-icon
+                            [icon]="expandedLocalId() === r.localId ? icons.chevronDown : icons.chevronRight"
+                            className="w-3.5 h-3.5"
+                          />
+                          Par pilote
+                          @if (agentOverrideCount(r.localId); as n) {
+                            @if (n > 0) {
+                              <span class="rounded bg-blue-600/15 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                                {{ n }}
+                              </span>
+                            }
+                          }
+                        </button>
+                      </td>
+                      <td class="px-3 py-2">
+                        <button
+                          type="button"
                           (click)="removeRow(r.localId)"
                           class="p-1 rounded text-muted hover:text-rose-600"
                           aria-label="Supprimer"
@@ -320,6 +365,92 @@ type PolePondRow = {
                         </button>
                       </td>
                     </tr>
+                    @if (expandedLocalId() === r.localId) {
+                      <tr>
+                        <td colspan="8" class="bg-input/40 px-3 py-3">
+                          @if (servicePilots().length === 0) {
+                            <p class="m-0 text-xs text-muted">Aucun pilote rattaché à ce service.</p>
+                          } @else {
+                            <p class="mb-2 text-xs text-muted">
+                              Champs vides = pondération du service. Personnalisez uniquement les pilotes dont les %
+                              diffèrent.
+                            </p>
+                            <div class="overflow-x-auto rounded border border-default bg-card">
+                              <table class="w-full text-sm">
+                                <thead class="bg-input text-[11px] uppercase text-muted">
+                                  <tr>
+                                    <th class="px-3 py-1.5 text-left">Pilote</th>
+                                    <th class="px-3 py-1.5 text-left">Pondération Prime</th>
+                                    <th class="px-3 py-1.5 text-left">Pondération Challenge</th>
+                                    <th class="px-3 py-1.5 text-left">Total effectif</th>
+                                    <th class="px-3 py-1.5 w-28"></th>
+                                  </tr>
+                                </thead>
+                                <tbody class="divide-y divide-default">
+                                  @for (p of servicePilots(); track p.employeeId) {
+                                    <tr>
+                                      <td class="px-3 py-1.5 text-primary">{{ p.employeeName }}</td>
+                                      <td class="px-3 py-1.5">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          step="0.01"
+                                          [value]="agentOverridePct(r.localId, p.employeeId, 'prime') ?? ''"
+                                          (input)="
+                                            patchAgentOverride(
+                                              r.localId,
+                                              p.employeeId,
+                                              'prime',
+                                              parsePct($any($event.target).value)
+                                            )
+                                          "
+                                          class="w-24 rounded border border-default bg-input px-2 py-1 text-primary"
+                                          [placeholder]="pctPlaceholder(r.ponderationPrimePct)"
+                                        />
+                                      </td>
+                                      <td class="px-3 py-1.5">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          step="0.01"
+                                          [value]="agentOverridePct(r.localId, p.employeeId, 'challenge') ?? ''"
+                                          (input)="
+                                            patchAgentOverride(
+                                              r.localId,
+                                              p.employeeId,
+                                              'challenge',
+                                              parsePct($any($event.target).value)
+                                            )
+                                          "
+                                          class="w-24 rounded border border-default bg-input px-2 py-1 text-primary"
+                                          [placeholder]="pctPlaceholder(r.ponderationChallengePct)"
+                                        />
+                                      </td>
+                                      <td class="px-3 py-1.5 text-xs text-muted whitespace-nowrap">
+                                        {{ agentEffectiveTotalsLabel(p.employeeId) }}
+                                      </td>
+                                      <td class="px-3 py-1.5">
+                                        @if (hasAgentOverride(r.localId, p.employeeId)) {
+                                          <button
+                                            type="button"
+                                            (click)="clearAgentOverride(r.localId, p.employeeId)"
+                                            class="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                                          >
+                                            Revenir au service
+                                          </button>
+                                        }
+                                      </td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                          }
+                        </td>
+                      </tr>
+                    }
                   }
                 </tbody>
               </table>
@@ -328,7 +459,7 @@ type PolePondRow = {
               Totaux actifs — Prime {{ serviceIndicatorPondTotals().prime }} % / Challenge
               {{ serviceIndicatorPondTotals().challenge }} %
               @if (serviceIndicatorPondTotals().warn) {
-                <span class="ml-1 text-amber-700 dark:text-amber-300">{{ serviceIndicatorPondTotals().warn }}</span>
+                <span class="ml-1 text-[var(--warning-text)]">{{ serviceIndicatorPondTotals().warn }}</span>
               }
             </div>
           }
@@ -349,11 +480,22 @@ type PolePondRow = {
               KPI.
             </p>
           } @else {
+            <div class="mb-3 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                (click)="savePonderations()"
+                [disabled]="!canSavePonderations() || savingPonderations() || bulkApplying()"
+                class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                <app-lucide-icon [icon]="icons.save" className="w-3.5 h-3.5" />
+                {{ savingPonderations() ? '…' : 'Enregistrer' }}
+              </button>
+            </div>
             <div
-              class="flex flex-col gap-0 overflow-hidden rounded-xl border border-default lg:flex-row lg:items-stretch lg:min-h-[min(68dvh,640px)]"
+              class="flex flex-col gap-0 overflow-hidden rounded-xl border border-default lg:flex-row lg:items-stretch lg:min-h-[min(72dvh,720px)]"
             >
               <aside
-                class="w-full shrink-0 border-b border-default bg-input lg:w-[22rem] xl:w-[24rem] lg:border-b-0 lg:border-r lg:max-h-[min(68dvh,640px)] lg:overflow-y-auto"
+                class="w-full shrink-0 border-b border-default bg-input lg:w-[20rem] xl:w-[22rem] lg:border-b-0 lg:border-r lg:max-h-[min(72dvh,720px)] lg:overflow-y-auto"
               >
                 <div class="p-3 sm:p-4">
                   <p class="px-1 pb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-muted/90">
@@ -412,7 +554,7 @@ type PolePondRow = {
                 </div>
               </aside>
 
-              <div class="min-w-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:max-h-[min(68dvh,640px)]">
+              <div class="min-w-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:max-h-[min(72dvh,720px)]">
                 @if (selectedPolePond(); as r) {
                   <div class="mb-4">
                     <h3 class="text-base font-semibold text-primary leading-snug">
@@ -434,9 +576,7 @@ type PolePondRow = {
                   </div>
 
                   <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                    <div
-                      class="space-y-2 rounded-lg border border-blue-500/35 bg-blue-600/10 p-3 sm:p-4 dark:bg-blue-500/15"
-                    >
+                    <div [class]="primeSectorBandClass + ' space-y-2 p-3 sm:p-4'">
                       <h4 class="text-xs font-semibold uppercase tracking-wide text-primary">Prime (Secteur)</h4>
                       <div class="min-w-0">
                         <label class="mb-1 block text-sm font-medium text-muted">Pondération Prime</label>
@@ -459,9 +599,7 @@ type PolePondRow = {
                         />
                       </div>
                     </div>
-                    <div
-                      class="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 sm:p-4 dark:bg-amber-500/15"
-                    >
+                    <div [class]="challengeSectorBandClass + ' space-y-2 p-3 sm:p-4'">
                       <h4 class="text-xs font-semibold uppercase tracking-wide text-primary">
                         Challenge (Secteur)
                       </h4>
@@ -603,9 +741,15 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
     trash: Trash2,
     undo: Undo2,
     rotate: RotateCcw,
+    chevronDown: ChevronDown,
+    chevronRight: ChevronRight,
   };
 
   readonly inputFieldClass = PRIME_INPUT_FIELD_CLASS;
+  readonly primeSectorBandClass = PRIME_SECTOR_BAND_CLASS;
+  readonly challengeSectorBandClass = CHALLENGE_SECTOR_BAND_CLASS;
+  readonly guardrailBannerClass = PRIME_WARNING_BANNER_CLASS + ' px-4 py-3 text-sm';
+  readonly replicateBtnClass = PRIME_BTN_SECONDARY_CLASS + ' px-3 py-1.5';
 
   readonly scopeLoading = signal(true);
   readonly scopePoles = this.scope.poles;
@@ -620,11 +764,15 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
   readonly configLevel = signal<ConfigLevel>('cellule');
   readonly currentTemplateId = signal('');
   readonly rows = signal<DraftRow[]>([]);
+  readonly expandedLocalId = signal<string | null>(null);
+  readonly servicePilots = signal<ServicePrimeAgentDto[]>([]);
+  readonly agentOverrides = signal<AgentOverrideDraft[]>([]);
   readonly polePondRows = signal<PolePondRow[]>([]);
   /** Lignes template RACC/SAV complètes (bareme/groupe) pour la même nav que la saisie commune. */
   readonly poleTemplateLines = signal<PrimeFicheTemplateLine[]>([]);
   readonly selectedPolePondStableId = signal<string | null>(null);
-  readonly saving = signal(false);
+  readonly savingIndicators = signal(false);
+  readonly savingPonderations = signal(false);
   readonly bulkApplying = signal(false);
   readonly banner = signal<string | null>(null);
   readonly bannerIsError = signal(false);
@@ -665,6 +813,110 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
   readonly sortedIndicatorRows = computed(() =>
     [...this.rows()].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'fr')),
   );
+
+  isPersistedRow(r: DraftRow): boolean {
+    return isPersistedIndicatorId(r.localId);
+  }
+
+  toggleAgentPanel(r: DraftRow): void {
+    if (!this.isPersistedRow(r)) {
+      this.bannerIsError.set(false);
+      this.banner.set('Enregistrez l’indicateur avant de personnaliser les pondérations par pilote.');
+      return;
+    }
+    this.expandedLocalId.update((cur) => (cur === r.localId ? null : r.localId));
+  }
+
+  agentOverrideCount(indicatorId: string): number {
+    const id = indicatorId.trim();
+    if (!isPersistedIndicatorId(id)) return 0;
+    return this.agentOverrides().filter((o) => o.indicatorId === id && this.overrideHasValue(o)).length;
+  }
+
+  hasAgentOverride(indicatorId: string, employeeId: string): boolean {
+    return this.overrideHasValue(this.findAgentOverride(indicatorId, employeeId));
+  }
+
+  agentOverridePct(
+    indicatorId: string,
+    employeeId: string,
+    field: 'prime' | 'challenge',
+  ): number | null {
+    const o = this.findAgentOverride(indicatorId, employeeId);
+    if (!o) return null;
+    return field === 'prime' ? o.ponderationPrimePct : o.ponderationChallengePct;
+  }
+
+  pctPlaceholder(value: number | null | undefined): string {
+    return value == null ? '—' : String(value);
+  }
+
+  patchAgentOverride(
+    indicatorId: string,
+    employeeId: string,
+    field: 'prime' | 'challenge',
+    value: number | null,
+  ): void {
+    const id = indicatorId.trim();
+    const emp = employeeId.trim();
+    if (!isPersistedIndicatorId(id) || !emp) return;
+    this.agentOverrides.update((list) => {
+      const next = [...list];
+      const idx = next.findIndex((o) => o.indicatorId === id && o.employeeId === emp);
+      const cur: AgentOverrideDraft =
+        idx >= 0
+          ? { ...next[idx] }
+          : {
+              employeeId: emp,
+              indicatorId: id,
+              ponderationPrimePct: null,
+              ponderationChallengePct: null,
+            };
+      if (field === 'prime') cur.ponderationPrimePct = value;
+      else cur.ponderationChallengePct = value;
+      if (idx >= 0) next[idx] = cur;
+      else next.push(cur);
+      return next.filter((o) => this.overrideHasValue(o));
+    });
+  }
+
+  clearAgentOverride(indicatorId: string, employeeId: string): void {
+    const id = indicatorId.trim();
+    const emp = employeeId.trim();
+    this.agentOverrides.update((list) => list.filter((o) => !(o.indicatorId === id && o.employeeId === emp)));
+  }
+
+  agentEffectiveTotalsLabel(employeeId: string): string {
+    const t = this.agentEffectiveTotals(employeeId);
+    return `Prime ${t.prime} % / Challenge ${t.challenge} %`;
+  }
+
+  private agentEffectiveTotals(employeeId: string): { prime: number; challenge: number } {
+    let prime = 0;
+    let challenge = 0;
+    for (const r of this.rows()) {
+      if (!r.isActive || !r.label.trim()) continue;
+      const ov = isPersistedIndicatorId(r.localId)
+        ? this.findAgentOverride(r.localId, employeeId)
+        : undefined;
+      prime += ov?.ponderationPrimePct ?? r.ponderationPrimePct ?? 0;
+      challenge += ov?.ponderationChallengePct ?? r.ponderationChallengePct ?? 0;
+    }
+    return {
+      prime: Math.round(prime * 100) / 100,
+      challenge: Math.round(challenge * 100) / 100,
+    };
+  }
+
+  private findAgentOverride(indicatorId: string, employeeId: string): AgentOverrideDraft | undefined {
+    const id = indicatorId.trim();
+    const emp = employeeId.trim();
+    return this.agentOverrides().find((o) => o.indicatorId === id && o.employeeId === emp);
+  }
+
+  private overrideHasValue(o: AgentOverrideDraft | undefined): boolean {
+    return !!o && (o.ponderationPrimePct != null || o.ponderationChallengePct != null);
+  }
 
   readonly selectedPolePond = computed(() => {
     const id = this.selectedPolePondStableId();
@@ -740,7 +992,9 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
     );
   });
 
-  readonly canSaveWeights = computed(() => {
+  readonly canSaveIndicators = computed(() => !!this.selectedServiceId().trim());
+
+  readonly canSavePonderations = computed(() => {
     if (!this.selectedRhCelluleId().trim()) return false;
     if (this.configLevel() === 'service') return !!this.selectedServiceId().trim();
     return true;
@@ -792,6 +1046,14 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
     return '';
   }
 
+  constructor() {
+    effect(() => {
+      const userId = this.role.currentUser().id.trim();
+      if (!userId) return;
+      untracked(() => this.reloadScope());
+    });
+  }
+
   ngOnInit(): void {
     const requested = this.nav.requestedPeriod();
     if (requested && /^\d{4}-\d{2}$/.test(requested)) {
@@ -801,7 +1063,6 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
       this.configLevel.set('cellule');
       this.selectedServiceId.set('');
     }
-    this.reloadScope();
   }
 
   /** Applique une navigation provenant du pilotage (cellule / service ciblés). */
@@ -823,6 +1084,10 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
 
   private reloadScope(): void {
     const u = this.role.currentUser();
+    if (!u.id.trim()) {
+      this.scopeLoading.set(true);
+      return;
+    }
     this.scopeLoading.set(true);
     this.cellIndicatorsMap.set(new Map());
     this.cellIndicatorsLoading.set(new Set());
@@ -1078,13 +1343,21 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
           const opts = { templateId: tid || undefined, effectiveAt: this.effectiveAtIso() };
           const cellReqs = cellules.map((c) =>
             this.api.getCelluleCommonLinePonderations(c.id, u.id, opts).pipe(
-              catchError(() => of([] as EffectiveCommonLinePonderationDto[])),
+              catchError(() => {
+                this.bannerIsError.set(true);
+                this.banner.set('Certaines pondérations cellule n’ont pas pu être chargées.');
+                return of([] as EffectiveCommonLinePonderationDto[]);
+              }),
               map((items) => ({ celluleId: c.id, items })),
             ),
           );
           const svcReqs = allServices.map(({ serviceId }) =>
             this.api.getServiceCommonLinePonderations(serviceId, u.id, opts).pipe(
-              catchError(() => of([] as EffectiveCommonLinePonderationDto[])),
+              catchError(() => {
+                this.bannerIsError.set(true);
+                this.banner.set('Certaines pondérations service n’ont pas pu être chargées.');
+                return of([] as EffectiveCommonLinePonderationDto[]);
+              }),
               map((items) => ({ serviceId, items })),
             ),
           );
@@ -1166,13 +1439,19 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
       indicators: serviceId
         ? this.api.getIndicators(serviceId, u.id).pipe(catchError(() => of([] as ServicePrimeIndicatorDto[])))
         : of([] as ServicePrimeIndicatorDto[]),
+      agentOverrides: serviceId
+        ? this.api.getIndicatorAgentOverrides(serviceId, u.id).pipe(
+            catchError(() => of({ employees: [] as ServicePrimeAgentDto[], overrides: [] })),
+          )
+        : of({ employees: [] as ServicePrimeAgentDto[], overrides: [] }),
       drafts: this.api
         .listActivePoleDrafts(u.id)
         .pipe(catchError(() => of([] as SupervisorPolePrimeDraftListItemDto[]))),
       summaries: this.api.cellsSummary(u.id, period).pipe(catchError(() => of([]))),
     }).subscribe({
-      next: ({ indicators, drafts, summaries }) => {
+      next: ({ indicators, agentOverrides, drafts, summaries }) => {
         this.setIndicatorRows(indicators.map((x) => this.fromDto(x)));
+        this.applyAgentOverrideResponse(agentOverrides);
         this.activeDrafts.set(drafts);
 
         const rhCell = this.findRhCelluleForService(serviceId);
@@ -1254,8 +1533,21 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
       this.configLevel() === 'service' && this.selectedServiceId().trim()
         ? this.api.getServiceCommonLinePonderations(this.selectedServiceId().trim(), u.id, opts)
         : this.api.getCelluleCommonLinePonderations(cellId, u.id, opts);
-    req$.pipe(catchError(() => of([] as EffectiveCommonLinePonderationDto[]))).subscribe((saved) => {
-      this.setPolePondRows(this.mergePolePondRows(templateLines.length ? templateLines : this.currentTemplateLines(), saved));
+    req$.subscribe({
+      next: (saved) => {
+        this.setPolePondRows(
+          this.mergePolePondRows(templateLines.length ? templateLines : this.currentTemplateLines(), saved),
+        );
+      },
+      error: () => {
+        this.bannerIsError.set(true);
+        this.banner.set(
+          'Impossible de charger les pondérations lignes communes. Vérifiez le réseau ou réessayez.',
+        );
+        this.setPolePondRows(
+          this.mergePolePondRows(templateLines.length ? templateLines : this.currentTemplateLines(), []),
+        );
+      },
     });
   }
 
@@ -1481,6 +1773,30 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
 
   private setIndicatorRows(list: DraftRow[]): void {
     this.rows.set(list);
+    const ids = new Set(list.map((r) => r.localId));
+    if (this.expandedLocalId() && !ids.has(this.expandedLocalId() ?? '')) {
+      this.expandedLocalId.set(null);
+    }
+  }
+
+  private applyAgentOverrideResponse(res: {
+    employees?: ServicePrimeAgentDto[];
+    overrides?: Array<{
+      employeeId: string;
+      indicatorId: string;
+      ponderationPrimePct: number | null;
+      ponderationChallengePct: number | null;
+    }>;
+  }): void {
+    this.servicePilots.set(res.employees ?? []);
+    this.agentOverrides.set(
+      (res.overrides ?? []).map((o) => ({
+        employeeId: o.employeeId,
+        indicatorId: o.indicatorId,
+        ponderationPrimePct: o.ponderationPrimePct,
+        ponderationChallengePct: o.ponderationChallengePct,
+      })),
+    );
   }
 
   private setPolePondRows(list: PolePondRow[]): void {
@@ -1599,10 +1915,11 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
     return undefined;
   }
 
-  private rowsToPutIndicators(): PutServicePrimeIndicatorItem[] {
+  private rowsToPutIndicators(includeIds = true): PutServicePrimeIndicatorItem[] {
     return this.rows()
       .filter((r) => r.label.trim().length > 0)
       .map((r) => ({
+        ...(includeIds && isPersistedIndicatorId(r.localId) ? { id: r.localId } : {}),
         sortOrder: r.sortOrder,
         label: r.label.trim(),
         ponderationPrimePct: r.ponderationPrimePct,
@@ -1651,14 +1968,14 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
         '',
         ...svcLines,
         '',
-        'Les configurations existantes pour chaque service seront remplacées.',
+        'Les configurations existantes pour chaque service seront remplacées (hors pondérations par pilote).',
       ].join('\n'),
       confirmLabel: 'Répliquer',
       variant: 'warning',
     });
     if (!confirmed) return;
 
-    const indPayload = this.rowsToPutIndicators();
+    const indPayload = this.rowsToPutIndicators(false);
     const targetIds = services.map((s) => s.id);
     this.bulkApplying.set(true);
     this.banner.set(null);
@@ -1700,15 +2017,61 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
     });
   }
 
-  save(): void {
-    const cellId = this.selectedRhCelluleId().trim();
+  saveIndicators(): void {
     const serviceId = this.selectedServiceId().trim();
-    if (!this.canSaveWeights()) return;
+    if (!this.canSaveIndicators()) return;
     const u = this.role.currentUser();
     if (!u?.id) return;
     const indicators = this.rowsToPutIndicators();
+    this.savingIndicators.set(true);
+    this.banner.set(null);
+    this.api.putIndicators(serviceId, u.id, indicators).subscribe({
+      next: (list) => {
+        this.setIndicatorRows(list.map((x) => this.fromDto(x)));
+        this.mergeIndicatorsIntoCache([{ serviceId, list }]);
+        const persisted = new Set(list.map((x) => x.id));
+        const overrideItems = this.agentOverrides()
+          .filter((o) => persisted.has(o.indicatorId) && this.overrideHasValue(o))
+          .map((o) => ({
+            employeeId: o.employeeId,
+            indicatorId: o.indicatorId,
+            ponderationPrimePct: o.ponderationPrimePct,
+            ponderationChallengePct: o.ponderationChallengePct,
+          }));
+        this.api.putIndicatorAgentOverrides(serviceId, u.id, overrideItems).subscribe({
+          next: (ov) => {
+            this.applyAgentOverrideResponse(ov);
+            this.preloadProgressForPole();
+            this.savingIndicators.set(false);
+            this.banner.set('Indicateurs service enregistrés.');
+            this.bannerIsError.set(false);
+          },
+          error: (e) => {
+            this.preloadProgressForPole();
+            this.savingIndicators.set(false);
+            this.banner.set(
+              `Indicateurs enregistrés, mais les pondérations par pilote ont échoué : ${primeHttpErrorMessage(e)}`,
+            );
+            this.bannerIsError.set(true);
+          },
+        });
+      },
+      error: (e) => {
+        this.savingIndicators.set(false);
+        this.banner.set(primeHttpErrorMessage(e));
+        this.bannerIsError.set(true);
+      },
+    });
+  }
+
+  savePonderations(): void {
+    const cellId = this.selectedRhCelluleId().trim();
+    const serviceId = this.selectedServiceId().trim();
+    if (!this.canSavePonderations()) return;
+    const u = this.role.currentUser();
+    if (!u?.id) return;
     const pondItems = this.rowsToPutCommonPonderations(this.configLevel() === 'service');
-    this.saving.set(true);
+    this.savingPonderations.set(true);
     this.banner.set(null);
     const tid = this.currentTemplateId().trim();
     const pondReq$ =
@@ -1727,30 +2090,22 @@ export class PrimeCelluleIndicatorsPageComponent implements OnInit {
               items: pondItems,
             })
           : of(null);
-    const indicatorsReq$ = serviceId ? this.api.putIndicators(serviceId, u.id, indicators) : of([] as ServicePrimeIndicatorDto[]);
-    forkJoin({
-      list: indicatorsReq$,
-      pond: pondReq$,
-    }).subscribe({
-      next: ({ list }) => {
-        if (serviceId) {
-          this.setIndicatorRows(list.map((x) => this.fromDto(x)));
-          this.mergeIndicatorsIntoCache([{ serviceId, list }]);
-        }
+    pondReq$.subscribe({
+      next: () => {
         this.loadCommonPonderations();
         this.preloadProgressForPole();
-        this.saving.set(false);
+        this.savingPonderations.set(false);
         this.banner.set(
           this.configLevel() === 'cellule'
-              ? tid
+            ? tid
               ? 'Pondérations cellule enregistrées. Elles restent valables jusqu’à la prochaine modification.'
-              : 'Indicateurs enregistrés. Uploadez un modèle pour enregistrer les pondérations cellule.'
-            : 'Indicateurs service et surcharges enregistrés.',
+              : 'Uploadez un modèle pour enregistrer les pondérations cellule.'
+            : 'Surcharges de pondération service enregistrées.',
         );
         this.bannerIsError.set(false);
       },
       error: (e) => {
-        this.saving.set(false);
+        this.savingPonderations.set(false);
         this.banner.set(primeHttpErrorMessage(e));
         this.bannerIsError.set(true);
       },

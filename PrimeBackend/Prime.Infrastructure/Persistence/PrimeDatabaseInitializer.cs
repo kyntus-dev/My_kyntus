@@ -48,8 +48,10 @@ public sealed class PrimeDatabaseInitializer(
         {
             await PrimeSchemaPatches.EnsureEmployeeFicheDetailSnapshotColumnsAsync(db, cancellationToken);
             await PrimeSchemaPatches.EnsureEmployeeManagerIdColumnsAsync(db, cancellationToken);
+            await PrimeSchemaPatches.EnsureOperationalValidationWorkflowAsync(db, cancellationToken);
+            await PrimeSchemaPatches.EnsureRhThenComptaGlobalPoolWorkflowAsync(db, cancellationToken);
             await PrimeSchemaPatches.EnsureOutboxTableAsync(db, cancellationToken);
-            logger.LogInformation("PRIME : correctif schéma snapshot détail fiche employé appliqué.");
+            logger.LogInformation("PRIME : correctif schéma fiche employé + workflow opérationnel appliqué.");
         }
         catch (Exception ex)
         {
@@ -62,6 +64,8 @@ public sealed class PrimeDatabaseInitializer(
             await PrimeSchemaPatches.EnsureAllowanceTrackSchemaAsync(db, cancellationToken);
             await PrimeSchemaPatches.EnsureServicePoleLinePonderationTableAsync(db, cancellationToken);
             await PrimeSchemaPatches.EnsureCommonLinePonderationTableAsync(db, cancellationToken);
+            await PrimeSchemaPatches.EnsureEmployeeServiceIndicatorPonderationTableAsync(db, cancellationToken);
+            await PrimeSchemaPatches.EnsurePerfIndexesAsync(db, cancellationToken);
             logger.LogInformation("PRIME : schéma Allowances + pondérations RACC/SAV appliqué.");
         }
         catch (Exception ex)

@@ -80,7 +80,7 @@ function friendlyPeriod(period: string): string {
                 <app-lucide-icon [icon]="icons.arrow" className="w-4 h-4" />
               </button>
               <p class="text-xs text-muted">
-                {{ row.completeEmployees }} / {{ row.totalEmployees }} fiches agents complètes
+                {{ row.completeEmployees }} / {{ row.totalEmployees }} fiches pilotes terminées
               </p>
             </div>
           }
@@ -95,7 +95,7 @@ function friendlyPeriod(period: string): string {
             (click)="nav.requestView('/superviseur/scope')"
             class="mt-3 rounded-lg border border-default bg-card px-4 py-2 text-sm font-medium text-primary hover:bg-input/40"
           >
-            Ouvrir périmètre superviseur
+            Voir mon périmètre
           </button>
         </app-prime-card>
       }

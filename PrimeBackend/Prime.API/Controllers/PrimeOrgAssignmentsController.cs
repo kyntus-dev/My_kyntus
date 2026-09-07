@@ -71,7 +71,6 @@ public sealed class PrimeOrgAssignmentsController(
         return Ok(await mediator.Send(new GetOrgSousServicesQuery(), ct));
     }
 
-    [AllowAnonymous]
     [HttpGet("assignments/manager-etage")]
     public async Task<ActionResult<List<ChefProjetPoleAssignment>>> GetChefProjetPoleAssignments(
         [FromQuery] string? userId,
@@ -81,7 +80,6 @@ public sealed class PrimeOrgAssignmentsController(
         return Ok(await mediator.Send(new GetChefProjetPoleAssignmentsQuery(userId), ct));
     }
 
-    [AllowAnonymous]
     [HttpGet("assignments/supervisor-service")]
     public async Task<ActionResult<List<SupervisorCelluleAssignment>>> GetSupervisorCelluleAssignments(
         [FromQuery] string? userId,
@@ -91,7 +89,6 @@ public sealed class PrimeOrgAssignmentsController(
         return Ok(await mediator.Send(new GetSupervisorCelluleAssignmentsQuery(userId), ct));
     }
 
-    [AllowAnonymous]
     [HttpGet("assignments/coach-sous-service")]
     public async Task<ActionResult<List<ReferentTechniqueServiceAssignment>>> GetReferentTechniqueServiceAssignments(
         [FromQuery] string? userId,

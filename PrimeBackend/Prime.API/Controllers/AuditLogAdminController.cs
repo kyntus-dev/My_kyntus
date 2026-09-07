@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Prime.Application.Abstractions;
 using Prime.Application.Admin;
@@ -9,9 +10,11 @@ namespace Prime.API.Controllers;
 /// <summary>API de consultation du journal d'audit (Phase 1.4).</summary>
 [ApiController]
 [Route("api/prime/admin/audit-logs")]
+[Authorize]
 public sealed class AuditLogAdminController(IMediator mediator, IAuditLogAdminService? auditAdmin) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Roles = "Admin,Audit")]
     public async Task<ActionResult<List<AuditLogDto>>> List(
         [FromQuery] string? userId,
         [FromQuery] string? role,
@@ -29,6 +32,7 @@ public sealed class AuditLogAdminController(IMediator mediator, IAuditLogAdminSe
     }
 
     [HttpPost("nav")]
+    [Authorize]
     public async Task<IActionResult> RecordNavigation([FromBody] RecordAuditNavigationRequest body, CancellationToken ct)
     {
         if (auditAdmin is null) return StatusCode(503, new { error = "Base de données non configurée." });

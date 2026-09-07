@@ -575,6 +575,39 @@ export interface InitialTrainingPathDto {
   documentsTotalCount?: number;
   missingDocumentTitles?: string[];
   daysUntilEnd?: number | null;
+  formateurValidatedBy?: string | null;
+  rhValidatedBy?: string | null;
+  orgDepartmentId?: string | null;
+  orgPoleId?: string | null;
+  orgCelluleId?: string | null;
+  orgServiceId?: string | null;
+  orgDepartmentName?: string | null;
+  orgPoleName?: string | null;
+  orgCelluleName?: string | null;
+  orgServiceName?: string | null;
+}
+
+export interface FormateurValidateOrgRequest {
+  orgDepartmentId: string;
+  orgPoleId: string;
+  orgCelluleId: string;
+  orgServiceId: string;
+  orgDepartmentName?: string;
+  orgPoleName?: string;
+  orgCelluleName?: string;
+  orgServiceName?: string;
+}
+
+export function formatInitialTrainingOrgLabel(
+  path: Pick<
+    InitialTrainingPathDto,
+    'orgDepartmentName' | 'orgPoleName' | 'orgCelluleName' | 'orgServiceName'
+  >,
+): string {
+  return [path.orgDepartmentName, path.orgPoleName, path.orgCelluleName, path.orgServiceName]
+    .map((part) => part?.trim() ?? '')
+    .filter((part) => part.length > 0)
+    .join(' · ');
 }
 
 export interface FormationDocumentDefinitionDto {

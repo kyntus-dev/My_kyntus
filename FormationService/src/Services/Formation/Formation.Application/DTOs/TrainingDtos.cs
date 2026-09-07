@@ -89,7 +89,15 @@ public sealed record InitialTrainingPathDto(
     IReadOnlyList<string>? MissingDocumentTitles = null,
     int? DaysUntilEnd = null,
     Guid? FormateurValidatedBy = null,
-    Guid? RhValidatedBy = null);
+    Guid? RhValidatedBy = null,
+    string? OrgDepartmentId = null,
+    string? OrgPoleId = null,
+    string? OrgCelluleId = null,
+    string? OrgServiceId = null,
+    string? OrgDepartmentName = null,
+    string? OrgPoleName = null,
+    string? OrgCelluleName = null,
+    string? OrgServiceName = null);
 
 public sealed record FormationDocumentDefinitionDto(
     Guid Id,
@@ -187,6 +195,18 @@ public sealed class RejectInitialTrainingRequest
 {
     public string RejectedBy { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
+}
+
+public sealed class FormateurValidateOrgRequest
+{
+    public string? OrgDepartmentId { get; set; }
+    public string? OrgPoleId { get; set; }
+    public string? OrgCelluleId { get; set; }
+    public string? OrgServiceId { get; set; }
+    public string? OrgDepartmentName { get; set; }
+    public string? OrgPoleName { get; set; }
+    public string? OrgCelluleName { get; set; }
+    public string? OrgServiceName { get; set; }
 }
 
 public sealed class ExtendInitialTrainingRequest

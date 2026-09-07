@@ -7,7 +7,7 @@ using Prime.Application.Drafts;
 
 namespace Prime.API.Controllers;
 
-/// <summary>Fichier Excel « pool global » rattaché à un brouillon cellule (validations Manager + RH + accusé Comptabilité).</summary>
+/// <summary>Fichier Excel « pool global » rattaché à un brouillon cellule (validation RH + accusé Comptabilité).</summary>
 [ApiController]
 [Route("api/prime/supervisor-cellule-prime-drafts")]
 [Route("api/prime/supervisor-pole-prime-drafts")]

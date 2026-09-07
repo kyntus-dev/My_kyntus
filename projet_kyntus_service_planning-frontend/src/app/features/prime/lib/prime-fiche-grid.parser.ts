@@ -56,6 +56,28 @@ export const CHALLENGE_KEYS: (keyof PrimeFicheSecteurPairValues)[] = [
   'montantChallenge',
 ];
 
+/** Pondération / bonus : saisis en % dans l’UI ; Excel les stocke souvent en fraction. */
+export const PERCENT_SECTOR_KEYS: ReadonlySet<keyof PrimeFicheSecteurPairValues> = new Set([
+  'ponderationPrime',
+  'bonusAtteintPrime',
+  'ponderationChallenge',
+  'bonusAtteintChallenge',
+]);
+
+/** Montants Prime / Challenge : DH. */
+export const AMOUNT_SECTOR_KEYS: ReadonlySet<keyof PrimeFicheSecteurPairValues> = new Set([
+  'montantPrime',
+  'montantChallenge',
+]);
+
+export type PrimeFicheFieldKind = 'percent' | 'amount' | 'other';
+
+export function primeSectorFieldKind(key: keyof PrimeFicheSecteurPairValues): PrimeFicheFieldKind {
+  if (PERCENT_SECTOR_KEYS.has(key)) return 'percent';
+  if (AMOUNT_SECTOR_KEYS.has(key)) return 'amount';
+  return 'other';
+}
+
 const EXPECT_PRIME: readonly string[] = [
   'resultat',
   'kpi point min',
@@ -176,11 +198,47 @@ function normalizePercentDisplayToDecimal(s: string): string | null {
   return String(n / 100);
 }
 
+function cellLooksLikePercent(cell: XLSX.CellObject | undefined, defaultValue: string): boolean {
+  if (!cell) {
+    return normalizePercentDisplayToDecimal(defaultValue) != null;
+  }
+  const z = typeof cell.z === 'string' ? cell.z : '';
+  if (z.includes('%')) return true;
+  const w = cell.w != null ? String(cell.w).trim() : '';
+  if (w && normalizePercentDisplayToDecimal(w) != null) return true;
+  return normalizePercentDisplayToDecimal(defaultValue) != null;
+}
+
+function attachValueUnit(
+  cap: PrimeFicheCellCapture,
+  kind: PrimeFicheFieldKind,
+  cell: XLSX.CellObject | undefined,
+): PrimeFicheCellCapture {
+  const excelPct = cellLooksLikePercent(cell, cap.defaultValue);
+  const n = Number(String(cap.defaultValue).replace(/\s/g, '').replace(',', '.'));
+  const finite = Number.isFinite(n);
+  if (kind === 'amount') {
+    cap.valueUnit = 'number';
+    return cap;
+  }
+  if (kind === 'percent') {
+    if (excelPct) cap.valueUnit = 'percent';
+    else if (finite && n > 0 && n <= 1.0001) cap.valueUnit = 'percent';
+    else if (finite && Math.abs(n) > 1.0001) cap.valueUnit = 'number';
+    else cap.valueUnit = 'percent';
+    return cap;
+  }
+  if (excelPct) cap.valueUnit = 'percent';
+  else if (finite) cap.valueUnit = 'number';
+  return cap;
+}
+
 export function readCellCapture(
   sheet: XLSX.WorkSheet,
   mergeMap: Map<string, { r: number; c: number }>,
   r: number,
   c: number,
+  fieldKind: PrimeFicheFieldKind = 'other',
 ): PrimeFicheCellCapture {
   const { r: mr, c: mc } = masterRC(mergeMap, r, c);
   const addr = XLSX.utils.encode_cell({ r: mr, c: mc });
@@ -201,7 +259,7 @@ export function readCellCapture(
       else defaultValue = String(cell.v).trim();
     }
   }
-  return { address: addr, formula, defaultValue };
+  return attachValueUnit({ address: addr, formula, defaultValue }, fieldKind, cell);
 }
 
 export function sectorHeadersMatch(
@@ -351,7 +409,8 @@ function parseWithLayout(
     const indicator = readCellCapture(sheet, mergeMap, r, COL_INDICATOR).defaultValue.trim();
     const bareme = readCellCapture(sheet, mergeMap, r, COL_BAREME).defaultValue.trim();
     const groupe = readCellCapture(sheet, mergeMap, r, COL_GROUPE).defaultValue.trim();
-    const repartitionRdv = readCellCapture(sheet, mergeMap, r, layout.colRepartition).defaultValue.trim();
+    const repartitionCap = readCellCapture(sheet, mergeMap, r, layout.colRepartition, 'percent');
+    const repartitionRdv = repartitionCap.defaultValue.trim();
     const firstPrimeCell = readCellCapture(sheet, mergeMap, r, layout.firstSectorDataCol).defaultValue.trim();
 
     if (layout.version === PRIME_FICHE_TEMPLATE_FORMAT_V1) {
@@ -420,16 +479,16 @@ function parseWithLayout(
       const cells: Partial<Record<keyof PrimeFicheSecteurPairValues, PrimeFicheCellCapture>> = {};
 
       for (let i = 0; i < PRIME_SUBCOLS; i++) {
-        const key = PRIME_KEYS[i];
-        const cap = readCellCapture(sheet, mergeMap, r, c0 + i);
+        const key = PRIME_KEYS[i]!;
+        const cap = readCellCapture(sheet, mergeMap, r, c0 + i, primeSectorFieldKind(key));
         defaults[key] = cap.defaultValue;
-        if (cap.formula) cells[key] = cap;
+        cells[key] = cap;
       }
       for (let i = 0; i < CHALLENGE_SUBCOLS; i++) {
-        const key = CHALLENGE_KEYS[i];
-        const cap = readCellCapture(sheet, mergeMap, r, c0 + PRIME_SUBCOLS + i);
+        const key = CHALLENGE_KEYS[i]!;
+        const cap = readCellCapture(sheet, mergeMap, r, c0 + PRIME_SUBCOLS + i, primeSectorFieldKind(key));
         defaults[key] = cap.defaultValue;
-        if (cap.formula) cells[key] = cap;
+        cells[key] = cap;
       }
 
       let customKpis: PrimeFicheTemplateCustomKpi[] | undefined;
@@ -443,9 +502,9 @@ function parseWithLayout(
             header,
             defaultValue: cap.defaultValue,
             gridCol: col,
+            cell: cap,
           };
           if (bandTitle) k.bandTitle = bandTitle;
-          if (cap.formula) k.cell = cap;
           return k;
         });
       }
@@ -454,7 +513,7 @@ function parseWithLayout(
         sectorIndex: s,
         label,
         defaults,
-        cells: Object.keys(cells).length ? cells : undefined,
+        cells,
         customKpis,
         gridStartCol: c0,
       });
@@ -467,6 +526,7 @@ function parseWithLayout(
       bareme,
       groupe,
       repartitionRdv,
+      repartitionCell: repartitionCap.formula || repartitionCap.valueUnit ? repartitionCap : undefined,
       secteurs,
       sourceRowIndex: r,
     });

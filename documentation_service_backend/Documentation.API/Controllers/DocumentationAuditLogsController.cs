@@ -37,6 +37,9 @@ public sealed class DocumentationAuditLogsController(
                 SortOrder = sortOrder,
             }), ct));
         }
-        catch (DocumentationApiException ex) { return StatusCode(ex.StatusCode, new { message = ex.Message }); }
+        catch (DocumentationApiException ex)
+        {
+            return StatusCode(ex.StatusCode, new { message = ex.Message });
+        }
     }
 }

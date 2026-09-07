@@ -15,6 +15,7 @@ import type { Employee, PrimeResult, PrimeType } from '../models';
 import { RoleService } from '../state/role.service';
 import { HierarchyDrillService } from '../state/hierarchy-drill.service';
 import { DepartmentContextService } from '../services/allowance-api.service';
+import { primeValidationStatusShortLabel } from '../lib/prime-workflow-labels';
 
 @Component({
   selector: 'app-prime-history-page',
@@ -29,15 +30,15 @@ import { DepartmentContextService } from '../services/allowance-api.service';
       <div class="prime-page-shell">
         <div class="flex justify-between items-center">
           <div>
-            <h1 class="prime-page-title">Prime History</h1>
-            <p class="text-muted mt-1">Historical log of all processed bonuses.</p>
+            <h1 class="prime-page-title">Historique des primes</h1>
+            <p class="text-muted mt-1">Journal de toutes les primes traitées.</p>
           </div>
           <button
             type="button"
             class="bg-card border border-default hover:bg-card/80 text-primary px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
           >
             <app-lucide-icon [icon]="icons.download" className="w-4 h-4" />
-            Export Log
+            Exporter le journal
           </button>
         </div>
 
@@ -48,19 +49,19 @@ import { DepartmentContextService } from '../services/allowance-api.service';
             <table class="w-full text-sm text-left">
               <thead class="text-xs text-muted uppercase bg-card border-b border-default">
                 <tr>
-                  <th class="px-6 py-3 font-medium tracking-wider">Date Processed</th>
-                  <th class="px-6 py-3 font-medium tracking-wider">Employee</th>
-                  <th class="px-6 py-3 font-medium tracking-wider">Prime Type</th>
-                  <th class="px-6 py-3 font-medium tracking-wider">Amount</th>
-                  <th class="px-6 py-3 font-medium tracking-wider">Final Status</th>
-                  <th class="px-6 py-3 font-medium tracking-wider">Processed By</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Date de traitement</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Collaborateur</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Type de prime</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Montant</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Statut final</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Traité par</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-default">
                 @if (filteredResults().length === 0) {
                   <tr>
                     <td colspan="6" class="px-6 py-8 text-center text-muted">
-                      No data available
+                      Aucune donnée disponible
                     </td>
                   </tr>
                 } @else {
@@ -85,12 +86,12 @@ import { DepartmentContextService } from '../services/allowance-api.service';
                         <div class="font-semibold text-primary">{{ item.amount }} MAD</div>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-primary">
-                        <span [class]="statusBadgeClass(item.status)">{{ item.status }}</span>
+                        <span [class]="statusBadgeClass(item.status)">{{ statusLabel(item.status) }}</span>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-primary">
                         @let approver = getApprover(item.approvedBy);
                         <div class="text-sm text-muted">
-                          {{ approver ? approver.firstName + ' ' + approver.lastName : 'System' }}
+                          {{ approver ? approver.firstName + ' ' + approver.lastName : 'Système' }}
                         </div>
                       </td>
                     </tr>
@@ -180,5 +181,9 @@ export class PrimeHistoryPageComponent {
     return status === 'RH Approved'
       ? base + 'bg-emerald-500/10 text-emerald-400'
       : base + 'bg-rose-500/10 text-rose-400';
+  }
+
+  statusLabel(status: PrimeResult['status']): string {
+    return primeValidationStatusShortLabel(status);
   }
 }

@@ -4,12 +4,16 @@ using Formation.Infrastructure.Persistence;
 using Formation.Infrastructure.Repositories;
 using Formation.Domain.Interfaces;
 using Formation.API.Middlewares;
+using Kyntus.Caching;
 using Kyntus.Identity.Jwt;
 using Kyntus.Messaging.Contracts;
 using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
+
+// Host Formation.API (projetformationconges) — service formation actif dans docker-compose (formation-backend).
+// Ne pas supprimer : c’est le point d’entrée HTTP Formation, pas un stub legacy.
 
 var builder = WebApplication.CreateBuilder(args);
 var isTesting = builder.Environment.IsEnvironment("Testing");
@@ -48,6 +52,7 @@ builder.Services.AddScoped<Formation.Infrastructure.Services.FormationDocumentCh
 builder.Services.AddScoped<Formation.Infrastructure.Services.LearningCatalogService>();
 builder.Services.AddScoped<Formation.Infrastructure.Services.TrainingQuizLibraryService>();
 builder.Services.AddScoped<Formation.Infrastructure.Services.TrainingWorkflowService>();
+builder.Services.AddKyntusCaching(builder.Configuration);
 builder.Services.AddHostedService<Formation.Infrastructure.Services.InitialTrainingMissingDocumentsAlertHostedService>();
 builder.Services.AddHostedService<Formation.Infrastructure.Services.CatalogDeadlineReminderHostedService>();
 
@@ -118,7 +123,13 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
     o.ValueLengthLimit = int.MaxValue;
 });
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        var policy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build();
+        options.Filters.Add(new Microsoft.AspNetCore.Mvc.Authorization.AuthorizeFilter(policy));
+    })
     .AddJsonOptions(o =>
     {
         o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -129,8 +140,11 @@ builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 app.UseMiddleware<ExceptionMiddleware>();
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

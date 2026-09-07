@@ -197,9 +197,7 @@ export default function AppShell({ user, onLogout, navSections, children }) {
         { label: "Coaching", key: "coaching", icon: "🎧" },
         { label: "Grilles", key: "grids", icon: "⊞" },
         { label: "Notifications", key: "notifications", icon: "🔔" },
-        { label: "Utilisateurs & Structures", key: "settings", icon: "👥" },
         { label: "Santé & Configuration", key: "health", icon: "🏥" },
-        { label: "Audit log", key: "audit", icon: "📜" },
       );
     }
     if (role === "cq") {

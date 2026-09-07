@@ -74,8 +74,9 @@ export class DocumentationNavigationService {
         tab = 'admin-config';
         break;
       case 'Audit':
-        tab = 'audit-logs';
-        break;
+        this.activeTab$.next('dashboard');
+        void this.router.navigate(['/audit'], { queryParams: { section: 'journal', module: 'documentation' } });
+        return;
     }
     this.navigateToTab(tab);
   }

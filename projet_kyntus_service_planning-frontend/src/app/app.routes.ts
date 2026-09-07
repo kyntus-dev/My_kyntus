@@ -3,7 +3,7 @@ import { AuthCallbackComponent } from './component/pages/auth-callback.component
 import { AuthGuard } from './guard/guards/auth';
 import { NewsletterAdminComponent } from './features/Newsletter-admin/newsletter-admin.component';
 import { ShellLayoutComponent } from './features/shell/shell-layout.component';
-import { ROLE_SETS } from './core/org/kyntus-role-names';
+import { KyntusRoleNames, ROLE_SETS } from './core/org/kyntus-role-names';
 
 export const routes: Routes = [
 
@@ -19,7 +19,7 @@ export const routes: Routes = [
         .then(m => m.UnauthorizedComponent),
   },
 
-  // ─── ANCIENS DASHBOARDS (layout propre, accès direct conservé) ──
+  // ─── ANCIENS DASHBOARDS (redirigés vers le dashboard unifié) ──
   { path: 'dashboard', redirectTo: 'home', pathMatch: 'full' },
   { path: 'dashboard-employee', redirectTo: 'home', pathMatch: 'full' },
 
@@ -50,6 +50,22 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/shell/pages/global-settings/global-settings.component')
             .then(m => m.GlobalSettingsComponent),
+      },
+      {
+        path: 'admin',
+        canActivate: [AuthGuard],
+        data: { roles: ROLE_SETS.adminRh, capability: 'admin.overview' },
+        loadComponent: () =>
+          import('./features/platform/pages/admin-root.component')
+            .then(m => m.AdminRootComponent),
+      },
+      {
+        path: 'audit',
+        canActivate: [AuthGuard],
+        data: { roles: [KyntusRoleNames.Admin, KyntusRoleNames.Audit], capability: 'audit.dashboard' },
+        loadComponent: () =>
+          import('./features/platform/pages/audit-root.component')
+            .then(m => m.AuditRootComponent),
       },
 
       {
@@ -334,7 +350,7 @@ export const routes: Routes = [
       {
         path: 'absences-planning',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.congesManager },
+        data: { roles: ROLE_SETS.congesManager, capability: 'conges.validation' },
         loadComponent: () =>
           import('./features/planning/pages/conge-manager/conge-manager.component')
             .then(m => m.CongeManagerComponent),
@@ -345,7 +361,7 @@ export const routes: Routes = [
           {
             path: 'validation',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.congesManager },
+            data: { roles: ROLE_SETS.congesManager, capability: 'conges.validation' },
             loadComponent: () =>
               import('./features/conge/pages/conge-manager/conge-manager.component')
                 .then(m => m.CongeManagerComponent),
@@ -353,7 +369,7 @@ export const routes: Routes = [
           {
             path: 'historique',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.congesRhConfig },
+            data: { roles: ROLE_SETS.congesRhConfig, capability: 'conges.history' },
             loadComponent: () =>
               import('./features/conge/pages/conge-historique/conge-historique.component')
                 .then(m => m.CongeHistoriqueComponent),
@@ -361,7 +377,7 @@ export const routes: Routes = [
           {
             path: 'periodes-interdites',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.congesRhConfig },
+            data: { roles: ROLE_SETS.congesRhConfig, capability: 'conges.periodes' },
             loadComponent: () =>
               import('./features/conge/pages/conge-periodes-interdites/conge-periodes-interdites.component')
                 .then(m => m.CongePeriodesInterditesComponent),
@@ -369,7 +385,7 @@ export const routes: Routes = [
           {
             path: 'quotas-service',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.congesSuperviseurConfig },
+            data: { roles: ROLE_SETS.congesSuperviseurConfig, capability: 'conges.quotas' },
             loadComponent: () =>
               import('./features/conge/pages/conge-quotas-service/conge-quotas-service.component')
                 .then(m => m.CongeQuotasServiceComponent),
@@ -379,7 +395,7 @@ export const routes: Routes = [
       {
         path: 'mes-conges',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.mesConges },
+        data: { roles: ROLE_SETS.mesConges, capability: 'conges.self' },
         loadComponent: () =>
           import('./features/conge/pages/conge-employe/conge-employe.component')
             .then(m => m.CongeEmployeComponent),

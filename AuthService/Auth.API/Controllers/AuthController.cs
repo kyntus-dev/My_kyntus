@@ -7,6 +7,7 @@ using Auth.Application.Commands.RefreshToken;
 using Auth.Application.Commands.RegisterFromPlanning;
 using Auth.Application.Commands.RegisterFromPlanningBatch;
 using Auth.Application.DTOs;
+using Auth.Application.Queries.AccessAudit;
 using Auth.Application.Queries.CheckEmail;
 using Auth.Application.Queries.CheckUsername;
 using Auth.API.Filters;
@@ -88,10 +89,20 @@ public class AuthController : ControllerBase
     [Authorize]
     public IActionResult Me()
     {
-        var sub = User.FindFirstValue("sub");
-        var email = User.FindFirstValue(ClaimTypes.Email) ?? "";
-        var role = User.FindFirstValue(ClaimTypes.Role) ?? "Employee";
-        var authUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var sub = User.FindFirstValue("sub")
+                  ?? User.FindAll(ClaimTypes.NameIdentifier)
+                      .Select(c => c.Value)
+                      .FirstOrDefault(v => v.Contains('-', StringComparison.Ordinal));
+        var email = User.FindFirstValue(ClaimTypes.Email)
+                    ?? User.FindFirstValue("email")
+                    ?? "";
+        var role = User.FindFirstValue(ClaimTypes.Role)
+                   ?? User.FindFirstValue("role")
+                   ?? "Employee";
+        var authUserId = User.FindAll(ClaimTypes.NameIdentifier)
+                             .Select(c => c.Value)
+                             .FirstOrDefault(v => int.TryParse(v, out _))
+                         ?? User.FindFirstValue("nameid");
         if (!Guid.TryParse(sub, out var subjectId) || subjectId == Guid.Empty)
             return Unauthorized(new { message = "Claim sub manquant." });
 
@@ -103,6 +114,14 @@ public class AuthController : ControllerBase
             Role = role,
             TenantId = "atlas-tech-demo",
         });
+    }
+
+    [HttpGet("audit/access")]
+    [Authorize(Roles = "Admin,Audit")]
+    public async Task<IActionResult> AccessAudit([FromQuery] int take = 200, CancellationToken ct = default)
+    {
+        var rows = await _mediator.Send(new GetAccessAuditQuery(take), ct);
+        return Ok(rows);
     }
 
     [HttpPost("logout")]

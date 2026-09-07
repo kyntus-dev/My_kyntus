@@ -38,7 +38,7 @@ public sealed class PlanningCongeService(
             .Select(c => new PlanningCongeListItemDto(
                 c.Id,
                 c.UserId,
-                $"{c.User.FirstName} {c.User.LastName}",
+                UserDisplayName.Format(c.User.FirstName, c.User.LastName),
                 c.StartDate,
                 c.EndDate,
                 c.Reason,
@@ -66,7 +66,7 @@ public sealed class PlanningCongeService(
             var slot = group?.NewEmployeeSlot ?? 0;
             return new PlanningNewEmployeeDto(
                 emp.Id,
-                $"{emp.FirstName} {emp.LastName}",
+                UserDisplayName.Format(emp.FirstName, emp.LastName),
                 emp.HireDate,
                 (int)((DateTime.UtcNow - emp.HireDate).TotalDays / 30),
                 emp.IsNewEmployee,
@@ -119,7 +119,7 @@ public sealed class PlanningCongeService(
         return new PlanningCongeListItemDto(
             conge.Id,
             conge.UserId,
-            $"{user.FirstName} {user.LastName}",
+            UserDisplayName.Format(user.FirstName, user.LastName),
             conge.StartDate,
             conge.EndDate,
             conge.Reason,

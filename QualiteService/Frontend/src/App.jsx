@@ -21,7 +21,6 @@ import {
   FiUsers,
   FiPlus,
   FiActivity,
-  FiFileText,
   FiPhone,
 } from "react-icons/fi";
 
@@ -195,7 +194,6 @@ function App() {
             { key: "grids", label: "Grilles", icon: <FiGrid />, active: adminTab === "grids", onClick: () => setAdminTab("grids") },
             { key: "notifications", label: "Notifications", icon: <FiUsers />, active: adminTab === "notifications", onClick: () => setAdminTab("notifications") },
             { key: "health", label: "Santé", icon: <FiActivity />, active: adminTab === "health", onClick: () => setAdminTab("health") },
-            { key: "audit", label: "Audit log", icon: <FiFileText />, active: adminTab === "audit", onClick: () => setAdminTab("audit") },
           ],
         },
       ];

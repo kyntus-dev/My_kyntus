@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, effect, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { isProjectLeadRole } from '../lib/projectLeadRole';
 import { redirectSupportManagerToAllowancesIfNeeded } from '../lib/allowance-manager-guard';
 import { DepartmentContextService } from '../services/allowance-api.service';
@@ -7,7 +8,6 @@ import { RoleService } from '../state/role.service';
 import { PrimeSectionService } from '../state/prime-section.service';
 import { RpDashboardComponent } from './rp/rp-dashboard.component';
 import { AdminDashboardComponent } from './admin/admin-dashboard.component';
-import { AuditRootComponent } from './audit/audit-root.component';
 import { NotificationsPageComponent } from './notifications-page.component';
 import { PrimeDashboardStandardComponent } from './prime-dashboard-standard.component';
 
@@ -17,7 +17,6 @@ import { PrimeDashboardStandardComponent } from './prime-dashboard-standard.comp
   imports: [
     RpDashboardComponent,
     AdminDashboardComponent,
-    AuditRootComponent,
     NotificationsPageComponent,
     PrimeDashboardStandardComponent,
   ],
@@ -38,7 +37,7 @@ import { PrimeDashboardStandardComponent } from './prime-dashboard-standard.comp
         }
       }
       @case ('Audit') {
-        <app-audit-root />
+        <app-prime-dashboard-standard />
       }
       @default {
         <app-prime-dashboard-standard />
@@ -53,9 +52,14 @@ export class DashboardPageComponent {
   readonly primeSection = inject(PrimeSectionService);
   private readonly dept = inject(DepartmentContextService);
   private readonly nav = inject(PrimeNavRequestService);
+  private readonly router = inject(Router);
 
   constructor() {
     effect(() => {
+      if (this.role.currentRole() === 'Audit') {
+        void this.router.navigate(['/audit'], { queryParams: { section: 'journal', module: 'prime' } });
+        return;
+      }
       if (!this.dept.loaded()) return;
       redirectSupportManagerToAllowancesIfNeeded(
         this.role.currentRole(),

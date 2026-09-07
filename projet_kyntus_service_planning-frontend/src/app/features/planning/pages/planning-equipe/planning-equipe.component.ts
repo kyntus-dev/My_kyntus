@@ -11,6 +11,7 @@ import {
 import { UserService } from '../../../users/services/user.service';
 import type { User } from '../../../users/users-module';
 import { formatWeekLabel } from '../../utils/week-code.util';
+import { formatPersonDisplayName } from '../../../../core/session/person-display-name.util';
 
 interface AgentOption {
   id: number;
@@ -83,7 +84,7 @@ export class PlanningEquipeComponent implements OnInit {
     return [...ids]
       .map((id) => {
         const u = this.usersById.get(id);
-        const label = u ? `${u.firstName} ${u.lastName}`.trim() : `Agent #${id}`;
+        const label = u ? formatPersonDisplayName(u) : `Agent #${id}`;
         return { id, label };
       })
       .filter((o) => !q || o.label.toLowerCase().includes(q))

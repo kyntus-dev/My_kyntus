@@ -18,6 +18,7 @@ export const KyntusRoleNames = {
   Audit: 'Audit',
   EquipeFormation: 'Equipe_Formation',
   Formateur: 'Formateur',
+  Comptabilite: 'Comptabilité',
 } as const;
 
 export type KyntusRoleName = (typeof KyntusRoleNames)[keyof typeof KyntusRoleNames];
@@ -32,6 +33,8 @@ const FORMATION_TEAM_ALIASES = [
   KyntusRoleNames.Formateur,
 ] as const;
 
+const COMPTABILITE_ALIASES = [KyntusRoleNames.Comptabilite, 'Comptable'] as const;
+
 /** Tous les rôles authentifiés sauf Pilote / Employee (espace salarié uniquement). */
 const DUAL_HAT_ROLES = [
   KyntusRoleNames.Admin,
@@ -43,6 +46,7 @@ const DUAL_HAT_ROLES = [
   ...FORMATION_TEAM_ALIASES,
   KyntusRoleNames.Superviseur,
   KyntusRoleNames.Qualiticien,
+  ...COMPTABILITE_ALIASES,
 ] as string[];
 
 export const ROLE_SETS = {
@@ -61,6 +65,7 @@ export const ROLE_SETS = {
     ...FORMATION_TEAM_ALIASES,
     KyntusRoleNames.Superviseur,
     KyntusRoleNames.Qualiticien,
+    ...COMPTABILITE_ALIASES,
   ] as string[],
 
   planningSelfService: [
@@ -208,6 +213,8 @@ export const ROLE_SETS = {
     KyntusRoleNames.Superviseur,
   ] as string[],
 
+  referentTechnique: [...REFERENT_ALIASES] as string[],
+
   prime: [
     KyntusRoleNames.Admin,
     KyntusRoleNames.RH,
@@ -217,6 +224,7 @@ export const ROLE_SETS = {
     ...PILOTE_ALIASES,
     KyntusRoleNames.Audit,
     KyntusRoleNames.Superviseur,
+    ...COMPTABILITE_ALIASES,
   ] as string[],
 
   parrainage: [

@@ -1,14 +1,18 @@
-# Secrets : copier .env.example → .env à la racine (non versionné).
-# ─── Ports hôte Kyntus (évite conflit avec un autre projet Docker sur 4200–5260) ───
-# UI login          8201   | SPA unifiée (planning + prime + parrainage) 8200
-# API Gateway       8500   | Postgres hôte   8433   | pgAdmin         8505
+# Secrets : copier .env.example vers .env a la racine (jamais committer .env).
+# Ports hote Kyntus (evite conflit avec un autre projet Docker sur 4200-5260)
+# UI login          8201   | SPA unifiee (planning + prime + parrainage) 8200
+# API Gateway       8500   | Postgres hote   8433   | pgAdmin         8505
 # auth-backend      8520   | planning        8521   | formation       8522   | documentation 8530
-# conge             8540   | prime           8550   | parrainage      8560   | qualité KCQ   8570
+# conge             8540   | prime           8550   | parrainage      8560   | qualite KCQ   8570
 # RabbitMQ          8672   | RabbitMQ UI     18672
 x-documentation-integration:
-  public_gateway_base: "http://localhost:8500"
+  public_gateway_base: "http://10.10.10.25:8500"
   documentation_api_prefixes: "/api/documentation,/api/generate-document-ai"
   documentation_signalr_hub: "/hubs/documentation"
+
+x-kyntus-redis: &kyntus-redis
+  ConnectionStrings__Redis: ${KYNTUS_REDIS_CONNECTION:-redis:6379}
+  Caching__InstanceName: "kyntus:"
 
 x-kyntus-jwt: &kyntus-jwt
   JwtSettings__Secret: ${KYNTUS_JWT_SECRET:?Définir KYNTUS_JWT_SECRET dans .env}
@@ -22,7 +26,7 @@ x-kyntus-rabbitmq: &kyntus-rabbitmq
 
 services:
 
-  # ─── DATABASE UNIQUE ──────────────────────────────────
+  # DATABASE UNIQUE
   postgres:
     build:
       context: ./init
@@ -43,6 +47,13 @@ services:
       KYNTUS_DB_PASSWORD_DIRECTORY: ${KYNTUS_DB_PASSWORD_DIRECTORY:?Définir KYNTUS_DB_PASSWORD_DIRECTORY dans .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Capacite >=300 users : plafond connexions + buffers
+    command:
+      - postgres
+      - -c
+      - max_connections=250
+      - -c
+      - shared_buffers=256MB
     ports:
       - "8433:5432"
     healthcheck:
@@ -60,7 +71,31 @@ services:
     networks:
       - microservices-network
 
-  # ─── BACKENDS ─────────────────────────────────────────
+  # REDIS (cache L2 partage - capacite >=300 users)
+  redis:
+    image: redis:7-alpine
+    container_name: kyntus_redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - microservices-network
+
+  # BACKENDSâ”€
   auth-backend:
     build:
       context: .
@@ -71,7 +106,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: ${KYNTUS_CONN_AUTH:?Définir KYNTUS_CONN_AUTH dans .env}
-      DemoSeed__Enabled: ${KYNTUS_DEMO_SEED_ENABLED:-true}
+      DemoSeed__Enabled: ${KYNTUS_DEMO_SEED_ENABLED:-false}
       DemoSeed__Passwords__Employee: ${KYNTUS_DEMO_SEED_PASSWORD_EMPLOYEE:-Azerty@2026}
       DemoSeed__Passwords__RH: ${KYNTUS_DEMO_SEED_PASSWORD_RH:-Azerty@2026}
       DemoSeed__Passwords__Manager: ${KYNTUS_DEMO_SEED_PASSWORD_MANAGER:-Azerty@2026}
@@ -82,8 +117,13 @@ services:
       DemoSeed__Passwords__Formation: ${KYNTUS_DEMO_SEED_PASSWORD_FORMATION:-Azerty@2026}
       DemoSeed__Passwords__Superviseur: ${KYNTUS_DEMO_SEED_PASSWORD_SUPERVISEUR:-Azerty@2026}
       DemoSeed__Passwords__Qualiticien: ${KYNTUS_DEMO_SEED_PASSWORD_QUALITICIEN:-Azerty@2026}
+      KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
+      KYNTUS_AUTH_DEMO_AUDIT_SEED: ${KYNTUS_AUTH_DEMO_AUDIT_SEED:-false}
       InternalServices__ApiKey: ${KYNTUS_INTERNAL_SERVICE_API_KEY:?Définir KYNTUS_INTERNAL_SERVICE_API_KEY dans .env}
-      <<: *kyntus-jwt
+      Push__VapidPublicKey: ${KYNTUS_VAPID_PUBLIC_KEY:-}
+      Push__VapidPrivateKey: ${KYNTUS_VAPID_PRIVATE_KEY:-}
+      Push__VapidSubject: ${KYNTUS_VAPID_SUBJECT:-mailto:admin@kyntus.ma}
+      <<: [*kyntus-jwt, *kyntus-redis]
     ports:
       - "8520:8080"
     healthcheck:
@@ -105,7 +145,7 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${KYNTUS_RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${KYNTUS_RABBITMQ_PASSWORD:?Définir KYNTUS_RABBITMQ_PASSWORD dans .env}
-      # Évite les échecs eacces sur .erlang.cookie (souvent vus sous Docker Desktop / WSL2).
+      # Ã‰vite les Ã©checs eacces sur .erlang.cookie (souvent vus sous Docker Desktop / WSL2).
       RABBITMQ_ERLANG_COOKIE: ${KYNTUS_RABBITMQ_ERLANG_COOKIE:?Définir KYNTUS_RABBITMQ_ERLANG_COOKIE dans .env}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
@@ -142,13 +182,24 @@ services:
       ConnectionStrings__DefaultConnection: ${KYNTUS_CONN_PLANNING:?Définir KYNTUS_CONN_PLANNING dans .env}
       Directory__BaseUrl: http://employee-directory-backend:8080/
       Directory__WriteMaster: "true"
-      Directory__RequireEnsureOnWrite: "false"
+      Directory__RequireEnsureOnWrite: "true"
       Directory__EnablePlanningBootstrap: "false"
       Auth__BaseUrl: http://kyntus_auth_backend:8080/
       InternalServices__ApiKey: ${KYNTUS_INTERNAL_SERVICE_API_KEY:?Définir KYNTUS_INTERNAL_SERVICE_API_KEY dans .env}
-      <<: [*kyntus-jwt, *kyntus-rabbitmq]
+      Planning__Media__RootPath: /app/uploads/media
+      Smtp__Host: ${KYNTUS_SMTP_HOST:-}
+      Smtp__Port: ${KYNTUS_SMTP_PORT:-587}
+      Smtp__User: ${KYNTUS_SMTP_USER:-}
+      Smtp__Password: ${KYNTUS_SMTP_PASSWORD:-}
+      Smtp__From: ${KYNTUS_SMTP_FROM:-}
+      Smtp__EnableSsl: ${KYNTUS_SMTP_ENABLE_SSL:-true}
+      KYNTUS_PLANNING_DEMO_SEED: ${KYNTUS_PLANNING_DEMO_SEED:-false}
+      KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
+      <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]
     ports:
       - "8521:8080"
+    volumes:
+      - planning_media_uploads:/app/uploads/media
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
       interval: 10s
@@ -174,12 +225,15 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: ${KYNTUS_CONN_FORMATION:?Définir KYNTUS_CONN_FORMATION dans .env}
-      # Catalogue / parcours mock — false = data clean (vrais flux métier)
+      # Catalogue / parcours mock â€” false = data clean (vrais flux mÃ©tier)
       KYNTUS_FORMATION_DEMO_SEED: ${KYNTUS_FORMATION_DEMO_SEED:-false}
       KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
-      <<: [*kyntus-jwt, *kyntus-rabbitmq]
+      Formation__UploadRoot: /app/wwwroot/uploads
+      <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]
     ports:
       - "8522:8080"
+    volumes:
+      - formation_uploads:/app/wwwroot/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -200,13 +254,18 @@ services:
       ASPNETCORE_URLS: http://+:8080
       # Crée le schéma documentation + tables au premier démarrage (init.sql ne contient pas le DDL métier).
       Documentation__ApplyBootstrapSchema: "true"
-      Documentation__AllowHeaderContextFallback: "true"
+      Documentation__AllowHeaderContextFallback: "false"
       Documentation__DefaultTenantId: "atlas-tech-demo"
+      Planning__BaseUrl: http://planning-backend:8080/
       DocumentationDb__Password: ${KYNTUS_DOCUMENTATION_DB_PASSWORD:?Définir KYNTUS_DOCUMENTATION_DB_PASSWORD dans .env}
       ConnectionStrings__Documentation: ${KYNTUS_CONN_DOCUMENTATION:?Définir KYNTUS_CONN_DOCUMENTATION dans .env}
-      <<: [*kyntus-jwt, *kyntus-rabbitmq]
+      Documentation__DemoDataSeed: ${KYNTUS_DOCUMENTATION_DEMO_SEED:-false}
+      KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
+      <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]
     ports:
       - "8530:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -215,7 +274,7 @@ services:
     networks:
       - microservices-network
 
-  # ─── CONGE BACKEND ───────────────────────────────────
+  # â”€â”€â”€ CONGE BACKEND â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   conge-backend:
     build:
       context: .
@@ -226,18 +285,25 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__CongeDb: ${KYNTUS_CONN_CONGE:?Définir KYNTUS_CONN_CONGE dans .env}
-      <<: [*kyntus-jwt, *kyntus-rabbitmq]
+      Directory__BaseUrl: http://employee-directory-backend:8080/
+      KYNTUS_CONGE_DEMO_SEED: ${KYNTUS_CONGE_DEMO_SEED:-false}
+      KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
+      <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]
     ports:
       - "8540:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      employee-directory-backend:
+        condition: service_started
     networks:
       - microservices-network
 
-  # One-shot : crée prime_db + prime_user si le volume Postgres existait avant l’ajout du bloc PRIME dans init.sql.
+  # One-shot : crÃ©e prime_db + prime_user si le volume Postgres existait avant lâ€™ajout du bloc PRIME dans init.sql.
   prime-db-bootstrap:
     image: postgres:16-alpine
     container_name: kyntus_prime_db_bootstrap
@@ -274,8 +340,12 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: ${KYNTUS_CONN_PRIME:?Définir KYNTUS_CONN_PRIME dans .env}
       Planning__BaseUrl: http://planning-backend:8080/
+      Auth__BaseUrl: http://kyntus_auth_backend:8080/
+      InternalServices__ApiKey: ${KYNTUS_INTERNAL_SERVICE_API_KEY:?Définir KYNTUS_INTERNAL_SERVICE_API_KEY dans .env}
       Prime__AutoProvisionEmployeeFromJwt: "true"
-      <<: [*kyntus-jwt, *kyntus-rabbitmq]
+      Prime__EnrichDemoData: ${KYNTUS_PRIME_DEMO_SEED:-false}
+      KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
+      <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]
     ports:
       - "8550:8080"
     healthcheck:
@@ -310,7 +380,7 @@ services:
       Htel__TechniciensUrl: ${HTEL_TECHNICIENS_URL:-https://htel-groupe.fr/api/v1/techniciens}
       Htel__ApiKey: ${HTEL_API_KEY:-}
       Directory__EnablePrimeBootstrap: "false"
-      <<: [*kyntus-jwt, *kyntus-rabbitmq]
+      <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]
     ports:
       - "8565:8080"
     healthcheck:
@@ -367,7 +437,7 @@ services:
     networks:
       - microservices-network
 
-  # One-shot : crée parrainage_db + parrainage_user si le volume Postgres existait avant l’ajout du bloc PARRAINAGE dans init.sql.
+  # One-shot : crÃ©e parrainage_db + parrainage_user si le volume Postgres existait avant lâ€™ajout du bloc PARRAINAGE dans init.sql.
   parrainage-db-bootstrap:
     image: postgres:16-alpine
     container_name: kyntus_parrainage_db_bootstrap
@@ -406,7 +476,9 @@ services:
       # Uploads CV (volume dédié).
       Parrainage__UploadPath: "/app/uploads/cv"
       Planning__BaseUrl: http://planning-backend:8080/
-      <<: [*kyntus-jwt, *kyntus-rabbitmq]
+      Parrainage__SeedDemoData: ${KYNTUS_PARRAINAGE_DEMO_SEED:-false}
+      KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
+      <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]
     volumes:
       - parrainage_cv_uploads:/app/uploads
     ports:
@@ -427,10 +499,10 @@ services:
     networks:
       - microservices-network
 
-  # ─── QUALITÉ KCQ (module wrap Node) ───────────────────
+  # â”€â”€â”€ QUALITÃ‰ KCQ (module wrap Node) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   kcq-mongo:
     # Default mongo:4.4 for VPS without AVX (web-s-2 exit 132 on mongo:7).
-    # Local PC with existing kcq_mongo_data (format 14): use docker-compose.override.yml → mongo:7.
+    # Local PC with existing kcq_mongo_data (format 14): use docker-compose.override.yml â†’ mongo:7.
     image: mongo:4.4
     container_name: kyntus_kcq_mongo
     restart: unless-stopped
@@ -516,8 +588,8 @@ services:
     networks:
       - microservices-network
 
-  # ─── API GATEWAY ──────────────────────────────────────
-  # Point d’entrée unique côté HTTP pour /api/* et /hubs/* (Ocelot : init/ocelot.gateway.json).
+  # â”€â”€â”€ API GATEWAY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # Point dâ€™entrÃ©e unique cÃ´tÃ© HTTP pour /api/* et /hubs/* (Ocelot : init/ocelot.gateway.json).
   api-gateway:
     build:
       context: ./ApiGateway.API/ApiGateway.API
@@ -551,7 +623,7 @@ services:
     networks:
       - microservices-network
 
-  # ─── FRONTEND UNIFIÉ ──────────────────────────────────
+  # â”€â”€â”€ FRONTEND UNIFIÃ‰ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # SPA unique (shell + menu global des microservices). auth-frontend = login uniquement.
   auth-frontend:
     build:
@@ -590,7 +662,7 @@ services:
      networks:
        - microservices-network
 
-  # ─── PGADMIN ──────────────────────────────────────────
+  # â”€â”€â”€ PGADMIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   pgadmin:
     image: dpage/pgadmin4
     container_name: kyntus_pgadmin
@@ -607,7 +679,10 @@ volumes:
   postgres_data:
   rabbitmq_data:
   parrainage_cv_uploads:
+  formation_uploads:
+  planning_media_uploads:
   kcq_mongo_data:
+  redis_data:
 
 networks:
   microservices-network:

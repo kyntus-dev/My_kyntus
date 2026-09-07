@@ -1,11 +1,9 @@
-﻿{
-    "markedAt":  "2026-08-20T18:20:54+01:00",
-    "note":  "fond lignes multi-mode + KPI shifts agreges avec detail modes au clic",
-    "gitCommit":  "b2b27df6590375125186e437cc172c510f43a10b",
-    "serverHost":  "o@10.10.10.25",
-    "serverPath":  "/home/o/projets_mykyntus-",
-    "lastServicesRebuilt":  [
-
-                            ],
-    "fileCount":  6
+{
+  "markedAt": "2026-09-07T08:32:00+01:00",
+  "note": "Baseline serveur confirmee: delta 4 sept (republish apres edit manuelle + export HTEL debut/pause). A partir de cet instant, seuls les fichiers touches ensuite vont dans pending.",
+  "gitCommit": "fe81fbcd1572c9ae301d28dc756b9a2b2b724ab1",
+  "serverHost": "o@10.10.10.25",
+  "serverPath": "/home/o/projets_mykyntus-",
+  "lastServicesRebuilt": [],
+  "fileCount": 0
 }

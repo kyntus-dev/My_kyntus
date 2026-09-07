@@ -33,7 +33,7 @@ export function isNotificationVisibleForRole(n: KyntusNotification, jwtRole: str
     case 'parrainage':
       return true;
     case 'prime':
-      return r !== 'employee' && r !== 'employe';
+      return true;
     case 'formation':
     case 'conge':
     case 'newsletter':

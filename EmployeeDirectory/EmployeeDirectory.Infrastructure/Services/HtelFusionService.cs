@@ -75,11 +75,10 @@ public sealed class HtelFusionService(
             .Select(e => e.IdTechnicien!.Value)
             .ToHashSet();
 
-        var index = BuildNameIndex(techniciens, takenIds);
-
         foreach (var employee in employees.Where(e => !e.IdTechnicien.HasValue))
         {
-            if (!TryResolveUniqueMatch(employee, index, out var tech))
+            var available = techniciens.Where(t => !takenIds.Contains(t.IdTechnicien)).ToList();
+            if (!TryResolveUniqueMatch(employee, available, out var tech))
                 continue;
 
             if (employees.Any(e => e.IdTechnicien == tech.IdTechnicien && e.Id != employee.Id))
@@ -135,6 +134,7 @@ public sealed class HtelFusionService(
 
         employee.IdTechnicien = null;
         employee.HtelCode = null;
+        employee.HtelTechnicienName = null;
         employee.UpdatedAt = DateTime.UtcNow;
         await EnqueueEmployeeChangedAsync(employee, ct);
         await db.SaveChangesAsync(ct);
@@ -168,6 +168,9 @@ public sealed class HtelFusionService(
                 var tech = techniciens.FirstOrDefault(t => t.IdTechnicien == employee.IdTechnicien.Value);
                 if (tech is not null)
                     employee.HtelCode = tech.Code;
+                    employee.HtelTechnicienName = string.IsNullOrWhiteSpace(tech.Technicien)
+                        ? employee.HtelTechnicienName
+                        : tech.Technicien.Trim();
                 return;
             }
 
@@ -175,9 +178,9 @@ public sealed class HtelFusionService(
                 .Where(e => e.IdTechnicien != null && e.Id != employee.Id)
                 .Select(e => e.IdTechnicien!.Value)
                 .ToListAsync(ct);
-
-            var index = BuildNameIndex(techniciens, takenIds.ToHashSet());
-            if (TryResolveUniqueMatch(employee, index, out var matched))
+            var takenSet = takenIds.ToHashSet();
+            var available = techniciens.Where(t => !takenSet.Contains(t.IdTechnicien)).ToList();
+            if (TryResolveUniqueMatch(employee, available, out var matched))
                 ApplyMirror(employee, matched);
         }
         catch (HttpRequestException ex)
@@ -194,51 +197,43 @@ public sealed class HtelFusionService(
     {
         employee.IdTechnicien = tech.IdTechnicien;
         employee.HtelCode = tech.Code;
+        employee.HtelTechnicienName = string.IsNullOrWhiteSpace(tech.Technicien)
+            ? null
+            : tech.Technicien.Trim();
         employee.UpdatedAt = DateTime.UtcNow;
-    }
-
-    private static Dictionary<string, List<HtelTechnicienDto>> BuildNameIndex(
-        IReadOnlyList<HtelTechnicienDto> techniciens,
-        HashSet<int> excludeIds)
-    {
-        var index = new Dictionary<string, List<HtelTechnicienDto>>(StringComparer.Ordinal);
-        foreach (var tech in techniciens)
-        {
-            if (excludeIds.Contains(tech.IdTechnicien))
-                continue;
-            var key = HtelNameNormalizer.TechnicienKey(tech.Technicien);
-            if (string.IsNullOrEmpty(key))
-                continue;
-            if (!index.TryGetValue(key, out var list))
-            {
-                list = [];
-                index[key] = list;
-            }
-            list.Add(tech);
-        }
-        return index;
     }
 
     private static bool TryResolveUniqueMatch(
         Employee employee,
-        Dictionary<string, List<HtelTechnicienDto>> index,
+        IReadOnlyList<HtelTechnicienDto> available,
         out HtelTechnicienDto tech)
     {
         tech = null!;
-        var matches = new Dictionary<int, HtelTechnicienDto>();
-        foreach (var key in HtelNameNormalizer.EmployeeNameKeys(employee.FirstName, employee.LastName))
-        {
-            if (!index.TryGetValue(key, out var list))
-                continue;
-            foreach (var candidate in list)
-                matches[candidate.IdTechnicien] = candidate;
-        }
+        var scored = available
+            .Select(t => (
+                Tech: t,
+                Score: HtelNameNormalizer.ScoreEmployeeToTechnicien(
+                    employee.FirstName, employee.LastName, t.Technicien)))
+            .Where(x => x.Score >= HtelNameNormalizer.AutoLinkThreshold)
+            .OrderByDescending(x => x.Score)
+            .ToList();
 
-        if (matches.Count != 1)
+        if (scored.Count == 0)
             return false;
 
-        tech = matches.Values.First();
-        return true;
+        if (scored.Count == 1)
+        {
+            tech = scored[0].Tech;
+            return true;
+        }
+
+        if (scored[0].Score - scored[1].Score >= HtelNameNormalizer.AmbiguityGap)
+        {
+            tech = scored[0].Tech;
+            return true;
+        }
+
+        return false;
     }
 
     private static HtelLiaisonsReportDto BuildReport(
@@ -294,27 +289,23 @@ public sealed class HtelFusionService(
         return new HtelLiaisonsReportDto(linked, orphans, ambiguous, unlinkedDtos);
     }
 
-    private static int CountNameMatches(HtelTechnicienDto tech, IReadOnlyList<Employee> employees)
-    {
-        var key = HtelNameNormalizer.TechnicienKey(tech.Technicien);
-        if (string.IsNullOrEmpty(key)) return 0;
-        return employees.Count(e =>
-            HtelNameNormalizer.EmployeeNameKeys(e.FirstName, e.LastName).Any(k => k == key));
-    }
+    private static int CountNameMatches(HtelTechnicienDto tech, IReadOnlyList<Employee> employees) =>
+        employees.Count(e =>
+            HtelNameNormalizer.IsNameMatch(e.FirstName, e.LastName, tech.Technicien));
 
     private static IReadOnlyList<HtelEmployeeCandidateDto> FindEmployeeCandidates(
         HtelTechnicienDto tech,
-        IReadOnlyList<Employee> employees)
-    {
-        var key = HtelNameNormalizer.TechnicienKey(tech.Technicien);
-        if (string.IsNullOrEmpty(key))
-            return [];
-
-        return employees
-            .Where(e => HtelNameNormalizer.EmployeeNameKeys(e.FirstName, e.LastName).Any(k => k == key))
-            .Select(e => new HtelEmployeeCandidateDto(e.Id.ToString(), e.FirstName, e.LastName, e.Email))
+        IReadOnlyList<Employee> employees) =>
+        employees
+            .Select(e => (
+                Emp: e,
+                Score: HtelNameNormalizer.ScoreEmployeeToTechnicien(
+                    e.FirstName, e.LastName, tech.Technicien)))
+            .Where(x => x.Score >= HtelNameNormalizer.AlertThreshold)
+            .OrderByDescending(x => x.Score)
+            .Select(x => new HtelEmployeeCandidateDto(
+                x.Emp.Id.ToString(), x.Emp.FirstName, x.Emp.LastName, x.Emp.Email))
             .ToList();
-    }
 
     private async Task EnqueueEmployeeChangedAsync(Employee employee, CancellationToken ct)
     {
@@ -346,6 +337,7 @@ public sealed class HtelFusionService(
             ReferentTechniqueId = employee.ReferentTechniqueId,
             IdTechnicien = employee.IdTechnicien,
             HtelCode = employee.HtelCode,
+            HtelTechnicienName = employee.HtelTechnicienName,
         }, aggregateId: employee.Id.ToString(), ct: ct);
     }
 }

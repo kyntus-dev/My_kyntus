@@ -90,9 +90,16 @@ public static class KyntusClaimsPrincipalExtensions
     {
         if (principal?.Identity?.IsAuthenticated != true)
             return null;
-        var raw = principal.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? principal.FindFirstValue("nameid");
-        return int.TryParse(raw, out var id) ? id : null;
+
+        // « sub » peut être remappé vers NameIdentifier (GUID) : ne pas le parser en int.
+        foreach (var claim in principal.FindAll(ClaimTypes.NameIdentifier))
+        {
+            if (int.TryParse(claim.Value, out var id) && id > 0)
+                return id;
+        }
+
+        var raw = principal.FindFirstValue("nameid");
+        return int.TryParse(raw, out var named) && named > 0 ? named : null;
     }
 
     private static IEnumerable<string> EnumerateSubjectCandidates(ClaimsPrincipal principal)

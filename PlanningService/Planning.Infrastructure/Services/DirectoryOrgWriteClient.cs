@@ -20,6 +20,17 @@ public interface IDirectoryOrgWriteClient
     Task DeletePoleAsync(string nodeId, CancellationToken ct = default);
     Task DeleteCelluleAsync(string poleId, string nodeId, CancellationToken ct = default);
     Task DeleteServiceAsync(string celluleId, string nodeId, CancellationToken ct = default);
+
+    Task<DirectoryUndoImportWindowResult> UndoImportAssignmentWindowAsync(
+        IReadOnlyList<Guid> employeeIds,
+        DateTime windowStart,
+        DateTime windowEnd,
+        CancellationToken ct = default);
+
+    Task<IReadOnlyList<Guid>> GetEmployeeIdsWithAssignmentsAfterAsync(
+        IReadOnlyList<Guid> employeeIds,
+        DateTime after,
+        CancellationToken ct = default);
 }
 
 public sealed class DirectoryOrgWriteClient(
@@ -76,18 +87,31 @@ public sealed class DirectoryOrgWriteClient(
         using var request = new HttpRequestMessage(HttpMethod.Get, "api/directory/business-departments");
         AttachAuth(request);
 
-        var response = await client.SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
+        HttpResponseMessage response;
+        try
         {
-            var err = await response.Content.ReadAsStringAsync(ct);
-            logger.LogWarning("Directory operational departments fetch failed {Status}: {Body}", response.StatusCode, err);
+            response = await client.SendAsync(request, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Directory operational departments fetch failed");
             return Array.Empty<DirectoryOperationalDepartmentJson>();
         }
 
-        var depts = await response.Content.ReadFromJsonAsync<List<DirectoryOperationalDepartmentJson>>(cancellationToken: ct);
-        return (depts ?? [])
-            .Where(d => string.Equals(d.Kind, "Operational", StringComparison.OrdinalIgnoreCase) && d.IsActive != false)
-            .ToList();
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync(ct);
+                logger.LogWarning("Directory operational departments fetch failed {Status}: {Body}", response.StatusCode, err);
+                return Array.Empty<DirectoryOperationalDepartmentJson>();
+            }
+
+            var depts = await ReadJsonOrDefaultAsync<List<DirectoryOperationalDepartmentJson>>(response, ct);
+            return (depts ?? [])
+                .Where(d => string.Equals(d.Kind, "Operational", StringComparison.OrdinalIgnoreCase) && d.IsActive != false)
+                .ToList();
+        }
     }
 
     public async Task<IReadOnlyDictionary<Guid, string>> GetEmployeeOperationalBusinessDepartmentIdsAsync(
@@ -97,23 +121,36 @@ public sealed class DirectoryOrgWriteClient(
         using var request = new HttpRequestMessage(HttpMethod.Get, "api/directory/employees");
         AttachAuth(request);
 
-        var response = await client.SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
+        HttpResponseMessage response;
+        try
         {
-            logger.LogWarning("Directory employees fetch failed {Status}", response.StatusCode);
+            response = await client.SendAsync(request, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Directory employees fetch failed");
             return new Dictionary<Guid, string>();
         }
 
-        var employees = await response.Content.ReadFromJsonAsync<List<DirectoryEmployeeOrgJson>>(cancellationToken: ct);
-        var map = new Dictionary<Guid, string>();
-        foreach (var e in employees ?? [])
+        using (response)
         {
-            if (!Guid.TryParse(e.Id, out var guid)) continue;
-            if (string.IsNullOrWhiteSpace(e.BusinessDepartmentId)) continue;
-            if (!string.Equals(e.BusinessDepartmentKind, "Operational", StringComparison.OrdinalIgnoreCase)) continue;
-            map[guid] = e.BusinessDepartmentId.Trim();
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Directory employees fetch failed {Status}", response.StatusCode);
+                return new Dictionary<Guid, string>();
+            }
+
+            var employees = await ReadJsonOrDefaultAsync<List<DirectoryEmployeeOrgJson>>(response, ct);
+            var map = new Dictionary<Guid, string>();
+            foreach (var e in employees ?? [])
+            {
+                if (!Guid.TryParse(e.Id, out var guid)) continue;
+                if (string.IsNullOrWhiteSpace(e.BusinessDepartmentId)) continue;
+                if (!string.Equals(e.BusinessDepartmentKind, "Operational", StringComparison.OrdinalIgnoreCase)) continue;
+                map[guid] = e.BusinessDepartmentId.Trim();
+            }
+            return map;
         }
-        return map;
     }
 
     public Task<string> CreateCelluleAsync(string poleDirectoryId, string name, CancellationToken ct = default) =>
@@ -172,6 +209,71 @@ public sealed class DirectoryOrgWriteClient(
         var err = await response.Content.ReadAsStringAsync(ct);
         logger.LogWarning("Directory org delete {Path} failed {Status}: {Body}", path, response.StatusCode, err);
         throw new InvalidOperationException($"Suppression organisationnelle échouée ({response.StatusCode}).");
+    }
+
+    public async Task<DirectoryUndoImportWindowResult> UndoImportAssignmentWindowAsync(
+        IReadOnlyList<Guid> employeeIds,
+        DateTime windowStart,
+        DateTime windowEnd,
+        CancellationToken ct = default)
+    {
+        var client = CreateClient();
+        client.Timeout = TimeSpan.FromMinutes(3);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "api/directory/org/assignments/undo-import-window")
+        {
+            Content = JsonContent.Create(new
+            {
+                employeeIds,
+                windowStart,
+                windowEnd,
+            }),
+        };
+        AttachAuth(request);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        var response = await client.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            logger.LogWarning(
+                "Directory undo-import-window failed {Status}: {Body}",
+                response.StatusCode,
+                err);
+            throw new InvalidOperationException(
+                $"Annulation des affectations Directory échouée ({response.StatusCode}).");
+        }
+
+        var parsed = await ReadJsonOrDefaultAsync<DirectoryUndoImportWindowResult>(response, ct);
+        return parsed ?? new DirectoryUndoImportWindowResult();
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetEmployeeIdsWithAssignmentsAfterAsync(
+        IReadOnlyList<Guid> employeeIds,
+        DateTime after,
+        CancellationToken ct = default)
+    {
+        var client = CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "api/directory/org/assignments/created-after")
+        {
+            Content = JsonContent.Create(new { employeeIds, after }),
+        };
+        AttachAuth(request);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        var response = await client.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            logger.LogWarning(
+                "Directory assignments created-after failed {Status}: {Body}",
+                response.StatusCode,
+                err);
+            throw new InvalidOperationException(
+                $"Lecture des rotations Directory échouée ({response.StatusCode}).");
+        }
+
+        var parsed = await ReadJsonOrDefaultAsync<List<Guid>>(response, ct);
+        return parsed ?? [];
     }
 
     private async Task<string> PostNodeAsync(string path, object body, CancellationToken ct)
@@ -237,6 +339,25 @@ public sealed class DirectoryOrgWriteClient(
             request.Headers.Authorization = AuthenticationHeaderValue.Parse(authHeader);
     }
 
+    private static async Task<T?> ReadJsonOrDefaultAsync<T>(HttpResponseMessage response, CancellationToken ct)
+        where T : class
+    {
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(body))
+            return null;
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<T>(body, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
     private sealed class DirectoryNodeJson
     {
         public string Id { get; set; } = "";
@@ -248,6 +369,13 @@ public sealed class DirectoryOrgWriteClient(
         public string? BusinessDepartmentId { get; set; }
         public string? BusinessDepartmentKind { get; set; }
     }
+}
+
+public sealed class DirectoryUndoImportWindowResult
+{
+    public int DeletedAssignments { get; set; }
+    public int RestoredAssignments { get; set; }
+    public int EmployeesTouched { get; set; }
 }
 
 public sealed class DirectoryOperationalDepartmentJson

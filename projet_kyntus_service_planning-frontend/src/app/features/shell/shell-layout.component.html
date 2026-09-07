@@ -97,7 +97,7 @@
       <div class="ks-user-row" *ngIf="!sidebarCollapsed">
         <div class="ks-user-av">{{ userInitials }}</div>
         <div class="ks-user-info">
-          <strong>{{ currentUser?.username || 'Utilisateur' }}</strong>
+          <strong>{{ displayName }}</strong>
           <span>{{ role || currentUser?.email || '—' }}</span>
         </div>
       </div>

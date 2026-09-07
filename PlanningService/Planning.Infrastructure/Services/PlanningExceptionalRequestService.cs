@@ -171,8 +171,15 @@ public class PlanningExceptionalRequestService : IPlanningExceptionalRequestServ
         var result = new List<PlanningExceptionalRequestDto>();
         foreach (var id in ids)
         {
-            var dto = await MapAsync(id, requesterUserId);
-            if (dto != null) result.Add(dto);
+            try
+            {
+                var dto = await MapAsync(id, requesterUserId);
+                if (dto != null) result.Add(dto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Mapping demande exceptionnelle {RequestId} ignoré.", id);
+            }
         }
         return result;
     }
@@ -240,8 +247,15 @@ public class PlanningExceptionalRequestService : IPlanningExceptionalRequestServ
         var result = new List<PlanningExceptionalRequestDto>();
         foreach (var id in ids)
         {
-            var dto = await MapAsync(id, viewerUserId);
-            if (dto != null) result.Add(dto);
+            try
+            {
+                var dto = await MapAsync(id, viewerUserId);
+                if (dto != null) result.Add(dto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Mapping demande exceptionnelle {RequestId} ignoré.", id);
+            }
         }
         return result;
     }
@@ -716,7 +730,7 @@ public class PlanningExceptionalRequestService : IPlanningExceptionalRequestServ
     private static string DisplayName(User? user, int fallbackId)
     {
         if (user == null) return $"#{fallbackId}";
-        var name = $"{user.FirstName} {user.LastName}".Trim();
+        var name = UserDisplayName.Format(user.FirstName, user.LastName);
         return string.IsNullOrWhiteSpace(name) ? (user.Email ?? $"#{fallbackId}") : name;
     }
 
@@ -862,9 +876,11 @@ public class PlanningExceptionalRequestService : IPlanningExceptionalRequestServ
             WeekCode = r.WeekCode,
             RequestedDate = r.RequestedDate,
             RequesterUserId = r.RequesterUserId,
-            RequesterName = $"{r.Requester.FirstName} {r.Requester.LastName}",
+            RequesterName = r.Requester is null
+                ? "—"
+                : UserDisplayName.Format(r.Requester.FirstName, r.Requester.LastName),
             SubServiceId = r.SubServiceId,
-            SubServiceName = r.SubService.Name,
+            SubServiceName = r.SubService?.Name ?? "—",
             RequestedShiftTemplateId = r.RequestedShiftTemplateId,
             ShiftLabel = r.RequestedShiftTemplate?.Label ?? "(shift retiré)",
             ShiftStartTime = r.RequestedShiftTemplate?.StartTime.ToString("HH:mm") ?? string.Empty,
@@ -876,17 +892,17 @@ public class PlanningExceptionalRequestService : IPlanningExceptionalRequestServ
             JustificationFileName = r.JustificationFileName,
             SupervisorProcessedByUserId = r.SupervisorProcessedByUserId,
             SupervisorProcessedByName = r.SupervisorProcessedBy != null
-                ? $"{r.SupervisorProcessedBy.FirstName} {r.SupervisorProcessedBy.LastName}"
+                ? UserDisplayName.Format(r.SupervisorProcessedBy.FirstName, r.SupervisorProcessedBy.LastName)
                 : null,
             SupervisorProcessedAt = r.SupervisorProcessedAt,
             RhProcessedByUserId = r.RhProcessedByUserId,
             RhProcessedByName = r.RhProcessedBy != null
-                ? $"{r.RhProcessedBy.FirstName} {r.RhProcessedBy.LastName}"
+                ? UserDisplayName.Format(r.RhProcessedBy.FirstName, r.RhProcessedBy.LastName)
                 : null,
             RhProcessedAt = r.RhProcessedAt,
             ProcessedByUserId = r.ProcessedByUserId,
             ProcessedByName = r.ProcessedBy != null
-                ? $"{r.ProcessedBy.FirstName} {r.ProcessedBy.LastName}"
+                ? UserDisplayName.Format(r.ProcessedBy.FirstName, r.ProcessedBy.LastName)
                 : null,
             ProcessedAt = r.ProcessedAt,
             RejectionReason = r.RejectionReason,

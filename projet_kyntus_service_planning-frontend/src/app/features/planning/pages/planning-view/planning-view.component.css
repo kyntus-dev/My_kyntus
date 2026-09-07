@@ -1516,22 +1516,23 @@
   display: flex;
   align-items: flex-start;
   gap: 5px;
-  background: var(--navy-700);
-  border-left: 2px solid var(--blue-600);
+  background: var(--warning-bg);
+  border-left: 3px solid var(--warning);
   border-radius: 0 8px 8px 0;
-  padding: 5px 8px;
-  max-width: 220px;
+  padding: 6px 8px;
+  max-width: 280px;
+  margin-top: 4px;
 }
 
 .emp-comment svg {
-  stroke: var(--blue-600);
+  stroke: var(--warning-text);
   flex-shrink: 0;
   margin-top: 1px;
 }
 
 .emp-comment span {
-  font-size: 0.72rem;
-  color: var(--pv-text-2);
+  font-size: 0.75rem;
+  color: var(--warning-text);
   line-height: 1.4;
   word-break: break-word;
 }
@@ -1555,12 +1556,16 @@
   padding: 6px 10px;
   border-radius: 10px;
   min-width: 54px;
-  cursor: pointer;
+  cursor: default;
   transition: all 0.18s ease;
   position: relative;
 }
 
-.shift-pill:hover {
+.shift-pill.shift-pill-editable {
+  cursor: pointer;
+}
+
+.shift-pill.shift-pill-editable:hover {
   filter: brightness(1.03);
   transform: scale(1.03);
 }
@@ -2593,4 +2598,205 @@
   .modal-footer button {
     width: 100%;
   }
+}
+
+.export-preview-modal {
+  width: min(1360px, calc(100vw - 32px));
+  max-width: min(1360px, calc(100vw - 32px));
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+}
+
+.export-preview-body {
+  overflow: auto;
+  max-height: calc(100vh - 200px);
+  background: #e8eef6;
+  padding: 16px;
+}
+
+.export-preview-sheet {
+  background: #fff;
+  color: #0f172a;
+  border-radius: 12px;
+  padding: 18px 18px 14px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12);
+}
+
+.export-sheet-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px 16px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.export-sheet-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.export-sheet-title strong {
+  font-size: 1.15rem;
+  color: #0f172a;
+}
+
+.export-week {
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.export-sheet-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.export-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.export-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+.export-table-wrap {
+  overflow: auto;
+}
+
+.export-sheet-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.78rem;
+}
+
+.export-sheet-table th,
+.export-sheet-table td {
+  border: 1px solid #dbe3ee;
+  padding: 8px;
+  vertical-align: middle;
+}
+
+.export-sheet-table th {
+  background: #1d4ed8;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.export-col-name,
+.export-emp-name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  min-width: 160px;
+}
+
+.export-sheet-table th.export-col-name {
+  z-index: 3;
+  text-align: left;
+}
+
+.export-emp-name {
+  font-weight: 700;
+  color: #0f172a;
+  background: #fff;
+  white-space: nowrap;
+}
+
+.export-htel-table {
+  min-width: 760px;
+}
+
+.export-htel-name {
+  vertical-align: middle;
+  text-align: center;
+  background: #fff;
+}
+
+.export-htel-start .export-day-cell,
+.export-htel-end .export-day-cell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.export-htel-cp {
+  color: #92400e;
+  background: #fef3c7;
+  font-weight: 700;
+}
+
+.export-htel-f {
+  color: #5b21b6;
+  background: #ede9fe;
+  font-weight: 700;
+}
+
+.export-col-level,
+.export-emp-level {
+  min-width: 88px;
+  text-align: center;
+  color: #334155;
+}
+
+.export-day-cell {
+  text-align: center;
+  background: #f8fafc;
+  min-width: 112px;
+}
+
+.export-day-cell .shift-pill {
+  cursor: default;
+  margin: 0 auto;
+}
+
+.export-day-cell .shift-pill:hover {
+  transform: none;
+}
+
+.export-day-cell .break-pill {
+  margin-top: 4px;
+  justify-content: center;
+}
+
+.export-day-cell .cell-conge,
+.export-day-cell .cell-ferie {
+  cursor: default;
+  margin: 0 auto;
+}
+
+.export-col-note,
+.export-note-cell {
+  min-width: 140px;
+  max-width: 220px;
+  text-align: left;
+  color: #0f172a;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.export-note-cell {
+  background: #fffbeb;
 }

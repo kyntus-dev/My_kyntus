@@ -21,12 +21,47 @@ public sealed class PutServicePrimeIndicatorsRequest
 
 public sealed class PutServicePrimeIndicatorItem
 {
+    public Guid? Id { get; set; }
     public int SortOrder { get; set; }
     public string Label { get; set; } = "";
     public decimal? PonderationPrimePct { get; set; }
     public decimal? PonderationChallengePct { get; set; }
     public bool IsActive { get; set; } = true;
     public string? TemplateStableId { get; set; }
+}
+
+public sealed class ServicePrimeAgentDto
+{
+    public string EmployeeId { get; init; } = "";
+    public string EmployeeName { get; init; } = "";
+}
+
+public sealed class ServicePrimeIndicatorAgentOverrideDto
+{
+    public string EmployeeId { get; init; } = "";
+    public string EmployeeName { get; init; } = "";
+    public Guid IndicatorId { get; init; }
+    public decimal? PonderationPrimePct { get; init; }
+    public decimal? PonderationChallengePct { get; init; }
+}
+
+public sealed class ServicePrimeIndicatorAgentOverridesResponse
+{
+    public List<ServicePrimeAgentDto> Employees { get; init; } = [];
+    public List<ServicePrimeIndicatorAgentOverrideDto> Overrides { get; init; } = [];
+}
+
+public sealed class PutServicePrimeIndicatorAgentOverrideItem
+{
+    public string EmployeeId { get; set; } = "";
+    public Guid IndicatorId { get; set; }
+    public decimal? PonderationPrimePct { get; set; }
+    public decimal? PonderationChallengePct { get; set; }
+}
+
+public sealed class PutServicePrimeIndicatorAgentOverridesRequest
+{
+    public List<PutServicePrimeIndicatorAgentOverrideItem> Items { get; set; } = [];
 }
 
 public sealed class ServicePoleLinePonderationDto
@@ -176,7 +211,7 @@ public sealed class SupervisorCellulePrimeDraftListItemDto
     public bool IsFullyComplete { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
     public bool HasGlobalPoolFile { get; init; }
-    /// <summary>True lorsque Manager et RH ont tous deux validé le fichier global (déblocage diffusion pilotes / compta).</summary>
+    /// <summary>True lorsque la RH a validé le fichier global (déblocage diffusion pilotes / compta).</summary>
     public bool PoolDistributionUnlocked { get; init; }
 }
 

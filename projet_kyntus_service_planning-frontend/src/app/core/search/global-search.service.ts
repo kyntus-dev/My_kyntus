@@ -217,7 +217,7 @@ export class GlobalSearchService {
             id: s.id,
             title: s.title || 'Session continue',
             subtitle: [
-              'Continue',
+              'Formation continue',
               TRAINING_SESSION_STATUS_LABELS[s.status],
             ]
               .filter(Boolean)

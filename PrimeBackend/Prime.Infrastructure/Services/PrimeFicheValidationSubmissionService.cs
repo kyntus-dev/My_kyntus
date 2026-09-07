@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Prime.Application.Abstractions;
+using Prime.Domain.Entities;
 using Prime.Infrastructure.Persistence;
 
 namespace Prime.Infrastructure.Services;
@@ -10,7 +12,8 @@ namespace Prime.Infrastructure.Services;
 public sealed class PrimeFicheValidationSubmissionService(
     PrimeDbContext db,
     PrimeValidationWorkflowRuntime wfRuntime,
-    PrimeOrgScopeService org)
+    PrimeOrgScopeService org,
+    PrimeFicheValidationHistoryService? history = null)
 {
     public static bool IsDraftValidated(string? draftStatus) =>
         string.Equals(draftStatus?.Trim(), "Validated", StringComparison.OrdinalIgnoreCase);
@@ -70,12 +73,19 @@ public sealed class PrimeFicheValidationSubmissionService(
 
         if (ready)
         {
+            var submittedFromStatus = PrimeValidationWorkflowService.AwaitingData;
             if (IsPreSubmissionStatus(fiche.ValidationStatus))
             {
+                submittedFromStatus = string.IsNullOrWhiteSpace(fiche.ValidationStatus)
+                    ? PrimeValidationWorkflowService.AwaitingData
+                    : fiche.ValidationStatus.Trim();
                 fiche.ValidationStatus = PrimeValidationWorkflowService.Pending;
                 fiche.UpdatedAt = now;
             }
 
+            // Répare aussi le journal des fiches déjà entrées dans le circuit
+            // avant l'introduction de l'évènement Submitted.
+            await AppendSubmittedHistoryAsync(fiche, submittedFromStatus, ct);
             return;
         }
 
@@ -129,7 +139,7 @@ public sealed class PrimeFicheValidationSubmissionService(
     public async Task<int> SyncAllValidatedDraftsAsync(CancellationToken ct = default)
     {
         var draftIds = await db.SupervisorCellulePrimeDrafts.AsNoTracking()
-            .Where(d => EF.Functions.ILike(d.Status, "validated"))
+            .Where(d => d.Status.ToLower() == "validated")
             .Select(d => d.Id)
             .ToListAsync(ct);
         foreach (var id in draftIds)
@@ -143,7 +153,7 @@ public sealed class PrimeFicheValidationSubmissionService(
     {
         var per = period.Trim();
         var draftIds = await db.SupervisorCellulePrimeDrafts.AsNoTracking()
-            .Where(d => d.Period == per && EF.Functions.ILike(d.Status, "validated"))
+            .Where(d => d.Period == per && d.Status.ToLower() == "validated")
             .Select(d => d.Id)
             .ToListAsync(ct);
         foreach (var id in draftIds)
@@ -165,7 +175,7 @@ public sealed class PrimeFicheValidationSubmissionService(
             .Where(d =>
                 d.SupervisorUserId == fiche.SupervisorUserId &&
                 d.Period == per &&
-                EF.Functions.ILike(d.Status, "validated"))
+                d.Status.ToLower() == "validated")
             .OrderByDescending(d => d.UpdatedAt)
             .ToListAsync(ct);
 
@@ -181,7 +191,7 @@ public sealed class PrimeFicheValidationSubmissionService(
             .Where(d =>
                 d.Period == per &&
                 d.CelluleId == ficheCell &&
-                EF.Functions.ILike(d.Status, "validated"))
+                d.Status.ToLower() == "validated")
             .OrderByDescending(d => d.UpdatedAt)
             .ToListAsync(ct);
 
@@ -194,7 +204,7 @@ public sealed class PrimeFicheValidationSubmissionService(
             .Where(d =>
                 d.Period == per &&
                 d.RootPoleId == fichePoleId &&
-                EF.Functions.ILike(d.Status, "validated"))
+                d.Status.ToLower() == "validated")
             .OrderByDescending(d => d.UpdatedAt)
             .ToListAsync(ct);
 
@@ -238,7 +248,7 @@ public sealed class PrimeFicheValidationSubmissionService(
             .Where(f =>
                 (f.ValidationStatus == PrimeValidationWorkflowService.AwaitingData ||
                  f.ValidationStatus == "NotStarted") &&
-                EF.Functions.ILike(f.FillingStatus, "complete"))
+                f.FillingStatus.ToLower() == "complete")
             .ToListAsync(ct);
 
         return await ReconcileFichesCoreAsync(fiches, ct);
@@ -260,7 +270,7 @@ public sealed class PrimeFicheValidationSubmissionService(
                 celluleIds.Contains(f.CelluleId) &&
                 (f.ValidationStatus == PrimeValidationWorkflowService.AwaitingData ||
                  f.ValidationStatus == "NotStarted") &&
-                EF.Functions.ILike(f.FillingStatus, "complete"))
+                f.FillingStatus.ToLower() == "complete")
             .ToListAsync(ct);
 
         return await ReconcileFichesCoreAsync(fiches, ct);
@@ -278,7 +288,7 @@ public sealed class PrimeFicheValidationSubmissionService(
                 f.Period == per &&
                 (f.ValidationStatus == PrimeValidationWorkflowService.AwaitingData ||
                  f.ValidationStatus == "NotStarted") &&
-                EF.Functions.ILike(f.FillingStatus, "complete"))
+                f.FillingStatus.ToLower() == "complete")
             .ToListAsync(ct);
 
         return await ReconcileFichesCoreAsync(fiches, ct);
@@ -306,6 +316,45 @@ public sealed class PrimeFicheValidationSubmissionService(
         if (changed > 0)
             await db.SaveChangesAsync(ct);
         return changed;
+    }
+
+    private async Task AppendSubmittedHistoryAsync(
+        EmployeePrimeServiceFiche fiche,
+        string fromStatus,
+        CancellationToken ct)
+    {
+        if (history is null) return;
+        var supId = (fiche.SupervisorUserId ?? "").Trim();
+        if (supId.Length == 0) return;
+
+        var empEntity = await org.GetEmployeeAsync(supId, ct);
+        var employee = empEntity is null
+            ? new Employee
+            {
+                Id = supId,
+                Role = PrimeFicheValidationRoles.Superviseur,
+            }
+            : new Employee
+            {
+                Id = empEntity.Id,
+                FirstName = empEntity.FirstName,
+                LastName = empEntity.LastName,
+                Role = string.IsNullOrWhiteSpace(empEntity.Role)
+                    ? PrimeFicheValidationRoles.Superviseur
+                    : empEntity.Role,
+                ParentId = empEntity.ParentId,
+                ServiceId = empEntity.ServiceId,
+                PoleId = empEntity.PoleId ?? "",
+                CelluleId = empEntity.CelluleId,
+                Email = empEntity.Email,
+                Avatar = empEntity.Avatar,
+                BusinessDepartmentId = empEntity.BusinessDepartmentId,
+                BusinessDepartmentKind = empEntity.BusinessDepartmentKind,
+            };
+
+        var actor = new PrimeResolvedUser(supId, PrimeFicheValidationRoles.Superviseur, employee);
+        var amounts = PrimeEmployeeFicheAmountService.ResolveWorkflowDisplayAmounts(fiche);
+        await history.AppendSubmittedAsync(fiche, fromStatus, actor, amounts, ct);
     }
 }
 

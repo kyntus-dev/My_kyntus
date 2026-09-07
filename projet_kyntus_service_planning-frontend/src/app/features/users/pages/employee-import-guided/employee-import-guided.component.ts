@@ -186,6 +186,10 @@ export class EmployeeImportGuidedComponent implements OnInit, OnDestroy {
 
   showHistory = false;
 
+  rollingBackJobId: string | null = null;
+
+  restoringJobId: string | null = null;
+
   draftResumeHint: string | null = null;
   furthestStepIndex = 0;
 
@@ -337,6 +341,80 @@ export class EmployeeImportGuidedComponent implements OnInit, OnDestroy {
 
     this.importSvc.downloadSourceFile(job.id, job.fileName);
 
+  }
+
+  canRollback(job: EmployeeImportJobSummary): boolean {
+    const status = (job.status ?? '').toLowerCase();
+    if (status === 'rolledback' || status === 'running' || status === 'failed' || status === 'pending') {
+      return false;
+    }
+    return status === 'completed' || !!job.completedAt;
+  }
+
+  rollbackJob(job: EmployeeImportJobSummary): void {
+    if (!this.canRollback(job) || this.rollingBackJobId) return;
+    const ok = window.confirm(
+      `Annuler uniquement l'import « ${job.fileName} » du ${this.formatDate(job.startedAt)} ?\n\n` +
+        'Les employés créés par cet import seront supprimés, et les affectations de cet import seront restaurées.\n' +
+        'Les cellules, employés et rotations ajoutés après cet import resteront en place.',
+    );
+    if (!ok) return;
+
+    this.rollingBackJobId = job.id;
+    this.importSvc.rollbackJob(job.id).subscribe({
+      next: (result) => {
+        this.toast.success(result.message || 'Import annulé.');
+        this.rollingBackJobId = null;
+        this.goToHistory();
+      },
+      error: (err) => {
+        this.rollingBackJobId = null;
+        this.toast.error(formatHttpErrorMessage(err, "Impossible d'annuler cet import."));
+      },
+    });
+  }
+
+  canRestorePlacements(job: EmployeeImportJobSummary): boolean {
+    const status = (job.status ?? '').toLowerCase();
+    return status === 'rolledback' || status === 'completed';
+  }
+
+  restorePlacements(job: EmployeeImportJobSummary): void {
+    if (!this.canRestorePlacements(job) || this.restoringJobId) return;
+    this.restoringJobId = job.id;
+    this.importSvc.restorePlacements(job.id, true).subscribe({
+      next: (preview) => {
+        if (!preview.restored) {
+          this.restoringJobId = null;
+          this.toast.success(preview.message || 'Aucune cellule à remettre.');
+          return;
+        }
+        const ok = window.confirm(
+          `${preview.restored} employé(s) seront remis dans leur cellule d'avant l'import.\n` +
+            `Rotations faites après l'import : ${preview.skippedRotation} conservée(s).\n\n` +
+            'Continuer ?',
+        );
+        if (!ok) {
+          this.restoringJobId = null;
+          return;
+        }
+        this.importSvc.restorePlacements(job.id, false).subscribe({
+          next: (result) => {
+            this.toast.success(result.message || 'Cellules restaurées.');
+            this.restoringJobId = null;
+            this.goToHistory();
+          },
+          error: (err) => {
+            this.restoringJobId = null;
+            this.toast.error(formatHttpErrorMessage(err, 'Impossible de remettre les cellules.'));
+          },
+        });
+      },
+      error: (err) => {
+        this.restoringJobId = null;
+        this.toast.error(formatHttpErrorMessage(err, 'Impossible de préparer la restauration des cellules.'));
+      },
+    });
   }
 
 

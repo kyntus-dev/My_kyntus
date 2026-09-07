@@ -59,6 +59,9 @@ public sealed class DirectoryEmployeeProjectionConsumer(
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(Planning.Infrastructure.Security.PasswordGenerator.Generate()),
                 IdTechnicien = msg.IdTechnicien,
                 HtelCode = msg.HtelCode,
+                HtelTechnicienName = string.IsNullOrWhiteSpace(msg.HtelTechnicienName)
+                    ? null
+                    : msg.HtelTechnicienName.Trim(),
             };
             if (!string.IsNullOrWhiteSpace(msg.ServiceId))
             {
@@ -87,6 +90,9 @@ public sealed class DirectoryEmployeeProjectionConsumer(
             user.IsActive = msg.IsActive;
             user.IdTechnicien = msg.IdTechnicien;
             user.HtelCode = msg.HtelCode;
+            user.HtelTechnicienName = string.IsNullOrWhiteSpace(msg.HtelTechnicienName)
+                ? null
+                : msg.HtelTechnicienName.Trim();
             // Promotions structurelles toujours appliquées ; ne pas écraser un rôle structure
             // par un message non structurel (évite les régressions Employee/Pilote).
             if (role is not null && (IsStructureRole(role.Name) || !IsStructureRole(user.Role?.Name)))

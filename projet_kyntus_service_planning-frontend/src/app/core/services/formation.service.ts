@@ -6,7 +6,8 @@ import { FormationDto, CreateFormationCommand, InscrireFormationCommand } from '
 @Injectable({ providedIn: 'root' })
 export class FormationService {
   // Via Ocelot Gateway
-  private readonly base = '/api/formations';
+  // Slash final : évite la redirection absolue ASP.NET qui perd le port :8200.
+  private readonly base = '/api/formations/';
 
   constructor(private http: HttpClient) {}
 
@@ -16,7 +17,7 @@ export class FormationService {
   }
 
   getById(id: string): Observable<FormationDto> {
-    return this.http.get<FormationDto>(`${this.base}/${id}`);
+    return this.http.get<FormationDto>(`${this.base}${id}`);
   }
 
   create(cmd: CreateFormationCommand): Observable<{ id: string }> {
@@ -24,15 +25,15 @@ export class FormationService {
   }
 
   update(id: string, cmd: Partial<CreateFormationCommand>): Observable<void> {
-    return this.http.put<void>(`${this.base}/${id}`, cmd);
+    return this.http.put<void>(`${this.base}${id}`, cmd);
   }
 
   delete(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.base}/${id}`);
+    return this.http.delete<void>(`${this.base}${id}`);
   }
 
   valider(id: string): Observable<void> {
-    return this.http.post<void>(`${this.base}/${id}/valider`, {});
+    return this.http.post<void>(`${this.base}${id}/valider`, {});
   }
 
 inscrire(id: string, cmd: InscrireFormationCommand): Observable<{ inscriptionId: string }> {
@@ -41,6 +42,6 @@ inscrire(id: string, cmd: InscrireFormationCommand): Observable<{ inscriptionId:
     employeId: cmd.employeId,
     nomEmploye: cmd.nomEmploye
   };
-  return this.http.post<{ inscriptionId: string }>(`${this.base}/${id}/inscrire`, body);
+  return this.http.post<{ inscriptionId: string }>(`${this.base}${id}/inscrire`, body);
 }
 }

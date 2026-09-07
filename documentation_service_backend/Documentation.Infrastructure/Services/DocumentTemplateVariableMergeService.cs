@@ -1,6 +1,8 @@
 using System.Globalization;
+using Documentation.Application;
 using Documentation.Application.Abstractions;
 using Documentation.Application.Configuration;
+using Documentation.Domain.Entities;
 using Documentation.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -12,6 +14,7 @@ public sealed class DocumentTemplateVariableMergeService(
     DocumentationDbContext db,
     IDirectoryQueryAppService directoryQuery,
     IAiTemplateContentGenerator aiTemplateGenerator,
+    IDocumentTemplateEmployeeMappingService employeeMapping,
     IOptions<AiTemplateOptions> aiTemplateOptions,
     ILogger<DocumentTemplateVariableMergeService> logger) : IDocumentTemplateVariableMergeService
 {
@@ -20,6 +23,65 @@ public sealed class DocumentTemplateVariableMergeService(
         Guid? documentRequestId,
         IReadOnlyDictionary<string, string>? source,
         CancellationToken ct = default)
+    {
+        var result = await MergeForTemplateAsync(
+            beneficiaryUserId,
+            documentRequestId,
+            Array.Empty<DocumentTemplateVariable>(),
+            source,
+            ct).ConfigureAwait(false);
+        return result.Values;
+    }
+
+    public async Task<DocumentVariableMergeResult> MergeForTemplateAsync(
+        Guid? beneficiaryUserId,
+        Guid? documentRequestId,
+        IReadOnlyList<DocumentTemplateVariable> templateVariables,
+        IReadOnlyDictionary<string, string>? source,
+        CancellationToken ct = default)
+    {
+        var dict = await MergeBaseAsync(beneficiaryUserId, documentRequestId, source, ct).ConfigureAwait(false);
+        if (templateVariables.Count == 0)
+        {
+            EnsureFrenchDateAlias(dict);
+            return new DocumentVariableMergeResult(dict, Array.Empty<ResolvedTemplateVariable>());
+        }
+
+        var resolved = await employeeMapping.ResolveAsync(beneficiaryUserId, templateVariables, source, ct)
+            .ConfigureAwait(false);
+
+        var resolutions = new List<ResolvedTemplateVariable>(resolved.Resolutions.Count);
+        foreach (var item in resolved.Resolutions)
+        {
+            dict.TryGetValue(item.Name, out var existing);
+            var existingNorm = DocumentTemplateVariableValueResolver.Normalize(existing);
+            if (item.FilledFromDb || !string.IsNullOrEmpty(item.ResolvedValue))
+            {
+                dict[item.Name] = item.ResolvedValue;
+                resolutions.Add(item);
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(existingNorm))
+            {
+                dict[item.Name] = existingNorm;
+                resolutions.Add(item with { ResolvedValue = existingNorm, NeedsRhInput = false });
+                continue;
+            }
+
+            dict[item.Name] = string.Empty;
+            resolutions.Add(item);
+        }
+
+        EnsureFrenchDateAlias(dict);
+        return new DocumentVariableMergeResult(dict, resolutions);
+    }
+
+    private async Task<Dictionary<string, string>> MergeBaseAsync(
+        Guid? beneficiaryUserId,
+        Guid? documentRequestId,
+        IReadOnlyDictionary<string, string>? source,
+        CancellationToken ct)
     {
         var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 

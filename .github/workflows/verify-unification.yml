@@ -17,6 +17,7 @@ on:
       - 'documentation_service_backend/**'
       - 'FormationService/**'
       - 'Kyntus.slnx'
+      - 'Kyntus.Caching/**'
       - 'scripts/verify-unification.ps1'
       - 'docker-compose.yml'
 
@@ -56,3 +57,16 @@ jobs:
           dotnet build PrimeBackend/PrimeBackend.slnx -c Release
           dotnet build parrainage_service_backend/parrainage_service_backend.slnx -c Release
           dotnet build documentation_service_backend/documentation_service_backend.slnx -c Release
+
+  solution-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build full solution
+        run: dotnet build Kyntus.slnx -c Release --verbosity minimal
+      - name: Build Kyntus.Caching
+        run: dotnet build Kyntus.Caching/Kyntus.Caching.csproj -c Release

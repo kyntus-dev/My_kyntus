@@ -391,7 +391,9 @@ public class PlanningLeaveImpactTests
         public Task<WeeklyShiftModePlanDto> SaveWeeklyShiftModePlanAsync(SaveWeeklyShiftModePlanDto dto) => NIAsync<WeeklyShiftModePlanDto>();
         public Task NotifyModeConfigPendingAsync(
             int planningUserId, int authUserId, string weekCode, string subServiceName, string message) => NI();
-        public Task<AutoGenerateWeekResultDto> AutoGenerateWeekAsync(string? weekCode = null, bool forceDraftRefresh = false) => NIAsync<AutoGenerateWeekResultDto>();
+        public Task<AutoGenerateWeekResultDto> AutoGenerateWeekAsync(
+            string? weekCode = null, bool forceDraftRefresh = false, int? actorUserId = null) => NIAsync<AutoGenerateWeekResultDto>();
+        public Task EnsureViewerCanManageSubServiceAsync(int viewerUserId, int subServiceId) => Task.CompletedTask;
         public Task<AutoGenerateSettingsDto> GetAutoGenerateSettingsAsync() => NIAsync<AutoGenerateSettingsDto>();
         public Task<AutoGenerateSettingsDto> SaveAutoGenerateSettingsAsync(AutoGenerateSettingsDto dto, int? updatedByUserId) => NIAsync<AutoGenerateSettingsDto>();
         public Task<PlanningWeekListDto> GetWeekOverviewAsync(string weekCode, int? viewerUserId = null) => NIAsync<PlanningWeekListDto>();

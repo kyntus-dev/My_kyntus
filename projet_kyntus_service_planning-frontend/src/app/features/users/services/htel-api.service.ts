@@ -92,30 +92,15 @@ export class HtelApiService {
   }
 }
 
-/** Aligné sur HtelNameNormalizer côté backend. */
-export function normalizeHtelName(value: string | null | undefined): string {
-  if (!value?.trim()) return '';
-  const collapsed = value.trim().replace(/\s+/g, ' ');
-  return collapsed
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase();
-}
+export {
+  normalizeHtelName,
+  employeeHtelNameKeys,
+  scoreHtelStrings,
+  scoreEmployeeToHtel,
+  findUniqueHtelMatch,
+  HTEL_MATCH_ALERT_THRESHOLD,
+  HTEL_MATCH_AUTO_LINK_THRESHOLD,
+  HTEL_MATCH_AMBIGUITY_GAP,
+  HTEL_MATCH_MIN_NAME_LENGTH,
+} from './htel-name-match.util';
 
-export function employeeHtelNameKeys(firstName: string, lastName: string): string[] {
-  const first = normalizeHtelName(firstName);
-  const last = normalizeHtelName(lastName);
-  if (!first && !last) return [];
-  if (first && last) return [`${last} ${first}`, `${first} ${last}`];
-  return [last || first];
-}
-
-export function findUniqueHtelMatch(
-  firstName: string,
-  lastName: string,
-  techniciens: HtelTechnicienDto[],
-): HtelTechnicienDto | null {
-  const keys = new Set(employeeHtelNameKeys(firstName, lastName));
-  const matches = techniciens.filter((t) => keys.has(normalizeHtelName(t.technicien)));
-  return matches.length === 1 ? matches[0] : null;
-}

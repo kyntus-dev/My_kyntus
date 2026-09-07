@@ -1,4 +1,7 @@
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using Kyntus.Caching;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -15,6 +18,7 @@ public interface IPlanningAbsenceClient
 public sealed class PlanningAbsenceClient(
     HttpClient http,
     IConfiguration configuration,
+    ICacheService cache,
     ILogger<PlanningAbsenceClient> logger) : IPlanningAbsenceClient
 {
     public async Task<IReadOnlyDictionary<string, int>> GetAbsenceDayCountsAsync(
@@ -25,6 +29,22 @@ public sealed class PlanningAbsenceClient(
         if (employeeGuids.Count == 0)
             return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
+        var hash = Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes(string.Join(',', employeeGuids.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)))));
+        var key = KyntusCacheKeys.PrimeAbsences(period.Trim(), hash[..16]);
+
+        return await cache.GetOrCreateAsync(
+            key,
+            token => FetchAsync(period, employeeGuids, token),
+            KyntusCacheTtl.Short,
+            ct);
+    }
+
+    private async Task<Dictionary<string, int>> FetchAsync(
+        string period,
+        IReadOnlyList<string> employeeGuids,
+        CancellationToken ct)
+    {
         var baseUrl = configuration["Planning:BaseUrl"] ?? "http://planning-backend:8080";
         var url = $"{baseUrl.TrimEnd('/')}/api/Conges/absence-days/bulk";
 

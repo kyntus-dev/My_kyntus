@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { FormationTrainingService } from '../../../core/services/formation-training.service';
 import {
+  formatInitialTrainingOrgLabel,
   INITIAL_TRAINING_STATUS_LABELS,
   type InitialTrainingPathDto,
 } from '../../../core/models/formation-training.models';
@@ -43,6 +44,9 @@ import { resolveUserGuid } from '../../../core/lib/user-guid.util';
                 <span class="frpq-docs" [class.frpq-docs-ko]="!isChecklistComplete(p)">
                   Docs {{ p.documentsReceivedCount ?? 0 }}/{{ p.documentsTotalCount ?? 0 }}
                 </span>
+                @if (orgLabel(p)) {
+                  <span class="frpq-org" [title]="orgLabel(p)">{{ orgLabel(p) }}</span>
+                }
                 <a
                   class="frpq-check-link"
                   [routerLink]="['/formations/initiales', p.id, 'checklist']"
@@ -200,6 +204,14 @@ import { resolveUserGuid } from '../../../core/lib/user-guid.util';
     .frpq-docs {
       font-size: 0.72rem;
       color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .frpq-org {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      max-width: 22rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
       white-space: nowrap;
     }
     .frpq-status {
@@ -398,6 +410,10 @@ export class FormationRhProdQueueComponent implements OnInit {
     const total = path.documentsTotalCount ?? 0;
     if (total <= 0) return true;
     return (path.documentsReceivedCount ?? 0) >= total;
+  }
+
+  orgLabel(path: InitialTrainingPathDto): string {
+    return formatInitialTrainingOrgLabel(path);
   }
 
   isPeriodEnded(path: InitialTrainingPathDto): boolean {

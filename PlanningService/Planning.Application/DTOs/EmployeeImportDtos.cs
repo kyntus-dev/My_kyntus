@@ -470,4 +470,73 @@ public sealed class ImportChunkCreateResultDto
     public string? TemporaryPassword { get; set; }
 }
 
+public class EmployeeImportRollbackResultDto
+{
+    public Guid JobId { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public DateTime StartedAt { get; set; }
+    public int CreatedDeleted { get; set; }
+    public int DirectoryAssignmentsDeleted { get; set; }
+    public int DirectoryAssignmentsRestored { get; set; }
+    public List<string> DeletedEmails { get; set; } = [];
+    public string Message { get; set; } = string.Empty;
+}
+
+public class EmployeeImportRollbackByTimeRequest
+{
+    public DateTime StartedAt { get; set; }
+    public string? FileNameContains { get; set; }
+}
+
+public class EmployeeImportPlacementRestoreItemDto
+{
+    public string Email { get; set; } = string.Empty;
+    public string? CurrentLabel { get; set; }
+    public string? PreviousLabel { get; set; }
+    public string Action { get; set; } = string.Empty;
+}
+
+public class EmployeeImportPlacementRestoreResultDto
+{
+    public Guid JobId { get; set; }
+    public bool DryRun { get; set; }
+    public int Restored { get; set; }
+    public int SkippedRotation { get; set; }
+    public int SkippedAlready { get; set; }
+    public int SkippedNoHistory { get; set; }
+    public List<EmployeeImportPlacementRestoreItemDto> Items { get; set; } = [];
+    public string Message { get; set; } = string.Empty;
+}
+
+public class EmployeeVariableMatchSourceDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string? DisplayLabel { get; set; }
+    public string? NormalizedName { get; set; }
+    public string? RawPlaceholder { get; set; }
+}
+
+public class EmployeeVariableMatchRequest
+{
+    public List<EmployeeVariableMatchSourceDto> Sources { get; set; } = new();
+}
+
+public class EmployeeVariableMatchDto
+{
+    public string SourceName { get; set; } = string.Empty;
+    public string? SuggestedFieldKey { get; set; }
+    public string? SuggestedFieldLabel { get; set; }
+    public double Score { get; set; }
+    public string Confidence { get; set; } = "low";
+    public bool IsEnabled { get; set; }
+    public bool IsSystemField { get; set; }
+}
+
+public class EmployeeDocumentFieldValuesDto
+{
+    public Guid EmployeeGuid { get; set; }
+    public Dictionary<string, string?> Values { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<string> UnavailableKeys { get; set; } = [];
+}
+
 

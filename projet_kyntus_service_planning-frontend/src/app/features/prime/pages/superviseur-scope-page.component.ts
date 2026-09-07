@@ -7,6 +7,7 @@ import { PrimeCardComponent } from '../components/prime-card.component';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
 import { BodyPortalDirective } from '../../../shared/directives/body-portal.directive';
 import {
+  collectCelluleMemberOrgIds,
   dedupeEmployeesByEmail,
   employeesInSuperviseurCellule,
   resolvePlatformOrgLabels,
@@ -21,6 +22,7 @@ import {
   type AgentPlanningWeek,
   type SaturdayEmployeeMode,
   type ShiftModeProfileDto,
+  type ShiftConfigStatusResponse,
   type WeeklyEmployeeShiftMode,
   type WeeklyShiftModePlan,
 } from '../../planning/services/planning.service';
@@ -122,46 +124,42 @@ function resolveCelluleLabel(
             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
           </div>
         } @else {
-        @if (balanceAlert(); as alert) {
-          <div class="sat-imbalance-banner" role="alert">
-            <strong>Déséquilibre des effectifs du samedi</strong>
-            <p>
-              Effectif périmètre :
-              <strong>{{ alert.totalCount }}</strong>
-              = {{ alert.alwaysOnCount }} (tous les samedis 4h)
-              + {{ alert.group1Count }} (alternance G1)
-              + {{ alert.group2Count }} (alternance G2)
-              @if (alert.ungroupedCount > 0) {
-                + {{ alert.ungroupedCount }} (alternance sans groupe)
+        @if (saturdayHeadcountView(); as view) {
+          <div
+            class="sat-headcount-banner"
+            [class.sat-imbalance-banner]="view.isImbalanced"
+            [class.sat-balance-ok]="!view.isImbalanced"
+            [attr.role]="view.isImbalanced ? 'alert' : null"
+          >
+            <div class="sat-headcount">
+              <div class="sat-headcount-stocks">
+                <span>Tous les sam. <strong>{{ view.alwaysOnCount }}</strong></span>
+                <span>G1 <strong>{{ view.group1Count }}</strong></span>
+                <span>G2 <strong>{{ view.group2Count }}</strong></span>
+                @if (view.ungroupedCount > 0) {
+                  <span class="sat-headcount-ungrouped">{{ view.ungroupedCount }} sans groupe</span>
+                }
+              </div>
+              @if (view.current; as current) {
+                <div class="sat-headcount-row">
+                  <span>Samedi en cours</span>
+                  <span>{{ formatSatDate(current.date) }}</span>
+                  <strong>{{ current.presentCount }}</strong>
+                </div>
               }
-            </p>
-            <p>
-              Présents un samedi donné :
-              <strong>{{ alert.projectedSaturdayGroup1 }}</strong> (semaine G1 : {{ alert.alwaysOnCount }}+{{ alert.group1Count }})
-              vs
-              <strong>{{ alert.projectedSaturdayGroup2 }}</strong> (semaine G2 : {{ alert.alwaysOnCount }}+{{ alert.group2Count }})
-              — écart de {{ alert.imbalanceDelta }} sur l’alternance.
-              Rééquilibrez les groupes 1 et 2.
-            </p>
-            @if (alert.ungroupedCount > 0) {
-              <p>
-                {{ alert.ungroupedCount }} collaborateur(s) en alternance sans groupe assigné.
-              </p>
-            }
-            <p>
+              @if (view.next; as next) {
+                <div class="sat-headcount-row">
+                  <span>Samedi prochain</span>
+                  <span>{{ formatSatDate(next.date) }}</span>
+                  <strong>{{ next.presentCount }}</strong>
+                </div>
+              }
+            </div>
+            @if (view.isImbalanced) {
               <button type="button" class="sat-renfort-link" (click)="goToReinforcement()">
                 Créer une demande de renfort
               </button>
-            </p>
-          </div>
-        } @else if (balanceSummary(); as summary) {
-          <div class="sat-balance-ok">
-            Effectif :
-            {{ summary.totalCount }}
-            = {{ summary.alwaysOnCount }} (tous sam. 4h)
-            + {{ summary.group1Count }} (G1)
-            + {{ summary.group2Count }} (G2)
-            · Présents samedi : {{ summary.projectedSaturdayGroup1 }} / {{ summary.projectedSaturdayGroup2 }}
+            }
           </div>
         }
 
@@ -172,13 +170,13 @@ function resolveCelluleLabel(
                 <span>Assignation groupée</span>
                 <select
                   class="scope-cellule-select"
-                  [value]="wmBulkModeId() ?? ''"
-                  (change)="onWmBulkModeChange($event)"
+                  [ngModel]="wmBulkModeId()"
+                  (ngModelChange)="onWmBulkModeChange($event)"
                   [disabled]="wmLocked() || wmLoading()"
                 >
-                  <option value="">Choisir un mode…</option>
+                  <option [ngValue]="null">Choisir un mode…</option>
                   @for (m of wmAvailableModes(); track m.id) {
-                    <option [value]="m.id">{{ m.title }}</option>
+                    <option [ngValue]="m.id">{{ m.title }}</option>
                   }
                 </select>
               </label>
@@ -249,13 +247,13 @@ function resolveCelluleLabel(
                           <td>
                             <select
                               class="scope-cellule-select"
-                              [value]="emp.shiftModeProfileId ?? ''"
-                              (change)="onWmEmployeeModeChange(emp.userId, $event)"
+                              [ngModel]="emp.shiftModeProfileId ?? null"
+                              (ngModelChange)="onWmEmployeeModeChange(emp.userId, $event)"
                               [disabled]="wmLocked()"
                             >
-                              <option value="" disabled [hidden]="!!emp.shiftModeProfileId">— Choisir —</option>
+                              <option [ngValue]="null" disabled [hidden]="emp.shiftModeProfileId != null">— Choisir —</option>
                               @for (m of wmAvailableModes(); track m.id) {
-                                <option [value]="m.id">{{ m.title }}</option>
+                                <option [ngValue]="m.id">{{ m.title }}</option>
                               }
                             </select>
                           </td>
@@ -495,7 +493,7 @@ function resolveCelluleLabel(
                   [class.active]="satGroupDraft() === 1"
                   (click)="satGroupDraft.set(1)"
                 >
-                  Groupe 1
+                  Groupe 1 · sam. {{ formatSatDate(saturdayGroupDates().g1) }}
                 </button>
                 <button
                   type="button"
@@ -503,7 +501,7 @@ function resolveCelluleLabel(
                   [class.active]="satGroupDraft() === 2"
                   (click)="satGroupDraft.set(2)"
                 >
-                  Groupe 2
+                  Groupe 2 · sam. {{ formatSatDate(saturdayGroupDates().g2) }}
                 </button>
               </div>
             </div>
@@ -858,27 +856,80 @@ function resolveCelluleLabel(
         color: var(--info-text);
       }
 
-      .sat-imbalance-banner {
+      .sat-headcount-banner {
         margin-bottom: 1rem;
-        padding: 0.9rem 1.1rem;
+        padding: 0.75rem 1rem;
         border-radius: 0.75rem;
+      }
+
+      .sat-imbalance-banner {
         border: 1px solid var(--warning-border);
         background: var(--warning-bg);
         color: var(--warning-text);
       }
 
-      .sat-imbalance-banner strong {
-        display: block;
-        margin-bottom: 0.25rem;
+      .sat-balance-ok {
+        background: var(--bg-input);
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
       }
 
-      .sat-imbalance-banner p {
-        margin: 0.15rem 0 0;
+      .sat-headcount {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
         font-size: 0.88rem;
       }
 
+      .sat-headcount-stocks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem 1.15rem;
+        align-items: baseline;
+      }
+
+      .sat-headcount-stocks strong,
+      .sat-headcount-row strong {
+        display: inline;
+        margin: 0;
+        font-weight: 700;
+      }
+
+      .sat-headcount-ungrouped {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .sat-imbalance-banner .sat-headcount-ungrouped {
+        color: inherit;
+        opacity: 0.85;
+      }
+
+      .sat-headcount-row {
+        display: grid;
+        grid-template-columns: 9.5rem 3.5rem 2rem;
+        gap: 0.65rem;
+        align-items: baseline;
+      }
+
+      .sat-headcount-row span:first-child,
+      .sat-balance-ok .sat-headcount-stocks span {
+        color: var(--text-muted);
+      }
+
+      .sat-balance-ok .sat-headcount-stocks strong,
+      .sat-balance-ok .sat-headcount-row strong {
+        color: var(--text-primary);
+      }
+
+      .sat-imbalance-banner .sat-headcount-row span:first-child,
+      .sat-imbalance-banner .sat-headcount-stocks span {
+        color: inherit;
+        opacity: 0.85;
+      }
+
       .sat-renfort-link {
-        margin-top: 0.25rem;
+        margin-top: 0.45rem;
         border: none;
         background: transparent;
         color: var(--warning-text);
@@ -887,20 +938,6 @@ function resolveCelluleLabel(
         text-decoration: underline;
         cursor: pointer;
         padding: 0;
-      }
-
-      .sat-imbalance-meta,
-      .sat-balance-ok {
-        font-size: 0.8rem;
-        color: var(--text-muted);
-      }
-
-      .sat-balance-ok {
-        margin-bottom: 1rem;
-        padding: 0.65rem 1rem;
-        border-radius: 0.65rem;
-        background: var(--bg-input);
-        border: 1px solid var(--border-color);
       }
 
       .scope-search {
@@ -1211,6 +1248,7 @@ export class SuperviseurScopePageComponent {
     const groupDelta = Math.abs(g1 - g2);
     const isImbalanced = groupDelta >= 2 || ungrouped > 0;
     const totalCount = alwaysOn + g1 + g2 + ungrouped;
+    const dates = this.saturdayGroupDates();
 
     return {
       totalCount,
@@ -1222,6 +1260,8 @@ export class SuperviseurScopePageComponent {
       projectedSaturdayGroup2: projected2,
       isImbalanced,
       imbalanceDelta: groupDelta,
+      group1SaturdayDate: dates.g1,
+      group2SaturdayDate: dates.g2,
     };
   });
 
@@ -1232,14 +1272,37 @@ export class SuperviseurScopePageComponent {
     return list.filter((r) => this.rowMatchesSearch(r, q));
   });
 
-  readonly balanceAlert = computed(() => {
+  readonly saturdayHeadcountView = computed(() => {
     const scoped = this.scopedBalance();
-    return scoped?.isImbalanced ? scoped : null;
-  });
-  readonly balanceSummary = computed(() => {
-    const scoped = this.scopedBalance();
-    if (!scoped || scoped.isImbalanced) return null;
-    return scoped;
+    if (!scoped) return null;
+
+    type SatLine = { date: string; presentCount: number; groupLabel: 'G1' | 'G2' };
+    const lines: SatLine[] = [];
+    if (scoped.group1SaturdayDate) {
+      lines.push({
+        date: scoped.group1SaturdayDate,
+        presentCount: scoped.alwaysOnCount + scoped.group1Count,
+        groupLabel: 'G1',
+      });
+    }
+    if (scoped.group2SaturdayDate) {
+      lines.push({
+        date: scoped.group2SaturdayDate,
+        presentCount: scoped.alwaysOnCount + scoped.group2Count,
+        groupLabel: 'G2',
+      });
+    }
+    lines.sort((a, b) => a.date.localeCompare(b.date));
+
+    return {
+      alwaysOnCount: scoped.alwaysOnCount,
+      group1Count: scoped.group1Count,
+      group2Count: scoped.group2Count,
+      ungroupedCount: scoped.ungroupedCount,
+      isImbalanced: scoped.isImbalanced,
+      current: lines[0] ?? null,
+      next: lines[1] ?? null,
+    };
   });
 
   readonly levelModalOpen = signal(false);
@@ -1253,6 +1316,7 @@ export class SuperviseurScopePageComponent {
   readonly satModalRow = signal<ScopeRow | null>(null);
   readonly satModeDraft = signal<ModeDraft>('default');
   readonly satGroupDraft = signal<1 | 2>(1);
+  readonly saturdayGroupDates = signal<{ g1: string | null; g2: string | null }>({ g1: null, g2: null });
   readonly satSaving = signal(false);
   readonly satError = signal('');
 
@@ -1313,7 +1377,11 @@ export class SuperviseurScopePageComponent {
     if (mode === 2) {
       const g =
         row.groupNumber === 1 || row.groupNumber === 2
-          ? ` · G${row.groupNumber}`
+          ? ` · G${row.groupNumber} · ${this.formatSatDate(
+              row.groupNumber === 1
+                ? this.saturdayGroupDates().g1
+                : this.saturdayGroupDates().g2,
+            )}`
           : ' · sans groupe';
       return row.saturdayWorkMode == null ? `Alternance 8h (défaut)${g}` : `Alternance 8h${g}`;
     }
@@ -1334,15 +1402,12 @@ export class SuperviseurScopePageComponent {
     return '—';
   }
 
-  onWmBulkModeChange(event: Event): void {
-    const raw = (event.target as HTMLSelectElement).value;
-    this.wmBulkModeId.set(raw ? Number(raw) : null);
+  onWmBulkModeChange(modeId: number | null): void {
+    this.wmBulkModeId.set(modeId);
   }
 
-  onWmEmployeeModeChange(userId: number, event: Event): void {
-    const raw = (event.target as HTMLSelectElement).value;
-    const modeId = raw ? Number(raw) : null;
-    const mode = this.wmAvailableModes().find((m) => m.id === modeId);
+  onWmEmployeeModeChange(userId: number, modeId: number | null): void {
+    const mode = modeId != null ? this.wmAvailableModes().find((m) => m.id === modeId) : undefined;
     this.wmEmployees.set(
       this.wmEmployees().map((e) =>
         e.userId === userId
@@ -1579,6 +1644,14 @@ export class SuperviseurScopePageComponent {
 
   private formatDate(d: Date): string {
     return d.toLocaleDateString('en-CA');
+  }
+
+  formatSatDate(iso: string | null | undefined): string {
+    if (!iso) return '—';
+    const ymd = iso.slice(0, 10);
+    const parts = ymd.split('-');
+    if (parts.length !== 3) return ymd;
+    return `${parts[2]}/${parts[1]}`;
   }
 
   onSearchInput(event: Event): void {
@@ -1929,6 +2002,12 @@ export class SuperviseurScopePageComponent {
       subIds.map(async (subId) => {
         try {
           const bal = await firstValueFrom(this.planningService.getSaturdayBalance(subId));
+          if (bal.group1SaturdayDate || bal.group2SaturdayDate) {
+            this.saturdayGroupDates.set({
+              g1: bal.group1SaturdayDate ?? null,
+              g2: bal.group2SaturdayDate ?? null,
+            });
+          }
           for (const emp of bal.employees ?? []) {
             if (emp.guid) modeByGuid.set(emp.guid.toLowerCase(), emp);
           }
@@ -1985,6 +2064,76 @@ export class SuperviseurScopePageComponent {
     return normalized[0];
   }
 
+  /**
+   * Modes hebdo = Users Planning du sous-service BTE.
+   * Équipe supervisée ne prenait que Prime.Employees.CelluleId — les agents
+   * rattachés au service / uniquement dans Planning disparaissaient.
+   */
+  private async mergePlanningTeamIntoScopeRows(
+    mapped: ScopeRow[],
+    planningUsers: User[],
+    memberOrgIds: readonly string[],
+    shiftStatus: ShiftConfigStatusResponse | null,
+  ): Promise<void> {
+    const subIds = new Set<number>();
+    for (const row of mapped) {
+      if (row.subServiceId != null) subIds.add(row.subServiceId);
+    }
+    const orgKeys = new Set(memberOrgIds.map((id) => id.trim().toLowerCase()).filter(Boolean));
+    for (const item of shiftStatus?.items ?? []) {
+      const pid = (item.primeServiceId ?? '').trim().toLowerCase();
+      if (pid && orgKeys.has(pid)) subIds.add(item.subServiceId);
+    }
+    if (subIds.size === 0) return;
+
+    const roster: User[] = [...planningUsers];
+    for (const subId of subIds) {
+      const batch = await firstValueFrom(this.userService.getUsersBySubService(subId)).catch(
+        () => [] as User[],
+      );
+      for (const u of batch) {
+        roster.push(u.subServiceId != null ? u : { ...u, subServiceId: subId });
+      }
+    }
+
+    const seenGuid = new Set(mapped.map((r) => r.id.trim().toLowerCase()).filter(Boolean));
+    const seenPlanningId = new Set(
+      mapped.map((r) => r.planningUserId).filter((id): id is number => id != null),
+    );
+
+    for (const u of roster) {
+      if (u.isActive === false) continue;
+      if (u.subServiceId == null || !subIds.has(u.subServiceId)) continue;
+      if (seenPlanningId.has(u.id)) continue;
+      const guid = resolveUserGuid(u).toLowerCase();
+      if (guid && seenGuid.has(guid)) continue;
+
+      const saturdayWorkMode = u.saturdayWorkMode ?? null;
+      const level = u.level ?? null;
+      const id = guid || `planning:${u.id}`;
+      mapped.push({
+        id,
+        fullName: `${u.firstName} ${u.lastName}`.trim(),
+        role: (u.roleName || '').trim() || 'Collaborateur',
+        operationalDepartment: u.orgOperationalDepartmentName?.trim() || '—',
+        pole: u.orgPoleName?.trim() || '—',
+        cellule: u.orgCelluleName?.trim() || '—',
+        service: u.orgServiceName?.trim() || u.subServiceName?.trim() || '—',
+        planningUserId: u.id,
+        subServiceId: u.subServiceId ?? null,
+        level,
+        saturdayWorkMode,
+        effectiveMode: this.resolveEffectiveMode(saturdayWorkMode, level),
+        groupNumber: 0,
+        isSpecialCase: !!u.isSpecialCase,
+        specialCaseDescription: u.specialCaseDescription ?? null,
+        isPlateauTraining: !!u.isPlateauTraining,
+      });
+      if (guid) seenGuid.add(guid);
+      seenPlanningId.add(u.id);
+    }
+  }
+
   private fetch(keepSelection = false): void {
     this.loading.set(true);
     const current = this.roleService.currentUser();
@@ -1993,7 +2142,8 @@ export class SuperviseurScopePageComponent {
       firstValueFrom(this.orgApi.loadOverview()),
       PrimeService.getOperationalOrgTree(),
       firstValueFrom(this.userService.getAllUsers()).catch(() => [] as User[]),
-    ]).then(async ([employees, overview, orgTree, planningUsers]) => {
+      firstValueFrom(this.planningService.getShiftConfigStatus()).catch(() => null),
+    ]).then(async ([employees, overview, orgTree, planningUsers, shiftStatus]) => {
       const useLegacyFallback =
         (orgTree.operationalDepartments?.length ?? 0) === 0 &&
         (orgTree.unassignedPoles?.length ?? 0) === 0;
@@ -2018,8 +2168,14 @@ export class SuperviseurScopePageComponent {
         ?? '';
       this.selectedCelluleId.set(celluleId);
       if (celluleId) this.scope.setSelectedCelluleId(celluleId, current.id);
+      const memberOrgIds = collectCelluleMemberOrgIds(
+        celluleId,
+        orgTree.operationalDepartments ?? [],
+        orgTree.unassignedPoles ?? [],
+        legacyDepartments,
+      );
       const scopeEmployees = dedupeEmployeesByEmail(
-        employeesInSuperviseurCellule(employees, celluleId),
+        employeesInSuperviseurCellule(employees, celluleId, memberOrgIds),
       );
 
       this.planningUsersByGuid = new Map(
@@ -2055,11 +2211,14 @@ export class SuperviseurScopePageComponent {
         };
       });
 
-      mapped.sort((a, b) => a.fullName.localeCompare(b.fullName));
+      await this.mergePlanningTeamIntoScopeRows(mapped, planningUsers, memberOrgIds, shiftStatus);
+      mapped.sort((a, b) => a.fullName.localeCompare(b.fullName, 'fr'));
       this.rows.set(mapped);
       this.loading.set(false);
       await this.refreshSaturdayMeta();
       await this.refreshMultiModesFlag();
+    }).catch(() => {
+      this.loading.set(false);
     });
   }
 }

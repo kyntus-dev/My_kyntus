@@ -137,7 +137,16 @@ public sealed record DocumentTemplateVariableResponse(
     int SourcePriority,
     string? NormalizedName,
     string? RawPlaceholder,
-    int SortOrder);
+    int SortOrder)
+{
+    public string? SourceFieldKey { get; init; }
+    public string? MappingConfidence { get; init; }
+    public bool MappingConfirmed { get; init; }
+    public bool MappingUnavailable { get; init; }
+    public string? SuggestedFieldKey { get; init; }
+    public string? SuggestedFieldLabel { get; init; }
+    public double? MappingScore { get; init; }
+}
 
 public sealed record DocumentTemplateDetailResponse(
     string Id,
@@ -167,6 +176,9 @@ public sealed class TemplateVariableInput
     public int? SourcePriority { get; set; }
     public string? NormalizedName { get; set; }
     public string? RawPlaceholder { get; set; }
+    public string? SourceFieldKey { get; set; }
+    public string? MappingConfidence { get; set; }
+    public bool? MappingConfirmed { get; set; }
 }
 
 public sealed record InternalEnginePlaceholderResponse(
@@ -299,6 +311,27 @@ public sealed class DocumentWorkflowRequest
 
     public IReadOnlyDictionary<string, string> Variables { get; set; } = new Dictionary<string, string>();
 }
+
+public sealed class ResolveTemplateEmployeeValuesRequest
+{
+    public Guid BeneficiaryUserId { get; set; }
+    public Dictionary<string, string>? CurrentValues { get; set; }
+}
+
+public sealed record TemplateVariableResolutionItem(
+    string Name,
+    string FormScope,
+    string? SourceFieldKey,
+    string? DisplayLabel,
+    bool IsRequired,
+    bool FilledFromDb,
+    bool NeedsRhInput,
+    bool UnavailableMapping,
+    string? DbValue,
+    string ResolvedValue);
+
+public sealed record TemplateEmployeeResolutionResponse(
+    IReadOnlyList<TemplateVariableResolutionItem> Variables);
 
 /// <summary>Entrée unique : template brut + données base + formulaire (génération IA directe, sans moteur local).</summary>
 public sealed class AiDirectDocumentFillRequest

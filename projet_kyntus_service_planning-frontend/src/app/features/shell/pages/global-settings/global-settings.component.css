@@ -128,10 +128,47 @@
   border-top: none;
 }
 
+.ks-toggle-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ks-toggle-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .ks-settings-hint {
   margin: 0 0 8px;
   color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+.ks-desktop-push-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.ks-desktop-push-row button {
+  padding: 8px 14px;
+  border-radius: var(--radius-md, 0.5rem);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--electric-blue);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.ks-desktop-push-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .ks-settings-link {

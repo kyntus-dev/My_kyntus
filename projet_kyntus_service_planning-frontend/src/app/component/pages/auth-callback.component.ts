@@ -1,12 +1,13 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { RedirectService } from '../../core/services/redirect.service';
 import { DocumentationIdentityService } from '../../core/services/documentation-identity.service';
 import { KyntusNotificationInitService } from '../../core/notifications/kyntus-notification-init.service';
-import { persistAccessTokens, clearStoredTokens, decodeJwtPayload, readJwtEmail, readJwtName, readJwtNameIdentifier, readJwtRole } from '../../core/session/kyntus-auth-token.util';
+import { clearStoredTokens } from '../../core/session/kyntus-auth-token.util';
 import { redirectToAuthLogin } from '../../core/session/kyntus-auth-refresh.service';
 import { persistReturnUrl } from '../../core/session/kyntus-return-url.util';
+import { KyntusSessionService } from '../../core/session/kyntus-session.service';
 import { KyntusThemeService, type KyntusTheme } from '../../core/theme/kyntus-theme.service';
 
 @Component({
@@ -48,6 +49,7 @@ import { KyntusThemeService, type KyntusTheme } from '../../core/theme/kyntus-th
   `],
 })
 export class AuthCallbackComponent implements OnInit {
+  private readonly session = inject(KyntusSessionService);
 
   constructor(
     private route: ActivatedRoute,
@@ -73,36 +75,9 @@ export class AuthCallbackComponent implements OnInit {
       return;
     }
 
-    persistAccessTokens(token, refresh ?? undefined);
+    this.session.persistSession(token, refresh ?? undefined);
 
     try {
-      const payload = decodeJwtPayload(token);
-      if (!payload) throw new Error('JWT payload illisible');
-
-      const role = readJwtRole(token);
-      const nameIdentifier = readJwtNameIdentifier(token);
-      const sub = payload['sub'];
-      const authUserIdRaw = nameIdentifier ? parseInt(String(nameIdentifier), 10) : NaN;
-      const authUserId = Number.isFinite(authUserIdRaw) && authUserIdRaw > 0 ? authUserIdRaw : 0;
-      const subjectId =
-        typeof sub === 'string' && sub.trim().length > 0
-          ? sub.trim()
-          : nameIdentifier.trim() !== ''
-            ? nameIdentifier.trim()
-            : '';
-      const username = readJwtName(token) || 'Utilisateur';
-      const email = readJwtEmail(token);
-
-      localStorage.setItem('user', JSON.stringify({
-        id: subjectId,
-        authUserId,
-        subjectId,
-        guid: subjectId,
-        username,
-        email,
-        role
-      }));
-
       this.documentationIdentity.syncFromJwtSession();
       this.notificationInit.connectIfAuthenticated();
 

@@ -21,14 +21,12 @@ import {
 } from 'lucide';
 import { catchError, firstValueFrom, of } from 'rxjs';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
-import { PrimeCampaignStepperComponent } from '@/shared/components/prime-campaign-stepper.component';
 import { PrimeCardComponent } from '../components/prime-card.component';
 import { PrimeNavRequestService } from '../services/prime-nav-request.service';
 import {
   draftListOrganizationalKey,
   PrimeCellPrimeApiService,
   type CelluleDraftGlobalPoolStateDto,
-  type SupervisorCelluleCampaignDto,
   type SupervisorPolePrimeDraftDto,
   type SupervisorPolePrimeDraftListItemDto,
 } from '../services/prime-cell-prime-api.service';
@@ -39,7 +37,6 @@ import {
 } from '../services/prime-global-pool-api.service';
 import { RoleService } from '../state/role.service';
 import { PrimeScopeStore } from '../state/prime-scope.store';
-import { navigatePrimeCampaignPath, resolveCampaignSaisieWizardStep } from '../lib/prime-campaign-nav';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 
 interface PeriodGroup {
@@ -101,7 +98,7 @@ function httpErrMessage(err: unknown): string {
 @Component({
   selector: 'app-prime-fiches-communes-list',
   standalone: true,
-  imports: [LucideIconComponent, PrimeCardComponent, PrimeCampaignStepperComponent],
+  imports: [LucideIconComponent, PrimeCardComponent],
   template: `
     <div class="flex flex-col min-h-0">
       <header
@@ -132,32 +129,10 @@ function httpErrMessage(err: unknown): string {
             class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
           >
             <app-lucide-icon [icon]="icons.plus" className="w-4 h-4" />
-            Ajouter une fiche
+            Nouvelle période
           </button>
         </div>
       </header>
-
-      @if (campaignRow(); as row) {
-        <div class="border-b border-default bg-card/40 px-4 py-4 sm:px-6">
-          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wide text-muted">Campagne {{ friendlyPeriod(row.period) }}</p>
-              <p class="text-sm text-primary">{{ row.celluleName }}</p>
-            </div>
-            @if (row.nextActionPath && row.nextActionLabel) {
-              <button
-                type="button"
-                (click)="continueCampaign(row)"
-                class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                {{ row.nextActionLabel }}
-                <app-lucide-icon [icon]="icons.arrowRight" className="w-4 h-4" />
-              </button>
-            }
-          </div>
-          <app-prime-campaign-stepper [steps]="row.steps" (stepClick)="onCampaignStep($event)" />
-        </div>
-      }
 
       @if (banner()) {
         <div [class]="bannerClass()" role="alert">
@@ -202,8 +177,8 @@ function httpErrMessage(err: unknown): string {
               </div>
               <h2 class="text-lg font-semibold text-primary">Aucune fiche commune en cours</h2>
               <p class="max-w-md text-sm text-muted">
-                Vous n'avez aucune fiche commune (RACC / SAV) en cours pour vos pôles supervisés. Cliquez sur
-                « Ajouter une nouvelle fiche » pour démarrer la saisie d'une nouvelle période.
+                Vous n'avez aucune partie commune (RACC / SAV) pour vos pôles supervisés. Créez une période pour
+                démarrer la saisie.
               </p>
               <div class="mt-2 flex flex-wrap items-center justify-center gap-3">
                 <button
@@ -212,7 +187,7 @@ function httpErrMessage(err: unknown): string {
                   class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
                 >
                   <app-lucide-icon [icon]="icons.plus" className="w-4 h-4" />
-                  Ajouter une nouvelle fiche
+                  Créer une période
                 </button>
                 <button
                   type="button"
@@ -281,11 +256,11 @@ function httpErrMessage(err: unknown): string {
 
                     <div>
                       <div class="mb-1.5 flex items-center justify-between text-xs">
-                        <span class="font-medium text-muted">Progression employés</span>
+                        <span class="font-medium text-muted">Progression des fiches pilotes</span>
                         <span class="font-semibold text-primary">
-                          {{ item.completeEmployees }} / {{ item.totalEmployees }} employés complets
+                          {{ item.completeEmployees }} / {{ item.totalEmployees }} fiches terminées
                           @if (item.totalEmployees === 0) {
-                            <span class="ml-1 text-muted">(aucun employé)</span>
+                            <span class="ml-1 text-muted">(aucun pilote)</span>
                           }
                         </span>
                       </div>
@@ -309,7 +284,7 @@ function httpErrMessage(err: unknown): string {
                         [disabled]="busyDraftId() === item.id"
                         class="text-xs font-medium text-[color:var(--danger-text)] hover:underline disabled:opacity-50"
                       >
-                        Supprimer
+                        Supprimer la période
                       </button>
                       <div class="flex flex-wrap items-center gap-2">
                         <button
@@ -319,7 +294,7 @@ function httpErrMessage(err: unknown): string {
                           class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                         >
                           <app-lucide-icon [icon]="icons.pen" className="w-3.5 h-3.5" />
-                          Ouvrir
+                          {{ (item.status ?? '').toLowerCase() === 'validated' ? 'Consulter la partie commune' : 'Continuer la saisie commune' }}
                         </button>
                         @if (isActionRequired(item) || (item.status ?? '').toLowerCase() === 'validated') {
                           <button
@@ -328,7 +303,7 @@ function httpErrMessage(err: unknown): string {
                             [disabled]="busyDraftId() === item.id"
                             [class]="cellPartButtonClass(item)"
                           >
-                            Fiches agents
+                            Saisir les fiches pilotes
                             <app-lucide-icon [icon]="icons.arrowRight" className="w-3.5 h-3.5" />
                           </button>
                         }
@@ -342,7 +317,7 @@ function httpErrMessage(err: unknown): string {
                         (click)="toggleGlobalPool(item)"
                         class="text-left text-xs font-semibold text-[color:var(--info-text)] hover:underline"
                       >
-                        Fichier global (Excel) — synthèse RH / Manager / Compta
+                        Fichier global (Excel) — synthèse RH / Compta
                         @if (item.poolDistributionUnlocked) {
                           <span class="ml-1 font-normal text-[color:var(--success-text)]">· diffusion débloquée</span>
                         }
@@ -357,8 +332,7 @@ function httpErrMessage(err: unknown): string {
                               Fichier : {{ st.hasFile ? (st.fileName || 'synthese.xlsx') : '— non généré —' }}
                             </p>
                             <p class="text-muted">
-                              Manager : {{ st.managerApprovedAt ? 'OK' : 'en attente' }} · RH :
-                              {{ st.rhApprovedAt ? 'OK' : 'en attente' }} · Compta :
+                              RH : {{ st.rhApprovedAt ? 'OK' : 'en attente' }} · Compta :
                               {{ st.comptaAckAt ? 'OK' : '—' }}
                             </p>
                             @if (globalPoolPreviewRows().length) {
@@ -405,16 +379,6 @@ function httpErrMessage(err: unknown): string {
                               </div>
                             }
                             <div class="flex flex-wrap gap-2">
-                              @if (role.currentUser().role === 'Manager' || role.currentRole() === 'Manager') {
-                                <button
-                                  type="button"
-                                  (click)="approveGlobalPoolManager(item)"
-                                  [disabled]="globalPoolActionBusy() || !!st.managerApprovedAt"
-                                  class="rounded bg-amber-600/80 px-2 py-1 font-semibold text-navy-950 disabled:opacity-50"
-                                >
-                                  Valider (Manager)
-                                </button>
-                              }
                               @if (role.currentUser().role === 'RH' || role.currentRole() === 'RH') {
                                 <button
                                   type="button"
@@ -440,7 +404,7 @@ function httpErrMessage(err: unknown): string {
                           }
 
                           <div class="mt-2 border-t border-default/60 pt-2">
-                            <p class="mb-1 font-semibold text-primary">Suivi synthèse &amp; paiement (par employé)</p>
+                            <p class="mb-1 font-semibold text-primary">Suivi synthèse et paiement (par pilote)</p>
                             @if (synthTrackingLoading()) {
                               <p class="text-muted">Chargement du suivi…</p>
                             } @else if (synthTracking().length === 0) {
@@ -450,7 +414,7 @@ function httpErrMessage(err: unknown): string {
                                 <table class="w-full border-collapse text-[11px]">
                                   <thead class="sticky top-0 bg-card">
                                     <tr class="text-left text-muted">
-                                      <th class="px-2 py-1 font-medium">Employé</th>
+                                      <th class="px-2 py-1 font-medium">Pilote</th>
                                       <th class="px-2 py-1 font-medium">Fiche</th>
                                       <th class="px-2 py-1 font-medium">Synthèse</th>
                                       <th class="px-2 py-1 font-medium">Paiement</th>
@@ -549,14 +513,6 @@ export class PrimeFichesCommunesListComponent implements OnInit {
   readonly globalPoolPreviewRows = signal<string[][]>([]);
   readonly synthTracking = signal<SupervisorSynthesisTrackingItemDto[]>([]);
   readonly synthTrackingLoading = signal(false);
-  readonly campaign = signal<SupervisorCelluleCampaignDto[]>([]);
-
-  readonly campaignRow = computed(() => {
-    const rows = this.campaign();
-    if (!rows.length) return null;
-    const cell = this.scope.selectedCelluleId().trim();
-    return rows.find((r) => r.celluleId === cell) ?? rows[0] ?? null;
-  });
 
   readonly groups = computed<PeriodGroup[]>(() => {
     const byPeriod = new Map<string, SupervisorPolePrimeDraftListItemDto[]>();
@@ -583,83 +539,6 @@ export class PrimeFichesCommunesListComponent implements OnInit {
     const uid = this.role.currentUser()?.id;
     if (uid) this.scope.hydrateFromStorage(uid);
     void this.refresh();
-  }
-
-  continueCampaign(row: SupervisorCelluleCampaignDto): void {
-    const wizard = resolveCampaignSaisieWizardStep(null, row.nextActionPath, row.nextActionLabel);
-    if (wizard) {
-      void this.openCampaignSaisie(row, wizard);
-      return;
-    }
-    navigatePrimeCampaignPath(this.nav, row.nextActionPath);
-  }
-
-  onCampaignStep(step: { key?: string; actionPath?: string | null; state: string; label?: string }): void {
-    if (step.state === 'blocked' && !(step.actionPath ?? '').trim()) return;
-    const wizard = resolveCampaignSaisieWizardStep(step.key, step.actionPath, step.label);
-    if (wizard) {
-      const row = this.campaignRow();
-      if (row) {
-        void this.openCampaignSaisie(row, wizard);
-        return;
-      }
-    }
-    navigatePrimeCampaignPath(this.nav, step.actionPath);
-  }
-
-  /**
-   * Ouvre le wizard partie commune sur l’étape demandée (pondérations / saisie / setup).
-   * Si pas de draft ou chemin hors saisie → navigation classique.
-   */
-  private async openCampaignSaisie(
-    row: SupervisorCelluleCampaignDto,
-    wizardStep: 'ponderations' | 'entry' | 'setup',
-  ): Promise<void> {
-    const u = this.role.currentUser();
-    if (!u?.id) return;
-
-    const uid = u.id;
-    this.scope.setPeriod(row.period, uid);
-    if (row.celluleId) this.scope.setSelectedCelluleId(row.celluleId, uid);
-
-    if (!row.draftId || !row.templateId) {
-      this.session.startWizardForSupervisor();
-      return;
-    }
-
-    this.busyDraftId.set(row.draftId);
-    this.banner.set(null);
-    try {
-      const draft = await firstValueFrom(
-        this.api.getPoleDraft(uid, row.celluleId, row.period, row.templateId).pipe(
-          catchError((err: unknown) => {
-            this.bannerKind.set('error');
-            this.banner.set(`Impossible d'ouvrir la fiche : ${httpErrMessage(err)}`);
-            return of<SupervisorPolePrimeDraftDto | null>(null);
-          }),
-        ),
-      );
-      if (!draft) {
-        navigatePrimeCampaignPath(this.nav, '/prime-saisie');
-        return;
-      }
-      const ok = this.session.startWizardFromExistingDraft(draft);
-      if (!ok) {
-        this.bannerKind.set('error');
-        this.banner.set(
-          'Impossible de reconstruire le template depuis ce brouillon (schéma ou snapshot manquant). Réimportez le template.',
-        );
-        return;
-      }
-      if (wizardStep === 'entry') {
-        this.session.goEntry();
-      } else if (wizardStep === 'setup') {
-        this.session.goBackToSetup();
-      }
-      // ponderations : déjà positionné par startWizardFromExistingDraft
-    } finally {
-      this.busyDraftId.set(null);
-    }
   }
 
   formatDate(iso: string): string {
@@ -729,8 +608,8 @@ export class PrimeFichesCommunesListComponent implements OnInit {
 
   statusLabel(status: string): string {
     const s = (status ?? '').toLowerCase();
-    if (s === 'validated') return 'Validé';
-    return 'Brouillon';
+    if (s === 'validated') return 'Validée';
+    return 'À compléter';
   }
 
   statusBadgeClass(status: string): string {
@@ -761,24 +640,9 @@ export class PrimeFichesCommunesListComponent implements OnInit {
         ),
       );
       this.items.set(list);
-      await this.loadCampaign();
     } finally {
       this.loading.set(false);
     }
-  }
-
-  private async loadCampaign(): Promise<void> {
-    const u = this.role.currentUser();
-    if (!u?.id) {
-      this.campaign.set([]);
-      return;
-    }
-    const list = await firstValueFrom(
-      this.api.getSupervisorCampaign(u.id, this.scope.period()).pipe(
-        catchError(() => of<SupervisorCelluleCampaignDto[]>([])),
-      ),
-    );
-    this.campaign.set(list);
   }
 
   onAdd(): void {
@@ -827,7 +691,7 @@ export class PrimeFichesCommunesListComponent implements OnInit {
     if (!item?.period) return;
     const uid = this.role.currentUser()?.id;
     if (uid) this.scope.setPeriod(item.period, uid);
-    this.nav.requestViewWithTab('/prime-fiches-agents', 'pilotage');
+    this.nav.requestView('/prime-fiches-pilotes');
   }
 
   async onDelete(item: SupervisorPolePrimeDraftListItemDto): Promise<void> {
@@ -926,10 +790,9 @@ export class PrimeFichesCommunesListComponent implements OnInit {
       const who = t.rejectedByRole ? ` (${t.rejectedByRole})` : '';
       return reason ? `Rejetée${who} : ${reason}` : `Rejetée${who}`;
     }
-    if (t.lineStatus === 'Approved') return 'Ligne validée (RH + Manager)';
+    if (t.lineStatus === 'Approved') return 'Ligne validée (RH)';
     const rh = t.rhDecision === 'Approved' ? 'RH OK' : t.rhDecision === 'Rejected' ? 'RH rejet' : 'RH …';
-    const mgr = t.managerDecision === 'Approved' ? 'Manager OK' : t.managerDecision === 'Rejected' ? 'Manager rejet' : 'Manager …';
-    return `${rh} · ${mgr}`;
+    return rh;
   }
 
   downloadFinalizedFiche(t: SupervisorSynthesisTrackingItemDto): void {
@@ -1015,25 +878,6 @@ export class PrimeFichesCommunesListComponent implements OnInit {
     } catch {
       this.bannerKind.set('error');
       this.banner.set('Aperçu impossible.');
-    } finally {
-      this.globalPoolActionBusy.set(false);
-    }
-  }
-
-  async approveGlobalPoolManager(item: SupervisorPolePrimeDraftListItemDto): Promise<void> {
-    const uid = this.role.currentUser()?.id;
-    const sup = this.draftSupervisorId(item);
-    if (!uid || !sup) return;
-    this.globalPoolActionBusy.set(true);
-    try {
-      const st = await firstValueFrom(
-        this.api.approveGlobalPoolManager(sup, item.id, uid).pipe(catchError(() => of<CelluleDraftGlobalPoolStateDto | null>(null))),
-      );
-      if (st) {
-        this.globalPoolState.set(st);
-        this.session.bumpDraftListRefresh();
-        await this.refresh();
-      }
     } finally {
       this.globalPoolActionBusy.set(false);
     }

@@ -17,7 +17,7 @@ import { HierarchyDrillService } from '../../state/hierarchy-drill.service';
   template: `
     <div class="space-y-6">
       <div>
-        <h2 class="text-2xl font-bold text-primary tracking-tight">Performance équipe</h2>
+        <h2 class="text-2xl font-bold text-primary tracking-tight">Performance de l’équipe</h2>
         <p class="text-muted mt-1">Suivi detaille des taches et objectifs par membre.</p>
       </div>
 

@@ -35,7 +35,12 @@
           "Host": "formation-backend",
           "Port": 8080
         }
-      ]
+      ],
+      "QoSOptions": {
+        "ExceptionsAllowedBeforeBreaking": 5,
+        "DurationOfBreak": 30000,
+        "TimeoutValue": 30000
+      }
     },
     {
       "UpstreamPathTemplate": "/api/formations/{everything}",
@@ -47,7 +52,12 @@
           "Host": "formation-backend",
           "Port": 8080
         }
-      ]
+      ],
+      "QoSOptions": {
+        "ExceptionsAllowedBeforeBreaking": 5,
+        "DurationOfBreak": 30000,
+        "TimeoutValue": 30000
+      }
     },
 
     {
@@ -148,7 +158,18 @@
           "Host": "auth-backend",
           "Port": 8080
         }
-      ]
+      ],
+      "QoSOptions": {
+        "ExceptionsAllowedBeforeBreaking": 5,
+        "DurationOfBreak": 30000,
+        "TimeoutValue": 30000
+      },
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1s",
+        "PeriodTimespan": 1,
+        "Limit": 30
+      }
     },
     {
       "UpstreamPathTemplate": "/api/auth/{everything}",
@@ -160,7 +181,18 @@
           "Host": "auth-backend",
           "Port": 8080
         }
-      ]
+      ],
+      "QoSOptions": {
+        "ExceptionsAllowedBeforeBreaking": 5,
+        "DurationOfBreak": 30000,
+        "TimeoutValue": 30000
+      },
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1s",
+        "PeriodTimespan": 1,
+        "Limit": 30
+      }
     },
 
     {
@@ -253,6 +285,30 @@
       "UpstreamPathTemplate": "/api/my-newsletters/{everything}",
       "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
       "DownstreamPathTemplate": "/api/my-newsletters/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "planning-backend",
+          "Port": 8080
+        }
+      ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/media",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "DownstreamPathTemplate": "/api/media",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "planning-backend",
+          "Port": 8080
+        }
+      ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/media/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "DownstreamPathTemplate": "/api/media/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
@@ -750,7 +806,12 @@
           "Host": "employee-directory-backend",
           "Port": 8080
         }
-      ]
+      ],
+      "QoSOptions": {
+        "ExceptionsAllowedBeforeBreaking": 5,
+        "DurationOfBreak": 30000,
+        "TimeoutValue": 30000
+      }
     },
     {
       "UpstreamPathTemplate": "/api/directory/{everything}",
@@ -762,7 +823,12 @@
           "Host": "employee-directory-backend",
           "Port": 8080
         }
-      ]
+      ],
+      "QoSOptions": {
+        "ExceptionsAllowedBeforeBreaking": 5,
+        "DurationOfBreak": 30000,
+        "TimeoutValue": 30000
+      }
     },
     {
       "UpstreamPathTemplate": "/api/iam",
@@ -838,6 +904,12 @@
     }
   ],
   "GlobalConfiguration": {
-    "BaseUrl": "http://localhost:8500"
+    "BaseUrl": "http://10.10.10.25:8500",
+    "RequestIdKey": "OcRequestId",
+    "RateLimitOptions": {
+      "DisableRateLimitHeaders": false,
+      "QuotaExceededMessage": "Trop de requêtes, réessayez plus tard.",
+      "HttpStatusCode": 429
+    }
   }
 }

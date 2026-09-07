@@ -224,6 +224,11 @@ public class DocumentTemplateVariable
     public int SourcePriority { get; set; } = 0;
     public string? NormalizedName { get; set; }
     public string? RawPlaceholder { get; set; }
+    /// <summary>Clé stable du catalogue <c>/users/fields</c> lorsque la variable est alimentée depuis l’employé.</summary>
+    public string? SourceFieldKey { get; set; }
+    /// <summary><c>high</c>, <c>medium</c> ou <c>low</c>.</summary>
+    public string? MappingConfidence { get; set; }
+    public bool MappingConfirmed { get; set; }
     public int SortOrder { get; set; }
 
     public DocumentTemplate Template { get; set; } = null!;

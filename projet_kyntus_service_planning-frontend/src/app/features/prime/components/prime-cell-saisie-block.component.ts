@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   OnInit,
   computed,
   inject,
@@ -11,9 +12,13 @@ import {
 } from '@angular/core';
 import { catchError, forkJoin, of } from 'rxjs';
 import { CheckCircle2, FileSpreadsheet, Save } from 'lucide';
+import { resolveUserGuid } from '../../../core/lib/user-guid.util';
+import { UserService } from '../../users/services/user.service';
+import type { User } from '../../users/users-module';
 import {
   CHALLENGE_FIELD_LABELS,
   PRIME_INPUT_FIELD_CLASS,
+  PRIME_COMPUTED_FIELD_CLASS,
   PRIME_KPI_GRID_CLASS,
   PRIME_FIELD_LABELS,
   customBandHeading,
@@ -32,6 +37,12 @@ import {
   templateLineForCellIndicator,
 } from '../lib/prime-cell-schema-merge';
 import {
+  defaultPlafondPrimeForLevel,
+  plafondPrimeDefaultHint,
+  resolveExpertiseLevelForPlafond,
+  type PrimeExpertiseLevel,
+} from '../lib/prime-plafond-defaults';
+import {
   emptySecteurPairValues,
   isEmptyOrNonNegativeNumberString,
   sanitizeNonNegativeNumberInput,
@@ -41,7 +52,10 @@ import {
   hasNegativeDynamicValues,
   ligneDynamicFromTemplateLine,
   type PrimeFicheLigneDynamic,
+  type PrimeFicheTemplateCustomKpi,
   type PrimeFicheTemplateLine,
+  type PrimeFicheTemplateSchema,
+  type PrimeFicheTemplateSecteurSlice,
 } from '../models/prime-fiche-template.schema';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
 import { PrimeCardComponent } from './prime-card.component';
@@ -49,11 +63,21 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
 import {
   ficheDraftIdString,
   ficheResponseSaisieJson,
+  draftResponseSaisieJson,
   PrimeCellPrimeApiService,
   type CellulePrimeIndicatorDto,
   type EmployeePrimeCellFicheDto,
   type SupervisorPolePrimeDraftDto,
 } from '../services/prime-cell-prime-api.service';
+import { computeMergedEmployeeFichePreview } from '../lib/prime-employee-fiche-merged-preview';
+import {
+  computedOverlayKey,
+  extractComputedOverlayFromRows,
+  isComputedCustomKpi,
+  isComputedSectorField,
+  isLockedSectorField,
+  isPonderationField,
+} from '../lib/prime-fiche-computed-fields';
 import { PrimeCellSaisieContextService } from '../services/prime-cell-saisie-context.service';
 import { RoleService } from '../state/role.service';
 import type { Employee } from '../models';
@@ -134,14 +158,14 @@ export interface CellSaisieSaveResult {
       } @else if (hasNoActiveIndicators()) {
         <app-prime-card
           title="Aucun indicateur configuré"
-            description="Configurez d’abord les indicateurs pour le service de cet employé (écran « Indicateurs & pondérations »)."
+            description="Configurez d’abord les indicateurs pour le service de ce pilote (écran « Indicateurs et pondérations »)."
         >
           <button
             type="button"
             (click)="goIndicators()"
             class="rounded-lg border border-[var(--info-border)] bg-[var(--info-bg)] px-4 py-2 text-sm font-semibold text-[var(--info-text)]"
           >
-            Ouvrir la configuration indicateurs
+            Configurer les indicateurs
           </button>
         </app-prime-card>
       } @else {
@@ -165,11 +189,11 @@ export interface CellSaisieSaveResult {
           >
             <h3 class="text-sm font-semibold text-primary">Plafonds (pilote)</h3>
             <p class="text-xs text-muted">
-              Montants ou seuils plafond saisis une fois par fiche pilote (partie cellule).
+              Montants plafond saisis une fois par fiche pilote (partie cellule), en DH.
             </p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label class="block text-sm font-medium text-muted mb-2">Plafond Prime</label>
+                <label class="block text-sm font-medium text-muted mb-2">Plafond Prime (DH)</label>
                 <input
                   type="number"
                   min="0"
@@ -179,9 +203,10 @@ export interface CellSaisieSaveResult {
                   [class]="inputFieldClass"
                   autocomplete="off"
                 />
+                <p class="mt-1 text-[11px] text-muted">{{ plafondPrimeHint() }}</p>
               </div>
               <div>
-                <label class="block text-sm font-medium text-muted mb-2">Plafond Challenge</label>
+                <label class="block text-sm font-medium text-muted mb-2">Plafond Challenge (DH)</label>
                 <input
                   type="number"
                   min="0"
@@ -227,14 +252,22 @@ export interface CellSaisieSaveResult {
                       <div [class]="kpiGridClass">
                         @for (fl of primeFieldLabels; track fl.key) {
                           <div class="min-w-0">
-                            <label class="mb-1 block text-sm font-medium text-muted">{{ fl.label }}</label>
-                            @if (fl.key === 'ponderationPrime') {
+                            <label class="mb-1 block text-sm font-medium text-muted">
+                              {{ fl.label }}
+                              @if (fl.key !== 'ponderationPrime' && isSectorFieldComputed(run.templateLine, s, fl.key)) {
+                                <span class="normal-case font-normal text-[11px] text-muted">(calculé)</span>
+                              }
+                            </label>
+                            @if (isSectorFieldLocked(run.templateLine, s, fl.key)) {
                               <div
-                                class="w-full px-3 py-2 rounded-lg border border-default bg-input/60 text-primary text-sm"
+                                [class]="computedFieldClass"
+                                [title]="sectorFieldTitle(run.templateLine, s, fl.key)"
                               >
-                                {{ dynSector(run.indicator.id, s.sectorIndex)[fl.key] || '—' }}
+                                {{ displaySectorField(run.indicator.id, run.templateLine, s, fl.key) }}
                               </div>
-                              <p class="text-[10px] text-muted mt-1">Pondération issue de la config indicateur (%).</p>
+                              @if (fl.key === 'ponderationPrime') {
+                                <p class="text-[10px] text-muted mt-1">Pondération issue de la config indicateur (%).</p>
+                              }
                             } @else {
                               <input
                                 type="number"
@@ -242,7 +275,7 @@ export interface CellSaisieSaveResult {
                                 min="0"
                                 [class]="inputFieldClass"
                                 [value]="dynSector(run.indicator.id, s.sectorIndex)[fl.key]"
-                                (input)="onSectorInput(run.indicator.id, s.sectorIndex, fl.key, $any($event.target).value)"
+                                (input)="onSectorInput(run.indicator.id, s.sectorIndex, fl.key, $any($event.target).value, run.templateLine, s)"
                               />
                             }
                           </div>
@@ -256,14 +289,22 @@ export interface CellSaisieSaveResult {
                       <div [class]="kpiGridClass">
                         @for (fl of challengeFieldLabels; track fl.key) {
                           <div class="min-w-0">
-                            <label class="mb-1 block text-sm font-medium text-muted">{{ fl.label }}</label>
-                            @if (fl.key === 'ponderationChallenge') {
+                            <label class="mb-1 block text-sm font-medium text-muted">
+                              {{ fl.label }}
+                              @if (fl.key !== 'ponderationChallenge' && isSectorFieldComputed(run.templateLine, s, fl.key)) {
+                                <span class="normal-case font-normal text-[11px] text-muted">(calculé)</span>
+                              }
+                            </label>
+                            @if (isSectorFieldLocked(run.templateLine, s, fl.key)) {
                               <div
-                                class="w-full px-3 py-2 rounded-lg border border-default bg-input/60 text-primary text-sm"
+                                [class]="computedFieldClass"
+                                [title]="sectorFieldTitle(run.templateLine, s, fl.key)"
                               >
-                                {{ dynSector(run.indicator.id, s.sectorIndex)[fl.key] || '—' }}
+                                {{ displaySectorField(run.indicator.id, run.templateLine, s, fl.key) }}
                               </div>
-                              <p class="text-[10px] text-muted mt-1">Pondération issue de la config indicateur (%).</p>
+                              @if (fl.key === 'ponderationChallenge') {
+                                <p class="text-[10px] text-muted mt-1">Pondération issue de la config indicateur (%).</p>
+                              }
                             } @else {
                               <input
                                 type="number"
@@ -271,7 +312,7 @@ export interface CellSaisieSaveResult {
                                 min="0"
                                 [class]="inputFieldClass"
                                 [value]="dynSector(run.indicator.id, s.sectorIndex)[fl.key]"
-                                (input)="onSectorInput(run.indicator.id, s.sectorIndex, fl.key, $any($event.target).value)"
+                                (input)="onSectorInput(run.indicator.id, s.sectorIndex, fl.key, $any($event.target).value, run.templateLine, s)"
                               />
                             }
                           </div>
@@ -289,17 +330,31 @@ export interface CellSaisieSaveResult {
                         <div [class]="kpiGridClass">
                           @for (ck of s.customKpis; track ck.id) {
                             <div class="min-w-0">
-                              <label class="mb-1 block text-sm font-medium text-muted">{{ ck.header }}</label>
-                              <input
-                                type="number"
-                                step="any"
-                                min="0"
-                                [class]="inputFieldClass"
-                                [value]="dynCustom(run.indicator.id, s.sectorIndex, ck.id)"
-                                (input)="
-                                  onCustomInput(run.indicator.id, s.sectorIndex, ck.id, $any($event.target).value)
-                                "
-                              />
+                              <label class="mb-1 block text-sm font-medium text-muted">
+                                {{ ck.header }}
+                                @if (isCustomComputed(run.templateLine, ck)) {
+                                  <span class="normal-case font-normal text-[11px] text-muted">(calculé)</span>
+                                }
+                              </label>
+                              @if (isCustomComputed(run.templateLine, ck)) {
+                                <div
+                                  [class]="computedFieldClass"
+                                  title="Calculé d’après le modèle Excel"
+                                >
+                                  {{ displayCustomValue(run.indicator.id, run.templateLine, s.sectorIndex, ck) }}
+                                </div>
+                              } @else {
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0"
+                                  [class]="inputFieldClass"
+                                  [value]="dynCustom(run.indicator.id, s.sectorIndex, ck.id)"
+                                  (input)="
+                                    onCustomInput(run.indicator.id, s.sectorIndex, ck.id, $any($event.target).value, run.templateLine, ck)
+                                  "
+                                />
+                              }
                             </div>
                           }
                         </div>
@@ -358,6 +413,9 @@ export class PrimeCellSaisieBlockComponent implements OnInit {
   private readonly role = inject(RoleService);
   private readonly nav = inject(PrimeNavRequestService);
   private readonly cellCtx = inject(PrimeCellSaisieContextService);
+  private readonly userService = inject(UserService);
+  private readonly destroyRef = inject(DestroyRef);
+  private overlayTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly icons = { sheet: FileSpreadsheet, save: Save, check: CheckCircle2 };
 
@@ -377,6 +435,7 @@ export class PrimeCellSaisieBlockComponent implements OnInit {
   readonly primeFieldLabels = PRIME_FIELD_LABELS;
   readonly challengeFieldLabels = CHALLENGE_FIELD_LABELS;
   readonly inputFieldClass = PRIME_INPUT_FIELD_CLASS;
+  readonly computedFieldClass = PRIME_COMPUTED_FIELD_CLASS;
   readonly kpiGridClass = PRIME_KPI_GRID_CLASS;
   readonly customBandHeading = customBandHeading;
 
@@ -391,17 +450,23 @@ export class PrimeCellSaisieBlockComponent implements OnInit {
   readonly dynamicByIndicator = signal<Record<string, PrimeFicheLigneDynamic>>({});
   readonly plafondPrime = signal('');
   readonly plafondChallenge = signal('');
+  readonly expertiseLevel = signal<PrimeExpertiseLevel>(1);
   readonly schemaBanner = signal<string | null>(null);
   readonly bannerIsInfo = signal(false);
   readonly saving = signal(false);
   readonly saveBanner = signal<string | null>(null);
   readonly saveError = signal<string | null>(null);
   readonly employeeLabel = signal<string>('');
+  readonly overlayMap = signal<Record<string, string>>({});
+  readonly poleSchema = signal<PrimeFicheTemplateSchema | null>(null);
+  readonly snapshotJson = signal<string | null>(null);
+  readonly poleSaisieJson = signal('{}');
+  readonly overlayTemplateId = signal('');
 
   readonly employeeTitle = computed(() => {
     const id = this.employeeId();
     const lbl = this.employeeLabel();
-    return lbl ? `${lbl}` : `Employé ${id}`;
+    return lbl ? `${lbl}` : `Pilote ${id}`;
   });
 
   readonly hasNoActiveIndicators = computed(() => !this.indicators().some((i) => i.isActive));
@@ -426,7 +491,12 @@ export class PrimeCellSaisieBlockComponent implements OnInit {
 
   readonly unconfirmedCarriedCount = computed(() => countUnconfirmedCarriedLines(this.dynamicByIndicator()));
 
+  readonly plafondPrimeHint = computed(() => plafondPrimeDefaultHint(this.expertiseLevel()));
+
   ngOnInit(): void {
+    this.destroyRef.onDestroy(() => {
+      if (this.overlayTimer) clearTimeout(this.overlayTimer);
+    });
     void this.runLoad(this.employeeId(), this.period());
   }
 
@@ -464,15 +534,24 @@ export class PrimeCellSaisieBlockComponent implements OnInit {
   onPlafondPrimeInput(value: string): void {
     this.plafondPrime.set(sanitizeNonNegativeNumberInput(value));
     this.saveBanner.set(null);
+    this.scheduleComputedOverlay();
   }
 
   onPlafondChallengeInput(value: string): void {
     this.plafondChallenge.set(sanitizeNonNegativeNumberInput(value));
     this.saveBanner.set(null);
+    this.scheduleComputedOverlay();
   }
 
-  onSectorInput(indicatorId: string, sectorIndex: number, field: keyof PrimeFicheSecteurPairValues, value: string): void {
-    if (field === 'ponderationPrime' || field === 'ponderationChallenge') return;
+  onSectorInput(
+    indicatorId: string,
+    sectorIndex: number,
+    field: keyof PrimeFicheSecteurPairValues,
+    value: string,
+    line?: PrimeFicheTemplateLine,
+    secteur?: PrimeFicheTemplateSecteurSlice,
+  ): void {
+    if (isLockedSectorField(secteur, field, line)) return;
     const next = sanitizeNonNegativeNumberInput(value);
     this.dynamicByIndicator.update((m) => {
       let cur = markLineConfirmedOnMeasureEdit(m[indicatorId] ?? this.dynRow(indicatorId));
@@ -483,9 +562,18 @@ export class PrimeCellSaisieBlockComponent implements OnInit {
       return { ...m, [indicatorId]: cur };
     });
     this.saveBanner.set(null);
+    this.scheduleComputedOverlay();
   }
 
-  onCustomInput(indicatorId: string, sectorIndex: number, customId: string, value: string): void {
+  onCustomInput(
+    indicatorId: string,
+    sectorIndex: number,
+    customId: string,
+    value: string,
+    line?: PrimeFicheTemplateLine,
+    kpi?: PrimeFicheTemplateCustomKpi,
+  ): void {
+    if (isComputedCustomKpi(kpi, line)) return;
     const next = sanitizeNonNegativeNumberInput(value);
     this.dynamicByIndicator.update((m) => {
       let cur = markLineConfirmedOnMeasureEdit(m[indicatorId] ?? this.dynRow(indicatorId));
@@ -497,6 +585,90 @@ export class PrimeCellSaisieBlockComponent implements OnInit {
       return { ...m, [indicatorId]: cur };
     });
     this.saveBanner.set(null);
+    this.scheduleComputedOverlay();
+  }
+
+  isSectorFieldComputed(
+    line: PrimeFicheTemplateLine,
+    secteur: PrimeFicheTemplateSecteurSlice,
+    key: keyof PrimeFicheSecteurPairValues,
+  ): boolean {
+    return isComputedSectorField(secteur, key, line);
+  }
+
+  isSectorFieldLocked(
+    line: PrimeFicheTemplateLine,
+    secteur: PrimeFicheTemplateSecteurSlice,
+    key: keyof PrimeFicheSecteurPairValues,
+  ): boolean {
+    return isLockedSectorField(secteur, key, line);
+  }
+
+  isCustomComputed(line: PrimeFicheTemplateLine, kpi: PrimeFicheTemplateCustomKpi): boolean {
+    return isComputedCustomKpi(kpi, line);
+  }
+
+  sectorFieldTitle(
+    line: PrimeFicheTemplateLine,
+    secteur: PrimeFicheTemplateSecteurSlice,
+    key: keyof PrimeFicheSecteurPairValues,
+  ): string {
+    if (isPonderationField(key)) return 'Pondération définie dans Indicateurs & pondérations (par cellule)';
+    if (isComputedSectorField(secteur, key, line)) return 'Calculé d’après le modèle Excel — non modifiable';
+    return '';
+  }
+
+  displaySectorField(
+    indicatorId: string,
+    line: PrimeFicheTemplateLine,
+    secteur: PrimeFicheTemplateSecteurSlice,
+    field: keyof PrimeFicheSecteurPairValues,
+  ): string {
+    if (!isPonderationField(field) && isComputedSectorField(secteur, field, line)) {
+      const ov = this.overlayMap()[computedOverlayKey(line.stableId, 'field', secteur.sectorIndex, field)];
+      if (ov) return ov;
+    }
+    const v = this.dynSector(indicatorId, secteur.sectorIndex)[field]?.trim();
+    return v ? v : '—';
+  }
+
+  displayCustomValue(
+    indicatorId: string,
+    line: PrimeFicheTemplateLine,
+    sectorIndex: number,
+    kpi: PrimeFicheTemplateCustomKpi,
+  ): string {
+    if (isComputedCustomKpi(kpi, line)) {
+      const ov = this.overlayMap()[computedOverlayKey(line.stableId, 'custom', sectorIndex, kpi.id)];
+      if (ov) return ov;
+    }
+    const v = this.dynCustom(indicatorId, sectorIndex, kpi.id)?.trim();
+    return v ? v : '—';
+  }
+
+  private scheduleComputedOverlay(): void {
+    if (this.overlayTimer) clearTimeout(this.overlayTimer);
+    this.overlayTimer = setTimeout(() => this.refreshComputedOverlay(), 250);
+  }
+
+  private refreshComputedOverlay(): void {
+    const schema = this.poleSchema();
+    const snap = this.snapshotJson();
+    if (!schema || !snap) {
+      this.overlayMap.set({});
+      return;
+    }
+    const rows = this.runs().map((r) => cellRowPayloadForJson(r.indicator.id, this.dynRow(r.indicator.id)));
+    const cellSaisieJson = buildCellSaisieJsonV2(this.plafondPrime(), this.plafondChallenge(), rows);
+    const merged = computeMergedEmployeeFichePreview({
+      schema,
+      poleSaisieJson: this.poleSaisieJson(),
+      cellSaisieJson,
+      templateCalcSnapshotJson: snap,
+      indicators: this.indicators(),
+      templateId: this.overlayTemplateId() || 'cell-overlay',
+    });
+    this.overlayMap.set(extractComputedOverlayFromRows(merged.rows, merged.effectiveSchema ?? schema));
   }
 
   confirmAllCarried(): void {
@@ -517,23 +689,28 @@ export class PrimeCellSaisieBlockComponent implements OnInit {
 
     forkJoin({
       emps: this.http.get<Employee[]>('/api/prime/employees').pipe(catchError(() => of([] as Employee[]))),
+      users: this.userService.getAllUsers().pipe(catchError(() => of([] as User[]))),
       fiche: this.api.getFicheForEmployee(sup.id, empId, period, explicitTpl || undefined),
     }).subscribe({
-      next: ({ emps, fiche }) => {
+      next: ({ emps, users, fiche }) => {
         const e = emps.find((x) => x.id === empId);
         if (e) this.employeeLabel.set(`${e.firstName} ${e.lastName}`);
+        const planningUser = users.find(
+          (u) => resolveUserGuid(u).toLowerCase() === empId.trim().toLowerCase(),
+        );
+        const level = resolveExpertiseLevelForPlafond(planningUser);
+        this.expertiseLevel.set(level);
         this.poleDraftId.set(ficheDraftIdString(fiche));
         this.fillingStatus.set(fiche.fillingStatus);
         this.celluleId.set(fiche.celluleId);
         this.serviceId.set(fiche.serviceId);
         const poleResolved = (explicitPole || fiche.celluleId || '').trim();
 
-        this.api.getIndicators(fiche.serviceId, sup.id).subscribe({
+        this.api.getIndicators(fiche.serviceId, sup.id, empId).subscribe({
           next: (inds) => {
             this.indicators.set(inds);
             const parsed = parseCellSaisieJson(ficheResponseSaisieJson(fiche));
-            this.plafondPrime.set(parsed.plafondPrime);
-            this.plafondChallenge.set(parsed.plafondChallenge);
+            this.applyPlafondsFromParsed(parsed, level);
 
             const resolveDraft = (templateId: string | null) => {
               if (!templateId || !poleResolved) {
@@ -570,6 +747,15 @@ export class PrimeCellSaisieBlockComponent implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  private applyPlafondsFromParsed(
+    parsed: ReturnType<typeof parseCellSaisieJson>,
+    level: PrimeExpertiseLevel,
+  ): void {
+    const savedPrime = parsed.plafondPrime.trim();
+    this.plafondPrime.set(savedPrime !== '' ? savedPrime : defaultPlafondPrimeForLevel(level));
+    this.plafondChallenge.set(parsed.plafondChallenge);
   }
 
   private finalizeAfterDraft(
@@ -653,7 +839,12 @@ export class PrimeCellSaisieBlockComponent implements OnInit {
     }
     this.runs.set(runs);
     this.dynamicByIndicator.set(dyn);
+    this.poleSchema.set(schema);
+    this.snapshotJson.set(draft?.templateCalcSnapshotJson ?? null);
+    this.poleSaisieJson.set(draft ? draftResponseSaisieJson(draft) : '{}');
+    this.overlayTemplateId.set((draft?.templateId ?? this.linkedTemplateId()?.trim() ?? '').trim());
     this.loading.set(false);
+    this.scheduleComputedOverlay();
   }
 
   save(): void {

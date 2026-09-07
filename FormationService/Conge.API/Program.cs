@@ -1,6 +1,7 @@
 using Conge.Application.Abstractions;
 using Conge.Application.Behaviors;
 using Conge.Application.Contracts;
+using Conge.Application.Services;
 using Conge.Domain.Interfaces;
 using Conge.Infrastructure.Data;
 using Conge.Infrastructure.Messaging;
@@ -10,6 +11,7 @@ using Conge.Infrastructure.Persistence;
 using Conge.Infrastructure.Persistence.Repositories;
 using Conge.Infrastructure.Services;
 using FluentValidation;
+using Kyntus.Caching;
 using Kyntus.Identity.Jwt;
 using Kyntus.Iam;
 using MassTransit;
@@ -38,12 +40,14 @@ builder.Services.AddScoped<IQuotaCongeServiceRepository, QuotaCongeServiceReposi
 builder.Services.AddScoped<IOrgNodeCongeRepository, OrgNodeCongeRepository>();
 builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<CongeDbContext>());
 builder.Services.AddScoped<Conge.Application.Services.CongeReglesService>();
+builder.Services.AddScoped<Conge.Application.Services.CongeValidationFinalizer>();
+builder.Services.AddScoped<ILeaveWorkflowPolicy, DirectoryLeaveWorkflowPolicy>();
 
 var directoryBaseUrl = builder.Configuration["Directory:BaseUrl"] ?? "http://employee-directory-backend:8080";
 builder.Services.AddKyntusJwtAuthentication(builder.Configuration);
 builder.Services.AddKyntusIamViaDirectoryHttp(directoryBaseUrl);
 
-builder.Services.AddMemoryCache();
+builder.Services.AddKyntusCaching(builder.Configuration);
 builder.Services.AddHttpClient("directory-org", c =>
 {
     c.BaseAddress = new Uri(directoryBaseUrl.TrimEnd('/') + "/");
@@ -54,10 +58,25 @@ builder.Services.AddScoped<DirectoryOrgCatalog>(sp =>
     return new DirectoryOrgCatalog(
         http,
         sp.GetRequiredService<IOrgNodeCongeRepository>(),
-        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+        sp.GetRequiredService<ICacheService>(),
         sp.GetRequiredService<ILogger<DirectoryOrgCatalog>>());
 });
 builder.Services.AddScoped<IDirectoryOrgCatalog>(sp => sp.GetRequiredService<DirectoryOrgCatalog>());
+builder.Services.AddScoped<IEmployeSnapshotEnsure, EmployeSnapshotEnsure>();
+if (isTesting)
+{
+    builder.Services.AddSingleton<IDirectoryEmployeeLookup, NullDirectoryEmployeeLookup>();
+}
+else
+{
+    builder.Services.AddScoped<IDirectoryEmployeeLookup>(sp =>
+    {
+        var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("directory-org");
+        return new DirectoryEmployeeLookup(
+            http,
+            sp.GetRequiredService<ILogger<DirectoryEmployeeLookup>>());
+    });
+}
 if (!isTesting)
     builder.Services.AddHostedService<CongeDirectoryOrgBootstrap>();
 
@@ -79,6 +98,8 @@ else
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<SoldeAnnuelInitialiseConsumer>();
+    x.AddConsumer<EmployeCreatedConsumer>();
+    x.AddConsumer<EmployeUpdatedConsumer>();
     x.AddConsumer<OrgAssignmentCongeSyncConsumer>();
     x.AddConsumer<DirectoryEmployeeCongeProjectionConsumer>();
     x.AddConsumer<DirectoryEmployeeHrProfileCongeProjectionConsumer>();
@@ -97,6 +118,16 @@ builder.Services.AddMassTransit(x =>
         {
             e.Bind("Kyntus.Messaging.Contracts:SoldeAnnuelInitialiseMessage");
             e.ConfigureConsumer<SoldeAnnuelInitialiseConsumer>(ctx);
+        });
+
+        cfg.ReceiveEndpoint("conge-employe-created", e =>
+        {
+            e.ConfigureConsumer<EmployeCreatedConsumer>(ctx);
+        });
+
+        cfg.ReceiveEndpoint("conge-employe-updated", e =>
+        {
+            e.ConfigureConsumer<EmployeUpdatedConsumer>(ctx);
         });
 
         cfg.ReceiveEndpoint("conge-org-assignment", e =>
@@ -139,9 +170,10 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll", policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .WithOrigins("http://localhost:8200", "http://localhost:8201")
             .AllowAnyMethod()
-            .AllowAnyHeader();
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
 
@@ -197,13 +229,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// ? Swagger accessible aussi en Production pour les tests internes
-if (app.Environment.IsProduction())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Conge API v1"));
-}
-
 // ? HttpsRedirection d�sactiv� � cause des conflits derri�re Docker/Ocelot
 // app.UseHttpsRedirection();
 
@@ -211,6 +236,7 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "conge" }));
 
 app.Run();
 

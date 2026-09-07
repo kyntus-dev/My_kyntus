@@ -38,7 +38,30 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <script src="kyntus-public-urls.js?v=local-localhost"></script>
+  <script src="kyntus-public-urls.js?v=deploy-10.10.10.25"></script>
+  <script>
+    (function () {
+      function readCookie(name) {
+        var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=(light|dark)(?:;|$)'));
+        return m ? m[1] : null;
+      }
+      var theme = null;
+      try {
+        var q = new URLSearchParams(location.search).get('theme');
+        if (q === 'light' || q === 'dark') theme = q;
+      } catch (e) {}
+      if (!theme) theme = readCookie('kyntus_theme');
+      if (!theme) {
+        try { theme = localStorage.getItem('kyntus_theme'); } catch (e) {}
+      }
+      if (theme !== 'dark' && theme !== 'light') theme = 'light';
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+      document.addEventListener('DOMContentLoaded', function () {
+        document.body.classList.remove('theme-light', 'theme-dark');
+        document.body.classList.add('theme-' + theme);
+      });
+    })();
+  </script>
 </head>
 <body>
   <app-root></app-root>

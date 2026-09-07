@@ -52,7 +52,7 @@ public sealed class DocumentationUserContextMiddleware(
                 return;
             }
 
-            var tenantId = configuration["Documentation:DefaultTenantId"]?.Trim() ?? "atlas-tech-demo";
+            var tenantId = DocumentationTenantAccessor.ResolveConfiguredDefault(configuration);
             var directoryUser = await directoryLookup.ResolveAsync(
                 httpContext.User,
                 tenantId,

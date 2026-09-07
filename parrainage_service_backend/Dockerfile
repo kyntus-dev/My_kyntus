@@ -5,6 +5,7 @@ WORKDIR /src
 COPY Messaging.Contracts/Messaging.Contracts.csproj Messaging.Contracts/
 COPY Kyntus.Identity.Jwt/Kyntus.Identity.Jwt.csproj Kyntus.Identity.Jwt/
 COPY Kyntus.Iam/Kyntus.Iam.csproj Kyntus.Iam/
+COPY Kyntus.Caching/Kyntus.Caching.csproj Kyntus.Caching/
 COPY parrainage_service_backend/Parrainage.Domain/Parrainage.Domain.csproj parrainage_service_backend/Parrainage.Domain/
 COPY parrainage_service_backend/Parrainage.Application/Parrainage.Application.csproj parrainage_service_backend/Parrainage.Application/
 COPY parrainage_service_backend/Parrainage.Infrastructure/Parrainage.Infrastructure.csproj parrainage_service_backend/Parrainage.Infrastructure/
@@ -14,6 +15,7 @@ RUN dotnet restore parrainage_service_backend/Parrainage.API/Parrainage.API.cspr
 COPY Messaging.Contracts/ Messaging.Contracts/
 COPY Kyntus.Identity.Jwt/ Kyntus.Identity.Jwt/
 COPY Kyntus.Iam/ Kyntus.Iam/
+COPY Kyntus.Caching/ Kyntus.Caching/
 COPY parrainage_service_backend/ parrainage_service_backend/
 RUN dotnet publish parrainage_service_backend/Parrainage.API/Parrainage.API.csproj -c Release -o /out
 

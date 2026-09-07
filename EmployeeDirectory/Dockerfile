@@ -5,6 +5,7 @@ COPY Messaging.Contracts/Messaging.Contracts.csproj Messaging.Contracts/
 COPY Kyntus.Identity.Jwt/Kyntus.Identity.Jwt.csproj Kyntus.Identity.Jwt/
 COPY Kyntus.Messaging.Outbox/Kyntus.Messaging.Outbox.csproj Kyntus.Messaging.Outbox/
 COPY Kyntus.Iam/Kyntus.Iam.csproj Kyntus.Iam/
+COPY Kyntus.Caching/Kyntus.Caching.csproj Kyntus.Caching/
 COPY EmployeeDirectory/EmployeeDirectory.Domain/EmployeeDirectory.Domain.csproj EmployeeDirectory/EmployeeDirectory.Domain/
 COPY EmployeeDirectory/EmployeeDirectory.Application/EmployeeDirectory.Application.csproj EmployeeDirectory/EmployeeDirectory.Application/
 COPY EmployeeDirectory/EmployeeDirectory.Infrastructure/EmployeeDirectory.Infrastructure.csproj EmployeeDirectory/EmployeeDirectory.Infrastructure/
@@ -16,6 +17,7 @@ COPY Messaging.Contracts/ Messaging.Contracts/
 COPY Kyntus.Identity.Jwt/ Kyntus.Identity.Jwt/
 COPY Kyntus.Messaging.Outbox/ Kyntus.Messaging.Outbox/
 COPY Kyntus.Iam/ Kyntus.Iam/
+COPY Kyntus.Caching/ Kyntus.Caching/
 COPY EmployeeDirectory/ EmployeeDirectory/
 
 RUN dotnet publish EmployeeDirectory/EmployeeDirectory.API/EmployeeDirectory.API.csproj -c Release -o /out

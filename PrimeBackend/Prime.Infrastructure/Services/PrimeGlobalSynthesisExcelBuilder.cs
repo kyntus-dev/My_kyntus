@@ -12,7 +12,7 @@ public static class PrimeGlobalSynthesisExcelBuilder
     {
         using var wb = new XLWorkbook();
         var cover = wb.Worksheets.Add("Synthèse");
-        cover.Cell(1, 1).Value = "PRIME — Synthèse globale (plafonds pilote)";
+        cover.Cell(1, 1).Value = "PRIME — Synthèse globale (montants TOTAL Général)";
         cover.Cell(2, 1).Value = "Période";
         cover.Cell(2, 2).Value = period;
         cover.Cell(3, 1).Value = "Périmètre";
@@ -21,13 +21,13 @@ public static class PrimeGlobalSynthesisExcelBuilder
         cover.Cell(4, 2).Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
         cover.Cell(6, 1).Value = "Lignes approuvées";
         cover.Cell(6, 2).Value = lines.Count;
-        cover.Cell(7, 1).Value = "Total plafond prime";
+        cover.Cell(7, 1).Value = "Total Prime";
         cover.Cell(7, 2).Value = lines.Sum(l => l.PrimeAmount ?? 0m);
         cover.Cell(7, 2).Style.NumberFormat.Format = "# ##0.00";
-        cover.Cell(8, 1).Value = "Total plafond challenge";
+        cover.Cell(8, 1).Value = "Total Challenge";
         cover.Cell(8, 2).Value = lines.Sum(l => l.ChallengeAmount ?? 0m);
         cover.Cell(8, 2).Style.NumberFormat.Format = "# ##0.00";
-        cover.Cell(9, 1).Value = "Total plafond";
+        cover.Cell(9, 1).Value = "Total général";
         cover.Cell(9, 2).Value = lines.Sum(l => l.TotalAmount ?? 0m);
         cover.Cell(9, 2).Style.NumberFormat.Format = "# ##0.00";
         cover.Cell(10, 1).Value = "Total sanctions";
@@ -43,7 +43,7 @@ public static class PrimeGlobalSynthesisExcelBuilder
         var ws = wb.Worksheets.Add("Détail employés");
         var headers = new[]
         {
-            "Employé", "Plafond Prime", "Plafond Challenge", "Total plafond",
+            "Employé", "Montant Prime", "Montant Challenge", "Total",
             "Absences (j.)", "Sanction", "Régularisation", "Total net",
         };
         for (var c = 0; c < headers.Length; c++)

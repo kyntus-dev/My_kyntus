@@ -298,6 +298,20 @@ public sealed class DocumentationDocumentTemplatesController(
         catch (DocumentationApiException ex) { return MapExceptionResult(ex); }
     }
 
+    [HttpPost("document-templates/{id:guid}/resolve-employee-values")]
+    public async Task<IActionResult> ResolveEmployeeValues(
+        Guid id,
+        [FromBody] ResolveTemplateEmployeeValuesRequest body,
+        CancellationToken ct)
+    {
+        if (templates is null) return StatusCode(503, new { message = "Base de données non configurée." });
+        try
+        {
+            return Ok(await mediator.Send(new ResolveTemplateEmployeeValuesCommand(id, body), ct));
+        }
+        catch (DocumentationApiException ex) { return MapExceptionResult(ex); }
+    }
+
     private void ApplyResponseHeaders(IReadOnlyDictionary<string, string>? headers)
     {
         if (headers is null) return;

@@ -34,13 +34,34 @@
 .badge-refused { background: var(--danger-bg); color: var(--danger-text); }
 .badge-cancel { background: var(--bg-input); color: var(--text-muted); }
 .ce-btn-cancel { background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); border-radius: var(--radius-md, 0.5rem); padding: 4px 10px; cursor: pointer; font-size: 12px; font-weight: 600; }
-.ce-modal-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--navy-950, #0f172a) 40%, transparent); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.ce-modal { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-card, 0.875rem); width: 100%; max-width: 560px; box-shadow: var(--shadow-3, 0 12px 32px rgb(2 6 23 / 0.16)); overflow: hidden; }
+.ce-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--navy-950, #0f172a) 40%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.ce-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card, 0.875rem);
+  width: min(960px, calc(100vw - 32px));
+  max-width: min(960px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-3, 0 12px 32px rgb(2 6 23 / 0.16));
+  overflow: hidden;
+}
 .ce-calendar {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md, 0.5rem);
-  padding: 12px;
+  padding: 14px;
   background: var(--bg-input);
+  min-width: 0;
 }
 .ce-cal-head {
   display: flex;
@@ -95,8 +116,8 @@
   cursor: default;
 }
 .ce-cal-day.is-blocked {
-  background: #e2e8f0;
-  color: #94a3b8;
+  background: color-mix(in srgb, var(--text-muted) 22%, var(--bg-card));
+  color: var(--text-muted);
   text-decoration: line-through;
   cursor: not-allowed;
   opacity: 0.75;
@@ -116,14 +137,33 @@
   font-size: 0.72rem;
   color: var(--text-muted);
 }
-.ce-modal-head { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid var(--border-color); }
+.ce-modal-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
 .ce-modal-head h3 { font-size: 16px; font-weight: 700; color: var(--text-primary); margin: 0; }
 .ce-modal-head button { background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer; }
-.ce-modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
-.ce-modal-foot { padding: 16px 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px; }
+.ce-modal-body { padding: 20px 24px; overflow: auto; flex: 1; min-height: 0; }
+.ce-modal-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.1fr);
+  gap: 20px 24px;
+  align-items: start;
+}
+.ce-modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.ce-modal-foot { padding: 14px 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; flex-shrink: 0; }
 .ce-field { display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .ce-field label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
 .ce-hint { font-size: 11px; color: var(--text-muted); }
 .ce-row { display: flex; gap: 12px; }
 .ce-info-solde { display: flex; align-items: center; gap: 8px; background: var(--info-bg); border: 1px solid var(--info-border); border-radius: var(--radius-md, 0.5rem); padding: 10px 14px; font-size: 13px; color: var(--info-text); }
-@media (max-width: 768px) { .ce-solde-grid { grid-template-columns: repeat(2, 1fr); } .ce-header { flex-direction: column; align-items: flex-start; gap: 12px; } .ce-row { flex-direction: column; } }
+.ce-forbid-hint { font-size: 13px; color: var(--text-muted); margin: 0; }
+@media (max-width: 768px) {
+  .ce-solde-grid { grid-template-columns: repeat(2, 1fr); }
+  .ce-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .ce-row { flex-direction: column; }
+  .ce-modal-layout { grid-template-columns: 1fr; }
+  .ce-modal { width: min(100%, calc(100vw - 24px)); max-width: min(100%, calc(100vw - 24px)); }
+}

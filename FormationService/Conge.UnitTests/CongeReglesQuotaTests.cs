@@ -11,8 +11,34 @@ public class CongeReglesQuotaTests
     private sealed class FakePeriodeRepo : IPeriodeInterditeRepository
     {
         public PeriodeInterditeConge Row { get; } = PeriodeInterditeConge.CreerParDefaut();
+        public List<PeriodeInterditeConge> Rows { get; } = new();
+
+        public FakePeriodeRepo() => Rows.Add(Row);
+
         public Task<PeriodeInterditeConge> GetOrCreateAsync(CancellationToken ct = default) => Task.FromResult(Row);
+
+        public Task<PeriodeInterditeConge?> GetByScopeAsync(string scopeKind, string? scopeId, CancellationToken ct = default)
+        {
+            var kind = PeriodeInterditeScopeKinds.Normalize(scopeKind);
+            var id = PeriodeInterditeScopeKinds.NormalizeScopeId(kind, scopeId);
+            if (kind == PeriodeInterditeScopeKinds.General) return Task.FromResult<PeriodeInterditeConge?>(Row);
+            return Task.FromResult(Rows.FirstOrDefault(r =>
+                PeriodeInterditeScopeKinds.Normalize(r.ScopeKind) == kind
+                && string.Equals(r.ScopeId, id, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        public Task<IReadOnlyList<PeriodeInterditeConge>> GetAllAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<PeriodeInterditeConge>>(Rows);
+
+        public Task AddAsync(PeriodeInterditeConge config, CancellationToken ct = default)
+        {
+            Rows.Add(config);
+            return Task.CompletedTask;
+        }
+
         public void Update(PeriodeInterditeConge config) { }
+
+        public void Remove(PeriodeInterditeConge config) => Rows.Remove(config);
     }
 
     private sealed class FakeQuotaRepo : IQuotaCongeServiceRepository

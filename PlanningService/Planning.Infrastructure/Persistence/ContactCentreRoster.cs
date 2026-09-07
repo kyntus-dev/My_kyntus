@@ -47,7 +47,7 @@ internal static class ContactCentreRoster
             Guid.Parse("11111111-1111-4111-8111-111111111108"), "admin@kyntus.ma", "Admin"),
     ];
 
-    internal static string DisplayName(Employee e) => $"{e.FirstName} {e.LastName}";
+    internal static string DisplayName(Employee e) => UserDisplayName.Format(e.FirstName, e.LastName);
 
     /// <summary>Email utilisé en base Planning (Auth si mappé, sinon contact centre).</summary>
     internal static string PlanningLoginEmail(Employee e) =>

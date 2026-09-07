@@ -7,6 +7,7 @@ using Prime.Application.Abstractions;
 using Prime.Application.DTOs;
 using Prime.Infrastructure.Persistence;
 using Prime.Infrastructure.Services;
+using Shared.Kernel.Push;
 
 namespace Prime.Infrastructure.Services;
 
@@ -21,6 +22,7 @@ public sealed class PrimeValidationAppService(
     PrimeAuditLogService auditWriter,
     AnomalyDetectionService anomalies,
     PrimeFicheMergedPreviewAccessService previewAccess,
+    IDesktopPushClient desktopPush,
     ILogger<PrimeValidationAppService> logger) : IPrimeValidationAppService
 {
     private const string GlobalPoolRoleFicheErrorMessage =
@@ -163,7 +165,7 @@ public sealed class PrimeValidationAppService(
             preQuery = preQuery.Where(f =>
                 (f.ValidationStatus == PrimeValidationWorkflowService.AwaitingData ||
                  f.ValidationStatus == "NotStarted") &&
-                EF.Functions.ILike(f.FillingStatus, "complete"));
+                f.FillingStatus.ToLower() == "complete");
             if (applyReadyOnly)
                 preQuery = validationList.ApplyReadyForValidationFilter(preQuery);
 
@@ -202,9 +204,14 @@ public sealed class PrimeValidationAppService(
         {
             var a = action.Trim();
             if (!string.Equals(a, PrimeFicheValidationHistoryActions.Approved, StringComparison.Ordinal) &&
-                !string.Equals(a, PrimeFicheValidationHistoryActions.Rejected, StringComparison.Ordinal))
-                throw new PrimeApiException(400, "Filtre action invalide (Approved ou Rejected).");
+                !string.Equals(a, PrimeFicheValidationHistoryActions.Rejected, StringComparison.Ordinal) &&
+                !string.Equals(a, PrimeFicheValidationHistoryActions.Submitted, StringComparison.Ordinal))
+                throw new PrimeApiException(400, "Filtre action invalide (Submitted, Approved ou Rejected).");
         }
+
+        // Le suivi doit également réparer les évènements Submitted manquants
+        // des fiches déjà Pending avant l'ajout de cette trace.
+        await ReconcileForValidationReadAsync(period, ct);
 
         return await validationHistory.ListFeedAsync(ru, rbac, period, mineOnly ?? true, action, 500, ct);
     }
@@ -282,6 +289,11 @@ public sealed class PrimeValidationAppService(
 
         await db.SaveChangesAsync(ct);
         await anomalies.RecomputeForFicheAsync(fiche.Id, ct);
+        if (await wfRuntime.IsTerminalStatusAsync(next, ct)
+            && !string.Equals(next, PrimeValidationWorkflowService.Rejected, StringComparison.Ordinal))
+        {
+            await NotifyEmployeeDesktopAsync(fiche.EmployeeId, approved: true, ct);
+        }
         return await validationList.MapValidationDtoAsync(fiche, ct);
     }
 
@@ -327,6 +339,7 @@ public sealed class PrimeValidationAppService(
 
         await db.SaveChangesAsync(ct);
         await anomalies.RecomputeForFicheAsync(fiche.Id, ct);
+        await NotifyEmployeeDesktopAsync(fiche.EmployeeId, approved: false, ct);
         return await validationList.MapValidationDtoAsync(fiche, ct);
     }
 
@@ -386,6 +399,11 @@ public sealed class PrimeValidationAppService(
             await validationHistory.AppendApprovedAsync(f, fromStatus, next, ru, amounts, ct);
             await RecordValidationAuditAsync(ru, f.Id, "ValidationApproved", fromStatus, next, amounts, ct);
             approved.Add(f.Id);
+            if (await wfRuntime.IsTerminalStatusAsync(next, ct)
+                && !string.Equals(next, PrimeValidationWorkflowService.Rejected, StringComparison.Ordinal))
+            {
+                await NotifyEmployeeDesktopAsync(f.EmployeeId, approved: true, ct);
+            }
         }
         await db.SaveChangesAsync(ct);
         foreach (var ficheId in approved)
@@ -539,6 +557,28 @@ public sealed class PrimeValidationAppService(
         var approved = await previewAccess.FicheApprovedByBothWorkflowsAsync(fiche, ct);
         if (!approved)
             throw new PrimeApiException(403, "Export indisponible : validations PRIME en cours.");
+    }
+
+    private async Task NotifyEmployeeDesktopAsync(string employeeId, bool approved, CancellationToken ct)
+    {
+        var authUserIds = new List<int>();
+        var subjectIds = new List<Guid>();
+        if (int.TryParse(employeeId, out var numericId) && numericId > 0)
+            authUserIds.Add(numericId);
+        if (Guid.TryParse(employeeId, out var subjectId) && subjectId != Guid.Empty)
+            subjectIds.Add(subjectId);
+        if (authUserIds.Count == 0 && subjectIds.Count == 0)
+            return;
+
+        await desktopPush.NotifyAsync(
+            new DesktopPushRequest(
+                authUserIds,
+                subjectIds,
+                "PRIME",
+                approved ? "Votre prime a été approuvée." : "Votre prime a été refusée.",
+                "prime",
+                "/prime"),
+            ct);
     }
 
     private static string CsvEscape(string? s)

@@ -11,7 +11,13 @@ namespace Documentation.Infrastructure.Context;
 /// </summary>
 public sealed class DocumentationTenantAccessor : IDocumentationTenantAccessor
 {
-    private const string FallbackTenant = "atlas-tech-demo";
+    public const string FallbackTenant = "atlas-tech-demo";
+
+    public static string ResolveConfiguredDefault(IConfiguration configuration)
+    {
+        var value = configuration["Documentation:DefaultTenantId"]?.Trim();
+        return string.IsNullOrWhiteSpace(value) ? FallbackTenant : value;
+    }
 
     private readonly DocumentationUserContext _userContext;
     private readonly string _defaultTenantFromConfig;
@@ -24,7 +30,7 @@ public sealed class DocumentationTenantAccessor : IDocumentationTenantAccessor
     {
         _userContext = userContext;
         _logger = logger;
-        _defaultTenantFromConfig = configuration["Documentation:DefaultTenantId"]?.Trim() ?? "";
+        _defaultTenantFromConfig = ResolveConfiguredDefault(configuration);
     }
 
     public string ResolvedTenantId

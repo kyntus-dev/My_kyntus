@@ -29,12 +29,19 @@ public interface IPlanningService
 
     // -- Génération depuis config / auto --
     Task<WeeklyPlanningResponseDto> GeneratePlanningFromConfigAsync(GeneratePlanningFromConfigDto dto);
-    Task<AutoGenerateWeekResultDto> AutoGenerateWeekAsync(string? weekCode = null, bool forceDraftRefresh = false);
+    Task<AutoGenerateWeekResultDto> AutoGenerateWeekAsync(
+        string? weekCode = null, bool forceDraftRefresh = false, int? actorUserId = null);
+    Task EnsureViewerCanManageSubServiceAsync(int viewerUserId, int subServiceId);
     Task<AutoGenerateSettingsDto> GetAutoGenerateSettingsAsync();
     Task<AutoGenerateSettingsDto> SaveAutoGenerateSettingsAsync(AutoGenerateSettingsDto dto, int? updatedByUserId);
 
     // -- Validation RH/Admin --
     Task<PlanningWeekListDto> GetWeekOverviewAsync(string weekCode, int? viewerUserId = null);
+    Task<PlanningWeekListDto> GetWeekOverviewForManagedCellsAsync(
+        string weekCode,
+        int viewerUserId,
+        IReadOnlyCollection<string> primeCelluleIds) =>
+        GetWeekOverviewAsync(weekCode, viewerUserId);
     Task RecordConsultationAsync(int planningId, int userId);
     Task<bool> HasConsultedAsync(int planningId, int userId);
 

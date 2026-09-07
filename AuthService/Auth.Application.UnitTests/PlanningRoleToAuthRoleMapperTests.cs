@@ -16,6 +16,9 @@ public class PlanningRoleToAuthRoleMapperTests
     [InlineData("Superviseur", "Superviseur")]
     [InlineData("Qualiticien", "Qualiticien")]
     [InlineData("Audit", "Audit")]
+    [InlineData("Comptabilité", "Comptabilité")]
+    [InlineData("Comptable", "Comptabilité")]
+    [InlineData("comptabilite", "Comptabilité")]
     public void Maps_planning_role_to_auth_role(string planningRole, string authRole)
     {
         Assert.Equal(authRole, PlanningRoleToAuthRoleMapper.MapToAuthRoleName(planningRole));

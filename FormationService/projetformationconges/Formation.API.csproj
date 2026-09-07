@@ -1,4 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+	<!-- Formation.API host (folder name historique projetformationconges) — vivant dans docker-compose. -->
 	<PropertyGroup>
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
@@ -7,9 +8,9 @@
 		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="MassTransit" Version="8.1.3" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.0" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0" />
+		<PackageReference Include="MassTransit" Version="8.3.6" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
 	</ItemGroup>
 	<ItemGroup>
@@ -17,6 +18,7 @@
 		<ProjectReference Include="..\src\Services\Formation\Formation.Application\Formation.Application.csproj" />
 		<ProjectReference Include="..\src\Services\Formation\Formation.Infrastructure\Formation.Infrastructure.csproj" />
 		<ProjectReference Include="..\..\Kyntus.Identity.Jwt\Kyntus.Identity.Jwt.csproj" />
+		<ProjectReference Include="..\..\Kyntus.Caching\Kyntus.Caching.csproj" />
 		<ProjectReference Include="..\..\Messaging.Contracts\Messaging.Contracts.csproj" />
 	</ItemGroup>
 </Project>

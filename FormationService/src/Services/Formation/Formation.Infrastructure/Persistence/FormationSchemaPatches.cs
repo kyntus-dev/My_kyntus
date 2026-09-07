@@ -147,6 +147,14 @@ public static class FormationSchemaPatches
 
             await EnsureColumnAsync(db, "initial_training_paths", "FormateurValidatedBy", "uuid NULL", ct);
             await EnsureColumnAsync(db, "initial_training_paths", "RhValidatedBy", "uuid NULL", ct);
+            await EnsureColumnAsync(db, "initial_training_paths", "OrgDepartmentId", "character varying(200) NULL", ct);
+            await EnsureColumnAsync(db, "initial_training_paths", "OrgPoleId", "character varying(200) NULL", ct);
+            await EnsureColumnAsync(db, "initial_training_paths", "OrgCelluleId", "character varying(200) NULL", ct);
+            await EnsureColumnAsync(db, "initial_training_paths", "OrgServiceId", "character varying(200) NULL", ct);
+            await EnsureColumnAsync(db, "initial_training_paths", "OrgDepartmentName", "character varying(200) NULL", ct);
+            await EnsureColumnAsync(db, "initial_training_paths", "OrgPoleName", "character varying(200) NULL", ct);
+            await EnsureColumnAsync(db, "initial_training_paths", "OrgCelluleName", "character varying(200) NULL", ct);
+            await EnsureColumnAsync(db, "initial_training_paths", "OrgServiceName", "character varying(200) NULL", ct);
 
             await db.Database.ExecuteSqlRawAsync(
                 """

@@ -1,6 +1,41 @@
 import type { CampaignStepStatusDto } from '../services/prime-cell-prime-api.service';
 import type { PrimeNavRequestService } from '../services/prime-nav-request.service';
 
+const AGENTS_SHELL = '/prime-fiches-agents';
+const VALIDATION_HUB = '/prime-validation-hub';
+
+const AGENTS_TAB_TO_PATH: Record<string, string> = {
+  pilotage: '/prime-fiches-pilotes',
+  import: '/prime-fiche-import',
+};
+
+const VALIDATION_TAB_TO_PATH: Record<string, string> = {
+  validate: '/validation',
+  history: '/validation-history',
+  results: '/results',
+  performance: '/team-performance',
+};
+
+/**
+ * Maps legacy shell ActionPaths (backend still emits them) to standalone screens.
+ * Query `tab` is consumed here; the remapped path has no tab.
+ */
+export function remapPrimeShellPath(path: string, tab?: string | null): string {
+  const raw = (path ?? '').trim();
+  if (!raw) return raw;
+  const [base, query] = raw.split('?');
+  const queryTab = query ? new URLSearchParams(query).get('tab') : null;
+  const t = (tab ?? queryTab ?? '').trim().toLowerCase();
+
+  if (base === AGENTS_SHELL) {
+    return AGENTS_TAB_TO_PATH[t] ?? '/prime-fiches-pilotes';
+  }
+  if (base === VALIDATION_HUB) {
+    return VALIDATION_TAB_TO_PATH[t] ?? '/validation';
+  }
+  return base || raw;
+}
+
 /** Navigation interne Prime depuis un chemin campaign (avec query tab optionnelle). */
 export function navigatePrimeCampaignPath(
   nav: PrimeNavRequestService,
@@ -10,6 +45,11 @@ export function navigatePrimeCampaignPath(
   if (!raw) return;
   const [base, query] = raw.split('?');
   const tab = query ? new URLSearchParams(query).get('tab') : null;
+  const remapped = remapPrimeShellPath(base, tab);
+  if (remapped !== base) {
+    nav.requestView(remapped);
+    return;
+  }
   if (tab) {
     nav.requestViewWithTab(base, tab);
     return;

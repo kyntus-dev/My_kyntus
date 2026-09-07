@@ -35,7 +35,7 @@ interface ChartPoint {
   providers: [provideEchartsCore({ echarts })],
   template: `
     @if (loading()) {
-      <div class="p-8 text-muted">Loading your performance...</div>
+      <div class="p-8 text-muted">Chargement de votre performance…</div>
     } @else {
       <div class="prime-page-shell">
         <div>
@@ -46,12 +46,12 @@ interface ChartPoint {
         </div>
 
         <app-prime-card
-          title="Score evolution"
-          description="My score vs team average"
+          title="Évolution du score"
+          description="Mon score par rapport à la moyenne d’équipe"
           className="card-navy"
         >
           @if (chartData().length === 0) {
-            <div class="text-muted py-10 text-center">No primes yet</div>
+            <div class="text-muted py-10 text-center">Aucune prime pour le moment</div>
           } @else {
             <div class="h-80" echarts [options]="chartOptions()"></div>
           }
@@ -61,7 +61,7 @@ interface ChartPoint {
           <app-prime-card className="card-navy">
             <div class="flex items-center justify-between">
               <div>
-                <p class="text-muted text-sm">Average score</p>
+                <p class="text-muted text-sm">Score moyen</p>
                 <p class="text-2xl font-bold text-[var(--info-text)]">{{ averageScore() }}</p>
               </div>
               <app-lucide-icon [icon]="icons.gauge" className="w-5 h-5 text-[var(--info-text)]" />
@@ -70,7 +70,7 @@ interface ChartPoint {
           <app-prime-card className="card-navy">
             <div class="flex items-center justify-between">
               <div>
-                <p class="text-muted text-sm">Best month</p>
+                <p class="text-muted text-sm">Meilleur mois</p>
                 <p class="text-lg font-semibold text-[var(--success-text)]">
                   {{ bestMonth() ? bestMonth()!.month + ' (' + bestMonth()!.myScore + ')' : '-' }}
                 </p>
@@ -81,7 +81,7 @@ interface ChartPoint {
           <app-prime-card className="card-navy">
             <div class="flex items-center justify-between">
               <div>
-                <p class="text-muted text-sm">Worst month</p>
+                <p class="text-muted text-sm">Moins bon mois</p>
                 <p class="text-lg font-semibold text-[var(--danger-text)]">
                   {{ worstMonth() ? worstMonth()!.month + ' (' + worstMonth()!.myScore + ')' : '-' }}
                 </p>
@@ -170,7 +170,7 @@ export class MyPerformancePageComponent {
       },
       series: [
         {
-          name: 'My score',
+          name: 'Mon score',
           type: 'line',
           smooth: true,
           data: data.map((d) => d.myScore),
@@ -180,7 +180,7 @@ export class MyPerformancePageComponent {
           symbolSize: 8,
         },
         {
-          name: 'Team average',
+          name: 'Moyenne d’équipe',
           type: 'line',
           smooth: true,
           data: data.map((d) => d.teamAverage),

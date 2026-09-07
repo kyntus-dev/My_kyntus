@@ -1,8 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Kyntus.Iam;
 using Kyntus.Identity.Jwt;
 using Planning.Application.DTOs.Planning;
 using Planning.Application.Abstractions;
 using Planning.Application.Exceptions;
+using Planning.Application.PilotPlanning;
 
 namespace Planning.API.Controllers;
 
@@ -11,11 +14,61 @@ namespace Planning.API.Controllers;
 public class PlanningController(
     IPlanningService planningService,
     IUserService userService,
-    IPlanningPendingRequestsAlertService pendingAlerts) : ControllerBase
+    IPlanningPendingRequestsAlertService pendingAlerts,
+    IPolicyEvaluator policyEvaluator,
+    IRebacClient rebacClient,
+    IPlanningEmailSender planningEmails) : ControllerBase
 {
     private readonly IPlanningService _planningService = planningService;
     private readonly IUserService _userService = userService;
     private readonly IPlanningPendingRequestsAlertService _pendingAlerts = pendingAlerts;
+    private readonly IPolicyEvaluator _policyEvaluator = policyEvaluator;
+    private readonly IRebacClient _rebacClient = rebacClient;
+    private readonly IPlanningEmailSender _planningEmails = planningEmails;
+
+    private const string CapShiftConfigure = "planning.shift-config.Configure";
+    private const string CapGenerate = "planning.generate.Act";
+    private const string CapPublish = "planning.publish.Validate";
+
+    private async Task<int?> ResolvePlanningUserIdAsync()
+    {
+        var authUserId = User.GetAuthUserId();
+        if (authUserId is not > 0) return null;
+        var user = await _userService.GetUserByAuthIdAsync(authUserId.Value);
+        return user?.Id;
+    }
+
+    private async Task<(int Id, Guid Guid)?> ResolvePlanningUserAsync()
+    {
+        var authUserId = User.GetAuthUserId();
+        if (authUserId is not > 0) return null;
+        var user = await _userService.GetUserByAuthIdAsync(authUserId.Value);
+        return user is null ? null : (user.Id, user.Guid);
+    }
+
+    private async Task<IActionResult?> ForbidOutsidePerimeterAsync(int subServiceId)
+    {
+        var viewerId = await ResolvePlanningUserIdAsync();
+        if (viewerId is not > 0) return null;
+        try
+        {
+            await _planningService.EnsureViewerCanManageSubServiceAsync(viewerId.Value, subServiceId);
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    private async Task<IActionResult?> ForbidUnlessAsync(string action, CancellationToken ct = default)
+    {
+        var role = User.GetAuthRole() ?? "Employee";
+        var subjectId = User.GetSubjectId() ?? Guid.Empty;
+        var decision = await _policyEvaluator.EvaluateAsync(
+            new PolicyRequest(subjectId, role, action, "platform"), ct);
+        return decision.Allowed ? null : Forbid();
+    }
 
     // ----------------------------------------------------
     // CRUD PLANNING
@@ -88,6 +141,8 @@ public class PlanningController(
     [HttpPost("config")]
     public async Task<IActionResult> SaveShiftConfig([FromBody] SaveShiftConfigDto dto)
     {
+        if (await ForbidUnlessAsync(CapShiftConfigure) is { } denied) return denied;
+        if (await ForbidOutsidePerimeterAsync(dto.SubServiceId) is { } outside) return outside;
         try
         {
             var result = await _planningService.SaveShiftConfigAsync(dto);
@@ -95,10 +150,7 @@ public class PlanningController(
         }
         catch (Exception ex)
         {
-            var message = ex.InnerException?.Message is { Length: > 0 } inner
-                ? $"{ex.Message} ({inner})"
-                : ex.Message;
-            return BadRequest(new { message });
+            return BadRequest(new { message = FormatClientError(ex) });
         }
     }
 
@@ -177,7 +229,44 @@ public class PlanningController(
     [HttpGet("week/{weekCode}")]
     public async Task<IActionResult> GetWeekOverview(string weekCode, [FromQuery] int? viewerUserId = null)
     {
-        var result = await _planningService.GetWeekOverviewAsync(weekCode, viewerUserId);
+        // RH/Admin voient toutes les cellules, indépendamment d'un rôle Planning
+        // local éventuellement désynchronisé. Les autres rôles restent filtrés.
+        var role = User.GetAuthRole();
+        var seesAll = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase);
+        var authenticatedViewer = seesAll ? null : await ResolvePlanningUserAsync();
+
+        PlanningWeekListDto result;
+        if (!seesAll
+            && authenticatedViewer is { } supervisor
+            && (string.Equals(role, "Superviseur", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(role, "Manager", StringComparison.OrdinalIgnoreCase)))
+        {
+            IReadOnlyList<string> cells;
+            try
+            {
+                cells = await _rebacClient.GetManagedNodeIdsAsync(
+                    supervisor.Guid,
+                    "Superviseur");
+            }
+            catch
+            {
+                // En cas d'indisponibilité Directory, ne jamais montrer la cellule
+                // d'appartenance ni un ancien périmètre local.
+                cells = [];
+            }
+
+            result = await _planningService.GetWeekOverviewForManagedCellsAsync(
+                weekCode,
+                supervisor.Id,
+                cells);
+        }
+        else
+        {
+            result = await _planningService.GetWeekOverviewAsync(
+                weekCode,
+                seesAll ? null : authenticatedViewer?.Id ?? viewerUserId);
+        }
         return Ok(result);
     }
 
@@ -206,8 +295,52 @@ public class PlanningController(
         [FromBody] AutoGenerateSettingsDto dto,
         [FromQuery] int? updatedByUserId = null)
     {
-        var result = await _planningService.SaveAutoGenerateSettingsAsync(dto, updatedByUserId);
-        return Ok(result);
+        if (await ForbidUnlessAsync(CapShiftConfigure) is { } denied) return denied;
+        try
+        {
+            var result = await _planningService.SaveAutoGenerateSettingsAsync(dto, updatedByUserId);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("auto-generate-settings/test-email")]
+    public async Task<IActionResult> SendTestPlanningEmail(
+        [FromBody] TestPlanningEmailRequest? body,
+        CancellationToken ct)
+    {
+        if (await ForbidUnlessAsync(CapShiftConfigure) is { } denied) return denied;
+        try
+        {
+            var settings = await _planningService.GetAutoGenerateSettingsAsync();
+            var viewerId = await ResolvePlanningUserIdAsync();
+            var user = viewerId is > 0 ? await _userService.GetUserByIdAsync(viewerId.Value) : null;
+
+            var to = PlanningSenderAddress.NormalizeEmailOrNull(body?.To)
+                ?? PlanningSenderAddress.NormalizeEmailOrNull(settings.SenderFromEmail)
+                ?? PlanningSenderAddress.NormalizeEmailOrNull(user?.Email)
+                ?? PlanningSenderAddress.NormalizeEmailOrNull(User.GetEmail());
+            if (to is null)
+                return BadRequest(new { message = "Indiquez une adresse de test ou renseignez l’adresse RH « De : »." });
+
+            await _planningEmails.SendRequiredHtmlAsync(
+                to,
+                "Test mail Kyntus Planning",
+                "<p>Envoi OK — Kyntus Planning.</p>",
+                ct);
+            return Ok(new { sent = true, to });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = FormatClientError(ex) });
+        }
     }
 
     [HttpPost("week/{weekCode}/auto-generate")]
@@ -215,9 +348,11 @@ public class PlanningController(
         string weekCode,
         [FromQuery] bool force = false)
     {
+        if (await ForbidUnlessAsync(CapGenerate) is { } denied) return denied;
         try
         {
-            var result = await _planningService.AutoGenerateWeekAsync(weekCode, force);
+            var actorId = await ResolvePlanningUserIdAsync();
+            var result = await _planningService.AutoGenerateWeekAsync(weekCode, force, actorId);
             try
             {
                 await _pendingAlerts.SendValidationRemindersAsync(weekCode);
@@ -230,7 +365,7 @@ public class PlanningController(
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(new { message = FormatClientError(ex) });
         }
     }
 
@@ -257,6 +392,7 @@ public class PlanningController(
     [HttpPost("generate")]
     public async Task<IActionResult> Generate([FromBody] GeneratePlanningDto dto)
     {
+        if (await ForbidUnlessAsync(CapGenerate) is { } denied) return denied;
         try
         {
             var result = await _planningService.GeneratePlanningAsync(dto);
@@ -264,11 +400,11 @@ public class PlanningController(
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(new { message = FormatClientError(ex) });
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(new { message = FormatClientError(ex) });
         }
     }
 
@@ -277,6 +413,8 @@ public class PlanningController(
     public async Task<IActionResult> GenerateFromConfig(
         [FromBody] GeneratePlanningFromConfigDto dto)
     {
+        if (await ForbidUnlessAsync(CapGenerate) is { } denied) return denied;
+        if (await ForbidOutsidePerimeterAsync(dto.SubServiceId) is { } outside) return outside;
         try
         {
             var result = await _planningService.GeneratePlanningFromConfigAsync(dto);
@@ -307,7 +445,7 @@ public class PlanningController(
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(new { message = FormatClientError(ex) });
         }
     }
 
@@ -317,8 +455,10 @@ public class PlanningController(
 
     // POST api/planning/5/publish
     [HttpPost("{id}/publish")]
+    [Authorize(Roles = "Admin,RH")]
     public async Task<IActionResult> Publish(int id, [FromQuery] int validatorId)
     {
+        if (await ForbidUnlessAsync(CapPublish) is { } denied) return denied;
         try
         {
             var result = await _planningService.PublishPlanningAsync(id, validatorId);
@@ -625,9 +765,30 @@ public class PlanningController(
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(new { message = FormatClientError(ex) });
         }
     }
 
+    /// <summary>
+    /// EF/Npgsql wraps the real Postgres error. Surface the innermost message
+    /// so the UI is not stuck on « See the inner exception for details ».
+    /// </summary>
+    internal static string FormatClientError(Exception ex)
+    {
+        var current = ex;
+        while (current.InnerException is not null)
+            current = current.InnerException;
 
+        var leaf = current.Message ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(leaf) || ReferenceEquals(current, ex))
+            return ex.Message;
+
+        if (ex.Message.Contains("See the inner exception", StringComparison.OrdinalIgnoreCase))
+            return leaf;
+
+        if (ex.Message.Contains(leaf, StringComparison.Ordinal))
+            return ex.Message;
+
+        return $"{ex.Message} ({leaf})";
+    }
 }

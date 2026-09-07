@@ -54,7 +54,7 @@ public sealed class PrimeGlobalSynthesisService(
             .ToList();
     }
 
-    /// <summary>Régénère l'Excel avec uniquement les lignes approuvées (RH + Manager).</summary>
+    /// <summary>Régénère l'Excel avec uniquement les lignes approuvées par la RH.</summary>
     public async Task<byte[]?> BuildApprovedExportExcelAsync(Guid scopeSynthesisId, CancellationToken ct = default)
     {
         var scope = await db.GlobalPoolScopeSyntheses.AsNoTracking()
@@ -453,7 +453,7 @@ public sealed class PrimeGlobalSynthesisService(
     }
 
     private static PrimeEmployeeFicheAmounts ResolveAmounts(EmployeePrimeServiceFiche f) =>
-        PrimeEmployeeFicheAmountService.ExtractPlafondsFromFiche(f);
+        PrimeEmployeeFicheAmountService.ResolveWorkflowDisplayAmounts(f);
 
     private async Task RefreshPendingLineAbsencesAsync(
         Guid scopeSynthesisId,

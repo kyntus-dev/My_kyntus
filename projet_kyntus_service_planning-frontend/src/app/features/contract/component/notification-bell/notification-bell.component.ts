@@ -1,9 +1,10 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { interval, Subscription } from 'rxjs';
 import { ContractService, ContractNotification } from '../../services/contract.service';
 import { NotificationService, PlanningNotification } from '../../../../core/services/notification.service'; // ← AJOUT
+import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 
 export type UnifiedNotification =
   | { source: 'contract';    data: ContractNotification   }
@@ -30,6 +31,7 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
 
   private pollSub?:    Subscription;
   private signalrSub?: Subscription;
+  private readonly session = inject(KyntusSessionService);
 
   constructor(
     private contractService:     ContractService,
@@ -40,10 +42,9 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
 
 ngOnInit(): void {
   this.loadCount();
-  this.pollSub = interval(30_000).subscribe(() => this.loadCount());
+  this.pollSub = interval(300_000).subscribe(() => this.loadCount());
 
   this.signalrSub = this.notificationService.notifications$.subscribe(notifs => {
-    console.log('🔔 notifications$ reçu:', notifs.length, notifs);
     this.reclamationNotifications = notifs.filter(n => n.type === 'reclamation');
     this.refreshUnreadCount();
     this.cdr.detectChanges();
@@ -56,6 +57,7 @@ ngOnInit(): void {
 
   // ── Badge total = contrats + réclamations non lues ──
   loadCount(): void {
+    if (!this.session.isAuthenticated()) return;
     this.contractService.getNotificationsCount().subscribe({
       next: res => {
         this.refreshUnreadCount(res.count);
@@ -72,6 +74,7 @@ ngOnInit(): void {
   }
 
   loadNotifications(): void {
+    if (!this.session.isAuthenticated()) return;
     this.loading = true;
     this.cdr.detectChanges();
 

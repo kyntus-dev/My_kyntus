@@ -11,6 +11,7 @@ import {
   persistReturnUrl,
   sanitizeReturnUrl,
 } from './kyntus-return-url.util';
+import { resolveInitialTheme } from '../theme/kyntus-theme.service';
 
 interface RefreshAuthResponse {
   accessToken?: string;
@@ -82,10 +83,12 @@ export function redirectToAuthLogin(
   clearStoredTokens();
   localStorage.removeItem('user');
   const base = KYNTUS_PUBLIC_URLS.authLogin;
+  const theme = resolveInitialTheme();
+  const themeQuery = `theme=${encodeURIComponent(theme)}`;
   const url =
     target && target.trim()
-      ? `${base}?returnUrl=${encodeURIComponent(target.trim())}`
-      : base;
+      ? `${base}?returnUrl=${encodeURIComponent(target.trim())}&${themeQuery}`
+      : `${base}?${themeQuery}`;
   // replace : empêche le bouton Retour d’afficher une page SPA encore « authentifiée ».
   window.location.replace(url);
 }

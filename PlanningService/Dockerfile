@@ -6,6 +6,8 @@ COPY Messaging.Contracts/Messaging.Contracts.csproj Messaging.Contracts/
 COPY Kyntus.Iam/Kyntus.Iam.csproj Kyntus.Iam/
 COPY Kyntus.Identity.Jwt/Kyntus.Identity.Jwt.csproj Kyntus.Identity.Jwt/
 COPY Kyntus.Messaging.Outbox/Kyntus.Messaging.Outbox.csproj Kyntus.Messaging.Outbox/
+COPY Kyntus.Caching/Kyntus.Caching.csproj Kyntus.Caching/
+COPY Shared.Kernel/Shared.Kernel.csproj Shared.Kernel/
 COPY PlanningService/Planning.Domain/Planning.Domain.csproj PlanningService/Planning.Domain/
 COPY PlanningService/Planning.Application/Planning.Application.csproj PlanningService/Planning.Application/
 COPY PlanningService/Planning.Infrastructure/Planning.Infrastructure.csproj PlanningService/Planning.Infrastructure/
@@ -16,6 +18,8 @@ COPY Messaging.Contracts/ Messaging.Contracts/
 COPY Kyntus.Iam/ Kyntus.Iam/
 COPY Kyntus.Identity.Jwt/ Kyntus.Identity.Jwt/
 COPY Kyntus.Messaging.Outbox/ Kyntus.Messaging.Outbox/
+COPY Kyntus.Caching/ Kyntus.Caching/
+COPY Shared.Kernel/ Shared.Kernel/
 COPY PlanningService/ PlanningService/
 RUN dotnet publish PlanningService/Planning.API/Planning.API.csproj -c Release -o /out
 

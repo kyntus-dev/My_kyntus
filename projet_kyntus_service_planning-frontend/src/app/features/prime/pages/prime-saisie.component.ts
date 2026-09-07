@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { catchError, of } from 'rxjs';
-import { ArrowLeft, CheckCircle2, Circle, Clipboard, FileSpreadsheet, PenLine, Save } from 'lucide';
+import { ArrowLeft, CheckCircle2, Circle, Clipboard, Download, FileSpreadsheet, PenLine, Save } from 'lucide';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
 import { PrimeCardComponent } from '../components/prime-card.component';
 import { PrimeTemplatePreviewComponent } from '../components/prime-template-preview.component';
@@ -23,7 +23,14 @@ import {
   CHALLENGE_FIELD_LABELS,
   PRIME_FIELD_LABELS,
   PRIME_INPUT_FIELD_CLASS,
+  PRIME_COMPUTED_FIELD_CLASS,
   PRIME_KPI_GRID_CLASS,
+  CHALLENGE_SECTOR_BAND_CLASS,
+  CUSTOM_SECTOR_BAND_CLASS,
+  PRIME_SECTOR_BAND_CLASS,
+  PRIME_TEXT_WARNING_CLASS,
+  PRIME_TEXT_SUCCESS_CLASS,
+  PRIME_WARNING_BANNER_CLASS,
   customBandHeading,
 } from '../lib/prime-fiche-sector-field-meta';
 import {
@@ -43,7 +50,10 @@ import {
   ligneDynamicFromFlatPayload,
   ligneDynamicFromTemplateLine,
   type PrimeFicheLigneDynamic,
+  type PrimeFicheTemplateCustomKpi,
+  type PrimeFicheTemplateLine,
   type PrimeFicheTemplateSchema,
+  type PrimeFicheTemplateSecteurSlice,
 } from '../models/prime-fiche-template.schema';
 import {
   PRIME_EXCEL_DIRECT_COMMON_TEMPLATE_ID,
@@ -53,6 +63,8 @@ import {
   type StoredPrimeTemplate,
 } from '../models/prime-template.model';
 import { parsePrimeTemplateExcel } from '../lib/excel-fiche-template.parser';
+import { downloadPrimeFicheStandardTemplate } from '../lib/prime-fiche-template-download';
+import { attachExcelSheetAppearance } from '../lib/extract-excel-sheet-appearance';
 import { parsePrimeFicheGrid } from '../lib/prime-fiche-grid.parser';
 import {
   numericFieldValidationMessage,
@@ -67,6 +79,15 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
 import { RoleService } from '../state/role.service';
 import { computePreviewGridWithFormulas } from '../lib/prime-fiche-formula-eval';
 import { computeMergedEmployeeFichePreview } from '../lib/prime-employee-fiche-merged-preview';
+import {
+  computedOverlayKey,
+  extractComputedOverlayFromRows,
+  isComputedCustomKpi,
+  isComputedRepartition,
+  isComputedSectorField,
+  isLockedSectorField,
+  isPonderationField,
+} from '../lib/prime-fiche-computed-fields';
 import { filterTemplatePayloadToPoleContracts, isPoleContract, isSavContract } from '../lib/prime-pole-saisie-filter';
 import {
   confirmAllCarriedLines,
@@ -278,10 +299,10 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
               Retour à la liste
             </button>
           }
-          <h1 class="truncate text-lg font-bold tracking-tight text-primary sm:text-xl">Résultats communs — saisie</h1>
+          <h1 class="truncate text-lg font-bold tracking-tight text-primary sm:text-xl">Partie commune (RACC / SAV)</h1>
           @if (session.useWizardFlow()) {
             <span
-              class="shrink-0 rounded-md border border-blue-500/40 bg-blue-600/15 px-2 py-1 text-xs font-semibold text-primary"
+              class="shrink-0 rounded-md px-2 py-1 text-xs font-semibold prime-chip-info"
             >
               Période {{ session.periodLabel() }}
             </span>
@@ -292,7 +313,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
               (click)="session.startWizardForSupervisor()"
               class="shrink-0 rounded-lg border border-blue-500/40 bg-blue-600/15 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-blue-600/25"
             >
-              Nouvelle fiche commune
+              Nouvelle période
             </button>
           }
           @if (hasGridTemplate()) {
@@ -305,7 +326,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                 >
                   {{ ct }}
                   @if (contractPoleSectionComplete(ct)) {
-                    <span class="ml-1.5 text-[10px] font-bold uppercase text-emerald-200">OK</span>
+                    <span class="ml-1.5 text-[10px] font-bold uppercase" [class]="textSuccessClass">OK</span>
                   }
                 </button>
               }
@@ -329,16 +350,18 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
             </div>
           }
         </div>
-        <button
-          type="button"
-          (click)="copyJson()"
-          class="shrink-0 rounded-lg border border-default bg-card px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-input/50"
-        >
-          <span class="inline-flex items-center gap-2">
-            <app-lucide-icon [icon]="icons.clipboard" className="w-4 h-4" />
-            Copier JSON
-          </span>
-        </button>
+        @if (role.currentRole() === 'Admin') {
+          <button
+            type="button"
+            (click)="copyJson()"
+            class="shrink-0 rounded-lg border border-default bg-card px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-input/50"
+          >
+            <span class="inline-flex items-center gap-2">
+              <app-lucide-icon [icon]="icons.clipboard" className="w-4 h-4" />
+              Copier les données techniques
+            </span>
+          </button>
+        }
       </header>
 
       @if (validationMessage()) {
@@ -352,7 +375,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
 
       @if (hasGridTemplate()) {
         <div
-          class="flex flex-wrap items-center justify-between gap-2 border-b border-blue-500/30 bg-blue-600/10 px-4 py-2 text-xs text-primary sm:px-6 sm:text-sm"
+          class="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--info-border)] bg-[var(--info-bg)] px-4 py-2 text-xs text-primary sm:px-6 sm:text-sm"
         >
           <span>
             Modèle actif : {{ schemaForUi()?.fileName }}
@@ -370,8 +393,8 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
       @if (session.useWizardFlow() && session.step() === 'setup') {
         <main class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           <app-prime-card
-            title="Démarrer les résultats communs"
-            description="Choisissez la période et un modèle Excel. Reconduisez le mois précédent si possible, ou ouvrez directement la saisie."
+            title="Créer une période"
+            description="Choisissez le mois et le modèle Excel à utiliser pour la partie commune."
           >
             <div class="flex flex-col gap-6">
               <div class="flex flex-wrap gap-4 items-end">
@@ -406,7 +429,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                     [disabled]="rolloverBusy()"
                     class="inline-flex items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-600/15 px-4 py-2 text-sm font-semibold text-primary hover:bg-violet-600/25 disabled:opacity-50"
                   >
-                    Reconduire depuis {{ rolloverHint() }}
+                    Copier les données de {{ rolloverHint() }}
                   </button>
                 }
               </div>
@@ -414,8 +437,17 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
               <div class="flex min-w-0 flex-col gap-2">
                 <h3 class="text-sm font-semibold tracking-tight text-primary">Modèle Excel</h3>
                 <p class="text-xs text-muted">
-                  Importez ou activez un modèle via Templates fiche PRIME, puis sélectionnez-le ici.
+                  Téléchargez le modèle standard ou ajoutez votre propre fichier dans « Modèles de fiches », puis sélectionnez-le ici.
                 </p>
+                <button
+                  type="button"
+                  (click)="downloadStandardTemplate()"
+                  [disabled]="templateDownloadBusy()"
+                  class="inline-flex w-fit items-center gap-2 rounded-lg border border-default bg-card px-3 py-2 text-xs font-semibold text-primary hover:bg-input/40 disabled:opacity-50"
+                >
+                  <app-lucide-icon [icon]="icons.download" className="w-3.5 h-3.5" />
+                  Télécharger le modèle standard
+                </button>
                 <label class="mb-1 block text-sm font-medium text-muted">Choisir un modèle</label>
                 <select
                   [value]="session.selectedTemplateId() ?? ''"
@@ -433,7 +465,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                     (click)="nav.requestView('/template-manager')"
                     class="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue-300 hover:text-blue-200"
                   >
-                    Ouvrir Templates fiche PRIME
+                    Gérer les modèles de fiches
                     <app-lucide-icon [icon]="icons.file" className="w-3.5 h-3.5" />
                   </button>
                 }
@@ -446,7 +478,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                   [disabled]="!session.selectedTemplateId() || !session.sessionTemplate()?.ficheGridSchema"
                   class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Continuer vers indicateurs et pondérations
+                  Configurer les indicateurs
                 </button>
                 @if (wizardEarlySaveMessage()) {
                   <p class="text-xs text-muted">{{ wizardEarlySaveMessage() }}</p>
@@ -459,7 +491,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
         <main class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 class="text-base font-bold text-primary">Indicateurs &amp; pondérations</h2>
+              <h2 class="text-base font-bold text-primary">Indicateurs et pondérations</h2>
               <p class="text-xs text-muted">
                 Configurez les pondérations pour la période {{ session.periodLabel() }}, puis continuez la saisie
                 commune.
@@ -479,7 +511,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                 [disabled]="!session.sessionTemplate()?.ficheGridSchema"
                 class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Continuer vers saisie RACC/SAV
+                Saisir la partie commune
               </button>
             </div>
           </div>
@@ -488,15 +520,16 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
       } @else if (session.useWizardFlow() && session.step() === 'result') {
         <main class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           <app-prime-card
+            className="p-0 overflow-hidden"
             title="Résultat calculé (aperçu Excel)"
-            description="Même aperçu feuille Excel que le template (recalcul HyperFormula après injection de la saisie)."
+            description="Aperçu identique au fichier Excel d’origine (couleurs, fusions, formats) après recalcul."
           >
             @if (resultPreviewTemplate(); as tpl) {
-              <app-prime-template-preview [tpl]="tpl" />
+              <app-prime-template-preview [tpl]="tpl" [computedRows]="resultPreview().rows" />
             } @else {
-              <p class="text-sm text-muted">Aucun template de session.</p>
+              <p class="text-sm text-muted p-4 sm:p-6">Aucun template de session.</p>
             }
-            <div class="mt-6 flex flex-wrap gap-2 border-t border-default pt-4">
+            <div class="mt-0 flex flex-wrap gap-2 border-t border-default px-4 sm:px-6 py-4">
               <button
                 type="button"
                 (click)="session.backToEntry()"
@@ -509,7 +542,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                 (click)="submitWizardToServer()"
                 class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700"
               >
-                Valider (superviseur) et enregistrer en base
+                Valider la partie commune
               </button>
             </div>
           </app-prime-card>
@@ -517,17 +550,17 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
       } @else if (session.useWizardFlow() && session.step() === 'submitted') {
         <main class="flex-1 overflow-y-auto p-4 sm:p-6">
           <app-prime-card
-            title="Fiche enregistrée"
-            description="Brouillon pôle (RACC/SAV) enregistré automatiquement. Complétez la partie cellule depuis le pilotage."
+            title="Partie commune validée"
+            description="La partie commune RACC/SAV est enregistrée. Vous pouvez maintenant compléter les fiches pilotes."
           >
             <p class="text-sm text-primary">{{ saveMessage() }}</p>
             <div class="mt-6">
               <button
                 type="button"
-                (click)="nav.requestViewWithTab('/prime-fiches-agents', 'pilotage')"
+                (click)="nav.requestView('/prime-fiches-pilotes')"
                 class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
               >
-                Continuer vers fiches agents
+                Saisir les fiches pilotes
               </button>
             </div>
           </app-prime-card>
@@ -535,7 +568,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
       } @else {
       <div class="flex flex-1 flex-col gap-0 lg:flex-row lg:items-stretch lg:gap-0 lg:min-h-[min(70dvh,720px)]">
         <aside
-          class="prime-nav-aside w-full shrink-0 border-b border-default bg-input lg:w-[19.5rem] lg:border-b-0 lg:border-r lg:border-default lg:max-h-[calc(100dvh-10rem)] lg:overflow-y-auto"
+          class="w-full shrink-0 border-b border-default bg-input lg:w-[18rem] xl:w-[20rem] lg:border-b-0 lg:border-r lg:max-h-[calc(100dvh-10rem)] lg:overflow-y-auto"
         >
           <div class="p-3 sm:p-4">
             <p
@@ -602,7 +635,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
               >
                 @if (dynRow(k).carriedFrom && !dynRow(k).carriedConfirmed) {
                   <div
-                    class="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-primary"
+                    [class]="warningBannerClass"
                   >
                     <span>
                       Ligne reconduite depuis <strong>{{ dynRow(k).carriedFrom }}</strong> — confirmez les mesures
@@ -612,7 +645,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                 }
                 @if (unconfirmedCarriedCount() > 0) {
                   <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
-                    <span class="text-xs text-amber-200">
+                    <span class="text-xs" [class]="textWarningClass">
                       {{ unconfirmedCarriedCount() }} ligne(s) reconduite(s) à confirmer
                     </span>
                     <button
@@ -631,14 +664,20 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                       <div class="max-w-xs">
                         <div class="min-w-0">
                           <label class="mb-1 block text-sm font-medium text-muted">Répartition RDV (%)</label>
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
-                            [class]="inputFieldClass"
-                            [value]="dynRow(k).repartitionRdv"
-                            (input)="onDynRepartition(k, $any($event.target).value)"
-                          />
+                          @if (isRepartitionComputed(tl)) {
+                            <div [class]="computedFieldClass" title="Calculé d’après le modèle Excel">
+                              {{ displayRepartition(k, tl) }}
+                            </div>
+                          } @else {
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              [class]="inputFieldClass"
+                              [value]="dynRow(k).repartitionRdv"
+                              (input)="onDynRepartition(k, $any($event.target).value)"
+                            />
+                          }
                         </div>
                       </div>
                     </div>
@@ -650,9 +689,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                         {{ s.label }}
                       </h3>
                       <div class="flex flex-col gap-4">
-                        <div
-                          class="space-y-3 rounded-lg border border-blue-500/35 bg-blue-600/10 p-4 dark:bg-blue-500/15"
-                        >
+                        <div [class]="primeSectorBandClass">
                           <h4 class="text-xs font-semibold uppercase tracking-wide text-primary">Prime (Secteur)</h4>
                           <div [class]="kpiGridClass">
                             @for (fl of primeFieldLabels; track fl.key) {
@@ -663,30 +700,34 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                                     <span class="normal-case font-normal text-[11px] text-muted">
                                       (config cellule)
                                     </span>
+                                  } @else if (isSectorFieldComputed(s, fl.key, tl)) {
+                                    <span class="normal-case font-normal text-[11px] text-muted">
+                                      (calculé)
+                                    </span>
                                   }
                                 </label>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0"
-                                  [class]="inputFieldClass"
-                                  [class.opacity-70]="fl.key === 'ponderationPrime'"
-                                  [readOnly]="fl.key === 'ponderationPrime'"
-                                  [title]="
-                                    fl.key === 'ponderationPrime'
-                                      ? 'Pondération définie dans Indicateurs & pondérations (par cellule)'
-                                      : ''
-                                  "
-                                  [value]="dynSector(k, s.sectorIndex)[fl.key]"
-                                  (input)="onDynSectorInput(k, s.sectorIndex, fl.key, $any($event.target).value)"
-                                />
+                                @if (isSectorFieldLocked(s, fl.key, tl)) {
+                                  <div
+                                    [class]="computedFieldClass"
+                                    [title]="sectorFieldTitle(s, fl.key, tl)"
+                                  >
+                                    {{ displaySectorField(k, s, fl.key, tl) }}
+                                  </div>
+                                } @else {
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0"
+                                    [class]="inputFieldClass"
+                                    [value]="dynSector(k, s.sectorIndex)[fl.key]"
+                                    (input)="onDynSectorInput(k, s.sectorIndex, fl.key, $any($event.target).value, s, tl)"
+                                  />
+                                }
                               </div>
                             }
                           </div>
                         </div>
-                        <div
-                          class="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 dark:bg-amber-500/15"
-                        >
+                        <div [class]="challengeSectorBandClass">
                           <h4 class="text-xs font-semibold uppercase tracking-wide text-primary">
                             Challenge (Secteur)
                           </h4>
@@ -699,31 +740,35 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                                     <span class="normal-case font-normal text-[11px] text-muted">
                                       (config cellule)
                                     </span>
+                                  } @else if (isSectorFieldComputed(s, fl.key, tl)) {
+                                    <span class="normal-case font-normal text-[11px] text-muted">
+                                      (calculé)
+                                    </span>
                                   }
                                 </label>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0"
-                                  [class]="inputFieldClass"
-                                  [class.opacity-70]="fl.key === 'ponderationChallenge'"
-                                  [readOnly]="fl.key === 'ponderationChallenge'"
-                                  [title]="
-                                    fl.key === 'ponderationChallenge'
-                                      ? 'Pondération définie dans Indicateurs & pondérations (par cellule)'
-                                      : ''
-                                  "
-                                  [value]="dynSector(k, s.sectorIndex)[fl.key]"
-                                  (input)="onDynSectorInput(k, s.sectorIndex, fl.key, $any($event.target).value)"
-                                />
+                                @if (isSectorFieldLocked(s, fl.key, tl)) {
+                                  <div
+                                    [class]="computedFieldClass"
+                                    [title]="sectorFieldTitle(s, fl.key, tl)"
+                                  >
+                                    {{ displaySectorField(k, s, fl.key, tl) }}
+                                  </div>
+                                } @else {
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0"
+                                    [class]="inputFieldClass"
+                                    [value]="dynSector(k, s.sectorIndex)[fl.key]"
+                                    (input)="onDynSectorInput(k, s.sectorIndex, fl.key, $any($event.target).value, s, tl)"
+                                  />
+                                }
                               </div>
                             }
                           </div>
                         </div>
                         @if (s.customKpis?.length) {
-                          <div
-                            class="space-y-3 rounded-lg border border-violet-500/40 bg-violet-500/10 p-4 dark:bg-violet-900/20"
-                          >
+                          <div [class]="customSectorBandClass">
                             <h4 class="text-xs font-semibold uppercase tracking-wide text-primary">
                               {{ customBandHeading(s) }}
                             </h4>
@@ -733,15 +778,28 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                             <div [class]="kpiGridClass">
                               @for (ck of s.customKpis; track ck.id) {
                                 <div class="min-w-0">
-                                  <label class="mb-1 block text-sm font-medium text-muted">{{ ck.header }}</label>
-                                  <input
-                                    type="number"
-                                    step="any"
-                                    min="0"
-                                    [class]="inputFieldClass"
-                                    [value]="dynCustomValue(k, s.sectorIndex, ck.id)"
-                                    (input)="onDynCustomInput(k, s.sectorIndex, ck.id, $any($event.target).value)"
-                                  />
+                                  <label class="mb-1 block text-sm font-medium text-muted">
+                                    {{ ck.header }}
+                                    @if (isCustomComputed(ck, tl)) {
+                                      <span class="normal-case font-normal text-[11px] text-muted">
+                                        (calculé)
+                                      </span>
+                                    }
+                                  </label>
+                                  @if (isCustomComputed(ck, tl)) {
+                                    <div [class]="computedFieldClass" title="Calculé d’après le modèle Excel">
+                                      {{ displayCustomValue(k, s.sectorIndex, ck, tl) }}
+                                    </div>
+                                  } @else {
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      [class]="inputFieldClass"
+                                      [value]="dynCustomValue(k, s.sectorIndex, ck.id)"
+                                      (input)="onDynCustomInput(k, s.sectorIndex, ck.id, $any($event.target).value, ck, tl)"
+                                    />
+                                  }
                                 </div>
                               }
                             </div>
@@ -822,7 +880,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                   }
 
                   <div
-                    class="space-y-3 rounded-lg border border-blue-500/35 bg-blue-600/10 p-4 dark:bg-blue-500/15"
+                    [class]="primeSectorBandClass"
                   >
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-primary">Prime (Secteur)</h3>
                     <div [class]="kpiGridClass">
@@ -861,7 +919,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                       </div>
                       <div class="min-w-0">
                         <label class="mb-1 block text-sm font-medium text-muted">
-                          Pondération
+                          Pondération (%)
                           <span class="normal-case font-normal text-[11px] text-muted">(config cellule)</span>
                         </label>
                         <input
@@ -886,7 +944,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                         />
                       </div>
                       <div class="min-w-0">
-                        <label class="mb-1 block text-sm font-medium text-muted">Montant</label>
+                        <label class="mb-1 block text-sm font-medium text-muted">Montant (DH)</label>
                         <input
                           type="number"
                           step="any"
@@ -900,7 +958,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                   </div>
 
                   <div
-                    class="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 dark:bg-amber-500/15"
+                    [class]="challengeSectorBandClass"
                   >
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-primary">Challenge (Secteur)</h3>
                     <div [class]="kpiGridClass">
@@ -928,7 +986,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                       </div>
                       <div class="min-w-0">
                         <label class="mb-1 block text-sm font-medium text-muted">
-                          Pondération
+                          Pondération (%)
                           <span class="normal-case font-normal text-[11px] text-muted">(config cellule)</span>
                         </label>
                         <input
@@ -953,7 +1011,7 @@ function buildNavBlocksLegacy(ctx: PrimeSaisieContext): NavBlock[] {
                         />
                       </div>
                       <div class="min-w-0">
-                        <label class="mb-1 block text-sm font-medium text-muted">Montant</label>
+                        <label class="mb-1 block text-sm font-medium text-muted">Montant (DH)</label>
                         <input
                           type="number"
                           step="any"
@@ -1016,6 +1074,7 @@ export class PrimeSaisieComponent {
     file: FileSpreadsheet,
     back: ArrowLeft,
     save: Save,
+    download: Download,
   };
   /** Exposé au template (grille) pour libellé « répartition optionnelle » sur contrat SAV. */
   readonly isSavContract = isSavContract;
@@ -1023,6 +1082,12 @@ export class PrimeSaisieComponent {
   readonly primeFieldLabels = PRIME_FIELD_LABELS;
   readonly challengeFieldLabels = CHALLENGE_FIELD_LABELS;
   readonly customBandHeading = customBandHeading;
+  readonly primeSectorBandClass = PRIME_SECTOR_BAND_CLASS;
+  readonly challengeSectorBandClass = CHALLENGE_SECTOR_BAND_CLASS;
+  readonly customSectorBandClass = CUSTOM_SECTOR_BAND_CLASS;
+  readonly warningBannerClass = PRIME_WARNING_BANNER_CLASS + ' mb-4 flex flex-wrap items-center justify-between gap-2';
+  readonly textWarningClass = PRIME_TEXT_WARNING_CLASS;
+  readonly textSuccessClass = PRIME_TEXT_SUCCESS_CLASS;
 
   readonly activeTpl = inject(PrimeFicheTemplateActiveService);
   readonly session = inject(PrimeFicheSessionService);
@@ -1069,7 +1134,13 @@ export class PrimeSaisieComponent {
       rows: merged.rows,
       errors: merged.errors,
       template: merged.previewTemplate ?? t,
+      overlay: extractComputedOverlayFromRows(merged.rows, merged.effectiveSchema ?? schema),
     };
+  });
+
+  readonly computedOverlay = computed(() => {
+    const preview = this.resultPreview() as { overlay?: Record<string, string> };
+    return preview.overlay ?? {};
   });
 
   /** Aperçu Excel unifié (même composant / chrome que le gestionnaire de templates). */
@@ -1105,6 +1176,7 @@ export class PrimeSaisieComponent {
   readonly storedTemplateList = computed(() => loadStoredTemplates());
 
   readonly inputFieldClass = PRIME_INPUT_FIELD_CLASS;
+  readonly computedFieldClass = PRIME_COMPUTED_FIELD_CLASS;
 
   /** Grille responsive pour les champs KPI (même style de cartes, moins de scroll vertical). */
   readonly kpiGridClass = PRIME_KPI_GRID_CLASS;
@@ -1132,6 +1204,7 @@ export class PrimeSaisieComponent {
   readonly wizardEarlySaveMessage = signal<string | null>(null);
   readonly rolloverBusy = signal(false);
   readonly rolloverHint = signal<string | null>(null);
+  readonly templateDownloadBusy = signal(false);
 
   readonly unconfirmedCarriedCount = computed(() => countUnconfirmedCarriedLines(this.lignesDynamic()));
 
@@ -1404,6 +1477,21 @@ export class PrimeSaisieComponent {
       this.wizardDraftListItems.set(list);
     } finally {
       this.wizardDraftsLoading.set(false);
+    }
+  }
+
+  async downloadStandardTemplate(): Promise<void> {
+    if (this.templateDownloadBusy()) return;
+    this.templateDownloadBusy.set(true);
+    this.wizardEarlySaveMessage.set(null);
+    try {
+      await downloadPrimeFicheStandardTemplate();
+    } catch (e) {
+      this.wizardEarlySaveMessage.set(
+        e instanceof Error ? e.message : 'Impossible de télécharger le modèle standard.',
+      );
+    } finally {
+      this.templateDownloadBusy.set(false);
     }
   }
 
@@ -1680,6 +1768,8 @@ export class PrimeSaisieComponent {
   }
 
   onDynRepartition(key: string, value: string): void {
+    const line = this.schemaForUi()?.lines.find((l) => l.stableId === key);
+    if (isComputedRepartition(line)) return;
     const next = sanitizeNonNegativeNumberInput(value);
     this.lignesDynamic.update((m) => {
       const cur = markLineConfirmedOnMeasureEdit(m[key] ?? this.dynRow(key));
@@ -1689,8 +1779,17 @@ export class PrimeSaisieComponent {
     this.saveMessage.set(null);
   }
 
-  onDynSectorInput(key: string, sectorIndex: number, field: keyof PrimeFicheSecteurPairValues, value: string): void {
-    if (field === 'ponderationPrime' || field === 'ponderationChallenge') return;
+  onDynSectorInput(
+    key: string,
+    sectorIndex: number,
+    field: keyof PrimeFicheSecteurPairValues,
+    value: string,
+    secteur?: PrimeFicheTemplateSecteurSlice,
+    line?: PrimeFicheTemplateLine | null,
+  ): void {
+    const ln = line ?? this.schemaForUi()?.lines.find((l) => l.stableId === key);
+    const sect = secteur ?? ln?.secteurs[sectorIndex];
+    if (isLockedSectorField(sect, field, ln ?? undefined)) return;
     const next = sanitizeNonNegativeNumberInput(value);
     this.lignesDynamic.update((m) => {
       let cur = markLineConfirmedOnMeasureEdit(m[key] ?? this.dynRow(key));
@@ -1704,7 +1803,17 @@ export class PrimeSaisieComponent {
     this.saveMessage.set(null);
   }
 
-  onDynCustomInput(key: string, sectorIndex: number, customId: string, value: string): void {
+  onDynCustomInput(
+    key: string,
+    sectorIndex: number,
+    customId: string,
+    value: string,
+    kpi?: PrimeFicheTemplateCustomKpi,
+    line?: PrimeFicheTemplateLine | null,
+  ): void {
+    const ln = line ?? this.schemaForUi()?.lines.find((l) => l.stableId === key);
+    const ck = kpi ?? ln?.secteurs[sectorIndex]?.customKpis?.find((x) => x.id === customId);
+    if (isComputedCustomKpi(ck, ln ?? undefined)) return;
     const next = sanitizeNonNegativeNumberInput(value);
     this.lignesDynamic.update((m) => {
       let cur = markLineConfirmedOnMeasureEdit(m[key] ?? this.dynRow(key));
@@ -1716,6 +1825,81 @@ export class PrimeSaisieComponent {
     });
     this.bumpProgress(key);
     this.saveMessage.set(null);
+  }
+
+  isRepartitionComputed(line: PrimeFicheTemplateLine | null | undefined): boolean {
+    return isComputedRepartition(line ?? undefined);
+  }
+
+  isSectorFieldComputed(
+    secteur: PrimeFicheTemplateSecteurSlice,
+    key: keyof PrimeFicheSecteurPairValues,
+    line: PrimeFicheTemplateLine | null | undefined,
+  ): boolean {
+    return isComputedSectorField(secteur, key, line ?? undefined);
+  }
+
+  isSectorFieldLocked(
+    secteur: PrimeFicheTemplateSecteurSlice,
+    key: keyof PrimeFicheSecteurPairValues,
+    line: PrimeFicheTemplateLine | null | undefined,
+  ): boolean {
+    return isLockedSectorField(secteur, key, line ?? undefined);
+  }
+
+  isCustomComputed(kpi: PrimeFicheTemplateCustomKpi, line: PrimeFicheTemplateLine | null | undefined): boolean {
+    return isComputedCustomKpi(kpi, line ?? undefined);
+  }
+
+  sectorFieldTitle(
+    secteur: PrimeFicheTemplateSecteurSlice,
+    key: keyof PrimeFicheSecteurPairValues,
+    line: PrimeFicheTemplateLine | null | undefined,
+  ): string {
+    if (isPonderationField(key)) {
+      return 'Pondération définie dans Indicateurs & pondérations (par cellule)';
+    }
+    if (isComputedSectorField(secteur, key, line ?? undefined)) {
+      return 'Calculé d’après le modèle Excel — non modifiable';
+    }
+    return '';
+  }
+
+  displayRepartition(key: string, line: PrimeFicheTemplateLine): string {
+    if (isComputedRepartition(line)) {
+      const ov = this.computedOverlay()[computedOverlayKey(key, 'repartition')];
+      if (ov) return ov;
+    }
+    const v = this.dynRow(key).repartitionRdv?.trim();
+    return v ? v : '—';
+  }
+
+  displaySectorField(
+    key: string,
+    secteur: PrimeFicheTemplateSecteurSlice,
+    field: keyof PrimeFicheSecteurPairValues,
+    line: PrimeFicheTemplateLine,
+  ): string {
+    if (!isPonderationField(field) && isComputedSectorField(secteur, field, line)) {
+      const ov = this.computedOverlay()[computedOverlayKey(key, 'field', secteur.sectorIndex, field)];
+      if (ov) return ov;
+    }
+    const v = this.dynSector(key, secteur.sectorIndex)[field]?.trim();
+    return v ? v : '—';
+  }
+
+  displayCustomValue(
+    key: string,
+    sectorIndex: number,
+    kpi: PrimeFicheTemplateCustomKpi,
+    line: PrimeFicheTemplateLine,
+  ): string {
+    if (isComputedCustomKpi(kpi, line)) {
+      const ov = this.computedOverlay()[computedOverlayKey(key, 'custom', sectorIndex, kpi.id)];
+      if (ov) return ov;
+    }
+    const v = this.dynCustomValue(key, sectorIndex, kpi.id)?.trim();
+    return v ? v : '—';
   }
 
   confirmAllCarried(): void {
@@ -2021,6 +2205,7 @@ export class PrimeSaisieComponent {
       const buf = await file.arrayBuffer();
       const grid = parsePrimeFicheGrid(file.name, buf);
       const parsedWb = parsePrimeTemplateExcel(file.name, buf);
+      await attachExcelSheetAppearance(parsedWb, buf);
       if (!grid.schema) {
         const errs = grid.diagnostics.errors.length
           ? grid.diagnostics.errors.join(' ')

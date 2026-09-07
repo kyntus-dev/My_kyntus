@@ -1,5 +1,6 @@
 import { parsePrimeFicheGrid } from './prime-fiche-grid.parser';
 import { parsePrimeTemplateExcel } from './excel-fiche-template.parser';
+import { attachExcelSheetAppearance } from './extract-excel-sheet-appearance';
 import { buildTemplatePayloadFromSchemaDefaults } from './prime-fiche-payload-from-schema';
 import { extractMergedFicheTotals } from './prime-employee-fiche-merged-preview';
 import {
@@ -38,6 +39,7 @@ export async function parseReadyPrimeFicheExcel(
 ): Promise<ReadyFicheExcelParseResult> {
   const grid = parsePrimeFicheGrid(fileName, buffer);
   const parsedWorkbook = parsePrimeTemplateExcel(fileName, buffer);
+  await attachExcelSheetAppearance(parsedWorkbook, buffer);
   const schema = grid.schema;
 
   if (!schema) {

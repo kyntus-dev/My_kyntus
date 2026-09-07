@@ -7,7 +7,7 @@ namespace Planning.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-//[Authorize]
+[Authorize]
 public class ServicesController : ControllerBase
 {
     private readonly IServiceService _serviceService;

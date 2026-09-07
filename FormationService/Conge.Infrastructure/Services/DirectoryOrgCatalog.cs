@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 using Conge.Application.Abstractions;
 using Conge.Domain.Entities;
 using Conge.Domain.Interfaces;
-using Microsoft.Extensions.Caching.Memory;
+using Kyntus.Caching;
 using Microsoft.Extensions.Logging;
 
 namespace Conge.Infrastructure.Services;
@@ -15,27 +15,21 @@ namespace Conge.Infrastructure.Services;
 public sealed class DirectoryOrgCatalog(
     HttpClient http,
     IOrgNodeCongeRepository orgNodes,
-    IMemoryCache cache,
+    ICacheService cache,
     ILogger<DirectoryOrgCatalog> logger) : IDirectoryOrgCatalog
 {
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(2);
-    private const string CacheKey = "conge.directory.org.catalog";
-
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public async Task<DirectoryOrgCatalogSnapshot> GetSnapshotAsync(CancellationToken ct = default)
-    {
-        if (cache.TryGetValue(CacheKey, out DirectoryOrgCatalogSnapshot? cached) && cached is not null)
-            return cached;
-
-        var snapshot = await BuildSnapshotAsync(ct);
-        cache.Set(CacheKey, snapshot, CacheTtl);
-        return snapshot;
-    }
+    public Task<DirectoryOrgCatalogSnapshot> GetSnapshotAsync(CancellationToken ct = default) =>
+        cache.GetOrCreateAsync(
+            KyntusCacheKeys.CongeOrgCatalog(),
+            BuildSnapshotAsync,
+            KyntusCacheTtl.Entity,
+            ct);
 
     public async Task<string?> ResolveNodeNameAsync(string nodeId, CancellationToken ct = default)
     {
@@ -45,7 +39,8 @@ public sealed class DirectoryOrgCatalog(
         return snap.GetName(id);
     }
 
-    public void InvalidateCache() => cache.Remove(CacheKey);
+    public void InvalidateCache() =>
+        _ = cache.RemoveAsync(KyntusCacheKeys.CongeOrgCatalog());
 
     private async Task<DirectoryOrgCatalogSnapshot> BuildSnapshotAsync(CancellationToken ct)
     {

@@ -76,6 +76,9 @@ public class AppDbContext : DbContext
             .Property(u => u.HtelCode)
             .HasMaxLength(128);
         modelBuilder.Entity<User>()
+            .Property(u => u.HtelTechnicienName)
+            .HasMaxLength(256);
+        modelBuilder.Entity<User>()
             .HasIndex(u => u.IdTechnicien)
             .IsUnique()
             .HasFilter("\"IdTechnicien\" IS NOT NULL");
@@ -275,13 +278,13 @@ public class AppDbContext : DbContext
                   .OnDelete(DeleteBehavior.SetNull)
                   .IsRequired(false);
 
-            // Template: unique (SubServiceId, Mode, Label) when IsTemplate
-            entity.HasIndex(e => new { e.SubServiceId, e.ShiftModeProfileId, e.Label })
+            // Template: unique (SubServiceId, Mode, Saturday, Label) when IsTemplate
+            entity.HasIndex(e => new { e.SubServiceId, e.ShiftModeProfileId, e.AppliesToSaturday, e.Label })
                 .IsUnique()
                 .HasFilter("\"IsTemplate\" = TRUE");
 
-            // Snapshot: unique (SubServiceId, WeekCode, Mode, Label) when not template
-            entity.HasIndex(e => new { e.SubServiceId, e.WeekCode, e.ShiftModeProfileId, e.Label })
+            // Snapshot: unique (SubServiceId, WeekCode, Mode, Saturday, Label) when not template
+            entity.HasIndex(e => new { e.SubServiceId, e.WeekCode, e.ShiftModeProfileId, e.AppliesToSaturday, e.Label })
                 .IsUnique()
                 .HasFilter("\"IsTemplate\" = FALSE AND \"WeekCode\" IS NOT NULL");
         });
@@ -307,6 +310,14 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Target).HasMaxLength(32);
             entity.Property(e => e.LastRunWeekCode).HasMaxLength(16);
             entity.Property(e => e.LastValidationReminderWeekCode).HasMaxLength(16);
+            entity.Property(e => e.SenderFromEmail).HasMaxLength(256);
+            entity.Property(e => e.SenderDisplayName).HasMaxLength(128);
+            entity.Property(e => e.SmtpHost).HasMaxLength(256);
+            entity.Property(e => e.SmtpUser).HasMaxLength(256);
+            entity.Property(e => e.SmtpPassword).HasMaxLength(512);
+            entity.Property(e => e.MailSendMode).HasMaxLength(16);
+            entity.Property(e => e.MailApiProvider).HasMaxLength(32);
+            entity.Property(e => e.MailApiKey).HasMaxLength(512);
         });
 
         modelBuilder.Entity<PlanningChangeRequest>(entity =>

@@ -7,7 +7,7 @@ const messages: Record<string, string> = {
   'prime.types.title': 'Types de prime',
   'prime.rules.title': 'Règles de prime',
   'prime.results.title': 'Résultats des primes',
-  'prime.validation.title': 'Validation des primes',
+  'prime.validation.title': 'Fiches à valider',
   'prime.history.title': 'Historique des primes',
   'layout.menu': 'Menu',
   'topbar.search.placeholder': 'Rechercher…',

@@ -1,6 +1,6 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Subscription } from 'rxjs';
 import { KyntusSessionService } from '../../core/session/kyntus-session.service';
@@ -16,6 +16,7 @@ import { KyntusPageHeaderComponent } from '../../shared/components/ui/kyntus-pag
 })
 export class QualiteCqHostComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly session = inject(KyntusSessionService);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly subs = new Subscription();
@@ -29,6 +30,10 @@ export class QualiteCqHostComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.route.queryParamMap.subscribe((q) => {
         const view = q.get('view') || 'evaluations';
+        if (view === 'audit') {
+          void this.router.navigate(['/audit'], { queryParams: { section: 'journal', module: 'qualite' } });
+          return;
+        }
         this.title = this.titleFor(view);
         const url = `/qualite-app/?embed=1&view=${encodeURIComponent(view)}`;
         this.iframeSrc = this.sanitizer.bypassSecurityTrustResourceUrl(url);

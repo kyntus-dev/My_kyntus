@@ -30,8 +30,8 @@ import type { Department, PrimeRule, PrimeType } from '../models';
       <div class="prime-page-shell">
         <div class="flex justify-between items-center">
           <div>
-            <h1 class="prime-page-title">Prime Rules</h1>
-            <p class="text-muted mt-1">Configure logic and conditions for bonuses.</p>
+            <h1 class="prime-page-title">Règles de prime</h1>
+            <p class="text-muted mt-1">Configurer la logique et les conditions des primes.</p>
           </div>
           <button
             type="button"
@@ -39,7 +39,7 @@ import type { Department, PrimeRule, PrimeType } from '../models';
             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
           >
             <app-lucide-icon [icon]="icons.plus" className="w-4 h-4" />
-            New Rule
+            Nouvelle règle
           </button>
         </div>
 
@@ -50,11 +50,11 @@ import type { Department, PrimeRule, PrimeType } from '../models';
             <table class="w-full text-sm text-left">
               <thead class="text-xs text-muted uppercase bg-card border-b border-default">
                 <tr>
-                  <th class="px-6 py-3 font-medium tracking-wider">Prime Type</th>
-                  <th class="px-6 py-3 font-medium tracking-wider">Scope</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Type de prime</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Périmètre</th>
                   <th class="px-6 py-3 font-medium tracking-wider">Condition</th>
-                  <th class="px-6 py-3 font-medium tracking-wider">Reward</th>
-                  <th class="px-6 py-3 font-medium tracking-wider">Period</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Récompense</th>
+                  <th class="px-6 py-3 font-medium tracking-wider">Période</th>
                   <th class="px-6 py-3 font-medium tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
@@ -62,7 +62,7 @@ import type { Department, PrimeRule, PrimeType } from '../models';
                 @if (filteredRules().length === 0) {
                   <tr>
                     <td colspan="6" class="px-6 py-8 text-center text-muted">
-                      No data available
+                      Aucune donnée disponible
                     </td>
                   </tr>
                 } @else {
@@ -76,14 +76,14 @@ import type { Department, PrimeRule, PrimeType } from '../models';
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-primary">
                         <div class="text-sm">
-                          <span class="text-muted">Dept:</span> {{ getDeptName(item.departmentId) }}
+                          <span class="text-muted">Dépt. :</span> {{ getDeptName(item.departmentId) }}
                         </div>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-primary">
                         <div
                           class="font-mono text-xs bg-card px-2 py-1 rounded text-primary inline-block border border-default"
                         >
-                          IF {{ item.conditionField }} {{ item.conditionType }} {{ item.targetValue }}
+                          SI {{ item.conditionField }} {{ item.conditionType }} {{ item.targetValue }}
                         </div>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-primary">
@@ -91,7 +91,7 @@ import type { Department, PrimeRule, PrimeType } from '../models';
                           {{ item.amount }} {{ item.calculationMethod === 'Percentage' ? '%' : 'MAD' }}
                         </div>
                       </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-primary">{{ item.period }}</td>
+                      <td class="px-6 py-4 whitespace-nowrap text-primary">{{ periodLabel(item.period) }}</td>
                       <td class="px-6 py-4 whitespace-nowrap text-primary text-right">
                         <div class="flex items-center justify-end gap-2">
                           <button
@@ -119,7 +119,7 @@ import type { Department, PrimeRule, PrimeType } from '../models';
         <app-prime-modal
           [isOpen]="isModalOpen()"
           (onClose)="closeModal()"
-          title="Build Prime Rule"
+          title="Créer une règle de prime"
           className="max-w-2xl"
         >
           <app-prime-rule-builder
@@ -155,7 +155,7 @@ export class PrimeRulesPageComponent implements OnInit {
 
   readonly filterBarFilters = computed<PrimeFilterBarFilter[]>(() => [
     {
-      name: 'Prime Type',
+      name: 'Type de prime',
       value: this.typeFilter(),
       onChange: this.setTypeFilter,
       options: this.types().map((t) => ({ label: t.name, value: t.id })),
@@ -178,11 +178,24 @@ export class PrimeRulesPageComponent implements OnInit {
   }
 
   getTypeName(id: string): string {
-    return this.types().find((t) => t.id === id)?.name ?? 'Unknown';
+    return this.types().find((t) => t.id === id)?.name ?? 'Inconnu';
   }
 
   getDeptName(id?: string): string {
-    return this.departments().find((d) => d.id === id)?.name ?? 'All';
+    return this.departments().find((d) => d.id === id)?.name ?? 'Tous';
+  }
+
+  periodLabel(period: string): string {
+    switch (period) {
+      case 'Monthly':
+        return 'Mensuel';
+      case 'Quarterly':
+        return 'Trimestriel';
+      case 'Yearly':
+        return 'Annuel';
+      default:
+        return period;
+    }
   }
 
   openModal(): void {

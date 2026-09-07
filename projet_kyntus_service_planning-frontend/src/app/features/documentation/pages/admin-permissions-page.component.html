@@ -1,12 +1,12 @@
 @if (role$ | async; as role) {
   @if (!isAdmin(role)) {
-    <app-admin-shell title="Permissions Management" description="Accès refusé pour ce rôle." iconName="lock">
+    <app-admin-shell title="Gestion des permissions" description="Accès refusé pour ce rôle." iconName="lock">
       <div class="card-navy p-6">
         <p class="text-primary">Seul le rôle `Admin` peut modifier la matrice RBAC.</p>
       </div>
     </app-admin-shell>
   } @else if (loading) {
-    <app-admin-shell title="Permissions Management" description="Chargement des permissions…" iconName="lock">
+    <app-admin-shell title="Gestion des permissions" description="Chargement des permissions…" iconName="lock">
       <div class="card-navy p-6">
         <p class="text-primary">Veuillez patienter.</p>
       </div>

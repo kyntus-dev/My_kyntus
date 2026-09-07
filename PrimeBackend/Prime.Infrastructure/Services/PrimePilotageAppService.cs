@@ -115,8 +115,7 @@ public sealed class PrimePilotageAppService(
 
             var readyForValidation = readyCount + submittedForValidation;
 
-            var poolOk = cellDraft is not null && cellDraft.GlobalPoolManagerApprovedAt.HasValue &&
-                         cellDraft.GlobalPoolRhApprovedAt.HasValue;
+            var poolOk = cellDraft is not null && GlobalPoolWorkflowService.LegacyPoolUnlocked(cellDraft);
 
             cellulesById.TryGetValue(celluleId, out var cellEnt);
             var poleName = cellEnt is not null && polesById.TryGetValue(cellEnt.PoleId, out var pole)

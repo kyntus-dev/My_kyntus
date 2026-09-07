@@ -80,6 +80,7 @@
           <th>Créés</th>
           <th>Màj</th>
           <th>Erreurs</th>
+          <th>Statut</th>
           <th></th>
         </tr>
       </thead>
@@ -103,7 +104,26 @@
           <td>{{ job.crees }}</td>
           <td>{{ job.misAJour }}</td>
           <td>{{ job.erreurs }}</td>
-          <td><button type="button" class="link-btn" (click)="viewJob(job.id)">Détail</button></td>
+          <td>{{ job.status || '—' }}</td>
+          <td>
+            <button type="button" class="link-btn" (click)="viewJob(job.id)">Détail</button>
+            <button
+              type="button"
+              class="link-btn danger-link"
+              *ngIf="canRollback(job)"
+              [disabled]="rollingBackJobId === job.id"
+              (click)="rollbackJob(job)">
+              {{ rollingBackJobId === job.id ? 'Annulation…' : 'Annuler cet import' }}
+            </button>
+            <button
+              type="button"
+              class="link-btn"
+              *ngIf="canRestorePlacements(job)"
+              [disabled]="restoringJobId === job.id"
+              (click)="restorePlacements(job)">
+              {{ restoringJobId === job.id ? 'Restauration…' : 'Remettre les cellules' }}
+            </button>
+          </td>
         </tr>
       </tbody>
     </table>

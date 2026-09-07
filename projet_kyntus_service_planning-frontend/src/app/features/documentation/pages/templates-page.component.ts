@@ -29,6 +29,8 @@ import { KyntusEmptyStateComponent } from '../../../shared/components/ui/kyntus-
 import { KyntusErrorStateComponent } from '../../../shared/components/ui/kyntus-error-state.component';
 import { BodyPortalDirective } from '../../../shared/directives/body-portal.directive';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
+import { EmployeeFieldService } from '../../users/services/employee-field.service';
+import type { EmployeeImportFieldConfig } from '../../users/services/employee-import.service';
 
 @Component({
   standalone: true,
@@ -126,6 +128,7 @@ export class TemplatesPageComponent implements OnInit, OnDestroy {
   cleaningDrafts = false;
   creatingTemplate = false;
   createProgressLabel: string | null = null;
+  employeeFieldOptions: EmployeeImportFieldConfig[] = [];
   private readonly templateActionLoading = new Map<string, TemplateAction>();
   private readonly feedbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly previewBlobCache = new Map<string, Blob>();
@@ -138,10 +141,25 @@ export class TemplatesPageComponent implements OnInit, OnDestroy {
     private readonly session: KyntusSessionService,
     private readonly sanitizer: DomSanitizer,
     private readonly confirmService: KyntusConfirmService,
+    private readonly employeeFieldService: EmployeeFieldService,
   ) {}
 
   ngOnInit(): void {
+    this.loadEmployeeFieldOptions();
     this.reloadTemplates();
+  }
+
+  private loadEmployeeFieldOptions(): void {
+    this.sub.add(
+      this.employeeFieldService.getFields().subscribe({
+        next: (rows) => {
+          this.employeeFieldOptions = [...rows].sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+        },
+        error: () => {
+          this.employeeFieldOptions = [];
+        },
+      }),
+    );
   }
 
   /** Rechargement public (bouton Réessayer de l’état d’erreur). */
@@ -615,6 +633,57 @@ export class TemplatesPageComponent implements OnInit, OnDestroy {
     );
   }
 
+  allEditableVariables(): TemplateVariableDto[] {
+    return this.selectedTemplate?.currentVersion?.variables ?? [];
+  }
+
+  mappingLabel(v: TemplateVariableDto): string {
+    if (this.normalizeFormScope(v.formScope) === 'hr' || !v.sourceFieldKey?.trim()) {
+      return 'A saisir par RH';
+    }
+    const matched = this.employeeFieldOptions.find((f) => f.fieldKey === v.sourceFieldKey);
+    return matched?.label ?? v.suggestedFieldLabel?.trim() ?? v.sourceFieldKey;
+  }
+
+  mappingBadgeClass(v: TemplateVariableDto): string {
+    switch ((v.mappingConfidence ?? '').toLowerCase()) {
+      case 'high':
+        return 'bg-[var(--success-bg)] text-[var(--success-text)] border-[var(--success-border)]';
+      case 'medium':
+        return 'bg-[var(--warning-bg)] text-[var(--warning-text)] border-[var(--warning-border)]';
+      default:
+        return 'bg-card text-muted border-default';
+    }
+  }
+
+  mappingSelectValue(v: TemplateVariableDto): string {
+    return this.normalizeFormScope(v.formScope) === 'db' && v.sourceFieldKey?.trim()
+      ? v.sourceFieldKey.trim()
+      : '__hr__';
+  }
+
+  onVariableMappingChanged(v: TemplateVariableDto, value: string): void {
+    if (value === '__hr__') {
+      v.formScope = 'hr';
+      v.sourceFieldKey = null;
+      v.mappingConfirmed = true;
+      v.sourcePriority = 30;
+      return;
+    }
+
+    const field = this.employeeFieldOptions.find((row) => row.fieldKey === value);
+    v.formScope = 'db';
+    v.sourceFieldKey = value;
+    v.mappingConfirmed = true;
+    v.mappingUnavailable = field ? !field.isEnabled : false;
+    v.suggestedFieldKey = value;
+    v.suggestedFieldLabel = field?.label ?? value;
+    if (!v.mappingConfidence || v.mappingConfidence === 'low') {
+      v.mappingConfidence = field ? 'medium' : 'low';
+    }
+    v.sourcePriority = 10;
+  }
+
   /** Enregistre la définition des formulaires RH / DB (version courante). */
   savePilotDefinitions(): void {
     if (!this.selectedTemplate?.currentVersion?.variables?.length) {
@@ -648,6 +717,9 @@ export class TemplatesPageComponent implements OnInit, OnDestroy {
         sourcePriority: v.sourcePriority ?? (formScope === 'hr' ? 30 : formScope === 'db' ? 10 : 20),
         normalizedName: v.normalizedName ?? v.name.trim(),
         rawPlaceholder: v.rawPlaceholder ?? null,
+        sourceFieldKey: formScope === 'db' ? v.sourceFieldKey ?? null : null,
+        mappingConfidence: v.mappingConfidence ?? null,
+        mappingConfirmed: v.mappingConfirmed ?? (formScope === 'hr'),
       };
     });
     this.pilotVarBusy = true;
@@ -691,6 +763,9 @@ export class TemplatesPageComponent implements OnInit, OnDestroy {
               sourcePriority: v.sourcePriority ?? (formScope === 'hr' ? 30 : formScope === 'db' ? 10 : 20),
               normalizedName: v.normalizedName ?? v.name.trim(),
               rawPlaceholder: v.rawPlaceholder ?? null,
+              sourceFieldKey: formScope === 'db' ? v.sourceFieldKey ?? null : null,
+              mappingConfidence: v.mappingConfidence ?? null,
+              mappingConfirmed: v.mappingConfirmed ?? (formScope === 'hr'),
             };
           }),
         })

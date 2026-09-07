@@ -39,6 +39,7 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
             e.HasIndex(x => x.Email).IsUnique();
             e.HasIndex(x => x.BusinessDepartmentId);
             e.Property(x => x.HtelCode).HasMaxLength(128);
+            e.Property(x => x.HtelTechnicienName).HasMaxLength(256);
             e.HasIndex(x => x.IdTechnicien)
                 .IsUnique()
                 .HasFilter("\"IdTechnicien\" IS NOT NULL");

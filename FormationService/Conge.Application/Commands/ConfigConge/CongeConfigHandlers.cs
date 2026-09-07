@@ -7,10 +7,26 @@ using MediatR;
 
 namespace Conge.Application.Commands.ConfigConge;
 
-public record GetPeriodesInterditesQuery : IRequest<PeriodesInterditesDto>;
+public record GetPeriodesInterditesQuery(
+    string? ScopeKind = null,
+    string? ScopeId = null,
+    Guid? EmployeId = null,
+    string? DepartmentId = null,
+    string? PoleId = null,
+    string? CelluleId = null,
+    string? ServiceId = null) : IRequest<PeriodesInterditesDto>;
 
-public record UpdatePeriodesInterditesCommand(IReadOnlyList<int> Mois, Guid? UpdatedBy = null)
+public record GetPeriodesInterditesScopesQuery : IRequest<PeriodesInterditesScopesDto>;
+
+public record UpdatePeriodesInterditesCommand(
+    IReadOnlyList<int> Mois,
+    Guid? UpdatedBy = null,
+    string? ScopeKind = null,
+    string? ScopeId = null)
     : IRequest<PeriodesInterditesDto>;
+
+public record DeletePeriodesInterditesScopeCommand(string ScopeKind, string ScopeId)
+    : IRequest<bool>;
 
 public record GetQuotasServiceQuery(Guid SuperviseurId) : IRequest<IReadOnlyList<QuotaCongeServiceDto>>;
 
@@ -29,13 +45,174 @@ public record GetDisponibiliteCongeQuery(Guid EmployeId, DateTime Debut, DateTim
 public class GetPeriodesInterditesHandler : IRequestHandler<GetPeriodesInterditesQuery, PeriodesInterditesDto>
 {
     private readonly IPeriodeInterditeRepository _repo;
+    private readonly IEmployeSnapshotRepository _employeRepo;
+    private readonly IDirectoryOrgCatalog? _orgCatalog;
 
-    public GetPeriodesInterditesHandler(IPeriodeInterditeRepository repo) => _repo = repo;
+    public GetPeriodesInterditesHandler(
+        IPeriodeInterditeRepository repo,
+        IEmployeSnapshotRepository employeRepo,
+        IDirectoryOrgCatalog? orgCatalog = null)
+    {
+        _repo = repo;
+        _employeRepo = employeRepo;
+        _orgCatalog = orgCatalog;
+    }
 
     public async Task<PeriodesInterditesDto> Handle(GetPeriodesInterditesQuery request, CancellationToken ct)
     {
-        var row = await _repo.GetOrCreateAsync(ct);
-        return new PeriodesInterditesDto(row.GetMois().ToList(), row.UpdatedAt);
+        var general = await _repo.GetOrCreateAsync(ct);
+        var all = await _repo.GetAllAsync(ct);
+        var requested = PeriodeInterditeScopeKinds.Normalize(request.ScopeKind);
+        var requestedId = PeriodeInterditeScopeKinds.NormalizeScopeId(requested, request.ScopeId);
+
+        PeriodeInterditeConge resolved;
+        string deepestKind;
+        string deepestId;
+
+        if (request.EmployeId is Guid empId && empId != Guid.Empty)
+        {
+            var employe = await _employeRepo.GetByEmployeIdAsync(empId, ct);
+            resolved = PeriodeInterditeConge.PickForEmploye(all, employe, general);
+            deepestKind = PeriodeInterditeScopeKinds.Normalize(resolved.ScopeKind);
+            deepestId = resolved.ScopeId ?? string.Empty;
+        }
+        else if (!string.IsNullOrWhiteSpace(request.DepartmentId)
+                 || !string.IsNullOrWhiteSpace(request.PoleId)
+                 || !string.IsNullOrWhiteSpace(request.CelluleId)
+                 || !string.IsNullOrWhiteSpace(request.ServiceId))
+        {
+            resolved = PickChain(all, general, request);
+            deepestKind = DeepestKind(request);
+            deepestId = DeepestId(request);
+        }
+        else if (requested != PeriodeInterditeScopeKinds.General && requestedId.Length > 0)
+        {
+            resolved = all.FirstOrDefault(r =>
+                           PeriodeInterditeScopeKinds.Normalize(r.ScopeKind) == requested
+                           && string.Equals(r.ScopeId, requestedId, StringComparison.OrdinalIgnoreCase))
+                       ?? general;
+            deepestKind = requested;
+            deepestId = requestedId;
+        }
+        else
+        {
+            resolved = general;
+            deepestKind = PeriodeInterditeScopeKinds.General;
+            deepestId = string.Empty;
+        }
+
+        var isOverride = PeriodeInterditeScopeKinds.Normalize(resolved.ScopeKind) == deepestKind
+            && string.Equals(resolved.ScopeId ?? string.Empty, deepestId, StringComparison.OrdinalIgnoreCase)
+            && deepestKind != PeriodeInterditeScopeKinds.General;
+
+        return MapDto(resolved, general, isOverride, deepestKind, deepestId, await ResolveLabelAsync(resolved, ct));
+    }
+
+    private static PeriodeInterditeConge PickChain(
+        IReadOnlyList<PeriodeInterditeConge> all,
+        PeriodeInterditeConge general,
+        GetPeriodesInterditesQuery request)
+    {
+        static PeriodeInterditeConge? Find(IReadOnlyList<PeriodeInterditeConge> rows, string kind, string? id)
+        {
+            id = (id ?? string.Empty).Trim();
+            if (id.Length == 0) return null;
+            return rows.FirstOrDefault(r =>
+                PeriodeInterditeScopeKinds.Normalize(r.ScopeKind) == kind
+                && string.Equals(r.ScopeId, id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return Find(all, PeriodeInterditeScopeKinds.Service, request.ServiceId)
+            ?? Find(all, PeriodeInterditeScopeKinds.Cellule, request.CelluleId)
+            ?? Find(all, PeriodeInterditeScopeKinds.Pole, request.PoleId)
+            ?? Find(all, PeriodeInterditeScopeKinds.Department, request.DepartmentId)
+            ?? general;
+    }
+
+    private static string DeepestKind(GetPeriodesInterditesQuery request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ServiceId)) return PeriodeInterditeScopeKinds.Service;
+        if (!string.IsNullOrWhiteSpace(request.CelluleId)) return PeriodeInterditeScopeKinds.Cellule;
+        if (!string.IsNullOrWhiteSpace(request.PoleId)) return PeriodeInterditeScopeKinds.Pole;
+        if (!string.IsNullOrWhiteSpace(request.DepartmentId)) return PeriodeInterditeScopeKinds.Department;
+        return PeriodeInterditeScopeKinds.General;
+    }
+
+    private static string DeepestId(GetPeriodesInterditesQuery request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ServiceId)) return request.ServiceId.Trim();
+        if (!string.IsNullOrWhiteSpace(request.CelluleId)) return request.CelluleId.Trim();
+        if (!string.IsNullOrWhiteSpace(request.PoleId)) return request.PoleId.Trim();
+        if (!string.IsNullOrWhiteSpace(request.DepartmentId)) return request.DepartmentId.Trim();
+        return string.Empty;
+    }
+
+    private async Task<string?> ResolveLabelAsync(PeriodeInterditeConge row, CancellationToken ct)
+    {
+        if (row.IsGeneral) return "Configuration générale";
+        if (_orgCatalog is null) return null;
+        return await _orgCatalog.ResolveNodeNameAsync(row.ScopeId, ct);
+    }
+
+    internal static PeriodesInterditesDto MapDto(
+        PeriodeInterditeConge resolved,
+        PeriodeInterditeConge general,
+        bool isOverride,
+        string requestedKind,
+        string requestedId,
+        string? label)
+    {
+        var kind = PeriodeInterditeScopeKinds.Normalize(resolved.ScopeKind);
+        return new PeriodesInterditesDto(
+            resolved.GetMois().ToList(),
+            resolved.UpdatedAt,
+            isOverride ? kind : requestedKind,
+            isOverride ? (resolved.ScopeId ?? string.Empty) : requestedId,
+            isOverride,
+            kind,
+            label ?? PeriodeInterditeScopeKinds.LabelFr(kind));
+    }
+}
+
+public class GetPeriodesInterditesScopesHandler
+    : IRequestHandler<GetPeriodesInterditesScopesQuery, PeriodesInterditesScopesDto>
+{
+    private readonly IPeriodeInterditeRepository _repo;
+    private readonly IDirectoryOrgCatalog? _orgCatalog;
+
+    public GetPeriodesInterditesScopesHandler(
+        IPeriodeInterditeRepository repo,
+        IDirectoryOrgCatalog? orgCatalog = null)
+    {
+        _repo = repo;
+        _orgCatalog = orgCatalog;
+    }
+
+    public async Task<PeriodesInterditesScopesDto> Handle(
+        GetPeriodesInterditesScopesQuery request,
+        CancellationToken ct)
+    {
+        var general = await _repo.GetOrCreateAsync(ct);
+        var all = await _repo.GetAllAsync(ct);
+        var overrides = new List<PeriodesInterditesDto>();
+        foreach (var row in all.Where(r => !r.IsGeneral)
+                     .OrderByDescending(r => PeriodeInterditeScopeKinds.Rank(r.ScopeKind))
+                     .ThenBy(r => r.ScopeId))
+        {
+            var label = _orgCatalog is null || string.IsNullOrWhiteSpace(row.ScopeId)
+                ? null
+                : await _orgCatalog.ResolveNodeNameAsync(row.ScopeId, ct);
+            overrides.Add(GetPeriodesInterditesHandler.MapDto(
+                row, general, true, row.ScopeKind, row.ScopeId ?? string.Empty,
+                label ?? PeriodeInterditeScopeKinds.LabelFr(row.ScopeKind)));
+        }
+
+        return new PeriodesInterditesScopesDto(
+            GetPeriodesInterditesHandler.MapDto(
+                general, general, false,
+                PeriodeInterditeScopeKinds.General, string.Empty,
+                "Configuration générale"),
+            overrides);
     }
 }
 
@@ -43,20 +220,80 @@ public class UpdatePeriodesInterditesHandler : IRequestHandler<UpdatePeriodesInt
 {
     private readonly IPeriodeInterditeRepository _repo;
     private readonly IUnitOfWork _uow;
+    private readonly IDirectoryOrgCatalog? _orgCatalog;
 
-    public UpdatePeriodesInterditesHandler(IPeriodeInterditeRepository repo, IUnitOfWork uow)
+    public UpdatePeriodesInterditesHandler(
+        IPeriodeInterditeRepository repo,
+        IUnitOfWork uow,
+        IDirectoryOrgCatalog? orgCatalog = null)
+    {
+        _repo = repo;
+        _uow = uow;
+        _orgCatalog = orgCatalog;
+    }
+
+    public async Task<PeriodesInterditesDto> Handle(UpdatePeriodesInterditesCommand request, CancellationToken ct)
+    {
+        var kind = PeriodeInterditeScopeKinds.Normalize(request.ScopeKind);
+        var scopeId = PeriodeInterditeScopeKinds.NormalizeScopeId(kind, request.ScopeId);
+        if (kind != PeriodeInterditeScopeKinds.General && string.IsNullOrWhiteSpace(scopeId))
+            throw new InvalidOperationException("Choisissez un département, pôle, cellule ou service.");
+
+        PeriodeInterditeConge row;
+        if (kind == PeriodeInterditeScopeKinds.General)
+        {
+            row = await _repo.GetOrCreateAsync(ct);
+            row.MettreAJour(request.Mois, request.UpdatedBy);
+            _repo.Update(row);
+        }
+        else
+        {
+            var existing = await _repo.GetByScopeAsync(kind, scopeId, ct);
+            if (existing is null)
+            {
+                row = PeriodeInterditeConge.CreerPourScope(kind, scopeId, request.Mois, request.UpdatedBy);
+                await _repo.AddAsync(row, ct);
+            }
+            else
+            {
+                row = existing;
+                row.MettreAJour(request.Mois, request.UpdatedBy);
+                _repo.Update(row);
+            }
+        }
+
+        await _uow.SaveChangesAsync(ct);
+        var label = kind == PeriodeInterditeScopeKinds.General
+            ? "Configuration générale"
+            : await (_orgCatalog?.ResolveNodeNameAsync(scopeId, ct) ?? Task.FromResult<string?>(null));
+        return GetPeriodesInterditesHandler.MapDto(
+            row, row, kind != PeriodeInterditeScopeKinds.General, kind, scopeId,
+            label ?? PeriodeInterditeScopeKinds.LabelFr(kind));
+    }
+}
+
+public class DeletePeriodesInterditesScopeHandler : IRequestHandler<DeletePeriodesInterditesScopeCommand, bool>
+{
+    private readonly IPeriodeInterditeRepository _repo;
+    private readonly IUnitOfWork _uow;
+
+    public DeletePeriodesInterditesScopeHandler(IPeriodeInterditeRepository repo, IUnitOfWork uow)
     {
         _repo = repo;
         _uow = uow;
     }
 
-    public async Task<PeriodesInterditesDto> Handle(UpdatePeriodesInterditesCommand request, CancellationToken ct)
+    public async Task<bool> Handle(DeletePeriodesInterditesScopeCommand request, CancellationToken ct)
     {
-        var row = await _repo.GetOrCreateAsync(ct);
-        row.MettreAJour(request.Mois, request.UpdatedBy);
-        _repo.Update(row);
+        var kind = PeriodeInterditeScopeKinds.Normalize(request.ScopeKind);
+        if (kind == PeriodeInterditeScopeKinds.General)
+            throw new InvalidOperationException("La configuration générale ne peut pas être supprimée.");
+
+        var row = await _repo.GetByScopeAsync(kind, request.ScopeId, ct);
+        if (row is null) return false;
+        _repo.Remove(row);
         await _uow.SaveChangesAsync(ct);
-        return new PeriodesInterditesDto(row.GetMois().ToList(), row.UpdatedAt);
+        return true;
     }
 }
 

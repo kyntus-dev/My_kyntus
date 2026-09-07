@@ -1,6 +1,7 @@
 /* You can add global styles to this file, and also import other style files */
 /* Fonts : chargées via <link> dans index.html (preconnect + display=swap) */
 @import './app/core/styles/_animations.css';
+@import './app/features/prime/styles/prime-sector-bands.css';
 
 /* ── Tokens globaux de la plateforme unifiée (style aligné Prime/Kyntus) ── */
 :root {
@@ -11,8 +12,8 @@
   --ky-page-bg: var(--bg-primary, #f0f4fa);
   --ky-surface: var(--bg-card, #ffffff);
   --ky-text-1: var(--text-primary, #0e1623);
-  --ky-text-2: var(--text-muted, #3d526e);
-  --ky-text-3: var(--text-muted, #7a8fa8);
+  --ky-text-2: var(--text-muted, #475569);
+  --ky-text-3: var(--text-muted, #64748b);
 
   /* ── Design system : typographie ── */
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;

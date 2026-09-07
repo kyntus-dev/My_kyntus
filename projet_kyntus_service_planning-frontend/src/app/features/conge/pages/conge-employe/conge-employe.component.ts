@@ -9,6 +9,7 @@ import { KyntusObjectDraftBinder } from '../../../../core/drafts/kyntus-object-d
 import { CongeService } from '../../../../core/services/conge.service';
 import { UserService } from '../../../users/services/user.service';
 import { AuthService }  from '../../../../core/services/auth.service';
+import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import {
   DemandeCongeDto, SoldeCongeDto, DemanderCongeCommand,
   TypeConge, TypeCongeExceptionnel, StatutDemande,
@@ -30,6 +31,7 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
   private readonly toastSvc = inject(KyntusToastService);
   private readonly confirmService = inject(KyntusConfirmService);
   private readonly formDrafts = inject(KyntusFormDraftService);
+  private readonly session = inject(KyntusSessionService);
   private draftBinder?: KyntusObjectDraftBinder<{
     showModal: boolean;
     form: DemanderCongeCommand;
@@ -37,6 +39,8 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
 
   demandes:  DemandeCongeDto[] = [];
   solde:     SoldeCongeDto | null = null;
+  /** yyyy-MM-dd : premier jour où un congé annuel peut commencer. */
+  dateEligibiliteYmd: string | null = null;
   loading    = false;
   showModal  = false;
   employeId  = '';
@@ -57,6 +61,28 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
 
   get moisInterditsLabel(): string {
     return this.moisInterdits.map((m) => this.moisLabels[m] ?? String(m)).join(', ');
+  }
+
+  get dateEligibiliteLabel(): string | null {
+    if (!this.dateEligibiliteYmd) return null;
+    const [y, m, d] = this.dateEligibiliteYmd.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  get showEligibiliteHint(): boolean {
+    if (!this.dateEligibiliteYmd) return false;
+    return this.todayYmd() < this.dateEligibiliteYmd;
+  }
+
+  private todayYmd(): string {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+  }
+
+  get minDateDebut(): string {
+    const today = this.todayYmd();
+    if (this.form.typeConge !== TypeConge.Annuel || !this.dateEligibiliteYmd) return today;
+    return this.dateEligibiliteYmd > today ? this.dateEligibiliteYmd : today;
   }
 
   typesConge = [
@@ -97,8 +123,16 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
 
     this.userSvc.getCurrentUser().subscribe({
       next: (user) => {
-        this.employeId = user.guid;
-        this.form.employeId = user.guid;
+        // Congé indexe le dossier sur le JWT sub / Directory id.
+        // Ne pas privilégier user.guid : /users/me a déjà renvoyé le Guid d'un autre employé (AuthUserId=0).
+        const jwtSub = this.session.getSubjectId()?.trim() || '';
+        const leaveId = jwtSub || user.guid?.trim() || '';
+        if (!leaveId) {
+          this.showToast('Identifiant employé introuvable.', 'error');
+          return;
+        }
+        this.employeId = leaveId;
+        this.form.employeId = leaveId;
         this.loadSolde();
         this.loadDemandes();
         this.loadMoisInterdits();
@@ -108,7 +142,7 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
   }
 
   loadMoisInterdits(): void {
-    this.svc.getPeriodesInterdites().subscribe({
+    this.svc.getPeriodesInterdites(this.employeId ? { employeId: this.employeId } : undefined).subscribe({
       next: (dto) => {
         this.moisInterdits = dto.mois?.length ? dto.mois : [9, 10];
         this.cdr.detectChanges();
@@ -184,8 +218,14 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
 
   loadSolde(): void {
     this.svc.getSolde(this.employeId).subscribe({
-      next: (s) => { this.solde = s; this.cdr.detectChanges(); },
-      error: () => this.showToast('Impossible de charger le solde.', 'error')
+      next: (s) => {
+        this.solde = s;
+        this.dateEligibiliteYmd = s.dateEligibilite ? s.dateEligibilite.slice(0, 10) : null;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.showToast(formatHttpErrorMessage(err, 'Impossible de charger le solde.'), 'error');
+      }
     });
   }
 
@@ -199,7 +239,9 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
         this.loading = false;
         this.cdr.detectChanges();
       },
-      error: () => { this.loading = false; this.cdr.detectChanges(); this.showToast('Erreur chargement.', 'error'); }
+      error: (err) => {
+        this.loading = false; this.cdr.detectChanges(); this.showToast('Erreur chargement.', 'error');
+      }
     });
   }
 
@@ -269,7 +311,15 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
   isDayBlocked(date: string): boolean {
     if (this.blockedDays.has(date)) return true;
     const month = Number(date.slice(5, 7));
-    return this.moisInterdits.includes(month);
+    if (this.moisInterdits.includes(month)) return true;
+    if (
+      this.form.typeConge === TypeConge.Annuel &&
+      this.dateEligibiliteYmd &&
+      date < this.dateEligibiliteYmd
+    ) {
+      return true;
+    }
+    return false;
   }
 
   isDateInSelectedRange(date: string): boolean {
@@ -344,6 +394,7 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
     this.form.dateFin = '';
     this.selectingEnd = false;
     this.touchDraft();
+    this.cdr.detectChanges();
   }
 
   isExceptionnel(): boolean    { return this.form.typeConge === TypeConge.Exceptionnel; }
@@ -352,6 +403,17 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
   submit(): void {
     if (!this.form.dateDebut) {
       this.showToast('La date de début est obligatoire.', 'error'); return;
+    }
+    if (
+      this.form.typeConge === TypeConge.Annuel &&
+      this.dateEligibiliteYmd &&
+      this.form.dateDebut < this.dateEligibiliteYmd
+    ) {
+      this.showToast(
+        `Le congé annuel peut commencer à partir du ${this.dateEligibiliteLabel}. Vous pouvez déposer la demande maintenant pour une période ultérieure.`,
+        'error',
+      );
+      return;
     }
     if (this.isDateFinManuelle()) {
       if (!this.form.dateFin) {
@@ -378,7 +440,10 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
         }
         this.sendDemande(debutIso, this.form.dateFin ? finIso : null);
       },
-      error: () => this.sendDemande(debutIso, this.form.dateFin ? finIso : null)
+      error: () => {
+        this.disponibiliteMotif = 'Impossible de vérifier la disponibilité. Réessayez.';
+        this.showToast('Impossible de vérifier la disponibilité de la période.', 'error');
+      }
     });
   }
 

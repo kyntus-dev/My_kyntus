@@ -35,10 +35,16 @@ import type { OrgAssignmentsOverview } from '../services/prime-org-api.service';
 import { PRIME_USER_LOAD_ERROR, primeHttpErrorDetail } from '../lib/primeHttpErrorMessage';
 import { formatWorkflowPipeline } from '../lib/workflow-step-rechain';
 import { rolesMatchWorkflowApprover } from '../lib/workflow-role-match';
+import {
+  primeValidationStatusLabel,
+  primeValidationStatusShortLabel,
+} from '../lib/prime-workflow-labels';
 
 interface RoleConfig {
   /** Statut(s) d’entrée des fiches que ce rôle doit valider (workflow DB). */
   fromStatuses?: PrimeFicheValidationStatus[];
+  /** Statuts affichés (inclut éventuellement les étapes amont en lecture seule). */
+  visibleStatuses?: PrimeFicheValidationStatus[];
   /** Statut courant des fiches que ce rôle doit valider (entrée du flux). */
   fromStatus: PrimeFicheValidationStatus | null;
   /** Statut résultant après approbation. */
@@ -69,6 +75,7 @@ const ROLE_STEP_MAP: Record<string, RoleConfig> = {
   Superviseur: {
     fromStatus: 'Référent technique Approved',
     toStatus: 'Superviseur Approved',
+    visibleStatuses: ['Pending', 'Référent technique Approved'],
     helper: 'Niveau 2 : vous validez les fiches après le référent technique, avant le Chef de projet.',
   },
   'Chef de projet': {
@@ -87,7 +94,7 @@ const ROLE_STEP_MAP: Record<string, RoleConfig> = {
     toStatus: null,
     readOnlyScope: 'all',
     helper:
-      'La validation des fiches service ne concerne pas le rôle Manager. Utilisez « Synthèse globale PRIME » pour valider le fichier agrégé (Manager + RH), puis la comptabilité.',
+      'La validation des fiches service ne concerne pas le rôle Manager. La synthèse globale est validée par la RH puis la Comptabilité.',
   },
   Comptabilité: {
     fromStatus: null,
@@ -101,7 +108,7 @@ const ROLE_STEP_MAP: Record<string, RoleConfig> = {
     toStatus: null,
     readOnlyScope: 'all',
     helper:
-      'La RH valide le fichier synthèse globale PRIME (avec le Manager), pas les fiches individuelles — menu « Synthèse globale ».',
+      'La RH peut régulariser puis valider le fichier synthèse globale PRIME, puis la Comptabilité — pas les fiches individuelles — menu « Synthèse globale ».',
   },
   Admin: {
     fromStatus: null,
@@ -150,16 +157,15 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
       <div class="prime-page-shell">
         <div class="flex justify-between items-start gap-4">
           <div>
-            <h1 class="prime-page-title">Validation des fiches PRIME</h1>
+            <h1 class="prime-page-title">Fiches à valider</h1>
             <p class="prime-page-subtitle">
-              Validez les fiches de votre périmètre selon le circuit
-              {{ workflowPipelineLabel() }}. RH, Manager et Comptabilité traitent la synthèse globale.
+              Contrôlez puis approuvez ou rejetez les fiches qui attendent votre décision.
               <button
                 type="button"
                 (click)="goToValidationHistory()"
                 class="text-[color:var(--info-text)] hover:underline ml-1"
               >
-                Voir toutes vos actions sur Suivi validation
+                Consulter le suivi
               </button>.
             </p>
           </div>
@@ -171,7 +177,7 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
               class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
             >
               <app-lucide-icon [icon]="icons.checkAll" className="w-4 h-4" />
-              Tout approuver ({{ actionableRows().length }})
+              Approuver toutes les fiches ({{ actionableRows().length }})
             </button>
           }
         </div>
@@ -179,7 +185,7 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
         <div class="ky-alert ky-alert-info">
           <app-lucide-icon [icon]="icons.alert" className="w-5 h-5 shrink-0 mt-0.5 text-[color:var(--info-text)]" />
           <div>
-            <h4 class="font-semibold text-primary text-sm m-0">Rôle : {{ roleService.currentRole() }}</h4>
+            <h4 class="font-semibold text-primary text-sm m-0">Votre rôle : {{ roleService.currentRole() }}</h4>
             <p class="text-sm text-muted m-0 mt-0.5">{{ roleHelper() }}</p>
           </div>
         </div>
@@ -197,13 +203,13 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
           >
             <div class="min-w-0 space-y-1">
               <p class="font-semibold text-[color:var(--warning-text)]">
-                {{ readyNotSubmittedCount() }} fiche(s) prête(s) — bascule en Pending en cours
+                {{ readyNotSubmittedCount() }} fiche(s) prête(s) — passage en attente de validation en cours
               </p>
               <p class="text-muted text-xs leading-relaxed">
                 Partie commune validée et saisie pilote complète : la fiche doit passer automatiquement en
-                <span class="font-mono text-[color:var(--warning-text)]">Pending</span> pour entrer dans le circuit de validation
+                <span class="font-semibold text-[color:var(--warning-text)]">en attente</span> pour entrer dans le circuit de validation
                 (le statut
-                <span class="font-mono text-[color:var(--warning-text)]">AwaitingData</span> signifie seulement « hors circuit », pas
+                <span class="font-semibold text-[color:var(--warning-text)]">hors circuit</span> signifie seulement « pas encore soumis », pas
                 « données manquantes »). Si le compteur persiste, cliquez « Réessayer la soumission ».
               </p>
             </div>
@@ -327,19 +333,21 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
                                 type="button"
                                 [disabled]="busyId() === item.id"
                                 (click)="approve(item.id)"
-                                class="p-1.5 text-muted hover:text-emerald-400 hover:bg-input rounded-md transition-colors border border-transparent hover:border-emerald-500/40 disabled:opacity-50"
-                                title="Approuver"
+                                class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                                title="Approuver cette fiche"
                               >
                                 <app-lucide-icon [icon]="icons.check" className="w-4 h-4" />
+                                Approuver
                               </button>
                               <button
                                 type="button"
                                 [disabled]="busyId() === item.id"
                                 (click)="startReject(item)"
-                                class="p-1.5 text-muted hover:text-rose-400 hover:bg-input rounded-md transition-colors border border-transparent hover:border-rose-500/40 disabled:opacity-50"
-                                title="Rejeter (motif obligatoire)"
+                                class="inline-flex items-center gap-1.5 rounded-md border border-rose-500/50 px-2.5 py-1.5 text-xs font-semibold text-rose-400 transition-colors hover:bg-rose-500/10 disabled:opacity-50"
+                                title="Rejeter cette fiche avec un motif"
                               >
                                 <app-lucide-icon [icon]="icons.x" className="w-4 h-4" />
+                                Rejeter
                               </button>
                             </div>
                             @if (rejectingFicheId() === item.id) {
@@ -387,6 +395,10 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
                                 </div>
                               </div>
                             }
+                          } @else if (isWaitingForReferentTechnique(item)) {
+                            <p class="max-w-[14rem] text-right text-xs leading-snug text-amber-400">
+                              En attente du référent technique
+                            </p>
                           } @else if (isAwaitingWorkflowSubmission(item)) {
                             <p
                               class="max-w-[14rem] text-right text-xs leading-snug text-[color:var(--warning-text)]"
@@ -461,7 +473,7 @@ export class PrimeValidationPageComponent {
   };
 
   goToValidationHistory(): void {
-    this.nav.requestViewWithTab('/prime-validation-hub', 'history');
+    this.nav.requestView('/validation-history');
   }
 
   readonly workflowPipelineLabel = computed(() =>
@@ -488,8 +500,13 @@ export class PrimeValidationPageComponent {
           .filter((s) => s.isActive)
           .sort((a, b) => a.sortOrder - b.sortOrder)
           .findIndex((s) => s.id === step.id) + 1;
+      const isSuperviseur = r === 'Superviseur' || uiRole === 'Superviseur';
+      const visibleStatuses = isSuperviseur
+        ? ([...new Set([...fromStatuses, 'Pending'])] as PrimeFicheValidationStatus[])
+        : fromStatuses;
       return {
         fromStatuses,
+        visibleStatuses,
         fromStatus: (fromStatuses[0] ?? step.fromStatus) as PrimeFicheValidationStatus,
         toStatus: step.toStatus as PrimeFicheValidationStatus,
         helper: `Niveau ${level} — validez les fiches en attente à votre étape du circuit de validation.`,
@@ -501,6 +518,7 @@ export class PrimeValidationPageComponent {
       return {
         ...fallback,
         fromStatuses: fs,
+        visibleStatuses: fallback.visibleStatuses ?? fs,
         helper: fallback.helper,
       };
     }
@@ -538,7 +556,7 @@ export class PrimeValidationPageComponent {
     if (sum?.statusCounts?.length) {
       return sum.statusCounts.map((sc) => ({
         status: sc.status as PrimeFicheValidationStatus,
-        label: sc.status,
+        label: primeValidationStatusShortLabel(sc.status),
         count: sc.count,
       }));
     }
@@ -546,7 +564,7 @@ export class PrimeValidationPageComponent {
     const distinct = [...new Set(rows.map((r) => r.validationStatus))].sort();
     return distinct.map((status) => ({
       status: status as PrimeFicheValidationStatus,
-      label: status,
+      label: primeValidationStatusShortLabel(status),
       count: rows.filter((r) => r.validationStatus === status).length,
     }));
   });
@@ -560,7 +578,7 @@ export class PrimeValidationPageComponent {
     const rows = this.results();
     if (status) return rows.filter((r) => r.validationStatus === status);
     const cfg = this.roleConfig();
-    const statuses = cfg.fromStatuses ?? [];
+    const statuses = cfg.visibleStatuses?.length ? cfg.visibleStatuses : (cfg.fromStatuses ?? []);
     if (statuses.length > 0) {
       const set = new Set(statuses);
       return rows.filter(
@@ -581,9 +599,13 @@ export class PrimeValidationPageComponent {
     const cfg = this.roleConfig();
     if ((cfg.fromStatuses?.length ?? 0) > 0) {
       if (this.readyNotSubmittedCount() > 0) {
-        return 'Aucune fiche en statut Pending à valider pour ce filtre. Des fiches prêtes peuvent être listées sous AwaitingData — voir le bandeau ci-dessus.';
+        return 'Aucune fiche en attente de validation pour ce filtre. Des fiches prêtes peuvent encore être hors circuit — voir le bandeau ci-dessus.';
       }
-      return 'Aucune fiche en attente de votre validation (statut Pending, partie commune validée et saisie cellule complète).';
+      const uiRole = this.roleService.currentRole() as string;
+      if (uiRole === 'Superviseur' || mapRoleForApi(uiRole) === 'Superviseur') {
+        return 'Aucune fiche dans le circuit de validation pour votre cellule (partie commune validée et saisie cellule complète).';
+      }
+      return 'Aucune fiche en attente de votre validation (partie commune validée et saisie cellule complète).';
     }
     return 'Aucune fiche à afficher pour ces critères.';
   });
@@ -744,7 +766,7 @@ export class PrimeValidationPageComponent {
   }
 
   statusLabel(status: string): string {
-    return status;
+    return primeValidationStatusLabel(status);
   }
 
   statusBadgeClass(status: string): string {
@@ -760,7 +782,7 @@ export class PrimeValidationPageComponent {
 
   formatAmount(value: number | null | undefined): string {
     if (value === null || value === undefined) return '—';
-    return `${value.toFixed(2)} MAD`;
+    return `${value.toFixed(2)} DH`;
   }
 
   canApproveRow(row: EmployeePrimeServiceFicheValidationDto): boolean {
@@ -768,6 +790,10 @@ export class PrimeValidationPageComponent {
     const statuses = cfg.fromStatuses ?? [];
     if (statuses.length === 0) return false;
     return statuses.includes(row.validationStatus);
+  }
+
+  isWaitingForReferentTechnique(row: EmployeePrimeServiceFicheValidationDto): boolean {
+    return row.validationStatus === 'Pending' && !this.canApproveRow(row);
   }
 
   canPreviewFiche(row: EmployeePrimeServiceFicheValidationDto): boolean {

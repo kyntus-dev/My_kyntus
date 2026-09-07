@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
-import { UserService } from '../../services/user.service';
+import { UserService, type OrgGroupScope } from '../../services/user.service';
 import { User } from '../../users-module';
 import { copyTextToClipboard } from '../../../../core/lib/clipboard.util';
 import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
@@ -88,9 +88,19 @@ export class UserListComponent implements OnInit {
   levelSaving = false;
   levelError = '';
   resetCredentials: { email: string; password: string; firstName?: string; lastName?: string } | null = null;
+  resetCredentialRows: { email: string; password: string; firstName?: string; lastName?: string }[] = [];
+  resetCredentialErrors: string[] = [];
   showResetPassword = false;
   resettingUserId: number | null = null;
   downloadingCredentialsExcel = false;
+
+  private orgOverview: OrgAssignmentsOverview | null = null;
+  groupResetOpen = false;
+  groupResetScope: OrgGroupScope = 'Cellule';
+  groupResetFilterPoleId = '';
+  groupResetFilterCelluleId = '';
+  groupResetNodeId = '';
+  groupResetting = false;
 
   constructor(
     private userService: UserService,
@@ -124,6 +134,7 @@ export class UserListComponent implements OnInit {
       next: ({ users, overview, subServices, directoryEmployees, businessDepartments }) => {
         this.users = users;
         this.filteredUsers = users;
+        this.orgOverview = overview ?? null;
         this.directoryEmployees = directoryEmployees ?? [];
         this.businessDepartments = businessDepartments ?? [];
         const departments = overview?.departments?.length ? overview.departments : [];
@@ -271,9 +282,11 @@ export class UserListComponent implements OnInit {
         this.resetCredentials = {
           email: result.email,
           password: result.temporaryPassword,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          firstName: result.firstName ?? user.firstName,
+          lastName: result.lastName ?? user.lastName,
         };
+        this.resetCredentialRows = [this.resetCredentials];
+        this.resetCredentialErrors = [];
         this.showResetPassword = true;
         this.resettingUserId = null;
         this.cdr.detectChanges();
@@ -288,6 +301,8 @@ export class UserListComponent implements OnInit {
 
   closeResetCredentials(): void {
     this.resetCredentials = null;
+    this.resetCredentialRows = [];
+    this.resetCredentialErrors = [];
     this.showResetPassword = false;
   }
 
@@ -301,21 +316,190 @@ export class UserListComponent implements OnInit {
     }
   }
 
+  openGroupReset(): void {
+    this.groupResetOpen = true;
+    this.groupResetScope = 'Cellule';
+    this.groupResetFilterPoleId = '';
+    this.groupResetFilterCelluleId = '';
+    this.groupResetNodeId = '';
+  }
+
+  closeGroupReset(): void {
+    if (this.groupResetting) return;
+    this.groupResetOpen = false;
+  }
+
+  onGroupResetScopeChange(scope: OrgGroupScope): void {
+    this.groupResetScope = scope;
+    this.groupResetNodeId = '';
+    if (scope === 'Pole') {
+      this.groupResetFilterCelluleId = '';
+    }
+  }
+
+  onGroupResetPoleFilterChange(): void {
+    this.groupResetFilterCelluleId = '';
+    this.groupResetNodeId = '';
+  }
+
+  onGroupResetCelluleFilterChange(): void {
+    this.groupResetNodeId = '';
+  }
+
+  groupResetPoles(): { id: string; name: string }[] {
+    return this.orgOverview?.etages ?? [];
+  }
+
+  groupResetCellules(): { id: string; name: string; etageId: string }[] {
+    const all = this.orgOverview?.services ?? [];
+    if (!this.groupResetFilterPoleId) return all;
+    return all.filter((c) => c.etageId === this.groupResetFilterPoleId);
+  }
+
+  groupResetServices(): { id: string; name: string; serviceId: string }[] {
+    const all = this.orgOverview?.sousServices ?? [];
+    if (this.groupResetFilterCelluleId) {
+      return all.filter((s) => s.serviceId === this.groupResetFilterCelluleId);
+    }
+    if (this.groupResetFilterPoleId) {
+      const celluleIds = new Set(
+        (this.orgOverview?.services ?? [])
+          .filter((c) => c.etageId === this.groupResetFilterPoleId)
+          .map((c) => c.id),
+      );
+      return all.filter((s) => celluleIds.has(s.serviceId));
+    }
+    return all;
+  }
+
+  groupResetNodeOptions(): { id: string; label: string }[] {
+    if (this.groupResetScope === 'Pole') {
+      return this.groupResetPoles().map((p) => ({ id: p.id, label: p.name }));
+    }
+    if (this.groupResetScope === 'Cellule') {
+      const poles = new Map(this.groupResetPoles().map((p) => [p.id, p.name]));
+      return this.groupResetCellules().map((c) => ({
+        id: c.id,
+        label: poles.get(c.etageId) ? `${c.name} — ${poles.get(c.etageId)}` : c.name,
+      }));
+    }
+    const cellules = new Map((this.orgOverview?.services ?? []).map((s) => [s.id, s.name]));
+    return this.groupResetServices().map((s) => ({
+      id: s.id,
+      label: cellules.get(s.serviceId) ? `${s.name} — ${cellules.get(s.serviceId)}` : s.name,
+    }));
+  }
+
+  groupResetNodeLabel(): string {
+    return this.groupResetNodeOptions().find((n) => n.id === this.groupResetNodeId)?.label ?? '';
+  }
+
+  groupResetScopeLabel(): string {
+    if (this.groupResetScope === 'Pole') return 'pôle';
+    if (this.groupResetScope === 'Cellule') return 'cellule';
+    return 'service';
+  }
+
+  groupEmployeeGuids(): string[] {
+    const nodeId = this.groupResetNodeId;
+    if (!nodeId) return [];
+    return (this.orgOverview?.employees ?? [])
+      .filter((e) => {
+        if (this.groupResetScope === 'Pole') return e.poleId === nodeId;
+        if (this.groupResetScope === 'Cellule') return e.celluleId === nodeId;
+        return e.serviceId === nodeId;
+      })
+      .map((e) => e.id)
+      .filter(Boolean);
+  }
+
+  groupResetPreviewUsers(): User[] {
+    const guids = new Set(this.groupEmployeeGuids());
+    return this.users.filter((u) => {
+      if (u.isActive === false) return false;
+      if ((u.roleName ?? '').toLowerCase() === 'admin') return false;
+      const guid = resolveUserGuid(u);
+      return !!guid && guids.has(guid);
+    });
+  }
+
+  groupResetPreviewCount(): number {
+    return this.groupResetPreviewUsers().length;
+  }
+
+  groupResetDirectoryCount(): number {
+    return this.groupEmployeeGuids().length;
+  }
+
+  orgOverviewHasNodes(): boolean {
+    const overview = this.orgOverview;
+    if (!overview) return false;
+    return !!(overview.etages?.length || overview.services?.length || overview.sousServices?.length);
+  }
+
+  async confirmGroupReset(): Promise<void> {
+    if (!this.groupResetNodeId || this.groupResetting) return;
+    const count = this.groupResetPreviewCount();
+    const node = this.groupResetNodeLabel();
+    const ok = await this.confirmService.confirm({
+      title: 'Régénérer les mots de passe du groupe',
+      message: count
+        ? `Régénérer les mots de passe de ${count} employé(s) du ${this.groupResetScopeLabel()} « ${node} » ? Les mots de passe actuels cesseront de fonctionner immédiatement. Les comptes Administrateur sont exclus.`
+        : `Aucun compte Planning visible pour le ${this.groupResetScopeLabel()} « ${node} ». Lancer quand même la régénération côté serveur ?`,
+      confirmLabel: 'Régénérer',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    this.groupResetting = true;
+    this.userService.resetPasswordsByGroup({
+      scope: this.groupResetScope,
+      nodeId: this.groupResetNodeId,
+      employeeGuids: this.groupEmployeeGuids(),
+    }).subscribe({
+      next: (result) => {
+        this.groupResetting = false;
+        this.groupResetOpen = false;
+        this.resetCredentialRows = (result.items ?? []).map((item) => ({
+          email: item.email,
+          password: item.temporaryPassword,
+          firstName: item.firstName,
+          lastName: item.lastName,
+        }));
+        this.resetCredentialErrors = result.errors ?? [];
+        this.resetCredentials = this.resetCredentialRows.length === 1 ? this.resetCredentialRows[0] : null;
+        this.showResetPassword = this.resetCredentialRows.length <= 1;
+        if (result.resetCount > 0) {
+          this.toastService.success(
+            `${result.resetCount} mot(s) de passe régénéré(s)${result.failedCount ? `, ${result.failedCount} échec(s)` : ''}.`,
+          );
+        } else if (result.failedCount > 0) {
+          this.toastService.error(`Aucun mot de passe régénéré (${result.failedCount} échec(s)).`);
+        } else {
+          this.toastService.error('Aucun employé actif trouvé dans ce groupe.');
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.groupResetting = false;
+        this.toastService.error(err?.error?.message ?? 'Échec de la régénération par groupe.');
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
   async downloadResetCredentialsExcel(): Promise<void> {
-    if (!this.resetCredentials || this.downloadingCredentialsExcel) return;
+    if (!this.resetCredentialRows.length || this.downloadingCredentialsExcel) return;
     this.downloadingCredentialsExcel = true;
     try {
       const { downloadCredentialsExcel } = await import('../../../../core/lib/credentials-excel.util');
       await downloadCredentialsExcel(
-        [
-          {
-            email: this.resetCredentials.email,
-            password: this.resetCredentials.password,
-            firstName: this.resetCredentials.firstName,
-            lastName: this.resetCredentials.lastName,
-          },
-        ],
-        { fileNamePrefix: 'identifiants-mykyntus-reinit' },
+        this.resetCredentialRows,
+        {
+          fileNamePrefix: this.resetCredentialRows.length > 1
+            ? 'identifiants-mykyntus-reinit-groupe'
+            : 'identifiants-mykyntus-reinit',
+        },
       );
     } catch {
       this.toastService.error('Échec du téléchargement Excel.');

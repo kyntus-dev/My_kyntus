@@ -3,14 +3,15 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Kyntus.Messaging.Outbox\Kyntus.Messaging.Outbox.csproj" />
     <ProjectReference Include="..\..\Kyntus.Iam\Kyntus.Iam.csproj" />
+    <ProjectReference Include="..\..\Kyntus.Caching\Kyntus.Caching.csproj" />
     <ProjectReference Include="..\..\Messaging.Contracts\Messaging.Contracts.csproj" />
     <ProjectReference Include="..\EmployeeDirectory.Application\EmployeeDirectory.Application.csproj" />
     <ProjectReference Include="..\EmployeeDirectory.Domain\EmployeeDirectory.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MassTransit" Version="8.1.3" />
-    <PackageReference Include="MassTransit.RabbitMQ" Version="8.1.3" />
+    <PackageReference Include="MassTransit" Version="8.3.6" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.6" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />

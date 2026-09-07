@@ -2,12 +2,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
+COPY Kyntus.Caching/Kyntus.Caching.csproj Kyntus.Caching/
 COPY AuthService/Auth.Domain/Auth.Domain.csproj AuthService/Auth.Domain/
 COPY AuthService/Auth.Application/Auth.Application.csproj AuthService/Auth.Application/
 COPY AuthService/Auth.Infrastructure/Auth.Infrastructure.csproj AuthService/Auth.Infrastructure/
 COPY AuthService/Auth.API/Auth.API.csproj AuthService/Auth.API/
 RUN dotnet restore AuthService/Auth.API/Auth.API.csproj
 
+COPY Kyntus.Caching/ Kyntus.Caching/
 COPY AuthService/ AuthService/
 RUN dotnet publish AuthService/Auth.API/Auth.API.csproj -c Release -o /out
 

@@ -13,7 +13,7 @@ public sealed class PrimeGlobalPoolStakeholderAppService(
     GlobalPoolWorkflowService poolWf) : IPrimeGlobalPoolStakeholderAppService
 {
     private static bool LegacyPoolUnlocked(SupervisorCellulePrimeDraft d) =>
-        d.GlobalPoolManagerApprovedAt.HasValue && d.GlobalPoolRhApprovedAt.HasValue;
+        GlobalPoolWorkflowService.LegacyPoolUnlocked(d);
 
     private static CelluleDraftGlobalPoolStateDto MapState(SupervisorCellulePrimeDraft d, bool unlocked) => new()
     {
@@ -38,10 +38,9 @@ public sealed class PrimeGlobalPoolStakeholderAppService(
             ? await poolWf.PendingActionForUserAsync(d, employeeRole, ct)
             : employeeRole switch
             {
-                "Manager" => !d.GlobalPoolManagerApprovedAt.HasValue,
                 "RH" => !d.GlobalPoolRhApprovedAt.HasValue,
                 "Comptable" or "Comptabilité" => LegacyPoolUnlocked(d) && !d.GlobalPoolComptaAckAt.HasValue,
-                "Admin" => !d.GlobalPoolManagerApprovedAt.HasValue || !d.GlobalPoolRhApprovedAt.HasValue ||
+                "Admin" => !d.GlobalPoolRhApprovedAt.HasValue ||
                            (LegacyPoolUnlocked(d) && !d.GlobalPoolComptaAckAt.HasValue),
                 _ => false,
             };
@@ -171,29 +170,13 @@ public sealed class PrimeGlobalPoolStakeholderAppService(
         return MapState(d, unlocked);
     }
 
-    public async Task<CelluleDraftGlobalPoolStateDto> ApproveManagerAsync(
+    public Task<CelluleDraftGlobalPoolStateDto> ApproveManagerAsync(
         Guid draftId,
         GlobalPoolActingUserRequest body,
         CancellationToken ct = default)
     {
-        if (await poolWf.UsesConfigurableWorkflowAsync(ct))
-            throw new ArgumentException("Utilisez POST .../approve-step avec l'identifiant d'étape (workflow configurable).");
-        if (string.IsNullOrWhiteSpace(body.UserId))
-            throw new ArgumentException("UserId est requis.");
-        var role = await RoleOfUserAsync(body.UserId, ct);
-        if (!string.Equals(role, "Manager", StringComparison.Ordinal) && !string.Equals(role, "Admin", StringComparison.Ordinal))
-            throw new PrimeApiException(403, "Seul le rôle Manager (ou Admin) peut valider cette étape.");
-
-        var d = await GetDraftAsync(draftId, ct);
-        if (d.GlobalPoolExcelContent is not { Length: > 0 })
-            throw new ArgumentException("Aucun fichier de synthèse globale sur ce brouillon.");
-
-        var now = DateTimeOffset.UtcNow;
-        d.GlobalPoolManagerApprovedAt = now;
-        d.GlobalPoolManagerApprovedByUserId = body.UserId.Trim();
-        d.UpdatedAt = now;
-        await db.SaveChangesAsync(ct);
-        return MapState(d, LegacyPoolUnlocked(d));
+        _ = (draftId, body, ct);
+        throw new PrimeApiException(410, PrimeGlobalPoolActorResolver.ManagerStepGoneMessage);
     }
 
     public async Task<CelluleDraftGlobalPoolStateDto> ApproveRhAsync(
@@ -238,7 +221,7 @@ public sealed class PrimeGlobalPoolStakeholderAppService(
 
         var d = await GetDraftAsync(draftId, ct);
         if (!LegacyPoolUnlocked(d))
-            throw new ArgumentException("Les validations Manager et RH doivent être complétées avant la comptabilité.");
+            throw new ArgumentException("La validation RH doit être complétée avant la comptabilité.");
 
         var now = DateTimeOffset.UtcNow;
         d.GlobalPoolComptaAckAt = now;

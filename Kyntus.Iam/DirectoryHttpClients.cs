@@ -80,7 +80,7 @@ public sealed class DirectoryHttpPolicyEvaluator(HttpClient http) : IPolicyEvalu
 {
     public async Task<PolicyDecision> EvaluateAsync(PolicyRequest request, CancellationToken ct = default)
     {
-        if (IsPrivilegedRole(request.Role))
+        if (IsPrivilegedAdmin(request.Role))
             return new PolicyDecision(true);
 
         var resp = await http.PostAsJsonAsync("/api/iam/evaluate", new
@@ -99,10 +99,8 @@ public sealed class DirectoryHttpPolicyEvaluator(HttpClient http) : IPolicyEvalu
             : new PolicyDecision(body.Allowed, body.Reason);
     }
 
-    private static bool IsPrivilegedRole(string role) =>
-        string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(role, "Audit", StringComparison.OrdinalIgnoreCase);
+    private static bool IsPrivilegedAdmin(string role) =>
+        string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
 
     private sealed record EvaluateResponse(bool Allowed, string? Reason);
 }

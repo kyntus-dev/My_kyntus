@@ -3,9 +3,11 @@ import {
   Component,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
+import { Router } from '@angular/router';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart, PieChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent } from 'echarts/components';
@@ -18,8 +20,6 @@ import { PrimeSectionService } from '../../state/prime-section.service';
 import { AdminPrimeService } from '../../services/admin-prime.service';
 import { WorkflowConfigAdminComponent } from '../../components/admin/workflow-config-admin.component';
 import { RbacAdminComponent } from '../../components/admin/rbac-admin.component';
-import { AuditLogsAdminComponent } from '../../components/admin/audit-logs-admin.component';
-import { AnomaliesAdminComponent } from '../../components/admin/anomalies-admin.component';
 import { primeChartRgba, primeChartTheme } from '../../lib/allowance-status';
 
 echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, CanvasRenderer]);
@@ -35,8 +35,6 @@ type DashboardPayload = Awaited<ReturnType<typeof AdminPrimeService.getDashboard
     NgxEchartsDirective,
     WorkflowConfigAdminComponent,
     RbacAdminComponent,
-    AuditLogsAdminComponent,
-    AnomaliesAdminComponent,
   ],
   providers: [provideEchartsCore({ echarts })],
   template: `
@@ -53,7 +51,7 @@ type DashboardPayload = Awaited<ReturnType<typeof AdminPrimeService.getDashboard
         @let d = data()!;
         <div class="prime-page-shell space-y-8">
           <div>
-            <h1 class="prime-page-title">Dashboard Admin Systeme</h1>
+            <h1 class="prime-page-title">Tableau de bord administrateur</h1>
             <p class="text-muted mt-1">Supervision technique, gouvernance et controle du moteur PRIME.</p>
           </div>
 
@@ -130,14 +128,6 @@ type DashboardPayload = Awaited<ReturnType<typeof AdminPrimeService.getDashboard
           @if (primeSection.activeAdminSection() === 'access') {
             <app-rbac-admin />
           }
-
-          @if (primeSection.activeAdminSection() === 'logs') {
-            <app-audit-logs-admin />
-          }
-
-          @if (primeSection.activeAdminSection() === 'anomalies') {
-            <app-anomalies-admin />
-          }
         </div>
       }
     }
@@ -146,7 +136,19 @@ type DashboardPayload = Awaited<ReturnType<typeof AdminPrimeService.getDashboard
 })
 export class AdminDashboardComponent implements OnInit {
   readonly primeSection = inject(PrimeSectionService);
+  private readonly router = inject(Router);
   readonly icons = { db: Database, loader: LoaderCircle, alert: AlertTriangle, clock: Clock3 };
+
+  constructor() {
+    effect(() => {
+      const section = this.primeSection.activeAdminSection();
+      if (section === 'anomalies') {
+        void this.router.navigate(['/admin'], { queryParams: { section: 'anomalies' } });
+      } else if (section === 'logs') {
+        void this.router.navigate(['/audit'], { queryParams: { section: 'journal', module: 'prime' } });
+      }
+    });
+  }
 
   readonly data = signal<DashboardPayload | null>(null);
 

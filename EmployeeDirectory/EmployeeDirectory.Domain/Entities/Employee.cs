@@ -21,6 +21,8 @@ public class Employee
     public int? IdTechnicien { get; set; }
     /// <summary>Code HTEL miroir (ex. SUPPORT TECHNICIEN BYTEL).</summary>
     public string? HtelCode { get; set; }
+    /// <summary>Libellé technicien HTEL (NOM Prénom) au moment de la liaison.</summary>
+    public string? HtelTechnicienName { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime HireDate { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

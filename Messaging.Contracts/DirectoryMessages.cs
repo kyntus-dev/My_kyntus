@@ -22,6 +22,8 @@ public record DirectoryEmployeeChangedMessage
     public Guid? ReferentTechniqueId { get; init; }
     public int? IdTechnicien { get; init; }
     public string? HtelCode { get; init; }
+    /// <summary>Libellé technicien HTEL (NOM Prénom) — utilisé pour l’export planning.</summary>
+    public string? HtelTechnicienName { get; init; }
 }
 
 /// <summary>Profil RH canonique publié après mutation.</summary>

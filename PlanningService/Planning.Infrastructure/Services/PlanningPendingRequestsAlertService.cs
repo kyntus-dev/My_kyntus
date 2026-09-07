@@ -355,7 +355,7 @@ public class PlanningPendingRequestsAlertService : IPlanningPendingRequestsAlert
     private static string DisplayName(User? user, int fallbackId)
     {
         if (user == null) return $"#{fallbackId}";
-        var name = $"{user.FirstName} {user.LastName}".Trim();
+        var name = UserDisplayName.Format(user.FirstName, user.LastName);
         return string.IsNullOrWhiteSpace(name) ? (user.Email ?? $"#{fallbackId}") : name;
     }
 

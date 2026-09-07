@@ -548,21 +548,23 @@ public static class PrimeDbEnrichmentSeeder
             .ToListAsync(ct);
         if (steps.Count == 0) return;
 
-        var managerId = org.ManagerId ?? org.AdminId;
-        if (managerId is null) return;
+        var rhId = org.RhId ?? org.AdminId;
+        if (rhId is null) return;
+
+        var rhStep = steps.FirstOrDefault(s => s.ApproverRole == "RH");
+        if (rhStep is null) return;
 
         var now = DateTimeOffset.UtcNow;
-        var managerStep = steps.FirstOrDefault(s => s.ApproverRole == "Manager") ?? steps[0];
         db.GlobalPoolApprovals.Add(new GlobalPoolApprovalEntity
         {
             Id = Guid.NewGuid(),
             DraftId = draft.Id,
-            StepId = managerStep.Id,
-            UserId = managerId,
+            StepId = rhStep.Id,
+            UserId = rhId,
             ApprovedAt = now.AddDays(-1),
         });
-        draft.GlobalPoolManagerApprovedAt = now.AddDays(-1);
-        draft.GlobalPoolManagerApprovedByUserId = managerId;
+        draft.GlobalPoolRhApprovedAt = now.AddDays(-1);
+        draft.GlobalPoolRhApprovedByUserId = rhId;
         await db.SaveChangesAsync(ct);
     }
 }

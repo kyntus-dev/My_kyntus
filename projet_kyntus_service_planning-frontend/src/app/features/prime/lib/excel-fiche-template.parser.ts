@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { layoutFromXlsxSheet } from './excel-sheet-appearance';
 import type {
   DetectedFormulaCell,
   ParsedPrimeTemplate,
@@ -227,6 +228,15 @@ export function parsePrimeTemplateExcel(fileName: string, data: ArrayBuffer): Pa
   const previewSheetName = wb.SheetNames?.[0] ?? '';
   const previewRows = previewSheetName ? buildPreview(wb, previewSheetName) : [];
   const { calcSheets, calcSheetOrigins } = extractCalcSheetsAndOriginsFromWorkbook(wb);
+  const previewSheet = previewSheetName ? wb.Sheets[previewSheetName] : undefined;
+  const sheetAppearance =
+    previewSheet && previewSheetName
+      ? layoutFromXlsxSheet(
+          previewSheet,
+          previewSheetName,
+          calcSheetOrigins[previewSheetName] ?? { r0: 0, c0: 0 },
+        )
+      : undefined;
 
   return {
     fileName,
@@ -240,5 +250,6 @@ export function parsePrimeTemplateExcel(fileName: string, data: ArrayBuffer): Pa
     validation,
     calcSheets,
     calcSheetOrigins,
+    sheetAppearance,
   };
 }

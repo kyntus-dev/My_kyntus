@@ -119,8 +119,6 @@
               <tr>
                 <th>Employé</th>
                 <th>Début → Fin prévue</th>
-                <th>Absentéisme</th>
-                <th>Retard</th>
                 <th>Documents</th>
                 <th>Quiz</th>
                 <th>Statut</th>
@@ -140,8 +138,6 @@
                       <div class="text-xs text-amber-300">J-{{ p.daysUntilEnd }}</div>
                     }
                   </td>
-                  <td>{{ formatMetric(metricsFor(p.employeeId).absenteeismRate) }}</td>
-                  <td>{{ formatMetric(metricsFor(p.employeeId).latenessRate) }}</td>
                   <td>
                     <div class="docs-cell">
                       <span>{{ p.documentsReceivedCount ?? 0 }}/{{ p.documentsTotalCount ?? 0 }}</span>

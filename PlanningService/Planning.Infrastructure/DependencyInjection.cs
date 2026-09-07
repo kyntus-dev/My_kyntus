@@ -1,3 +1,4 @@
+using Kyntus.Caching;
 using Kyntus.Iam;
 using Kyntus.Messaging.Outbox;
 using MassTransit;
@@ -11,6 +12,7 @@ using Planning.Infrastructure.Messaging.Publishers;
 using Planning.Infrastructure.Persistence;
 using Planning.Infrastructure.Services;
 using Planning.Infrastructure.Services.EmployeeImport;
+using Shared.Kernel.Push;
 using PlanningServiceImpl = Planning.Infrastructure.Services.PlanningService;
 
 namespace Planning.Infrastructure;
@@ -22,21 +24,36 @@ public static class DependencyInjection
         IConfiguration configuration,
         bool isTesting)
     {
+        services.AddSingleton<SlowQueryCommandInterceptor>();
         if (isTesting)
         {
-            services.AddDbContext<AppDbContext>(options =>
+            services.AddDbContext<AppDbContext>((sp, options) =>
+            {
                 options.UseSqlite(configuration.GetConnectionString("DefaultConnection")
-                    ?? "DataSource=planning_characterization_test.db"));
+                    ?? "DataSource=planning_characterization_test.db");
+                options.AddInterceptors(sp.GetRequiredService<SlowQueryCommandInterceptor>());
+            });
         }
         else
         {
-            services.AddDbContext<AppDbContext>(options =>
-                options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+            services.AddDbContext<AppDbContext>((sp, options) =>
+            {
+                options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"));
+                options.AddInterceptors(sp.GetRequiredService<SlowQueryCommandInterceptor>());
+            });
         }
 
         services.AddKyntusOutbox<AppDbContext>();
+        services.AddKyntusCaching(configuration);
         services.AddKyntusIamViaDirectoryHttp(
             configuration["Directory:BaseUrl"] ?? "http://employee-directory-backend:8080");
+        services.AddDesktopPushClient(configuration);
+        services.AddHttpClient("PlanningMailApi", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddScoped<IPlanningEmailSender, MailKitPlanningEmailSender>();
+        services.AddScoped<IPilotPlanningPersonalEmailService, PilotPlanningPersonalEmailService>();
 
         services.AddScoped<IFloorService, FloorService>();
         services.AddScoped<IRoleService, RoleService>();
@@ -94,6 +111,7 @@ public static class DependencyInjection
         services.AddHostedService<EmployeeImportExecuteHostedService>();
         services.AddSingleton<EmployeeImportFileParser>();
         services.AddSingleton<EmployeeImportColumnMatcher>();
+        services.AddScoped<IEmployeeDocumentFieldQueryService, EmployeeDocumentFieldQueryService>();
         services.AddScoped<EmployeeImportTemplateBuilder>();
 
         services.AddScoped<IReclamationService, ReclamationService>();

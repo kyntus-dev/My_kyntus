@@ -1,5 +1,4 @@
 ﻿import { Injectable, inject } from '@angular/core';
-import { Router } from '@angular/router';
 
 import { MICROSERVICES, Microservice, MenuItem } from './microservices.config';
 import { buildPrimeMenuItemsForRole } from './prime-menu.config';
@@ -13,26 +12,27 @@ import { PrimeUiPermissionsService } from '../../features/prime/services/prime-u
 import { isPrimePathAllowedForRole } from '../../features/prime/lib/prime-nav-access';
 import { buildPrimeDepartmentManagerNav } from '../../features/prime/lib/prime-manager-nav';
 import { ParrainageRoleService } from '../../features/parrainage/state/parrainage-role.service';
-import { DocumentationNavigationService } from '../../features/documentation/services/documentation-navigation.service';
 import { roleNamesMatch } from '../org/org-role-assignment';
 import { DepartmentContextService } from '../../features/prime/services/allowance-api.service';
 import { AllowanceInboxBadgeService } from '../../features/prime/services/allowance-inbox-badge.service';
 import type { Role } from '../../features/prime/models';
 import { WorkspaceHatService } from './workspace-hat.service';
 import { filterItemsByHat } from './workspace-hat.util';
+import { PlatformAccessService } from '../platform-access/platform-access.service';
+import { mapJwtRoleToParrainageRole } from '../session/kyntus-role-ui.config';
 
 @Injectable({ providedIn: 'root' })
 export class NavigationMenuService {
   private readonly primeRole = inject(RoleService);
   private readonly primePermissions = inject(PrimeUiPermissionsService);
   private readonly parrainageRole = inject(ParrainageRoleService);
-  private readonly docNav = inject(DocumentationNavigationService);
   private readonly deptContext = inject(DepartmentContextService);
   private readonly inboxBadge = inject(AllowanceInboxBadgeService);
-  private readonly router = inject(Router);
   private readonly workspace = inject(WorkspaceHatService);
+  private readonly access = inject(PlatformAccessService);
 
   buildVisibleGroups(jwtRole: string): Microservice[] {
+    void this.access.ensureLoaded();
     const dualHat = this.workspace.canSwitch();
     const hat = this.workspace.hat();
     return MICROSERVICES.map((g) => this.resolveGroup(g, jwtRole))
@@ -48,14 +48,14 @@ export class NavigationMenuService {
       return { ...group, children: this.filterPrimeChildren() };
     }
     if (group.id === 'parrainage' && group.dynamicChildren) {
-      return { ...group, children: this.filterParrainageChildren() };
+      return { ...group, children: this.filterParrainageChildren(jwtRole) };
     }
     if (group.id === 'documentation' && group.dynamicChildren) {
       return { ...group, children: this.filterDocumentationChildren(jwtRole) };
     }
     return {
       ...group,
-      children: group.children.filter((c) => this.jwtRoleAllowed(c.roles, jwtRole)),
+      children: group.children.filter((c) => this.itemAllowed(c, jwtRole)),
     };
   }
 
@@ -72,18 +72,21 @@ export class NavigationMenuService {
     );
     const badgeCount = this.inboxBadge.count();
     return items.map((item) => {
-      if (item.primePath === '/allowances/inbox' && role === 'RH' && badgeCount > 0) {
-        return { ...item, menuBadge: badgeCount };
+      let next = item;
+      if ((role === 'Admin' || role === 'Audit') && item.hat !== 'self') {
+        next = { ...next, hat: 'both' };
       }
-      return item;
+      if (item.primePath === '/allowances/inbox' && role === 'RH' && badgeCount > 0) {
+        next = { ...next, menuBadge: badgeCount };
+      }
+      return next;
     });
   }
 
   private isPrimeItemAllowed(item: MenuItem, role: Role): boolean {
     if (item.isSectionHeader) return true;
-    if (item.primeAdminSection || item.primeRpSection || item.primeAuditSection) {
-      return true;
-    }
+    if (item.primeAdminSection || item.primeAuditSection || item.primeRpSection) return true;
+    if (item.platformAdminSection || item.platformAuditSection) return true;
     const path = item.primePath;
     if (!path) return false;
     const managerNav = this.managerNav();
@@ -93,28 +96,41 @@ export class NavigationMenuService {
     return this.primePermissions.canViewPath(role, path, managerNav);
   }
 
-  private filterParrainageChildren(): MenuItem[] {
+  private filterParrainageChildren(jwtRole: string): MenuItem[] {
+    // Toujours dériver du JWT shell (pas du signal figé au 1er inject).
+    this.parrainageRole.syncFromSession();
     const dualHat = this.workspace.canSwitch();
     const hat = this.workspace.hat();
+    const mapped = mapJwtRoleToParrainageRole(jwtRole);
     if (dualHat && hat === 'self') {
-      return buildParrainageMenuItemsForRole('PILOTE');
+      const selfItems = buildParrainageMenuItemsForRole('PILOTE');
+      if (mapped === 'ADMIN' || mapped === 'AUDIT') {
+        return [...selfItems, ...buildParrainageMenuItemsForRole(mapped).map((i) => ({ ...i, hat: 'both' as const }))];
+      }
+      return selfItems;
     }
-    return buildParrainageMenuItemsForRole(this.parrainageRole.user().role);
+    return buildParrainageMenuItemsForRole(mapped);
   }
 
   private filterDocumentationChildren(jwtRole: string): MenuItem[] {
     const dualHat = this.workspace.canSwitch();
     const hat = this.workspace.hat();
+    const mapped = mapJwtRoleToDocumentationRole(jwtRole);
     if (dualHat && hat === 'self') {
-      return buildDocumentationMenuItemsForRole('Pilote');
+      const selfItems = buildDocumentationMenuItemsForRole('Pilote');
+      if (mapped === 'Admin' || mapped === 'Audit') {
+        return [...selfItems, ...buildDocumentationMenuItemsForRole(mapped).map((i) => ({ ...i, hat: 'both' as const }))];
+      }
+      return selfItems;
     }
-    const fromJwt = mapJwtRoleToDocumentationRole(jwtRole);
-    const path = this.router.url.split('?')[0];
-    const docRole =
-      path.startsWith('/documentation') && this.docNav.role !== 'Pilote'
-        ? this.docNav.role
-        : fromJwt;
-    return buildDocumentationMenuItemsForRole(docRole);
+    return buildDocumentationMenuItemsForRole(mapped);
+  }
+
+  private itemAllowed(item: MenuItem, jwtRole: string): boolean {
+    if (item.capability && this.access.hasCatalog()) {
+      return this.access.canView(item.capability);
+    }
+    return this.jwtRoleAllowed(item.roles, jwtRole);
   }
 
   private jwtRoleAllowed(roles: string[] | undefined, jwtRole: string): boolean {

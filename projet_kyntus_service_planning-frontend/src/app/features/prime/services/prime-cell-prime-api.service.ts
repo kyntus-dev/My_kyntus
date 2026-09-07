@@ -23,12 +23,31 @@ export interface ServicePrimeIndicatorDto {
 export type CellulePrimeIndicatorDto = ServicePrimeIndicatorDto;
 
 export interface PutServicePrimeIndicatorItem {
+  id?: string | null;
   sortOrder: number;
   label: string;
   ponderationPrimePct?: number | null;
   ponderationChallengePct?: number | null;
   isActive: boolean;
   templateStableId?: string | null;
+}
+
+export interface ServicePrimeAgentDto {
+  employeeId: string;
+  employeeName: string;
+}
+
+export interface ServicePrimeIndicatorAgentOverrideDto {
+  employeeId: string;
+  employeeName: string;
+  indicatorId: string;
+  ponderationPrimePct: number | null;
+  ponderationChallengePct: number | null;
+}
+
+export interface ServicePrimeIndicatorAgentOverridesResponse {
+  employees: ServicePrimeAgentDto[];
+  overrides: ServicePrimeIndicatorAgentOverrideDto[];
 }
 
 export type CommonLinePonderationSource =
@@ -381,10 +400,45 @@ export interface CelluleDraftRolloverResultDto {
 export class PrimeCellPrimeApiService {
   private readonly http = inject(HttpClient);
 
-  getIndicators(serviceId: string, supervisorUserId: string): Observable<ServicePrimeIndicatorDto[]> {
-    const q = new HttpParams().set('supervisorUserId', supervisorUserId);
+  getIndicators(
+    serviceId: string,
+    supervisorUserId: string,
+    employeeId?: string | null,
+  ): Observable<ServicePrimeIndicatorDto[]> {
+    let q = new HttpParams().set('supervisorUserId', supervisorUserId);
+    const emp = (employeeId ?? '').trim();
+    if (emp) q = q.set('employeeId', emp);
     return this.http.get<ServicePrimeIndicatorDto[]>(
       `${base}/services/${encodeURIComponent(serviceId)}/prime-indicators`,
+      { params: q },
+    );
+  }
+
+  getIndicatorAgentOverrides(
+    serviceId: string,
+    supervisorUserId: string,
+  ): Observable<ServicePrimeIndicatorAgentOverridesResponse> {
+    const q = new HttpParams().set('supervisorUserId', supervisorUserId);
+    return this.http.get<ServicePrimeIndicatorAgentOverridesResponse>(
+      `${base}/services/${encodeURIComponent(serviceId)}/prime-indicators/agent-overrides`,
+      { params: q },
+    );
+  }
+
+  putIndicatorAgentOverrides(
+    serviceId: string,
+    supervisorUserId: string,
+    items: Array<{
+      employeeId: string;
+      indicatorId: string;
+      ponderationPrimePct: number | null;
+      ponderationChallengePct: number | null;
+    }>,
+  ): Observable<ServicePrimeIndicatorAgentOverridesResponse> {
+    const q = new HttpParams().set('supervisorUserId', supervisorUserId);
+    return this.http.put<ServicePrimeIndicatorAgentOverridesResponse>(
+      `${base}/services/${encodeURIComponent(serviceId)}/prime-indicators/agent-overrides`,
+      { items },
       { params: q },
     );
   }

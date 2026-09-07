@@ -26,6 +26,7 @@ export function canonicalizeRole(name: string): string {
   if (r === 'referentechnique' || r === 'referenttechnique') return 'coach';
   if (r === 'chefdeprojet') return 'rp';
   if (r === 'equipeformation' || r === 'formateur') return 'equipeformation';
+  if (r === 'comptable') return 'comptabilite';
   return r;
 }
 
@@ -61,7 +62,8 @@ export function isOrgNeutralRole(roleName: string): boolean {
     r === 'admin' ||
     r === 'audit' ||
     r === 'equipeformation' ||
-    r === 'qualiticien'
+    r === 'qualiticien' ||
+    r === 'comptabilite'
   );
 }
 

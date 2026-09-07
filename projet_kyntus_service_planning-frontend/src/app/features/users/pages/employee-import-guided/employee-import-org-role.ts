@@ -32,7 +32,7 @@ export function employeeImportOrgDepth(roleName: string | null | undefined): Emp
   ) {
     return 'service';
   }
-  if (n === 'rh' || n === 'audit') return 'none';
+  if (n === 'rh' || n === 'audit' || n === 'comptable' || n === 'comptabilite') return 'none';
   return 'none';
 }
 

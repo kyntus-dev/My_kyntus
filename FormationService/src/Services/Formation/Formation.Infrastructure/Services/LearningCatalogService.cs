@@ -4,6 +4,7 @@ using Formation.Domain.Entities;
 using Formation.Domain.Enums;
 using Formation.Infrastructure.Persistence;
 using MassTransit;
+using Kyntus.Caching;
 using Kyntus.Messaging.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -13,11 +14,30 @@ namespace Formation.Infrastructure.Services;
 public sealed class LearningCatalogService(
     FormationDbContext db,
     IPublishEndpoint publish,
+    ICacheService cache,
     ILogger<LearningCatalogService> logger)
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = null };
 
     public async Task<IReadOnlyList<TrainingCatalogItemDto>> ListAsync(
+        string? category,
+        bool includeArchived,
+        CancellationToken ct)
+    {
+        // Catalogue publié (défaut admin) — cache partagé.
+        if (!includeArchived && string.IsNullOrWhiteSpace(category))
+        {
+            return await cache.GetOrCreateAsync(
+                KyntusCacheKeys.FormationCatalog(),
+                token => ListUncachedAsync(category: null, includeArchived: false, token),
+                KyntusCacheTtl.Referential,
+                ct);
+        }
+
+        return await ListUncachedAsync(category, includeArchived, ct);
+    }
+
+    private async Task<IReadOnlyList<TrainingCatalogItemDto>> ListUncachedAsync(
         string? category,
         bool includeArchived,
         CancellationToken ct)
@@ -31,6 +51,9 @@ public sealed class LearningCatalogService(
         var items = await q.OrderByDescending(x => x.UpdatedAt).ToListAsync(ct);
         return await MapListAsync(items, includeTree: false, ct);
     }
+
+    private Task InvalidatePublishedCatalogCacheAsync(CancellationToken ct = default) =>
+        cache.RemoveAsync(KyntusCacheKeys.FormationCatalog(), ct);
 
     public async Task<TrainingCatalogItemDto?> GetAsync(Guid id, CancellationToken ct)
     {
@@ -68,6 +91,7 @@ public sealed class LearningCatalogService(
         // Empty audience rule = public.
         db.TrainingCatalogAudienceRules.Add(new TrainingCatalogAudienceRule { CatalogItemId = item.Id });
         await db.SaveChangesAsync(ct);
+        await InvalidatePublishedCatalogCacheAsync(ct);
         return (await GetAsync(item.Id, ct))!;
     }
 
@@ -92,6 +116,7 @@ public sealed class LearningCatalogService(
         item.DefaultQuizTemplateId = request.DefaultQuizTemplateId;
         item.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        await InvalidatePublishedCatalogCacheAsync(ct);
         return (await GetAsync(item.Id, ct))!;
     }
 
@@ -105,6 +130,7 @@ public sealed class LearningCatalogService(
         item.ArchivedAt = null;
         item.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        await InvalidatePublishedCatalogCacheAsync(ct);
         await NotifyAudienceCatalogAvailableAsync(item.Id, item.Title, ct);
         return (await GetAsync(item.Id, ct))!;
     }
@@ -118,6 +144,7 @@ public sealed class LearningCatalogService(
         item.ArchivedAt = DateTime.UtcNow;
         item.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        await InvalidatePublishedCatalogCacheAsync(ct);
         return (await GetAsync(item.Id, ct))!;
     }
 
@@ -137,6 +164,7 @@ public sealed class LearningCatalogService(
 
         db.TrainingCatalogItems.Remove(item);
         await db.SaveChangesAsync(ct);
+        await InvalidatePublishedCatalogCacheAsync(ct);
     }
 
     public async Task<TrainingCatalogAudienceDto> UpsertAudienceAsync(

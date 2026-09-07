@@ -33,8 +33,8 @@ public sealed class PrimeFicheMergedPreviewAccessService(
         {
             if (!string.Equals(fiche.EmployeeId, ru.UserId, StringComparison.Ordinal))
                 return false;
-            // Le pilote accède à sa fiche dès que SA ligne est validée par les deux workflows
-            // (RH + Manager), indépendamment de l'avancement du reste du périmètre.
+            // Le pilote accède à sa fiche dès que SA ligne est validée par la RH,
+            // indépendamment de l'avancement du reste du périmètre.
             return await FicheApprovedByBothWorkflowsAsync(fiche, ct);
         }
 
@@ -50,7 +50,7 @@ public sealed class PrimeFicheMergedPreviewAccessService(
         }
 
         if (PrimeFicheValidationRoles.IsGlobalPoolStakeholder(role))
-            return await FicheInGlobalPoolScopeAsync(fiche.Id, actor, ct);
+            return await FicheInGlobalPoolScopeAsync(fiche.Id, ct);
 
         if (string.Equals(role, "Audit", StringComparison.Ordinal) &&
             await rbac.RoleHasActionAsync(role, "Read", ct))
@@ -101,6 +101,23 @@ public sealed class PrimeFicheMergedPreviewAccessService(
                 UpdatedAt = x.UpdatedAt,
             })
             .ToListAsync(ct);
+
+        if (indicators.Count > 0)
+        {
+            var empId = fiche.EmployeeId;
+            var ids = indicators.Select(x => x.Id).ToList();
+            var overlays = await db.EmployeeServiceIndicatorPonderations.AsNoTracking()
+                .Where(x => x.EmployeeId == empId && ids.Contains(x.ServicePrimeIndicatorId))
+                .ToListAsync(ct);
+            if (overlays.Count > 0)
+            {
+                var byInd = overlays.ToDictionary(x => x.ServicePrimeIndicatorId);
+                indicators = indicators.ConvertAll(dto =>
+                    byInd.TryGetValue(dto.Id, out var ov)
+                        ? EmployeeIndicatorPonderationResolver.Apply(dto, ov.PonderationPrimePct, ov.PonderationChallengePct)
+                        : dto);
+            }
+        }
 
         var poleLinePonderations = await ResolvePoleLinePonderationsAsync(fiche, templateId, ct);
 
@@ -161,24 +178,16 @@ public sealed class PrimeFicheMergedPreviewAccessService(
         return CommonLinePonderationPeriod.ToPoleLineDtos(fiche.ServiceId, resolved);
     }
 
-    private async Task<bool> FicheInGlobalPoolScopeAsync(
-        Guid ficheId,
-        Employee actor,
-        CancellationToken ct)
-    {
-        var inSynthesis = await db.GlobalPoolSynthesisLines.AsNoTracking()
+    /// <summary>
+    /// RH / Comptabilité : aperçu et export des fiches déjà présentes dans une synthèse globale
+    /// (même périmètre que l'écran Synthèse globale), sans exiger une permission RBAC Global séparée.
+    /// </summary>
+    private async Task<bool> FicheInGlobalPoolScopeAsync(Guid ficheId, CancellationToken ct) =>
+        await db.GlobalPoolSynthesisLines.AsNoTracking()
             .AnyAsync(l => l.FicheId == ficheId, ct);
-        if (!inSynthesis) return false;
-
-        if (!await rbac.RoleHasActionAsync(actor.Role, "Read", ct))
-            return false;
-
-        var scopes = await rbac.GetAllowedScopesAsync(actor.Role, "Read", ct);
-        return scopes.Any(s => string.Equals(s.Trim(), "Global", StringComparison.Ordinal));
-    }
 
     /// <summary>Vrai si la ligne de synthèse (périmètre le plus récent) de cette fiche est validée
-    /// par les deux workflows (RH + Manager), c.-à-d. LineStatus = Approved.</summary>
+    /// par la RH, c.-à-d. LineStatus = Approved.</summary>
     public async Task<bool> FicheApprovedByBothWorkflowsAsync(
         EmployeePrimeServiceFiche fiche,
         CancellationToken ct)

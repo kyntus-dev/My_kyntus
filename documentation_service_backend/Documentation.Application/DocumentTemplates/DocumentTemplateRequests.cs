@@ -199,3 +199,15 @@ public sealed class GenerateFromTemplateCommandHandler(IDocumentTemplateAppServi
     public Task<DocumentTemplateGenerateResponse> Handle(GenerateFromTemplateCommand request, CancellationToken ct) =>
         templates.GenerateFromTemplateAsync(request.Id, request.Body, ct);
 }
+
+public record ResolveTemplateEmployeeValuesCommand(Guid Id, ResolveTemplateEmployeeValuesRequest Body)
+    : IRequest<TemplateEmployeeResolutionResponse>;
+
+public sealed class ResolveTemplateEmployeeValuesCommandHandler(IDocumentTemplateAppService templates)
+    : IRequestHandler<ResolveTemplateEmployeeValuesCommand, TemplateEmployeeResolutionResponse>
+{
+    public Task<TemplateEmployeeResolutionResponse> Handle(
+        ResolveTemplateEmployeeValuesCommand request,
+        CancellationToken ct) =>
+        templates.ResolveEmployeeValuesAsync(request.Id, request.Body, ct);
+}

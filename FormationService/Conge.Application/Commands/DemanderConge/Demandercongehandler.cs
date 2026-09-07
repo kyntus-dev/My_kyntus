@@ -1,3 +1,4 @@
+using Conge.Application.Abstractions;
 using Conge.Application.Contracts;
 using Conge.Application.Services;
 using Conge.Domain.Entities;
@@ -18,6 +19,9 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICongeEventPublisher _eventPublisher;
     private readonly CongeReglesService _regles;
+    private readonly IEmployeSnapshotEnsure _ensure;
+    private readonly ILeaveWorkflowPolicy _workflow;
+    private readonly CongeValidationFinalizer _finalizer;
 
     public DemanderCongeHandler(
         IDemandeCongeRepository demandeRepo,
@@ -25,7 +29,10 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
         IEmployeSnapshotRepository employeRepo,
         IUnitOfWork unitOfWork,
         ICongeEventPublisher eventPublisher,
-        CongeReglesService regles)
+        CongeReglesService regles,
+        IEmployeSnapshotEnsure ensure,
+        ILeaveWorkflowPolicy workflow,
+        CongeValidationFinalizer finalizer)
     {
         _demandeRepo = demandeRepo;
         _soldeRepo = soldeRepo;
@@ -33,11 +40,22 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
         _unitOfWork = unitOfWork;
         _eventPublisher = eventPublisher;
         _regles = regles;
+        _ensure = ensure;
+        _workflow = workflow;
+        _finalizer = finalizer;
     }
 
     public async Task<Guid> Handle(DemanderCongeCommand request, CancellationToken ct)
     {
-        var employe = await _employeRepo.GetByEmployeIdAsync(request.EmployeId, ct)
+        var employe = await _ensure.EnsureAsync(
+                new EmployeSnapshotEnsureRequest(
+                    request.EmployeId,
+                    Email: null,
+                    Role: null,
+                    ActorSubjectId: null,
+                    AllowJwtStub: false),
+                ct)
+            ?? await _employeRepo.GetByEmployeIdAsync(request.EmployeId, ct)
             ?? throw new EmployeNotFoundException(request.EmployeId);
 
         Guid validateurId;
@@ -62,7 +80,7 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
             ? request.DateDebut.AddDays(PolitiqueConge.GetDureeExceptionnelle(request.TypeExceptionnel.Value) - 1)
             : request.DateFin;
 
-        await _regles.AssertHorsPeriodeInterditeAsync(request.DateDebut, dateFinEffective, ct);
+        await _regles.AssertHorsPeriodeInterditeAsync(request.DateDebut, dateFinEffective, employe, ct);
         await _regles.AssertQuotaForEmployeAsync(
             employe, request.DateDebut, dateFinEffective, null, ct);
 
@@ -116,6 +134,15 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
 
         await _demandeRepo.AddAsync(demande, ct);
         await _unitOfWork.SaveChangesAsync(ct);
+
+        if (statutInitial == StatutDemande.EnAttenteRh
+            && !await _workflow.IsRhValidationRequiredAsync(ct))
+        {
+            demande.FinaliserSansEtapeRh(employe.EmployeId, employe.NomComplet, employe.Role);
+            await _finalizer.PersistAndPublishAsync(demande, employe.EmployeId, employe.NomComplet, ct);
+            return demande.Id;
+        }
+
         foreach (var domainEvent in demande.DomainEvents)
         {
             if (domainEvent is CongeDemandeEvent)
