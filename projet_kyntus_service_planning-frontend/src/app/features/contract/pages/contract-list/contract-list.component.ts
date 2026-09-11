@@ -72,6 +72,40 @@ export class ContractListComponent implements OnInit {
   contractToDelete: ContractResponse | null = null;
 
   stats: Stats = { total: 0, actifs: 0, periodeEssai: 0, alertes: 0, expires: 0 };
+  readonly columnOptions: Array<{ id: string; label: string }> = [
+    { id: 'organisation', label: 'Organisation' },
+    { id: 'type', label: 'Type' },
+    { id: 'status', label: 'Statut' },
+    { id: 'startDate', label: 'Début' },
+    { id: 'endDate', label: 'Fin' },
+    { id: 'probationEndDate', label: 'Fin essai' },
+    { id: 'remainingDays', label: 'Jours restants' },
+    { id: 'alert', label: 'Alerte' },
+  ];
+
+  visibleColumns = new Set<string>(
+    this.columnOptions.map((column) => column.id)
+  );
+
+  isColumnVisible(column: string): boolean {
+    return this.visibleColumns.has(column);
+  }
+
+  setColumnVisibility(column: string, visible: boolean): void {
+    if (visible) {
+      this.visibleColumns.add(column);
+    } else {
+      this.visibleColumns.delete(column);
+    }
+
+    this.visibleColumns = new Set(this.visibleColumns);
+  }
+
+  get visibleColumnCount(): number {
+    return this.columnOptions.filter((column) =>
+      this.visibleColumns.has(column.id)
+    ).length + 2;
+  }
 
   constructor(
     private contractService: ContractService,

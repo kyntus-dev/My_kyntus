@@ -1,14 +1,31 @@
-<div class="ky-page-shell">
+<div class="ky-page-shell contract-list-page">
   <app-kyntus-page-header
     title="Contrats"
     subtitle="Suivi des contrats, périodes d'essai et alertes d'échéance — {{ filteredContracts.length }} contrat(s) affiché(s)">
     <div actions>
-      <button type="button" class="ky-btn-primary" (click)="goToCreate()">
-        <app-lucide-icon [icon]="icons.add" className="w-4 h-4" />
-        Nouveau contrat
-      </button>
-    </div>
-  </app-kyntus-page-header>
+      <div class="contract-header-actions">
+        <details class="columns-menu">
+          <summary class="columns-trigger">Colonnes</summary>
+          <div class="columns-popover">
+            @for (column of columnOptions; track column.id) {
+              <label class="column-option">
+                <input
+                  type="checkbox"
+                  [checked]="isColumnVisible(column.id)"
+                  (change)="setColumnVisibility(column.id, $any($event.target).checked)"
+                />
+                <span>{{ column.label }}</span>
+              </label>
+            }
+          </div>
+        </details>
+
+        <button type="button" class="ky-btn-primary" (click)="goToCreate()">
+          <app-lucide-icon [icon]="icons.add" className="w-4 h-4" />
+          Nouveau contrat
+        </button>
+      </div>
+    </div>  </app-kyntus-page-header>
 
   <div class="kpi-row">
     <div class="kpi-card kc-blue ky-card">
@@ -135,14 +152,14 @@
           <thead>
             <tr>
               <th>Employé</th>
-              <th>Organisation</th>
-              <th>Type</th>
-              <th>Statut</th>
-              <th>Début</th>
-              <th>Fin</th>
-              <th>Fin essai</th>
-              <th>Jours restants</th>
-              <th>Alerte</th>
+              @if (isColumnVisible('organisation')) { <th>Organisation</th> }
+              @if (isColumnVisible('type')) { <th>Type</th> }
+              @if (isColumnVisible('status')) { <th>Statut</th> }
+              @if (isColumnVisible('startDate')) { <th>Début</th> }
+              @if (isColumnVisible('endDate')) { <th>Fin</th> }
+              @if (isColumnVisible('probationEndDate')) { <th>Fin essai</th> }
+              @if (isColumnVisible('remainingDays')) { <th>Jours restants</th> }
+              @if (isColumnVisible('alert')) { <th>Alerte</th> }
               <th class="col-actions">Actions</th>
             </tr>
           </thead>
@@ -156,53 +173,65 @@
                     <span class="user-id">#{{ c.userId }}</span>
                   </div>
                 </td>
-                <td class="td-org">
-                  <span class="org-line">{{ orgPerimeterSummary(userPerimeter(c.userId)) }}</span>
-                </td>
-                <td><span class="badge-type" [ngClass]="typeBadge(c.type)">{{ c.type }}</span></td>
-                <td><span class="badge-status" [ngClass]="statusBadge(c.status)">{{ c.status }}</span></td>
-                <td class="td-date">{{ c.startDate | date:'dd/MM/yyyy' }}</td>
-                <td class="td-date">{{ c.endDate ? (c.endDate | date:'dd/MM/yyyy') : '—' }}</td>
-                <td class="td-date">{{ c.probationEndDate ? (c.probationEndDate | date:'dd/MM/yyyy') : '—' }}</td>
-                <td>
-                  @if (c.joursRestants != null) {
-                    <div class="days-cell">
-                      <div class="days-bar-bg">
-                        <div
-                          class="days-bar-fill"
-                          [style.width.%]="daysPercent(c)"
-                          [ngClass]="daysBarClass(c.joursRestants!)"
-                        ></div>
+
+                @if (isColumnVisible('organisation')) {
+                  <td class="td-org"><span class="org-line">{{ orgPerimeterSummary(userPerimeter(c.userId)) }}</span></td>
+                }
+                @if (isColumnVisible('type')) {
+                  <td><span class="badge-type" [ngClass]="typeBadge(c.type)">{{ c.type }}</span></td>
+                }
+                @if (isColumnVisible('status')) {
+                  <td><span class="badge-status" [ngClass]="statusBadge(c.status)">{{ c.status }}</span></td>
+                }
+                @if (isColumnVisible('startDate')) {
+                  <td class="td-date">{{ c.startDate | date:'dd/MM/yyyy' }}</td>
+                }
+                @if (isColumnVisible('endDate')) {
+                  <td class="td-date">{{ c.endDate ? (c.endDate | date:'dd/MM/yyyy') : 'â€”' }}</td>
+                }
+                @if (isColumnVisible('probationEndDate')) {
+                  <td class="td-date">{{ c.probationEndDate ? (c.probationEndDate | date:'dd/MM/yyyy') : 'â€”' }}</td>
+                }
+                @if (isColumnVisible('remainingDays')) {
+                  <td>
+                    @if (c.joursRestants != null) {
+                      <div class="days-cell">
+                        <div class="days-bar-bg">
+                          <div class="days-bar-fill" [style.width.%]="daysPercent(c)" [ngClass]="daysBarClass(c.joursRestants!)"></div>
+                        </div>
+                        <span [ngClass]="daysTextClass(c.joursRestants!)">{{ c.joursRestants }}j</span>
                       </div>
-                      <span [ngClass]="daysTextClass(c.joursRestants!)">{{ c.joursRestants }}j</span>
-                    </div>
-                  } @else {
-                    <span class="muted">—</span>
-                  }
-                </td>
-                <td>
-                  @if (c.isAlertActive) {
-                    <span class="badge-alert on">Alerte</span>
-                  } @else {
-                    <span class="badge-alert off">OK</span>
-                  }
-                </td>
+                    } @else { <span class="muted">â€”</span> }
+                  </td>
+                }
+                @if (isColumnVisible('alert')) {
+                  <td>
+                    @if (c.isAlertActive) { <span class="badge-alert on">Alerte</span> }
+                    @else { <span class="badge-alert off">OK</span> }
+                  </td>
+                }
+
                 <td class="td-actions">
-                  <button type="button" class="icon-btn" title="Détails" (click)="goToDetail(c.id)">
-                    <app-lucide-icon [icon]="icons.eye" className="w-4 h-4" />
-                  </button>
-                  <button type="button" class="icon-btn" title="Modifier" (click)="goToEdit(c.id)">
-                    <app-lucide-icon [icon]="icons.edit" className="w-4 h-4" />
-                  </button>
-                  <button type="button" class="icon-btn danger" title="Supprimer" (click)="openDeleteModal(c)">
-                    <app-lucide-icon [icon]="icons.trash" className="w-4 h-4" />
-                  </button>
+                  <div class="action-group">
+                    <button type="button" class="action-btn" title="Détails" (click)="goToDetail(c.id)">
+                      <app-lucide-icon [icon]="icons.eye" className="w-4 h-4" />
+                      <span>Détails</span>
+                    </button>
+                    <button type="button" class="action-btn" title="Modifier" (click)="goToEdit(c.id)">
+                      <app-lucide-icon [icon]="icons.edit" className="w-4 h-4" />
+                      <span>Modifier</span>
+                    </button>
+                    <button type="button" class="action-btn danger" title="Supprimer" (click)="openDeleteModal(c)">
+                      <app-lucide-icon [icon]="icons.trash" className="w-4 h-4" />
+                      <span>Supprimer</span>
+                    </button>
+                  </div>
                 </td>
               </tr>
             }
             @if (filteredContracts.length === 0) {
               <tr>
-                <td colspan="10">
+                <td [attr.colspan]="visibleColumnCount">
                   <div class="empty-state">Aucun contrat ne correspond aux filtres.</div>
                 </td>
               </tr>
