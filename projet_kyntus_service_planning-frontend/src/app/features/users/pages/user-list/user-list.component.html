@@ -1,4 +1,4 @@
-<div class="ky-page-shell">
+<div class="ky-page-shell employees-page">
 
   <app-pilot-rotation-history-modal
     [open]="rotationHistoryOpen"
@@ -7,35 +7,46 @@
     (close)="closePilotRotationHistory()"
   />
 
-  <app-kyntus-page-header
-    title="Employés"
-    [subtitle]="filteredUsers.length + ' employé(s) trouvé(s)'">
-    <div actions>
-      <button type="button" class="ky-btn-secondary btn-import-export" (click)="openGroupReset()">
-        <app-lucide-icon [icon]="icons.key" className="w-4 h-4" />
-        Régénérer par groupe
-      </button>
-      <button type="button" class="ky-btn-secondary btn-import-export" (click)="goimport()">
-        Importer / Exporter
-      </button>
-      <button type="button" class="ky-btn-primary" (click)="createUser()">
-        <span class="plus-icon">+</span> Nouvel employé
-      </button>
+  <section class="employee-toolbar" aria-label="Recherche et actions employés">
+    <div class="employee-heading">
+      <div><h1 class="ky-page-title">Employés</h1><p class="ky-page-subtitle" aria-live="polite">{{ filteredUsers.length }} employé(s) trouvé(s)</p></div>
+      <div class="toolbar-actions">
+        <details class="toolbar-menu" #generalMenu>
+          <summary class="ky-btn-secondary">Autres actions</summary>
+          <div class="toolbar-dropdown">
+            <button type="button" (click)="generalMenu.open = false; goimport()">Importer / Exporter</button>
+            <button type="button" (click)="generalMenu.open = false; openGroupReset()">Régénérer par groupe</button>
+          </div>
+        </details>
+        <button type="button" class="ky-btn-primary" (click)="createUser()"><span aria-hidden="true">+</span> Nouvel employé</button>
+      </div>
     </div>
-  </app-kyntus-page-header>
-
-  <div class="search-container">
-    <div class="search-box ky-card">
-      <span class="search-icon"><app-lucide-icon [icon]="icons.search" className="w-4 h-4" /></span>
-      <input
-        type="text"
-        class="search-input ky-input"
-        placeholder="Rechercher par nom, email, matricule, CIN ou téléphone..."
-        [(ngModel)]="searchTerm"
-        (input)="onSearch()"
-      />
+    <div class="employee-filters">
+      <div class="search-box">
+        <app-lucide-icon [icon]="icons.search" className="w-4 h-4" />
+        <input type="search" class="search-input ky-input" aria-label="Rechercher un employé"
+          placeholder="Nom, email, matricule, CIN ou téléphone…" [(ngModel)]="searchTerm" (input)="onSearch()" />
+      </div>
+      <label class="service-filter">
+        <span>Service</span>
+        <select class="ky-input" [ngModel]="serviceFilter" (ngModelChange)="onServiceFilterChange($event)" aria-label="Filtrer les employés par service">
+          <option value="">Tous les services</option>
+          @for (option of serviceFilterOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <details class="toolbar-menu column-picker">
+        <summary class="ky-btn-secondary">Colonnes</summary>
+        <div class="toolbar-dropdown">
+          <p>Collaborateur, rôle, statut et actions restent visibles.</p>
+          @for (column of columnChoices; track column.key) {
+            <label><input type="checkbox" [checked]="showColumn(column.key)" (change)="toggleColumn(column.key)" />{{ column.label }}</label>
+          }
+        </div>
+      </details>
     </div>
-  </div>
+  </section>
 
   <div class="card ky-card">
     @if (loading) {
@@ -55,34 +66,30 @@
         <button class="btn btn-outline ky-btn-secondary" (click)="searchTerm=''; onSearch()">Effacer la recherche</button>
       </div>
     } @else {
-      <div class="table-wrapper">
-        <table class="prime-table">
-          <thead>
-            <tr>
-              <th>Collaborateur</th>
-              <th>Rôle</th>
-              <th>Département</th>
-              <th>Pôle</th>
-              <th>Cellule</th>
-              <th>Service</th>
-              <th>Matricule</th>
-              <th>Téléphone</th>
-              <th>Embauche</th>
-              <th>Ancienneté</th>
-              <th>Statut</th>
-              <th class="col-actions">Actions</th>
-            </tr>
-          </thead>
+      <div class="table-wrapper" #employeeTable (scroll)="rememberScroll($event)" tabindex="0" role="region" aria-label="Liste des employés, défilement du tableau">
+        <table class="prime-table employee-table">
+          <caption class="visually-hidden">Employés et actions disponibles</caption>
+          <thead><tr>
+            <th scope="col" class="col-person">Collaborateur</th>
+            <th scope="col">Rôle</th>
+            @if (showColumn('organisation')) { <th scope="col">Organisation</th> }
+            @if (showColumn('matricule')) { <th scope="col">Matricule</th> }
+            @if (showColumn('telephone')) { <th scope="col">Téléphone</th> }
+            @if (showColumn('embauche')) { <th scope="col">Embauche</th> }
+            @if (showColumn('anciennete')) { <th scope="col">Ancienneté</th> }
+            <th scope="col">Statut</th>
+            <th scope="col" class="col-actions">Actions</th>
+          </tr></thead>
           <tbody>
-            @for (user of filteredUsers; track user.id) {
+            @for (user of pagedUsers; track user.id) {
               @let perimeter = userPerimeter(user);
               <tr class="user-row" (click)="viewUser(user.id)">
-                <td>
+                <td class="col-person" data-label="Collaborateur">
                   <div class="user-cell">
                     <div class="user-avatar">{{ user.lastName[0] }}{{ user.firstName[0] }}</div>
                     <div class="user-info">
                       <div class="user-name-row">
-                        <span class="name">{{ user.lastName }} {{ user.firstName }}</span>
+                        <button type="button" class="name employee-name-link" (click)="$event.stopPropagation(); viewUser(user.id)">{{ user.lastName }} {{ user.firstName }}</button>
                         <span class="level-badge lv-{{ user.level }}" [title]="'Niveau contractuel : ' + contractLevelLabel(user.level)">{{ contractLevelLabel(user.level) }}</span>
                         @if (user.niveauExpertiseMetier) {
                           <span class="level-badge expertise lv-{{ user.niveauExpertiseMetier }}" [title]="'Expertise métier : ' + (expertiseLevelLabel(user.niveauExpertiseMetier) ?? '')">{{ expertiseLevelLabel(user.niveauExpertiseMetier) }}</span>
@@ -92,79 +99,27 @@
                     </div>
                   </div>
                 </td>
-                <td><span class="badge badge-role">{{ user.roleName }}</span></td>
-                <td>
-                  <span class="org-cell" [title]="orgCellLabel(orgDepartmentLabel(perimeter))">
-                    {{ orgCellLabel(orgDepartmentLabel(perimeter)) }}
-                  </span>
-                </td>
-                <td>
-                  <span class="org-cell" [title]="orgCellLabel(perimeter.pole)">
-                    {{ orgCellLabel(perimeter.pole) }}
-                  </span>
-                </td>
-                <td>
-                  <span class="org-cell" [title]="orgCellLabel(perimeter.cellule)">
-                    {{ orgCellLabel(perimeter.cellule) }}
-                  </span>
-                </td>
-                <td>
-                  <span class="org-cell" [title]="orgCellLabel(perimeter.service)">
-                    {{ orgCellLabel(perimeter.service) }}
-                  </span>
-                </td>
-                <td><span class="hr-cell">{{ matriculeDisplay(user) }}</span></td>
-                <td><span class="hr-cell">{{ telephoneDisplay(user) }}</span></td>
-                <td>{{ user.hireDate | date:'dd/MM/yyyy' }}</td>
-                <td><span class="text-small">{{ getAnciennete(user) }}</span></td>
-                <td>
-                  <span class="status-indicator" [class.inactive]="!user.isActive">
-                    {{ user.isActive ? 'Actif' : 'Inactif' }}
-                  </span>
-                  @if (lifecycleBadge(user); as badge) {
-                    <span class="lifecycle-pill" [attr.data-phase]="badge.phase">{{ badge.label }}</span>
-                  }
+                <td data-label="Rôle"><span class="badge badge-role">{{ user.roleName }}</span></td>
+                @if (showColumn('organisation')) {
+                  <td data-label="Organisation" class="organisation-cell">
+                    <strong>{{ orgCellLabel(orgDepartmentLabel(perimeter)) }}</strong>
+                    <span>{{ orgCellLabel(perimeter.pole) }} / {{ orgCellLabel(perimeter.cellule) }}</span>
+                    <span>{{ orgCellLabel(perimeter.service) }}</span>
+                  </td>
+                }
+                @if (showColumn('matricule')) { <td data-label="Matricule">{{ matriculeDisplay(user) }}</td> }
+                @if (showColumn('telephone')) { <td data-label="Téléphone">{{ telephoneDisplay(user) }}</td> }
+                @if (showColumn('embauche')) { <td data-label="Embauche">{{ user.hireDate | date:'dd/MM/yyyy' }}</td> }
+                @if (showColumn('anciennete')) { <td data-label="Ancienneté">{{ getAnciennete(user) }}</td> }
+                <td data-label="Statut">
+                  <span class="status-indicator" [class.inactive]="!user.isActive">{{ user.isActive ? 'Actif' : 'Inactif' }}</span>
+                  @if (lifecycleBadge(user); as badge) { <span class="lifecycle-pill" [attr.data-phase]="badge.phase">{{ badge.label }}</span> }
                 </td>
                 <td class="col-actions" (click)="$event.stopPropagation()">
                   <div class="action-group">
-                    <button class="btn-action view btn-detail" title="Voir les détails" (click)="viewUser(user.id)">
-                      <app-lucide-icon [icon]="icons.eye" className="w-4 h-4" />
-                      <span class="btn-detail-label">Détails</span>
-                    </button>
-                    <button
-                      class="btn-action level"
-                      type="button"
-                      title="Modifier le niveau contractuel"
-                      (click)="openLevelModal(user, $event)"
-                    >
-                      <app-lucide-icon [icon]="icons.level" className="w-4 h-4" />
-                      <span class="btn-detail-label">Niveau</span>
-                    </button>
-                    <button
-                      class="btn-action view btn-detail"
-                      type="button"
-                      title="Historique rotation"
-                      aria-label="Historique rotation"
-                      (click)="openPilotRotationHistory(user, $event)"
-                    >
-                      <app-lucide-icon [icon]="icons.history" className="w-4 h-4" />
-                      <span class="btn-detail-label">Historique rotation</span>
-                    </button>
-                    <button class="btn-action edit" title="Modifier" (click)="editUser(user.id)">
-                      <app-lucide-icon [icon]="icons.edit" className="w-4 h-4" />
-                    </button>
-                    <button
-                      class="btn-action view"
-                      type="button"
-                      title="Réinitialiser le mot de passe"
-                      (click)="resetPassword(user, $event)"
-                      [disabled]="resettingUserId === user.id"
-                    >
-                      <app-lucide-icon [icon]="icons.key" className="w-4 h-4" />
-                    </button>
-                    <button class="btn-action delete" title="Supprimer" (click)="deleteUser(user.id)">
-                      <app-lucide-icon [icon]="icons.trash" className="w-4 h-4" />
-                    </button>
+                    <button type="button" class="btn-action btn-detail" (click)="viewUser(user.id)" [attr.aria-label]="'Détails de ' + user.lastName + ' ' + user.firstName">Détails</button>
+                    <button type="button" class="btn-action edit" (click)="editUser(user.id)" title="Modifier" [attr.aria-label]="'Modifier ' + user.lastName + ' ' + user.firstName"><app-lucide-icon [icon]="icons.edit" className="w-4 h-4" /></button>
+                    <button type="button" class="btn-action more-actions" (click)="openActions(user, $event)" aria-haspopup="dialog" [attr.aria-expanded]="actionUser?.id === user.id" [attr.aria-label]="'Autres actions pour ' + user.lastName + ' ' + user.firstName">⋯</button>
                   </div>
                 </td>
               </tr>
@@ -172,8 +127,30 @@
           </tbody>
         </table>
       </div>
+      <nav class="employee-pagination" aria-label="Pagination des employés">
+        <span aria-live="polite">{{ firstItem }}–{{ lastItem }} sur {{ filteredUsers.length }}</span>
+        <label>Par page <select class="ky-input" [ngModel]="pageSize" (ngModelChange)="changePageSize($event)"><option [ngValue]="25">25</option><option [ngValue]="50">50</option><option [ngValue]="100">100</option></select></label>
+        <div class="pagination-buttons">
+          <button type="button" class="ky-btn-secondary" [disabled]="currentPage === 1" (click)="changePage(currentPage - 1)">Précédent</button>
+          <span>{{ currentPage }} / {{ totalPages }}</span>
+          <button type="button" class="ky-btn-secondary" [disabled]="currentPage === totalPages" (click)="changePage(currentPage + 1)">Suivant</button>
+        </div>
+      </nav>
     }
   </div>
+
+  @if (actionUser; as selected) {
+    <div class="employee-action-backdrop" appBodyPortal (click)="closeActions()">
+      <div id="employee-actions-panel" class="employee-action-panel" role="dialog" aria-modal="true" aria-labelledby="employee-actions-title"
+        [style.top.px]="actionTop" [style.left.px]="actionLeft" (click)="$event.stopPropagation()" (keydown)="actionKeydown($event)">
+        <div class="action-panel-heading"><strong id="employee-actions-title">{{ selected.lastName }} {{ selected.firstName }}</strong><button type="button" aria-label="Fermer les actions" (click)="closeActions()">×</button></div>
+        <button type="button" (click)="runAction('level', selected)">Modifier le niveau contractuel</button>
+        <button type="button" (click)="runAction('history', selected)">Historique des rotations</button>
+        <button type="button" [disabled]="resettingUserId !== null" (click)="runAction('reset', selected)">Réinitialiser le mot de passe</button>
+        <button type="button" class="danger-action" (click)="runAction('delete', selected)">Supprimer l’employé</button>
+      </div>
+    </div>
+  }
 
   @if (levelModalOpen && levelModalUser) {
     <div class="level-modal-backdrop" appBodyPortal (click)="closeLevelModal()">

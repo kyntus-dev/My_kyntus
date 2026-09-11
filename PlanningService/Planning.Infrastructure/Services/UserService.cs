@@ -32,6 +32,7 @@ public class UserService : IUserService
     private readonly IEmployeeFieldService _fieldService;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IRebacClient _rebac;
+    private readonly IPlanningPerimeterResolver _perimeter;
 
     public UserService(
            AppDbContext context,
@@ -45,7 +46,8 @@ public class UserService : IUserService
            ILogger<UserService> logger,
            IEmployeeFieldService fieldService,
            IHttpContextAccessor httpContextAccessor,
-           IRebacClient rebac)
+           IRebacClient rebac,
+           IPlanningPerimeterResolver perimeter)
     {
         _context = context;
         _employePublisher = employePublisher;
@@ -59,6 +61,7 @@ public class UserService : IUserService
         _fieldService = fieldService;
         _httpContextAccessor = httpContextAccessor;
         _rebac = rebac;
+        _perimeter = perimeter;
     }
 
     public async Task<List<UserDto>> GetAllUsersAsync()
@@ -81,6 +84,90 @@ public class UserService : IUserService
         var hrByUser = await LoadHrProfilesAsync(users.Select(u => u.Id).ToList());
         var orgCtx = await LoadOrgNameContextAsync();
         return users.Select(u => ToDto(u, customByUser.GetValueOrDefault(u.Id), orgCtx, hrByUser.GetValueOrDefault(u.Id))).ToList();
+    }
+
+    public async Task<List<UserDto>> GetUsersForSupervisorAsync(
+        int authUserId,
+        CancellationToken ct = default)
+    {
+        var supervisorId = await _context.Users
+            .Where(u => u.AuthUserId == authUserId && u.IsActive)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (supervisorId == 0)
+            return [];
+
+        var allowedSubServiceIds =
+            await _perimeter.GetManagedSubServiceIdsAsync(supervisorId, ct);
+
+        if (allowedSubServiceIds.Count == 0)
+            return [];
+
+        var users = await _context.Users
+            .Include(u => u.Role)
+            .Include(u => u.SubService)
+                .ThenInclude(ss => ss!.Service)
+                    .ThenInclude(s => s!.Floor)
+            .Include(u => u.ManagedSubServices)
+                .ThenInclude(us => us.SubService)
+                    .ThenInclude(s => s!.Service)
+            .Include(u => u.ManagedServices)
+                .ThenInclude(us => us.Service)
+                    .ThenInclude(s => s!.Floor)
+            .Where(u => u.IsActive
+                        && u.SubServiceId.HasValue
+                        && allowedSubServiceIds.Contains(u.SubServiceId.Value))
+            .ToListAsync(ct);
+
+        var customByUser = await _fieldService
+            .LoadCustomFieldsForUsersAsync(users.Select(u => u.Id).ToList());
+        var hrByUser = await LoadHrProfilesAsync(users.Select(u => u.Id).ToList());
+        var orgCtx = await LoadOrgNameContextAsync();
+
+        return users
+            .Select(u => ToDto(
+                u,
+                customByUser.GetValueOrDefault(u.Id),
+                orgCtx,
+                hrByUser.GetValueOrDefault(u.Id)))
+            .ToList();
+    }
+
+    public async Task<bool> CanSupervisorAccessSubServiceAsync(
+        int authUserId,
+        int subServiceId,
+        CancellationToken ct = default)
+    {
+        var supervisorId = await _context.Users
+            .Where(u => u.AuthUserId == authUserId && u.IsActive)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (supervisorId == 0)
+            return false;
+
+        var allowed = await _perimeter
+            .GetManagedSubServiceIdsAsync(supervisorId, ct);
+
+        return allowed.Contains(subServiceId);
+    }
+
+    public async Task<bool> CanSupervisorAccessUserAsync(
+        int authUserId,
+        int targetUserId,
+        CancellationToken ct = default)
+    {
+        var targetSubServiceId = await _context.Users
+            .Where(u => u.Id == targetUserId && u.IsActive)
+            .Select(u => u.SubServiceId)
+            .FirstOrDefaultAsync(ct);
+
+        return targetSubServiceId.HasValue
+            && await CanSupervisorAccessSubServiceAsync(
+                authUserId,
+                targetSubServiceId.Value,
+                ct);
     }
     public async Task<List<UserDto>> GetUsersBySubServiceAsync(int subServiceId)
     {
@@ -1109,7 +1196,12 @@ public class UserService : IUserService
         {
             try
             {
-                var password = ResolveOrGeneratePassword(defaultPassword);
+                // Une synchronisation de rôle/affectation ne doit jamais changer
+                // le mot de passe d'un compte Auth existant. Générer un mot de
+                // passe uniquement lors du provisionnement initial.
+                var password = !user.AuthUserId.HasValue || !string.IsNullOrWhiteSpace(defaultPassword)
+                    ? ResolveOrGeneratePassword(defaultPassword)
+                    : null;
                 var response = await _httpClient.PostAsJsonAsync(
                     "api/auth/register-from-planning",
                     new

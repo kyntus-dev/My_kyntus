@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal, DestroyRef } from '@angular/core';
+﻿import { Injectable, computed, inject, signal, DestroyRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom, interval, of } from 'rxjs';
@@ -362,10 +362,32 @@ export class KyntusNotificationHubService {
       if ((n.weekCode ?? '').toUpperCase().startsWith('SAT-IMBALANCE-')) {
         return { route: n.deepLink?.startsWith('/') ? n.deepLink : '/prime' };
       }
+      const sub = (n.subServiceName ?? '').toLowerCase();
+      const message = (n.message ?? '').toLowerCase();
+      const role = jwtRole.trim().toLowerCase();
+      const managerLike =
+        ['admin', 'rh', 'superviseur', 'manager', 'coach', 'rp'].includes(role)
+        || role.includes('référent')
+        || role.includes('referent')
+        || role.includes('chef de projet');
+      const isExceptional =
+        sub.includes('exceptionnelle') || message.includes('demande exceptionnelle');
+      if (isExceptional) {
+        return { route: managerLike ? '/planning/exceptional-requests' : '/mes-demandes-exceptionnelles' };
+      }
+      const isReinforcement =
+        sub.includes('renfort') || message.includes('demande de renfort') || message.includes('appel au renfort');
+      if (isReinforcement) {
+        return { route: managerLike ? '/planning/demandes-renfort' : '/mes-renforts' };
+      }
+      const isChangeRequest =
+        sub.includes('demande de changement') || message.includes('demande de changement');
+      if (isChangeRequest) {
+        return { route: managerLike ? '/planning/change-requests' : '/mes-demandes-changement' };
+      }
       if (n.deepLink?.startsWith('/')) {
         return { route: n.deepLink };
       }
-      const sub = (n.subServiceName ?? '').toLowerCase();
       if (sub.includes('renfort')) {
         const r = jwtRole.trim().toLowerCase();
         if (r === 'admin' || r === 'rh' || r === 'superviseur' || r === 'manager'
@@ -659,3 +681,4 @@ export class KyntusNotificationHubService {
     this.primeUi.push(type);
   }
 }
+

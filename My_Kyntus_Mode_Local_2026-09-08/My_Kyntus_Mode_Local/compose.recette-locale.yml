@@ -1,0 +1,68 @@
+# Complement local uniquement. Lancer avec Activer-Local.ps1.
+# Les chemins absolus sont fournis par le script : aucun fichier du depot
+# ni aucune configuration du serveur ne sont remplaces.
+services:
+  auth-backend:
+    environment:
+      Push__VapidPublicKey: ""
+      Push__VapidPrivateKey: ""
+
+  planning-backend:
+    environment:
+      Smtp__Host: ""
+      Smtp__User: ""
+      Smtp__Password: ""
+      Smtp__From: ""
+
+  employee-directory-backend:
+    environment:
+      # Valeur non vide : une chaine vide retomberait sur HTEL reel dans le compose racine.
+      Htel__BaseUrl: "http://127.0.0.1:9/"
+      Htel__TechniciensUrl: "http://127.0.0.1:9/api/v1/techniciens"
+      Htel__ApiKey: ""
+
+  documentation-backend:
+    environment:
+      DocumentTemplates__Ai__BaseUrl: "http://127.0.0.1:9/v1"
+      DocumentTemplates__Ai__ApiKey: ""
+      DocumentTemplates__Minio__Endpoint: ""
+      DocumentTemplates__Minio__AccessKey: ""
+      DocumentTemplates__Minio__SecretKey: ""
+      DocumentTemplates__Minio__PublicBaseUrl: ""
+    volumes:
+      - "${KYNTUS_LOCAL_PACK_DIR:?Lancer Activer-Local.ps1}/documentation-templates:/app/local-template-storage"
+
+  kcq-backend:
+    environment:
+      RECORDINGS_MODE: "local"
+      DB_HOST: ""
+      DB_PASSWORD: ""
+      PICKING_API_URL: ""
+      PICKING_API_KEY: ""
+
+  kcq-mongo-restore:
+    # Aucun import automatique du dump fourni avec le depot pendant cette activation.
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["echo 'Recette locale : restauration automatique desactivee.'"]
+
+  api-gateway:
+    volumes:
+      - "${KYNTUS_LOCAL_PACK_DIR:?Lancer Activer-Local.ps1}/ocelot.local.json:/app/ocelot.json:ro"
+
+  auth-frontend:
+    environment:
+      API_URL: "http://api-gateway:8080"
+    volumes:
+      - "${KYNTUS_LOCAL_PACK_DIR:?Lancer Activer-Local.ps1}/kyntus-public-urls.local.js:/app/dist/auth-frontend/browser/kyntus-public-urls.js:ro"
+
+  planning-frontend:
+    volumes:
+      - "${KYNTUS_LOCAL_PACK_DIR:?Lancer Activer-Local.ps1}/kyntus-public-urls.local.js:/usr/share/nginx/html/kyntus-public-urls.js:ro"
+
+networks:
+  microservices-network:
+    name: "${KYNTUS_LOCAL_NETWORK_NAME:?Lancer Activer-Local.ps1}"
+    driver: bridge
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"

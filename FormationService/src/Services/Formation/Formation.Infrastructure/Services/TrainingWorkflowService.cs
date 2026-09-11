@@ -1,4 +1,4 @@
-using Formation.Application.DTOs;
+﻿using Formation.Application.DTOs;
 using Formation.Domain;
 using Formation.Domain.Entities;
 using Formation.Domain.Enums;
@@ -348,12 +348,14 @@ public sealed partial class TrainingWorkflowService(
         if (existing is not null)
             return ToInitialDto(existing);
 
+        var dateDebut = DateTime.SpecifyKind(request.DateDebut.Date, DateTimeKind.Utc);
+        var dateFinPrevue = DateTime.SpecifyKind(request.DateFinPrevue.Date, DateTimeKind.Utc);
         var path = new InitialTrainingPath
         {
             EmployeeId = request.EmployeeId,
             EmployeeName = request.EmployeeName.Trim(),
-            DateDebut = request.DateDebut,
-            DateFinPrevue = request.DateFinPrevue,
+            DateDebut = dateDebut,
+            DateFinPrevue = dateFinPrevue,
             Status = InitialTrainingStatus.EnCours,
         };
         db.InitialTrainingPaths.Add(path);
@@ -991,3 +993,4 @@ public sealed partial class TrainingWorkflowService(
         return Math.Round(results.Average(r => r.Score), 1);
     }
 }
+

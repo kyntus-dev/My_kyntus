@@ -38,16 +38,77 @@ public class UsersController(
         string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
         || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase);
 
-    [HttpGet]
-    public async Task<ActionResult<List<UserDto>>> GetAllUsers()
+    private static bool IsScopedManager(string role) =>
+        string.Equals(role, "Superviseur", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, "Manager", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, "Coach", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, "RP", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, "Chef de projet", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, "Référent technique", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsHrOrAdminConnected() =>
+        IsHrOrAdmin(User.GetAuthRole() ?? string.Empty);
+
+    private async Task<bool> CanAccessUserAsync(int targetUserId, CancellationToken ct)
     {
+        if (IsHrOrAdminConnected())
+            return true;
+
+        if (!IsScopedManager(User.GetAuthRole() ?? string.Empty))
+            return false;
+
+        var authUserId = User.GetAuthUserId();
+        return authUserId is > 0
+            && await userService.CanSupervisorAccessUserAsync(
+                authUserId.Value,
+                targetUserId,
+                ct);
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<List<UserDto>>> GetAllUsers(CancellationToken ct)
+    {
+        if (!IsHrOrAdminConnected())
+        {
+            if (!IsScopedManager(User.GetAuthRole() ?? string.Empty))
+                return Forbid();
+
+            var authUserId = User.GetAuthUserId();
+            if (authUserId is not > 0)
+                return Unauthorized();
+
+            return Ok(await userService.GetUsersForSupervisorAsync(
+                authUserId.Value,
+                ct));
+        }
+
         var users = await userService.GetAllUsersAsync();
         return Ok(users);
     }
 
     [HttpGet("by-subservice/{subServiceId}")]
-    public async Task<ActionResult<List<UserDto>>> GetBySubService(int subServiceId)
+    public async Task<ActionResult<List<UserDto>>> GetBySubService(
+        int subServiceId,
+        CancellationToken ct)
     {
+        if (!IsHrOrAdminConnected())
+        {
+            if (!IsScopedManager(User.GetAuthRole() ?? string.Empty))
+                return Forbid();
+
+            var authUserId = User.GetAuthUserId();
+            if (authUserId is not > 0)
+                return Unauthorized();
+
+            var allowed = await userService.CanSupervisorAccessSubServiceAsync(
+                authUserId.Value,
+                subServiceId,
+                ct);
+
+            if (!allowed)
+                return Forbid();
+        }
+
         var users = await userService.GetUsersBySubServiceAsync(subServiceId);
         return Ok(users);
     }
@@ -126,8 +187,11 @@ public class UsersController(
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<UserDto>> GetById(int id)
+    public async Task<ActionResult<UserDto>> GetById(int id, CancellationToken ct)
     {
+        if (!await CanAccessUserAsync(id, ct))
+            return Forbid();
+
         var user = await userService.GetUserByIdAsync(id);
         if (user == null)
             return NotFound(new { message = $"Utilisateur {id} introuvable." });
@@ -156,9 +220,13 @@ public class UsersController(
     }
 
     [HttpPut("{id}")]
-    public async Task<ActionResult<UserDto>> Update(int id, [FromBody] UpdateUserDto dto)
+    public async Task<ActionResult<UserDto>> Update(
+        int id,
+        [FromBody] UpdateUserDto dto,
+        CancellationToken ct)
     {
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
+        if (!await CanAccessUserAsync(id, ct)) return Forbid();
         if (!ModelState.IsValid) return BadRequest(ModelState);
         try
         {
@@ -174,9 +242,10 @@ public class UsersController(
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
+        if (!await CanAccessUserAsync(id, ct)) return Forbid();
         var result = await userService.DeleteUserAsync(id);
         if (!result)
             return NotFound(new { message = $"Utilisateur {id} introuvable." });

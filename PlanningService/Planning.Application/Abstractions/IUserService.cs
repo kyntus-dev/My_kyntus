@@ -5,6 +5,17 @@ using Planning.Application.DTOs;
 public interface IUserService
 {
     Task<List<UserDto>> GetAllUsersAsync();
+    Task<List<UserDto>> GetUsersForSupervisorAsync(
+        int authUserId,
+        CancellationToken ct = default);
+    Task<bool> CanSupervisorAccessUserAsync(
+        int authUserId,
+        int targetUserId,
+        CancellationToken ct = default);
+    Task<bool> CanSupervisorAccessSubServiceAsync(
+        int authUserId,
+        int subServiceId,
+        CancellationToken ct = default);
     Task<List<UserDto>> GetUsersBySubServiceAsync(int subServiceId);
     Task<UserDto?> GetUserByIdAsync(int id);
     Task<UserDto?> GetUserByGuidAsync(Guid employeeGuid);

@@ -1,0 +1,14 @@
+{
+  "yaml_parse": "PASS",
+  "services_in_source": 22,
+  "overridden_services": 9,
+  "networks_in_base": "all services use microservices-network",
+  "runtime_mount_targets": "PASS",
+  "gateway_internal_hosts": "PASS",
+  "local_profile": "PASS",
+  "external_https_defaults_after_override": [],
+  "powershell_tree_sitter_syntax": "PASS",
+  "windows_execution": "NOT RUN",
+  "docker_execution": "NOT RUN",
+  "live_login": "NOT RUN"
+}

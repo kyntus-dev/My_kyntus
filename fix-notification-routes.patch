@@ -1,0 +1,70 @@
+diff --git a/projet_kyntus_service_planning-frontend/src/app/core/notifications/kyntus-notification-hub.service.ts b/projet_kyntus_service_planning-frontend/src/app/core/notifications/kyntus-notification-hub.service.ts
+--- a/projet_kyntus_service_planning-frontend/src/app/core/notifications/kyntus-notification-hub.service.ts
++++ b/projet_kyntus_service_planning-frontend/src/app/core/notifications/kyntus-notification-hub.service.ts
+@@ -360,40 +360,40 @@ export class KyntusNotificationHubService {
+       if ((n.weekCode ?? '').toUpperCase().startsWith('SAT-IMBALANCE-')) {
+         return { route: n.deepLink?.startsWith('/') ? n.deepLink : '/prime' };
+       }
+-      if (n.deepLink?.startsWith('/')) {
+-        return { route: n.deepLink };
+-      }
+       const sub = (n.subServiceName ?? '').toLowerCase();
++      const message = (n.message ?? '').toLowerCase();
++      const role = jwtRole.trim().toLowerCase();
++      const managerLike =
++        ['admin', 'rh', 'superviseur', 'manager', 'coach', 'rp'].includes(role)
++        || role.includes('référent')
++        || role.includes('referent')
++        || role.includes('chef de projet');
++
++      // Priorité au type métier : certains deepLinks persistés sont historiques
++      // et pointent encore vers /mes-plannings.
++      const isExceptional =
++        sub.includes('exceptionnelle') || message.includes('demande exceptionnelle');
++      if (isExceptional) {
++        return { route: managerLike ? '/planning/exceptional-requests' : '/mes-demandes-exceptionnelles' };
++      }
++
++      const isReinforcement =
++        sub.includes('renfort') || message.includes('demande de renfort') || message.includes('appel au renfort');
++      if (isReinforcement) {
++        return { route: managerLike ? '/planning/demandes-renfort' : '/mes-renforts' };
++      }
++
++      const isChangeRequest =
++        sub.includes('demande de changement') || message.includes('demande de changement');
++      if (isChangeRequest) {
++        return { route: managerLike ? '/planning/change-requests' : '/mes-demandes-changement' };
++      }
++
++      if (n.deepLink?.startsWith('/')) {
++        return { route: n.deepLink };
++      }
+       if (sub.includes('renfort')) {
+-        const r = jwtRole.trim().toLowerCase();
++        const r = role;
+         if (r === 'admin' || r === 'rh' || r === 'superviseur' || r === 'manager'
+             || r.includes('référent') || r.includes('referent') || r === 'chef de projet'
+             || r === 'coach' || r === 'rp') {
+@@ -407,15 +407,15 @@ export class KyntusNotificationHubService {
+       }
+       if (sub.includes('exceptionnelle')) {
+-        const r = jwtRole.trim().toLowerCase();
++        const r = role;
+         if (r === 'admin' || r === 'rh' || r === 'superviseur' || r === 'manager'
+             || r.includes('référent') || r.includes('referent') || r === 'chef de projet') {
+@@ -424,7 +424,7 @@ export class KyntusNotificationHubService {
+       }
+       if (sub.includes('demande')) {
+-        const r = jwtRole.trim().toLowerCase();
++        const r = role;
+         if (r === 'admin' || r === 'rh') {
+@@ -430,11 +430,10 @@ export class KyntusNotificationHubService {
+       }
+       // Les employés n'ont pas accès à /planning (vue manager) — uniquement /mes-plannings.
+-      const r = jwtRole.trim().toLowerCase();
+       const canOpenManagerPlanning = [
+         'admin', 'rh', 'manager', 'coach', 'rp', 'pilote', 'audit',
+         'equipe_formation', 'equipe formation', 'formateur',
+-      ].includes(r);
++      ].includes(role);
