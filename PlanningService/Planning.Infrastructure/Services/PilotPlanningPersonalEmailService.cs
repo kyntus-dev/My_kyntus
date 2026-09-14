@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using Planning.Application.Abstractions;
 using Planning.Application.PilotPlanning;
 using Planning.Infrastructure.Persistence;
-using Planning.Infrastructure.Services.EmployeeImport;
 
 namespace Planning.Infrastructure.Services;
 
@@ -18,9 +17,13 @@ public sealed class PilotPlanningPersonalEmailService(
         {
             await SendCoreAsync(planningId, updated, ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Envoi email planning pilotes échoué (planningId={PlanningId}).", planningId);
+            logger.LogWarning(ex, "Envoi email planning employés échoué (planningId={PlanningId}).", planningId);
         }
     }
 
@@ -41,10 +44,10 @@ public sealed class PilotPlanningPersonalEmailService(
         if (userIds.Count == 0)
             return;
 
-        var pilots = await db.Users
+        var employees = await db.Users
             .AsNoTracking()
-            .Include(u => u.Role)
             .Where(u => userIds.Contains(u.Id) && u.IsActive)
+            .OrderBy(u => u.Id)
             .ToListAsync(ct);
 
         var personalEmails = await db.UserHrProfiles
@@ -54,16 +57,15 @@ public sealed class PilotPlanningPersonalEmailService(
             .ToListAsync(ct);
         var emailByUser = personalEmails.ToDictionary(x => x.UserId, x => x.EmailPersonnel);
 
-        foreach (var user in pilots)
+        foreach (var user in employees)
         {
-            if (!EmployeeImportRoleNames.IsPilote(user.Role?.Name))
-                continue;
+            ct.ThrowIfCancellationRequested();
 
             emailByUser.TryGetValue(user.Id, out var personal);
             if (!PilotPlanningEmailComposer.IsValidPersonalEmail(personal))
             {
                 logger.LogWarning(
-                    "Pilote {UserId} sans email personnel — planning {WeekCode} non envoyé.",
+                    "Employé {UserId} sans email personnel valide — planning {WeekCode} non envoyé.",
                     user.Id,
                     planning.WeekCode);
                 continue;
@@ -91,7 +93,26 @@ public sealed class PilotPlanningPersonalEmailService(
                 user.HtelTechnicienName,
                 user.IdTechnicien);
             var subject = PilotPlanningEmailComposer.Subject(planning.WeekCode, updated);
-            await emailSender.SendHtmlAsync(personal!.Trim(), subject, html, ct);
+            try
+            {
+                await emailSender.SendRequiredHtmlAsync(personal!.Trim(), subject, html, ct);
+                logger.LogInformation(
+                    "Planning {WeekCode} envoyé à l'employé {UserId}.",
+                    planning.WeekCode,
+                    user.Id);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Envoi email planning {WeekCode} échoué pour l'employé {UserId}. Les autres envois continuent.",
+                    planning.WeekCode,
+                    user.Id);
+            }
         }
     }
 }
