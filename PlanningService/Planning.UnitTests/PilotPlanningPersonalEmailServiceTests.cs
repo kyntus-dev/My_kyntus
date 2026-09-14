@@ -21,7 +21,7 @@ public class PilotPlanningPersonalEmailServiceTests
     }
 
     [Fact]
-    public async Task Sends_only_to_pilots_with_personal_email()
+    public async Task Sends_each_active_assigned_employee_only_their_own_planning()
     {
         await using var db = await SeedAsync();
         var sender = new RecordingEmailSender();
@@ -29,16 +29,110 @@ public class PilotPlanningPersonalEmailServiceTests
 
         await svc.SendToAssignedPilotsAsync(1, updated: false);
 
-        Assert.Single(sender.Sent);
-        Assert.Equal("yasmine.perso@gmail.com", sender.Sent[0].To);
-        Assert.Equal("Planning 2026-W36 disponible", sender.Sent[0].Subject);
-        Assert.DoesNotContain("href", sender.Sent[0].Html, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("/mes-plannings", sender.Sent[0].Html);
-        Assert.Contains("08:00", sender.Sent[0].Html);
-        Assert.Contains("EL IDRISSI Yasmine", sender.Sent[0].Html);
-        Assert.Contains("31-Aug", sender.Sent[0].Html);
-        Assert.DoesNotContain("Chraibi", sender.Sent[0].Html);
-        Assert.DoesNotContain("17:00", sender.Sent[0].Html);
+        Assert.Equal(2, sender.Sent.Count);
+        var pilotMail = Assert.Single(sender.Sent.Where(m => m.To == "yasmine.perso@gmail.com"));
+        var supervisorMail = Assert.Single(sender.Sent.Where(m => m.To == "sara.perso@gmail.com"));
+        Assert.Equal("Planning 2026-W36 disponible", pilotMail.Subject);
+        Assert.DoesNotContain("href", pilotMail.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("/mes-plannings", pilotMail.Html);
+        Assert.Contains("08:00", pilotMail.Html);
+        Assert.Contains("EL IDRISSI Yasmine", pilotMail.Html);
+        Assert.Contains("31-Aug", pilotMail.Html);
+        Assert.DoesNotContain("Chraibi", pilotMail.Html);
+        Assert.DoesNotContain("Sara", pilotMail.Html);
+        Assert.DoesNotContain("14:00", pilotMail.Html);
+        Assert.Contains("MANAGER Sara", supervisorMail.Html);
+        Assert.Contains("14:00", supervisorMail.Html);
+        Assert.DoesNotContain("Yasmine", supervisorMail.Html);
+        Assert.DoesNotContain("08:00", supervisorMail.Html);
+        Assert.Equal(2, sender.RequiredCalls);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("invalid-address")]
+    public async Task Skips_missing_or_invalid_personal_email_without_using_login_email(string? personal)
+    {
+        await using var db = await SeedAsync();
+        var profile = await db.UserHrProfiles.SingleAsync(p => p.UserId == 10);
+        profile.EmailPersonnel = personal;
+        await db.SaveChangesAsync();
+        var sender = new RecordingEmailSender();
+        var svc = new PilotPlanningPersonalEmailService(db, sender, NullLogger<PilotPlanningPersonalEmailService>.Instance);
+
+        await svc.SendToAssignedPilotsAsync(1, updated: false);
+
+        Assert.Equal("sara.perso@gmail.com", Assert.Single(sender.Sent).To);
+    }
+
+    [Fact]
+    public async Task Skips_inactive_and_unassigned_employees()
+    {
+        await using var db = await SeedAsync();
+        (await db.Users.SingleAsync(u => u.Id == 10)).IsActive = false;
+        db.ShiftAssignments.RemoveRange(await db.ShiftAssignments.Where(a => a.UserId == 30).ToListAsync());
+        await db.SaveChangesAsync();
+        var sender = new RecordingEmailSender();
+        var svc = new PilotPlanningPersonalEmailService(db, sender, NullLogger<PilotPlanningPersonalEmailService>.Instance);
+
+        await svc.SendToAssignedPilotsAsync(1, updated: false);
+
+        Assert.Empty(sender.Sent);
+    }
+
+    [Fact]
+    public async Task Trims_personal_address_and_sends_one_update_per_employee()
+    {
+        await using var db = await SeedAsync();
+        (await db.UserHrProfiles.SingleAsync(p => p.UserId == 10)).EmailPersonnel = "  yasmine.perso@gmail.com  ";
+        db.ShiftAssignments.Add(new ShiftAssignment
+        {
+            Id = 4,
+            WeeklyPlanningId = 1,
+            UserId = 10,
+            SubServiceShiftConfigId = 1,
+            AssignedDate = new DateOnly(2026, 9, 1),
+            DayOfWeek = DayOfWeekEnum.Tuesday,
+        });
+        await db.SaveChangesAsync();
+        var sender = new RecordingEmailSender();
+        var svc = new PilotPlanningPersonalEmailService(db, sender, NullLogger<PilotPlanningPersonalEmailService>.Instance);
+
+        await svc.SendToAssignedPilotsAsync(1, updated: true);
+
+        Assert.Equal(2, sender.Sent.Count);
+        Assert.Single(sender.Sent.Where(m => m.To == "yasmine.perso@gmail.com"));
+        Assert.All(sender.Sent, m => Assert.Equal("Planning 2026-W36 mis à jour", m.Subject));
+    }
+
+    [Fact]
+    public async Task Failed_recipient_does_not_block_following_employee()
+    {
+        await using var db = await SeedAsync();
+        var sender = new RecordingEmailSender { FailFor = "yasmine.perso@gmail.com" };
+        var svc = new PilotPlanningPersonalEmailService(db, sender, NullLogger<PilotPlanningPersonalEmailService>.Instance);
+
+        await svc.SendToAssignedPilotsAsync(1, updated: false);
+
+        Assert.Equal(2, sender.RequiredCalls);
+        Assert.Equal("sara.perso@gmail.com", Assert.Single(sender.Sent).To);
+    }
+
+    [Fact]
+    public async Task Cancellation_during_send_stops_remaining_recipients()
+    {
+        await using var db = await SeedAsync();
+        using var cancellation = new CancellationTokenSource();
+        var sender = new RecordingEmailSender { CancelDuringSend = cancellation };
+        var svc = new PilotPlanningPersonalEmailService(db, sender, NullLogger<PilotPlanningPersonalEmailService>.Instance);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            svc.SendToAssignedPilotsAsync(1, updated: false, ct: cancellation.Token));
+
+        Assert.Equal(1, sender.RequiredCalls);
+        Assert.Empty(sender.Sent);
     }
 
     [Fact]
@@ -119,6 +213,15 @@ public class PilotPlanningPersonalEmailServiceTests
             WorkHours = 8,
             BreakDurationMinutes = 60,
         });
+        db.SubServiceShiftConfigs.Add(new SubServiceShiftConfig
+        {
+            Id = 2,
+            SubServiceId = 1,
+            Label = "14h",
+            StartTime = new TimeOnly(14, 0),
+            WorkHours = 8,
+            BreakDurationMinutes = 60,
+        });
         db.ShiftAssignments.AddRange(
             new ShiftAssignment
             {
@@ -144,7 +247,7 @@ public class PilotPlanningPersonalEmailServiceTests
                 Id = 3,
                 WeeklyPlanningId = 1,
                 UserId = 30,
-                SubServiceShiftConfigId = 1,
+                SubServiceShiftConfigId = 2,
                 AssignedDate = new DateOnly(2026, 8, 31),
                 DayOfWeek = DayOfWeekEnum.Monday,
             });
@@ -155,16 +258,26 @@ public class PilotPlanningPersonalEmailServiceTests
     private sealed class RecordingEmailSender : IPlanningEmailSender
     {
         public bool IsConfigured => true;
+        public string? FailFor { get; init; }
+        public CancellationTokenSource? CancelDuringSend { get; init; }
+        public int RequiredCalls { get; private set; }
         public List<(string To, string Subject, string Html)> Sent { get; } = [];
 
         public Task SendHtmlAsync(string to, string subject, string htmlBody, CancellationToken ct = default)
         {
+            CancelDuringSend?.Cancel();
+            ct.ThrowIfCancellationRequested();
+            if (to == FailFor)
+                throw new InvalidOperationException("Simulated delivery failure.");
             Sent.Add((to, subject, htmlBody));
             return Task.CompletedTask;
         }
 
-        public Task SendRequiredHtmlAsync(string to, string subject, string htmlBody, CancellationToken ct = default) =>
-            SendHtmlAsync(to, subject, htmlBody, ct);
+        public Task SendRequiredHtmlAsync(string to, string subject, string htmlBody, CancellationToken ct = default)
+        {
+            RequiredCalls++;
+            return SendHtmlAsync(to, subject, htmlBody, ct);
+        }
     }
 
     private sealed class RecordingPilotEmailService : IPilotPlanningPersonalEmailService
