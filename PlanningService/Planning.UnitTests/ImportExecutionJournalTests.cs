@@ -107,6 +107,12 @@ public class ImportExecutionJournalTests
 
     private sealed class FakeImportUserService : IUserService
     {
+        public Task<List<UserDto>> GetUsersForSupervisorAsync(int authUserId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<bool> CanSupervisorAccessUserAsync(int authUserId, int targetUserId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<bool> CanSupervisorAccessSubServiceAsync(int authUserId, int subServiceId, CancellationToken ct = default)
+            => throw new NotSupportedException();
         public List<int> RolledBackCreatedUserIds { get; } = [];
         public List<(int UserId, UpdateUserDto PreviousState, Dictionary<string, string?> PreviousCustomFields)> RolledBackUpdatedUsers { get; } = [];
 

@@ -46,6 +46,8 @@ public sealed class DirectoryWriteService(
         var inactiveByEmail = await db.Employees.FirstOrDefaultAsync(
             e => e.Email.ToLower() == request.Email.Trim().ToLower() && !e.IsActive,
             ct);
+        if (inactiveByEmail is not null && request.IdTechnicien.HasValue)
+            throw new InvalidOperationException("Une fiche désactivée utilise déjà cet email. Vérifiez sa réactivation depuis la fiche existante.");
         if (inactiveByEmail is not null)
             return await ReactivateEmployeeAsync(inactiveByEmail, request, ct);
 

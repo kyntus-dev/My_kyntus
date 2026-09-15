@@ -78,6 +78,19 @@ public class DirectoryEmployeesController(IMediator mediator) : ControllerBase
         {
             return Conflict(new { error = ex.Message });
         }
+        catch (HttpRequestException ex) when (body.IdTechnicien.HasValue)
+        {
+            return StatusCode(502, new { error = "La liaison HTEL n'a pas pu être vérifiée. Aucune fiche n'a été créée.", detail = ex.Message });
+        }
+        catch (OperationCanceledException) when (body.IdTechnicien.HasValue && !ct.IsCancellationRequested)
+        {
+            return StatusCode(504, new { error = "Timeout HTEL. Aucune fiche n'a été créée." });
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+            when (body.IdTechnicien.HasValue && ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            return Conflict(new { error = "Une fiche utilise déjà cet identifiant HTEL ou cet email. Actualisez la comparaison." });
+        }
     }
 
     [HttpPost("employees/bulk")]
@@ -693,14 +706,13 @@ public class DirectoryHtelController(IHtelFusionService htelFusion) : Controller
         {
             return Ok(await htelFusion.ListTechniciensAsync(actifOnly, ct));
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            // HTEL externe indisponible : ne pas casser le formulaire RH.
-            return Ok(Array.Empty<HtelTechnicienDto>());
+            return StatusCode(502, new { error = ex.Message });
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return Ok(Array.Empty<HtelTechnicienDto>());
+            return StatusCode(504, new { error = "Timeout HTEL. Réessayez la comparaison." });
         }
     }
 
@@ -716,7 +728,7 @@ public class DirectoryHtelController(IHtelFusionService htelFusion) : Controller
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { error = "HTEL indisponible.", detail = ex.Message });
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             return StatusCode(StatusCodes.Status504GatewayTimeout, new { error = "Timeout HTEL." });
         }
@@ -734,7 +746,7 @@ public class DirectoryHtelController(IHtelFusionService htelFusion) : Controller
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { error = "HTEL indisponible.", detail = ex.Message });
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             return StatusCode(StatusCodes.Status504GatewayTimeout, new { error = "Timeout HTEL." });
         }
@@ -756,10 +768,38 @@ public class DirectoryHtelController(IHtelFusionService htelFusion) : Controller
         {
             return Conflict(new { error = ex.Message });
         }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+            when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            return Conflict(new { error = "Cet identifiant HTEL vient d'être lié. Actualisez la comparaison." });
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return StatusCode(504, new { error = "Timeout HTEL." });
+        }
         catch (HttpRequestException ex)
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { error = "HTEL indisponible.", detail = ex.Message });
         }
+    }
+
+    [HttpPost("liaisons/identity")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<IActionResult> ReviewIdentity([FromBody] HtelIdentityReviewRequest body, CancellationToken ct)
+    {
+        if (body.EmployeeId == Guid.Empty || body.IdTechnicien <= 0)
+            return BadRequest(new { error = "employeeId et idTechnicien requis." });
+        try
+        {
+            return await htelFusion.ReviewIdentityAsync(body, ct) ? NoContent() : NotFound();
+        }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        { return Conflict(new { error = "La fiche a changé. Actualisez la comparaison." }); }
+        catch (HttpRequestException ex) { return StatusCode(502, new { error = ex.Message }); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        { return StatusCode(504, new { error = "Timeout HTEL." }); }
     }
 
     [HttpPost("liaisons/unlink")]

@@ -363,6 +363,7 @@ public class StructuralAssignmentsReconcileTests : IDisposable
 
     private sealed class NoopHtelFusion : IHtelFusionService
     {
+        public Task<bool> ReviewIdentityAsync(HtelIdentityReviewRequest request, CancellationToken ct = default) => Task.FromResult(false);
         public Task<IReadOnlyList<HtelTechnicienDto>> ListTechniciensAsync(bool? actifOnly = null, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<HtelTechnicienDto>>([]);
 

@@ -277,6 +277,30 @@
 
             <div class="form-grid form-grid--dense">
 
+              @if (!isEditMode) {
+                <div class="form-group form-group--full">
+                  <label for="htelSelection">Collaborateur à créer depuis HTEL</label>
+                  <select class="ky-input" id="htelSelection" name="htelSelection" [(ngModel)]="htelSelectionId"
+                    (ngModelChange)="selectHtelTechnicien($event)" [disabled]="htelLoading || referralLockedFromUrl || !!passageProductionPathId">
+                    <option [ngValue]="null">Création manuelle / choisir un collaborateur HTEL…</option>
+                    @for (tech of htelCreationChoices; track tech.idTechnicien) {
+                      <option [ngValue]="tech.idTechnicien">{{ tech.technicien }} — {{ tech.code }} ({{ tech.idTechnicien }})</option>
+                    }
+                    @if (htelSelectionOutsideChoices && htelSourceName) {
+                      <option [ngValue]="htelSelectionId">Sélection HTEL : {{ htelSourceName }} ({{ htelSelectionId }})</option>
+                    }
+                  </select>
+                  <p class="section-hint"><a routerLink="/users/htel-liaisons">Voir les nouveaux collaborateurs et les correspondances à vérifier</a></p>
+                  @if (htelLoading) { <p role="status">Comparaison avec HTEL…</p> }
+                  @if (htelLoadError) { <p role="alert">{{ htelLoadError }}</p> }
+                  <button type="button" class="ky-btn-secondary" (click)="reloadHtel()" [disabled]="htelLoading">Actualiser HTEL</button>
+                  @if (htelSourceName) {
+                    <p><strong>Nom complet HTEL :</strong> {{ htelSourceName }}</p>
+                    <label><input type="checkbox" name="htelIdentityConfirmed" [(ngModel)]="htelIdentityConfirmed" />
+                      J’ai vérifié la séparation du nom et du prénom ci-dessous.</label>
+                  }
+                </div>
+              }
               <div class="form-group">
 
                 <label for="lastName">Nom <span class="required">*</span></label>
@@ -1432,5 +1456,3 @@
   </div>
 
 </div>
-
-

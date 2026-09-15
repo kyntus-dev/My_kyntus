@@ -1,0 +1,45 @@
+name: HTEL reconciliation
+
+on:
+  pull_request:
+    paths:
+      - 'EmployeeDirectory/**'
+      - 'PlanningService/**'
+      - 'projet_kyntus_service_planning-frontend/src/app/features/users/**'
+      - 'projet_kyntus_service_planning-frontend/tsconfig.htel-spec.json'
+      - '.github/workflows/htel-reconciliation.yml'
+  push:
+    branches: ['feature/htel-rh-reconciliation']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-htel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build affected APIs
+        run: |
+          dotnet build EmployeeDirectory/EmployeeDirectory.API/EmployeeDirectory.API.csproj
+          dotnet build PlanningService/Planning.API/Planning.API.csproj
+      - name: Verify reconciliation and creation
+        run: |
+          dotnet test EmployeeDirectory/EmployeeDirectory.UnitTests/EmployeeDirectory.UnitTests.csproj --filter 'FullyQualifiedName~Htel'
+          dotnet test PlanningService/Planning.UnitTests/Planning.UnitTests.csproj --filter 'FullyQualifiedName~DirectoryEmployeeWriteClientHtel'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: projet_kyntus_service_planning-frontend/package-lock.json
+      - name: Verify RH screens and HTEL exports
+        working-directory: projet_kyntus_service_planning-frontend
+        run: |
+          npm ci
+          npx ngc -p tsconfig.app.json
+          npx ng test --watch=false --ts-config=tsconfig.htel-spec.json --include='**/htel-*.spec.ts'

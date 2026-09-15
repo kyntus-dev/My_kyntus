@@ -309,7 +309,15 @@ public record HtelLinkedEmployeeDto(
     string Email,
     int IdTechnicien,
     string? HtelCode,
-    string? HtelTechnicienName);
+    string? HtelTechnicienName)
+{
+    public bool IsActive { get; init; }
+    public bool ExistsInHtel { get; init; }
+    public int? HtelActif { get; init; }
+    public string? SourceCode { get; init; }
+    public bool IdentityNeedsReview { get; init; }
+    public bool MirrorNeedsSync { get; init; }
+}
 
 public record HtelOrphanTechnicienDto(int IdTechnicien, string Technicien, int Actif, string Code);
 
@@ -317,25 +325,50 @@ public record HtelAmbiguousMatchDto(
     int IdTechnicien,
     string Technicien,
     string Code,
-    IReadOnlyList<HtelEmployeeCandidateDto> Candidates);
+    IReadOnlyList<HtelEmployeeCandidateDto> Candidates)
+{
+    public int Actif { get; init; }
+    public string? LinkedEmployeeId { get; init; }
+}
 
 public record HtelEmployeeCandidateDto(
     string EmployeeId,
     string FirstName,
     string LastName,
-    string Email);
+    string Email)
+{
+    public bool IsActive { get; init; }
+    public int? IdTechnicien { get; init; }
+}
 
 public record HtelUnlinkedEmployeeDto(
     string EmployeeId,
     string FirstName,
     string LastName,
-    string Email);
+    string Email)
+{
+    public bool IsActive { get; init; }
+}
 
 public record HtelLiaisonsReportDto(
     IReadOnlyList<HtelLinkedEmployeeDto> Linked,
     IReadOnlyList<HtelOrphanTechnicienDto> OrphansHtel,
     IReadOnlyList<HtelAmbiguousMatchDto> Ambiguous,
-    IReadOnlyList<HtelUnlinkedEmployeeDto> UnlinkedEmployees);
+    IReadOnlyList<HtelUnlinkedEmployeeDto> UnlinkedEmployees)
+{
+    public DateTime CheckedAtUtc { get; init; }
+    public IReadOnlyList<HtelMissingEmployeeDto> MissingFromHtel { get; init; } = [];
+}
+
+public record HtelMissingEmployeeDto(
+    string EmployeeId, string FirstName, string LastName, string Email,
+    bool IsActive, int? IdTechnicien, string Reason);
+
+// Les valeurs attendues empêchent d'appliquer une comparaison devenue obsolète.
+public record HtelIdentityReviewRequest(
+    Guid EmployeeId, int IdTechnicien,
+    string ExpectedFirstName, string ExpectedLastName, string ExpectedTechnicien,
+    string FirstName, string LastName);
 
 public record HtelSyncReportDto(
     int TechniciensFetched,

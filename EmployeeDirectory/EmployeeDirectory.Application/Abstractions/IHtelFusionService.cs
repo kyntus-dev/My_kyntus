@@ -15,9 +15,11 @@ public interface IHtelFusionService
     Task<HtelSyncReportDto> SyncAsync(CancellationToken ct = default);
     Task<bool> LinkAsync(Guid employeeId, int idTechnicien, CancellationToken ct = default);
     Task<bool> UnlinkAsync(Guid employeeId, CancellationToken ct = default);
+    Task<bool> ReviewIdentityAsync(HtelIdentityReviewRequest request, CancellationToken ct = default);
 
     /// <summary>
-    /// Applique une liaison explicite ou un auto-match par nom si l'employé n'est pas encore lié.
+    /// Applique une liaison explicitement choisie ou rafraîchit un identifiant déjà lié.
+    /// Une ressemblance de noms ne crée jamais de liaison sans décision RH.
     /// Ne sauvegarde pas : l'appelant persiste l'entité.
     /// </summary>
     Task ApplyLinkOnEmployeeAsync(Employee employee, int? explicitIdTechnicien, CancellationToken ct = default);

@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.spec.json",
+  "include": [
+    "src/**/*.d.ts",
+    "src/app/features/users/services/htel-*.spec.ts",
+    "src/app/features/users/pages/htel-liaisons/*.spec.ts",
+    "src/app/features/planning/lib/htel-*.spec.ts"
+  ]
+}

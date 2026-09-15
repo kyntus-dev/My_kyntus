@@ -19,6 +19,12 @@ export interface HtelLinkedEmployeeDto {
   idTechnicien: number;
   htelCode?: string | null;
   htelTechnicienName?: string | null;
+  isActive: boolean;
+  existsInHtel: boolean;
+  htelActif: number | null;
+  sourceCode: string | null;
+  identityNeedsReview: boolean;
+  mirrorNeedsSync: boolean;
 }
 
 export interface HtelOrphanTechnicienDto {
@@ -29,6 +35,8 @@ export interface HtelOrphanTechnicienDto {
 }
 
 export interface HtelEmployeeCandidateDto {
+  isActive: boolean;
+  idTechnicien: number | null;
   employeeId: string;
   firstName: string;
   lastName: string;
@@ -36,6 +44,8 @@ export interface HtelEmployeeCandidateDto {
 }
 
 export interface HtelAmbiguousMatchDto {
+  actif: number;
+  linkedEmployeeId?: string | null;
   idTechnicien: number;
   technicien: string;
   code: string;
@@ -43,13 +53,31 @@ export interface HtelAmbiguousMatchDto {
 }
 
 export interface HtelUnlinkedEmployeeDto {
+  isActive: boolean;
   employeeId: string;
   firstName: string;
   lastName: string;
   email: string;
 }
 
+export interface HtelMissingEmployeeDto extends HtelUnlinkedEmployeeDto {
+  idTechnicien: number | null;
+  reason: 'LinkedIdMissing' | 'NoReliableMatch';
+}
+
+export interface HtelIdentityReviewRequest {
+  employeeId: string;
+  idTechnicien: number;
+  expectedFirstName: string;
+  expectedLastName: string;
+  expectedTechnicien: string;
+  firstName: string;
+  lastName: string;
+}
+
 export interface HtelLiaisonsReportDto {
+  checkedAtUtc: string;
+  missingFromHtel: HtelMissingEmployeeDto[];
   linked: HtelLinkedEmployeeDto[];
   orphansHtel: HtelOrphanTechnicienDto[];
   ambiguous: HtelAmbiguousMatchDto[];
@@ -87,6 +115,10 @@ export class HtelApiService {
     return this.http.post<void>(`${htelBase}/liaisons/link`, { employeeId, idTechnicien });
   }
 
+  reviewIdentity(request: HtelIdentityReviewRequest): Observable<void> {
+    return this.http.post<void>(`${htelBase}/liaisons/identity`, request);
+  }
+
   unlink(employeeId: string): Observable<void> {
     return this.http.post<void>(`${htelBase}/liaisons/unlink`, { employeeId });
   }
@@ -103,4 +135,3 @@ export {
   HTEL_MATCH_AMBIGUITY_GAP,
   HTEL_MATCH_MIN_NAME_LENGTH,
 } from './htel-name-match.util';
-
