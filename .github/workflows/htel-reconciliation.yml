@@ -3,6 +3,7 @@ name: HTEL reconciliation
 on:
   pull_request:
     paths:
+      - 'ApiGateway.API/**'
       - 'EmployeeDirectory/**'
       - 'PlanningService/**'
       - 'projet_kyntus_service_planning-frontend/src/app/features/users/**'
@@ -43,3 +44,23 @@ jobs:
           npm ci
           npx ngc -p tsconfig.app.json
           npx ng test --watch=false --ts-config=tsconfig.htel-spec.json --include='**/htel-*.spec.ts'
+
+  verify-gateway-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Simulate stale local build files
+        run: |
+          mkdir -p ApiGateway.API/ApiGateway.API/bin/Release/net8.0 ApiGateway.API/ApiGateway.API/obj
+          touch ApiGateway.API/ApiGateway.API/bin/Release/net8.0/ApiGateway.API.runtimeconfig.json
+          touch ApiGateway.API/ApiGateway.API/bin/host-build-marker
+          touch ApiGateway.API/ApiGateway.API/obj/host-build-marker
+      - name: Verify host outputs stay outside the build
+        run: |
+          docker build --target build -t kyntus-gateway-build-check ApiGateway.API/ApiGateway.API
+          docker run --rm --entrypoint sh kyntus-gateway-build-check -c 'test ! -e /app/bin/host-build-marker && test ! -e /app/obj/host-build-marker && test -s /out/ApiGateway.API.runtimeconfig.json'
+      - name: Verify published runtime configuration
+        run: |
+          docker build -t kyntus-gateway-runtime-check ApiGateway.API/ApiGateway.API
+          docker run --rm --entrypoint cat kyntus-gateway-runtime-check /app/ApiGateway.API.runtimeconfig.json | python3 -c 'import json,sys; cfg=json.load(sys.stdin); assert cfg["runtimeOptions"]["tfm"] == "net8.0"'
