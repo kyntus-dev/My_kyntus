@@ -1,5 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, DestroyRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { timer, finalize } from 'rxjs';
+import { suggestHtelIdentity } from '../../services/htel-identity.util';
+import { UserService } from '../../services/user.service';
+import { resolveUserGuid } from '../../../../core/lib/user-guid.util';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AlertTriangle, ChevronLeft, ChevronRight, Link2, RefreshCw, Search, Unlink, X } from 'lucide';
@@ -9,6 +14,8 @@ import { KyntusConfirmService } from '../../../../shared/components/kyntus-confi
 import { formatHttpErrorMessage } from '../../../../core/lib/http-error-message.util';
 import {
   HtelAmbiguousMatchDto,
+  HtelMissingEmployeeDto,
+  HtelIdentityReviewRequest,
   HtelApiService,
   HtelLiaisonsReportDto,
   HtelLinkedEmployeeDto,
@@ -17,7 +24,7 @@ import {
   HtelUnlinkedEmployeeDto,
 } from '../../services/htel-api.service';
 
-type HtelListKey = 'linked' | 'orphans' | 'ambiguous';
+type HtelListKey = 'linked' | 'orphans' | 'ambiguous' | 'missing';
 
 @Component({
   selector: 'app-htel-liaisons-page',
@@ -45,6 +52,12 @@ export class HtelLiaisonsPageComponent implements OnInit {
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly confirmService = inject(KyntusConfirmService);
 
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly userService = inject(UserService);
+  acting = false;
+  sourceUnavailable = false;
+  identityReview: HtelIdentityReviewRequest | null = null;
+  missingPage = 1;
   loading = false;
   syncing = false;
   error: string | null = null;
@@ -61,7 +74,20 @@ export class HtelLiaisonsPageComponent implements OnInit {
 
   ngOnInit(): void {
     this.reload();
+    timer(300_000, 300_000).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      if (!document.hidden && !this.loading && !this.syncing && !this.acting && !this.identityReview) this.reload(false);
+    });
   }
+
+  get canAct(): boolean { return !!this.report && !this.loading && !this.syncing && !this.acting && !this.sourceUnavailable; }
+  get newActiveCount(): number { return this.orphans.filter(t => t.actif === 1).length; }
+  get inactiveHtelCount(): number { return this.linked.filter(e => e.htelActif === 0 && e.isActive).length; }
+  get missing(): HtelMissingEmployeeDto[] { return this.report?.missingFromHtel ?? []; }
+  get filteredMissing(): HtelMissingEmployeeDto[] {
+    const q = this.normalize(this.searchTerm);
+    return !q ? this.missing : this.missing.filter(r => this.matches(q, r.lastName, r.firstName, r.email, String(r.idTechnicien ?? '')));
+  }
+  get pagedMissing(): HtelMissingEmployeeDto[] { return this.slicePage(this.filteredMissing, this.missingPage); }
 
   get linked(): HtelLinkedEmployeeDto[] {
     return this.report?.linked ?? [];
@@ -173,17 +199,21 @@ export class HtelLiaisonsPageComponent implements OnInit {
     this.setPage(list, this.currentPage(list) + 1);
   }
 
-  reload(): void {
+  reload(resetPages = true): void {
+    if (this.loading) return;
     this.loading = true;
     this.error = null;
-    this.htelApi.getLiaisons().subscribe({
+    if (resetPages) this.identityReview = null;
+    this.htelApi.getLiaisons().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (report) => {
         this.report = report;
-        this.resetPages();
+        this.sourceUnavailable = false;
+        if (resetPages) this.resetPages();
         this.loading = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
+        this.sourceUnavailable = true;
         this.error = formatHttpErrorMessage(err, 'Impossible de charger les liaisons HTEL.');
         this.loading = false;
         this.cdr.detectChanges();
@@ -192,10 +222,11 @@ export class HtelLiaisonsPageComponent implements OnInit {
   }
 
   sync(): void {
+    if (!this.canAct || this.identityReview) return;
     this.syncing = true;
     this.error = null;
     this.syncReport = null;
-    this.htelApi.sync().subscribe({
+    this.htelApi.sync().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (report) => {
         this.syncReport = report;
         this.syncing = false;
@@ -210,6 +241,7 @@ export class HtelLiaisonsPageComponent implements OnInit {
   }
 
   async unlink(row: HtelLinkedEmployeeDto): Promise<void> {
+    if (!this.canAct) return;
     const name = `${row.lastName} ${row.firstName}`.trim() || row.email;
     const ok = await this.confirmService.confirm({
       title: 'Délier l’employé',
@@ -218,9 +250,10 @@ export class HtelLiaisonsPageComponent implements OnInit {
       cancelLabel: 'Annuler',
       variant: 'danger',
     });
-    if (!ok) return;
+    if (!ok || !this.canAct) return;
 
-    this.htelApi.unlink(row.employeeId).subscribe({
+    this.acting = true;
+    this.htelApi.unlink(row.employeeId).pipe(finalize(() => { this.acting = false; this.cdr.detectChanges(); })).subscribe({
       next: () => this.reload(),
       error: (err) => {
         this.error = formatHttpErrorMessage(err, 'Impossible de délier.');
@@ -236,39 +269,72 @@ export class HtelLiaisonsPageComponent implements OnInit {
       this.error = 'Sélectionnez un employé et un id technicien HTEL.';
       return;
     }
-    this.htelApi.link(employeeId, idTechnicien).subscribe({
-      next: () => {
-        this.linkEmployeeId = '';
-        this.linkIdTechnicien = null;
-        this.reload();
-      },
-      error: (err) => {
-        this.error = formatHttpErrorMessage(err, 'Liaison impossible.');
-        this.cdr.detectChanges();
-      },
-    });
+    void this.linkCandidate(employeeId, idTechnicien);
   }
 
-  linkCandidate(employeeId: string, idTechnicien: number): void {
-    this.htelApi.link(employeeId, idTechnicien).subscribe({
-      next: () => this.reload(),
-      error: (err) => {
-        this.error = formatHttpErrorMessage(err, 'Liaison impossible.');
-        this.cdr.detectChanges();
-      },
+  async linkCandidate(employeeId: string, idTechnicien: number): Promise<void> {
+    if (!this.canAct) return;
+    const source = [...this.orphans, ...this.ambiguous].find(t => t.idTechnicien === idTechnicien);
+    const employee = this.unlinked.find(e => e.employeeId === employeeId);
+    const ok = await this.confirmService.confirm({
+      title: 'Confirmer la liaison HTEL',
+      message: `Relier ${employee ? `${employee.lastName} ${employee.firstName} (${employee.email})` : 'cette fiche'} au technicien ${idTechnicien}${source ? ` — ${source.technicien}` : ''} ? Vérifiez qu’il s’agit de la même personne.`,
+      confirmLabel: 'Confirmer la liaison', cancelLabel: 'Annuler', variant: 'warning',
+    });
+    if (!ok || !this.canAct) return;
+    this.acting = true;
+    this.htelApi.link(employeeId, idTechnicien).pipe(finalize(() => { this.acting = false; this.cdr.detectChanges(); })).subscribe({
+      next: () => { this.linkEmployeeId = ''; this.linkIdTechnicien = null; this.reload(); },
+      error: err => { this.error = formatHttpErrorMessage(err, 'Liaison impossible.'); this.cdr.detectChanges(); },
     });
   }
 
   createEmployeeFromOrphan(orphan: HtelOrphanTechnicienDto): void {
-    const parts = orphan.technicien.trim().split(/\s+/);
-    const lastName = parts[0] ?? '';
-    const firstName = parts.slice(1).join(' ');
-    void this.router.navigate(['/users/create'], {
-      queryParams: {
-        lastName,
-        firstName,
-        idTechnicien: orphan.idTechnicien,
+    if (!this.canAct || orphan.actif !== 1) return;
+    void this.router.navigate(['/users/create'], { queryParams: { idTechnicien: orphan.idTechnicien } });
+  }
+
+  async createDespiteNameMatch(row: HtelAmbiguousMatchDto): Promise<void> {
+    if (!this.canAct || row.actif !== 1 || row.linkedEmployeeId) return;
+    const ok = await this.confirmService.confirm({
+      title: 'Vérifier un possible doublon',
+      message: 'Des fiches MyKyntus ressemblent à ce collaborateur HTEL. Avez-vous vérifié qu’il s’agit d’une autre personne ?',
+      confirmLabel: 'Créer une autre personne', cancelLabel: 'Revenir aux correspondances', variant: 'warning',
+    });
+    if (ok) this.createEmployeeFromOrphan(row);
+  }
+
+  reviewIdentity(row: HtelLinkedEmployeeDto): void {
+    if (!this.canAct || !row.existsInHtel || !row.htelTechnicienName) return;
+    const proposal = suggestHtelIdentity(row.htelTechnicienName, row.firstName, row.lastName);
+    this.identityReview = { employeeId: row.employeeId, idTechnicien: row.idTechnicien,
+      expectedFirstName: row.firstName, expectedLastName: row.lastName, expectedTechnicien: row.htelTechnicienName,
+      ...proposal };
+    this.cdr.detectChanges();
+    const panel = document.getElementById('htel-identity-review');
+    panel?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    panel?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
+  }
+
+  saveIdentity(): void {
+    if (!this.canAct || !this.identityReview) return;
+    this.acting = true;
+    this.htelApi.reviewIdentity(this.identityReview).pipe(finalize(() => { this.acting = false; this.cdr.detectChanges(); })).subscribe({
+      next: () => { this.identityReview = null; this.reload(false); },
+      error: err => { this.error = formatHttpErrorMessage(err, 'Identité non modifiée.'); this.cdr.detectChanges(); },
+    });
+  }
+
+  openEmployee(employeeId: string): void {
+    if (!this.canAct) return;
+    this.acting = true;
+    this.userService.getAllUsers().pipe(finalize(() => { this.acting = false; this.cdr.detectChanges(); })).subscribe({
+      next: users => {
+        const user = users.find(u => resolveUserGuid(u).toLowerCase() === employeeId.toLowerCase());
+        if (user) void this.router.navigate(['/users', user.id]);
+        else { this.error = 'La fiche existe dans l’annuaire mais sa projection Planning est indisponible. Contactez l’administrateur pour la réconcilier.'; this.cdr.detectChanges(); }
       },
+      error: err => { this.error = formatHttpErrorMessage(err, 'Impossible d’ouvrir la fiche.'); this.cdr.detectChanges(); },
     });
   }
 
@@ -280,6 +346,7 @@ export class HtelLiaisonsPageComponent implements OnInit {
 
   private filteredTotal(list: HtelListKey): number {
     switch (list) {
+      case 'missing': return this.filteredMissing.length;
       case 'linked':
         return this.filteredLinked.length;
       case 'orphans':
@@ -291,6 +358,7 @@ export class HtelLiaisonsPageComponent implements OnInit {
 
   private rawPage(list: HtelListKey): number {
     switch (list) {
+      case 'missing': return this.missingPage;
       case 'linked':
         return this.linkedPage;
       case 'orphans':
@@ -303,6 +371,7 @@ export class HtelLiaisonsPageComponent implements OnInit {
   private setPage(list: HtelListKey, page: number): void {
     const clamped = this.clampPage(list, page);
     switch (list) {
+      case 'missing': this.missingPage = clamped; break;
       case 'linked':
         this.linkedPage = clamped;
         break;
@@ -321,6 +390,7 @@ export class HtelLiaisonsPageComponent implements OnInit {
   }
 
   private resetPages(): void {
+    this.missingPage = 1;
     this.linkedPage = 1;
     this.orphansPage = 1;
     this.ambiguousPage = 1;

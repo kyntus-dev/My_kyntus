@@ -113,6 +113,7 @@ public class SubServiceSimpleDto
 
 public class CreateUserDto
 {
+    public int? IdTechnicien { get; set; }
     public int RoleId { get; set; }
     public int? SubServiceId { get; set; }
     public List<int> ManagedSubServiceIds { get; set; } = new();

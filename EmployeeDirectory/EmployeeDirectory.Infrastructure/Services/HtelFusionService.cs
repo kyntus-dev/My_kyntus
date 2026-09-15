@@ -13,117 +13,58 @@ public sealed class HtelFusionService(
     DirectoryDbContext db,
     IHtelTechnicienClient htelClient,
     IOutboxWriter outbox,
-    ILogger<HtelFusionService> logger) : IHtelFusionService
+    ILogger<HtelFusionService> logger,
+    IDirectoryCacheInvalidator? cacheInvalidator = null) : IHtelFusionService
 {
     public async Task<IReadOnlyList<HtelTechnicienDto>> ListTechniciensAsync(bool? actifOnly = null, CancellationToken ct = default)
     {
-        var all = await htelClient.GetTechniciensAsync(ct);
-        if (actifOnly == true)
-            return all.Where(t => t.Actif == 1).ToList();
-        return all;
+        var all = await ReadSnapshotAsync(ct);
+        return actifOnly == true ? all.Where(t => t.Actif == 1).ToList() : all;
     }
 
     public async Task<HtelLiaisonsReportDto> GetLiaisonsAsync(CancellationToken ct = default)
     {
-        var techniciens = await htelClient.GetTechniciensAsync(ct);
+        var techniciens = await ReadSnapshotAsync(ct);
+        // Un compte désactivé conserve son identité HTEL et doit empêcher un doublon.
         var employees = await db.Employees.AsNoTracking()
-            .Where(e => e.IsActive)
-            .OrderBy(e => e.LastName).ThenBy(e => e.FirstName)
-            .ToListAsync(ct);
-
-        return BuildReport(techniciens, employees);
+            .OrderBy(e => e.LastName).ThenBy(e => e.FirstName).ToListAsync(ct);
+        return HtelReconciliation.BuildReport(techniciens, employees);
     }
 
     public async Task<HtelSyncReportDto> SyncAsync(CancellationToken ct = default)
     {
-        var techniciens = await htelClient.GetTechniciensAsync(ct);
+        var techniciens = await ReadSnapshotAsync(ct);
         var byId = techniciens.ToDictionary(t => t.IdTechnicien);
-        var employees = await db.Employees.Where(e => e.IsActive).ToListAsync(ct);
-
-        var linkedUpdated = 0;
-        var newlyLinked = 0;
-
-        foreach (var employee in employees.Where(e => e.IdTechnicien.HasValue))
+        var employees = await db.Employees.ToListAsync(ct);
+        var changedIds = new List<Guid>();
+        foreach (var employee in employees)
         {
-            if (!byId.TryGetValue(employee.IdTechnicien!.Value, out var tech))
-                continue;
-
-            var changed = false;
-            if (!string.Equals(employee.HtelCode, tech.Code, StringComparison.Ordinal))
-            {
-                employee.HtelCode = tech.Code;
-                changed = true;
-            }
-
-            var shouldBeActive = tech.Actif == 1;
-            if (!shouldBeActive && employee.IsActive)
-            {
-                employee.IsActive = false;
-                changed = true;
-            }
-
-            if (changed)
-            {
-                employee.UpdatedAt = DateTime.UtcNow;
-                await EnqueueEmployeeChangedAsync(employee, ct);
-                linkedUpdated++;
-            }
-        }
-
-        var takenIds = employees
-            .Where(e => e.IdTechnicien.HasValue)
-            .Select(e => e.IdTechnicien!.Value)
-            .ToHashSet();
-
-        foreach (var employee in employees.Where(e => !e.IdTechnicien.HasValue))
-        {
-            var available = techniciens.Where(t => !takenIds.Contains(t.IdTechnicien)).ToList();
-            if (!TryResolveUniqueMatch(employee, available, out var tech))
-                continue;
-
-            if (employees.Any(e => e.IdTechnicien == tech.IdTechnicien && e.Id != employee.Id))
-                continue;
-
-            ApplyMirror(employee, tech);
+            if (employee.IdTechnicien is not int id || !byId.TryGetValue(id, out var tech)) continue;
+            if (!ApplyMirror(employee, tech)) continue;
             await EnqueueEmployeeChangedAsync(employee, ct);
-            takenIds.Add(tech.IdTechnicien);
-            newlyLinked++;
+            changedIds.Add(employee.Id);
         }
-
-        await db.SaveChangesAsync(ct);
-
-        var report = BuildReport(techniciens, employees);
-        logger.LogInformation(
-            "HTEL sync: fetched={Fetched}, updated={Updated}, newlyLinked={New}, orphans={Orphans}, ambiguous={Ambiguous}",
-            techniciens.Count, linkedUpdated, newlyLinked, report.OrphansHtel.Count, report.Ambiguous.Count);
-
-        return new HtelSyncReportDto(
-            techniciens.Count,
-            linkedUpdated,
-            newlyLinked,
-            report.OrphansHtel.Count,
-            report.Ambiguous.Count,
-            report.UnlinkedEmployees.Count);
+        await SaveAsync(changedIds, ct);
+        var report = HtelReconciliation.BuildReport(techniciens, employees);
+        logger.LogInformation("HTEL: {Fetched} techniciens, {Updated} miroirs actualisés. Statuts et identités RH conservés.",
+            techniciens.Count, changedIds.Count);
+        return new HtelSyncReportDto(techniciens.Count, changedIds.Count, 0,
+            report.OrphansHtel.Count, report.Ambiguous.Count, report.UnlinkedEmployees.Count);
     }
 
     public async Task<bool> LinkAsync(Guid employeeId, int idTechnicien, CancellationToken ct = default)
     {
         var employee = await db.Employees.FirstOrDefaultAsync(e => e.Id == employeeId, ct);
         if (employee is null) return false;
-
-        var techniciens = await htelClient.GetTechniciensAsync(ct);
-        var tech = techniciens.FirstOrDefault(t => t.IdTechnicien == idTechnicien);
-        if (tech is null)
-            throw new InvalidOperationException($"Technicien HTEL {idTechnicien} introuvable.");
-
-        var taken = await db.Employees.AnyAsync(
-            e => e.IdTechnicien == idTechnicien && e.Id != employeeId, ct);
-        if (taken)
-            throw new InvalidOperationException($"Id technicien {idTechnicien} déjà lié à un autre employé.");
-
-        ApplyMirror(employee, tech);
-        await EnqueueEmployeeChangedAsync(employee, ct);
-        await db.SaveChangesAsync(ct);
+        // Une liaison différente doit être déliée explicitement depuis sa fiche.
+        if (employee.IdTechnicien.HasValue && employee.IdTechnicien != idTechnicien)
+            throw new InvalidOperationException("Cet employé est déjà lié à un autre identifiant HTEL. Vérifiez sa liaison avant de la remplacer.");
+        var tech = await ResolveAvailableAsync(employee, idTechnicien, ct);
+        if (ApplyMirror(employee, tech))
+        {
+            await EnqueueEmployeeChangedAsync(employee, ct);
+            await SaveAsync([employee.Id], ct);
+        }
         return true;
     }
 
@@ -131,181 +72,120 @@ public sealed class HtelFusionService(
     {
         var employee = await db.Employees.FirstOrDefaultAsync(e => e.Id == employeeId, ct);
         if (employee is null) return false;
-
         employee.IdTechnicien = null;
         employee.HtelCode = null;
         employee.HtelTechnicienName = null;
         employee.UpdatedAt = DateTime.UtcNow;
         await EnqueueEmployeeChangedAsync(employee, ct);
-        await db.SaveChangesAsync(ct);
+        await SaveAsync([employee.Id], ct);
+        return true;
+    }
+
+    public async Task<bool> ReviewIdentityAsync(HtelIdentityReviewRequest request, CancellationToken ct = default)
+    {
+        var employee = await db.Employees.FirstOrDefaultAsync(e => e.Id == request.EmployeeId, ct);
+        if (employee is null) return false;
+        if (employee.IdTechnicien != request.IdTechnicien ||
+            employee.FirstName != request.ExpectedFirstName || employee.LastName != request.ExpectedLastName)
+            throw new InvalidOperationException("La fiche a changé. Actualisez la comparaison avant de confirmer.");
+        var tech = (await ReadSnapshotAsync(ct)).SingleOrDefault(t => t.IdTechnicien == request.IdTechnicien)
+            ?? throw new InvalidOperationException("Ce technicien est désormais absent de HTEL. Actualisez la comparaison.");
+        if (tech.Technicien != request.ExpectedTechnicien)
+            throw new InvalidOperationException("Le nom HTEL a changé. Actualisez la comparaison avant de confirmer.");
+        var first = request.FirstName?.Trim() ?? "";
+        var last = request.LastName?.Trim() ?? "";
+        if (first.Length is < 1 or > 128 || last.Length is < 1 or > 128)
+            throw new ArgumentException("Nom et prénom sont obligatoires (128 caractères maximum chacun).");
+        if (HtelNameNormalizer.Normalize($"{last} {first}") != HtelNameNormalizer.Normalize(tech.Technicien))
+            throw new ArgumentException("La combinaison Nom + Prénom doit correspondre au nom complet HTEL affiché.");
+        var changed = ApplyMirror(employee, tech);
+        if (employee.FirstName != first || employee.LastName != last)
+        {
+            employee.FirstName = first;
+            employee.LastName = last;
+            employee.UpdatedAt = DateTime.UtcNow;
+            changed = true;
+        }
+        if (changed)
+        {
+            employee.RowVersion = Guid.NewGuid().ToByteArray();
+            await EnqueueEmployeeChangedAsync(employee, ct);
+            await SaveAsync([employee.Id], ct);
+            logger.LogInformation("Identité HTEL confirmée pour l'employé {EmployeeId}, technicien {TechnicienId}", employee.Id, tech.IdTechnicien);
+        }
         return true;
     }
 
     public async Task ApplyLinkOnEmployeeAsync(Employee employee, int? explicitIdTechnicien, CancellationToken ct = default)
     {
+        if (explicitIdTechnicien.HasValue)
+        {
+            if (explicitIdTechnicien <= 0) throw new InvalidOperationException("Identifiant HTEL invalide.");
+            if (employee.IdTechnicien.HasValue && employee.IdTechnicien != explicitIdTechnicien)
+                throw new InvalidOperationException("La fiche est déjà liée à un autre technicien HTEL.");
+            // Une sélection explicite doit être vérifiée avant toute création de compte.
+            var tech = await ResolveAvailableAsync(employee, explicitIdTechnicien.Value, ct);
+            if (tech.Actif != 1 && !employee.IdTechnicien.HasValue)
+                throw new InvalidOperationException("Ce technicien est inactif dans HTEL. Vérifiez sa situation avant de créer le compte.");
+            if (!employee.IdTechnicien.HasValue && HtelNameNormalizer.Normalize($"{employee.LastName} {employee.FirstName}")
+                    != HtelNameNormalizer.Normalize(tech.Technicien))
+                throw new InvalidOperationException("Le nom et le prénom saisis doivent correspondre au nom complet HTEL sélectionné.");
+            ApplyMirror(employee, tech);
+            return;
+        }
+        if (employee.IdTechnicien is not int existingId) return;
         try
         {
-            var techniciens = await htelClient.GetTechniciensAsync(ct);
-
-            if (explicitIdTechnicien.HasValue)
-            {
-                var tech = techniciens.FirstOrDefault(t => t.IdTechnicien == explicitIdTechnicien.Value);
-                if (tech is null)
-                    throw new InvalidOperationException($"Technicien HTEL {explicitIdTechnicien.Value} introuvable.");
-
-                var taken = await db.Employees.AnyAsync(
-                    e => e.IdTechnicien == explicitIdTechnicien.Value && e.Id != employee.Id, ct);
-                if (taken)
-                    throw new InvalidOperationException(
-                        $"Id technicien {explicitIdTechnicien.Value} déjà lié à un autre employé.");
-
-                ApplyMirror(employee, tech);
-                return;
-            }
-
-            if (employee.IdTechnicien.HasValue)
-            {
-                var tech = techniciens.FirstOrDefault(t => t.IdTechnicien == employee.IdTechnicien.Value);
-                if (tech is not null)
-                    employee.HtelCode = tech.Code;
-                    employee.HtelTechnicienName = string.IsNullOrWhiteSpace(tech.Technicien)
-                        ? employee.HtelTechnicienName
-                        : tech.Technicien.Trim();
-                return;
-            }
-
-            var takenIds = await db.Employees.AsNoTracking()
-                .Where(e => e.IdTechnicien != null && e.Id != employee.Id)
-                .Select(e => e.IdTechnicien!.Value)
-                .ToListAsync(ct);
-            var takenSet = takenIds.ToHashSet();
-            var available = techniciens.Where(t => !takenSet.Contains(t.IdTechnicien)).ToList();
-            if (TryResolveUniqueMatch(employee, available, out var matched))
-                ApplyMirror(employee, matched);
+            var tech = (await ReadSnapshotAsync(ct)).SingleOrDefault(t => t.IdTechnicien == existingId);
+            if (tech is not null) ApplyMirror(employee, tech);
         }
         catch (HttpRequestException ex)
         {
-            logger.LogWarning(ex, "HTEL indisponible lors de la liaison automatique pour {EmployeeId}", employee.Id);
+            logger.LogWarning(ex, "HTEL indisponible : miroir conservé pour {EmployeeId}", employee.Id);
         }
-        catch (TaskCanceledException ex)
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "Timeout HTEL lors de la liaison automatique pour {EmployeeId}", employee.Id);
+            logger.LogWarning(ex, "Timeout HTEL : miroir conservé pour {EmployeeId}", employee.Id);
         }
     }
 
-    private static void ApplyMirror(Employee employee, HtelTechnicienDto tech)
+    private async Task<HtelTechnicienDto> ResolveAvailableAsync(Employee employee, int idTechnicien, CancellationToken ct)
     {
-        employee.IdTechnicien = tech.IdTechnicien;
-        employee.HtelCode = tech.Code;
-        employee.HtelTechnicienName = string.IsNullOrWhiteSpace(tech.Technicien)
-            ? null
-            : tech.Technicien.Trim();
-        employee.UpdatedAt = DateTime.UtcNow;
+        var tech = (await ReadSnapshotAsync(ct)).SingleOrDefault(t => t.IdTechnicien == idTechnicien)
+            ?? throw new InvalidOperationException($"Technicien HTEL {idTechnicien} introuvable.");
+        if (await db.Employees.AnyAsync(e => e.IdTechnicien == idTechnicien && e.Id != employee.Id, ct))
+            throw new InvalidOperationException($"Le technicien HTEL {idTechnicien} est déjà lié à une fiche MyKyntus (active ou désactivée).");
+        return tech;
     }
 
-    private static bool TryResolveUniqueMatch(
-        Employee employee,
-        IReadOnlyList<HtelTechnicienDto> available,
-        out HtelTechnicienDto tech)
+    private async Task<IReadOnlyList<HtelTechnicienDto>> ReadSnapshotAsync(CancellationToken ct)
     {
-        tech = null!;
-        var scored = available
-            .Select(t => (
-                Tech: t,
-                Score: HtelNameNormalizer.ScoreEmployeeToTechnicien(
-                    employee.FirstName, employee.LastName, t.Technicien)))
-            .Where(x => x.Score >= HtelNameNormalizer.AutoLinkThreshold)
-            .OrderByDescending(x => x.Score)
-            .ToList();
+        var rows = await htelClient.GetTechniciensAsync(ct);
+        HtelReconciliation.ValidateSnapshot(rows);
+        return rows;
+    }
 
-        if (scored.Count == 0)
+    private static bool ApplyMirror(Employee employee, HtelTechnicienDto tech)
+    {
+        var name = tech.Technicien.Trim();
+        // Un code absent en amont n'efface pas une information déjà renseignée.
+        var code = string.IsNullOrWhiteSpace(tech.Code) ? employee.HtelCode : tech.Code.Trim();
+        if (employee.IdTechnicien == tech.IdTechnicien && employee.HtelCode == code && employee.HtelTechnicienName == name)
             return false;
-
-        if (scored.Count == 1)
-        {
-            tech = scored[0].Tech;
-            return true;
-        }
-
-        if (scored[0].Score - scored[1].Score >= HtelNameNormalizer.AmbiguityGap)
-        {
-            tech = scored[0].Tech;
-            return true;
-        }
-
-        return false;
+        employee.IdTechnicien = tech.IdTechnicien;
+        employee.HtelCode = code;
+        employee.HtelTechnicienName = name;
+        employee.UpdatedAt = DateTime.UtcNow;
+        return true;
     }
 
-    private static HtelLiaisonsReportDto BuildReport(
-        IReadOnlyList<HtelTechnicienDto> techniciens,
-        IReadOnlyList<Employee> employees)
+    private async Task SaveAsync(IReadOnlyList<Guid> employeeIds, CancellationToken ct)
     {
-        var byId = techniciens.ToDictionary(t => t.IdTechnicien);
-        var linkedIds = employees
-            .Where(e => e.IdTechnicien.HasValue)
-            .Select(e => e.IdTechnicien!.Value)
-            .ToHashSet();
-
-        var linked = employees
-            .Where(e => e.IdTechnicien.HasValue)
-            .Select(e =>
-            {
-                byId.TryGetValue(e.IdTechnicien!.Value, out var tech);
-                return new HtelLinkedEmployeeDto(
-                    e.Id.ToString(),
-                    e.FirstName,
-                    e.LastName,
-                    e.Email,
-                    e.IdTechnicien.Value,
-                    e.HtelCode,
-                    tech?.Technicien);
-            })
-            .ToList();
-
-        var unlinked = employees.Where(e => !e.IdTechnicien.HasValue).ToList();
-        var orphans = techniciens
-            .Where(t => !linkedIds.Contains(t.IdTechnicien))
-            .Where(t => CountNameMatches(t, unlinked) == 0)
-            .Select(t => new HtelOrphanTechnicienDto(t.IdTechnicien, t.Technicien, t.Actif, t.Code))
-            .ToList();
-
-        var ambiguous = techniciens
-            .Where(t => !linkedIds.Contains(t.IdTechnicien))
-            .Select(t =>
-            {
-                var candidates = FindEmployeeCandidates(t, unlinked);
-                return candidates.Count > 1
-                    ? new HtelAmbiguousMatchDto(t.IdTechnicien, t.Technicien, t.Code, candidates)
-                    : null;
-            })
-            .Where(x => x is not null)
-            .Select(x => x!)
-            .ToList();
-
-        var unlinkedDtos = unlinked
-            .Select(e => new HtelUnlinkedEmployeeDto(e.Id.ToString(), e.FirstName, e.LastName, e.Email))
-            .ToList();
-
-        return new HtelLiaisonsReportDto(linked, orphans, ambiguous, unlinkedDtos);
+        await db.SaveChangesAsync(ct);
+        if (cacheInvalidator is null) return;
+        foreach (var id in employeeIds)
+            await cacheInvalidator.InvalidateEmployeeAsync(id, ct);
     }
-
-    private static int CountNameMatches(HtelTechnicienDto tech, IReadOnlyList<Employee> employees) =>
-        employees.Count(e =>
-            HtelNameNormalizer.IsNameMatch(e.FirstName, e.LastName, tech.Technicien));
-
-    private static IReadOnlyList<HtelEmployeeCandidateDto> FindEmployeeCandidates(
-        HtelTechnicienDto tech,
-        IReadOnlyList<Employee> employees) =>
-        employees
-            .Select(e => (
-                Emp: e,
-                Score: HtelNameNormalizer.ScoreEmployeeToTechnicien(
-                    e.FirstName, e.LastName, tech.Technicien)))
-            .Where(x => x.Score >= HtelNameNormalizer.AlertThreshold)
-            .OrderByDescending(x => x.Score)
-            .Select(x => new HtelEmployeeCandidateDto(
-                x.Emp.Id.ToString(), x.Emp.FirstName, x.Emp.LastName, x.Emp.Email))
-            .ToList();
 
     private async Task EnqueueEmployeeChangedAsync(Employee employee, CancellationToken ct)
     {

@@ -1,12 +1,13 @@
 <div class="ky-page-shell">
   <app-kyntus-page-header
     title="Liaisons HTEL"
-    subtitle="Fusion des techniciens HTEL (source de vérité) avec les employés MyKyntus — matching par nom.">
+    subtitle="Nouveaux collaborateurs, rapprochement des identités et situations à vérifier par RH.">
     <div actions>
       <a routerLink="/users" class="ky-btn-secondary">Retour aux employés</a>
-      <button type="button" class="ky-btn-primary" [disabled]="syncing || loading" (click)="sync()">
+      <button type="button" class="ky-btn-secondary" [disabled]="loading || syncing || acting" (click)="reload()">Actualiser HTEL</button>
+      <button type="button" class="ky-btn-primary" [disabled]="!canAct || !!identityReview" (click)="sync()">
         <app-lucide-icon [icon]="icons.sync" className="w-4 h-4" />
-        {{ syncing ? 'Synchronisation…' : 'Synchroniser' }}
+        {{ syncing ? 'Synchronisation…' : 'Actualiser les champs HTEL' }}
       </button>
     </div>
   </app-kyntus-page-header>
@@ -22,10 +23,32 @@
     <div class="alert alert-info">
       Sync : {{ syncReport.techniciensFetched }} techniciens HTEL —
       {{ syncReport.linkedUpdated }} mis à jour,
-      {{ syncReport.newlyLinked }} nouveaux liens,
-      {{ syncReport.orphansHtel }} orphelins HTEL,
-      {{ syncReport.ambiguous }} ambigus.
+      Les noms et statuts RH sont conservés.
+      {{ syncReport.orphansHtel }} sans lien,
+      {{ syncReport.ambiguous }} correspondances à vérifier.
     </div>
+  }
+
+  @if (report) {
+    <p class="search-meta">Dernière comparaison réussie : {{ report.checkedAtUtc | date:'dd/MM/yyyy HH:mm' }}.
+      Actualisation toutes les 5 minutes tant que cette page est visible.</p>
+    <p class="search-meta">HTEL fournit l’identifiant, le nom complet, le code et le statut externe.
+      RH confirme les noms, les liaisons et toute désactivation ou suppression depuis la fiche employé.</p>
+  }
+
+  @if (identityReview; as review) {
+    <section id="htel-identity-review" class="card ky-card" aria-label="Vérifier l’identité HTEL">
+      <h2>Vérifier la séparation Nom / Prénom</h2>
+      <p>Fiche actuelle : nom <strong>{{ review.expectedLastName }}</strong>, prénom <strong>{{ review.expectedFirstName }}</strong>.</p>
+      <p>Nom complet HTEL : <strong>{{ review.expectedTechnicien }}</strong> ({{ review.idTechnicien }}).</p>
+      <div class="manual-link">
+        <label>Nom<input class="ky-input" [(ngModel)]="review.lastName" maxlength="128" /></label>
+        <label>Prénom<input class="ky-input" [(ngModel)]="review.firstName" maxlength="128" /></label>
+        <button type="button" class="ky-btn-primary" [disabled]="!canAct" (click)="saveIdentity()">Confirmer cette identité</button>
+        <button type="button" class="ky-btn-secondary" [disabled]="acting" (click)="identityReview = null">Annuler</button>
+      </div>
+      <p>Cette confirmation modifie uniquement le nom, le prénom et les champs HTEL de cette fiche.</p>
+    </section>
   }
 
   @if (loading && !report) {
@@ -40,17 +63,18 @@
         <span class="stat-lbl">Liés</span>
       </div>
       <div class="stat stat--warn">
-        <span class="stat-val">{{ orphans.length }}</span>
-        <span class="stat-lbl">Non définis MyKyntus</span>
+        <span class="stat-val">{{ newActiveCount }}</span>
+        <span class="stat-lbl">Nouveaux à compléter</span>
       </div>
       <div class="stat">
         <span class="stat-val">{{ ambiguous.length }}</span>
-        <span class="stat-lbl">Ambigus</span>
+        <span class="stat-lbl">Correspondances à vérifier</span>
       </div>
       <div class="stat">
-        <span class="stat-val">{{ unlinked.length }}</span>
-        <span class="stat-lbl">Employés sans HTEL</span>
+        <span class="stat-val">{{ missing.length }}</span>
+        <span class="stat-lbl">Absents / sans correspondance</span>
       </div>
+      <div class="stat stat--warn"><span class="stat-val">{{ inactiveHtelCount }}</span><span class="stat-lbl">Actifs MyKyntus / inactifs HTEL</span></div>
     </div>
 
     <div class="search-container">
@@ -95,6 +119,7 @@
               <th>ID technicien</th>
               <th>Code HTEL</th>
               <th>Nom HTEL</th>
+              <th>Situation</th>
               <th class="col-actions">Actions</th>
             </tr>
           </thead>
@@ -109,10 +134,21 @@
                 </td>
                 <td class="muted-cell">{{ row.email }}</td>
                 <td><code class="id-chip">{{ row.idTechnicien }}</code></td>
-                <td>{{ row.htelCode || '—' }}</td>
+                <td>{{ row.htelCode || '—' }}
+                  @if (row.mirrorNeedsSync) { <small>HTEL : {{ row.sourceCode || 'Non renseigné' }} — à actualiser</small> }
+                </td>
                 <td>{{ row.htelTechnicienName || '—' }}</td>
+                <td>
+                  <div>MyKyntus : {{ row.isActive ? 'actif' : 'désactivé' }}</div>
+                  <div>HTEL : {{ !row.existsInHtel ? 'identifiant absent' : row.htelActif === 1 ? 'actif' : 'inactif — décision RH' }}</div>
+                  @if (row.identityNeedsReview) { <strong>Nom / prénom à vérifier</strong> }
+                </td>
                 <td class="col-actions">
-                  <button type="button" class="ky-btn-secondary btn-sm" (click)="unlink(row)">
+                  @if (row.existsInHtel) {
+                    <button type="button" class="ky-btn-secondary btn-sm" [disabled]="!canAct" (click)="reviewIdentity(row)">Vérifier l’identité</button>
+                  }
+                  <button type="button" class="ky-btn-secondary btn-sm" [disabled]="!canAct" (click)="openEmployee(row.employeeId)">Ouvrir la fiche</button>
+                  <button type="button" class="ky-btn-secondary btn-sm" [disabled]="!canAct" (click)="unlink(row)">
                     <app-lucide-icon [icon]="icons.unlink" className="w-3.5 h-3.5" />
                     Délier
                   </button>
@@ -120,7 +156,7 @@
               </tr>
             } @empty {
               <tr>
-                <td colspan="6" class="empty-row">
+                <td colspan="7" class="empty-row">
                   @if (hasSearch) {
                     Aucune liaison ne correspond à « {{ searchTerm }} ».
                   } @else {
@@ -150,8 +186,8 @@
     <section class="card ky-card">
       <div class="section-heading">
         <div>
-          <h2>Non définis sur MyKyntus <span class="count-pill count-pill--warn">{{ filteredOrphans.length }}</span></h2>
-          <p>Techniciens HTEL sans employé correspondant (ni lien, ni même nom).</p>
+          <h2>Collaborateurs HTEL sans fiche identifiée <span class="count-pill count-pill--warn">{{ filteredOrphans.length }}</span></h2>
+          <p>Techniciens sans lien ni correspondance probable. Les actifs peuvent être préremplis, puis complétés par RH.</p>
         </div>
       </div>
       <div class="table-wrap">
@@ -177,8 +213,8 @@
                   </span>
                 </td>
                 <td class="col-actions">
-                  <button type="button" class="ky-btn-primary btn-sm" (click)="createEmployeeFromOrphan(row)">
-                    Créer employé
+                  <button type="button" class="ky-btn-primary btn-sm" [disabled]="!canAct || row.actif !== 1" (click)="createEmployeeFromOrphan(row)">
+                    Préremplir la fiche RH
                   </button>
                 </td>
               </tr>
@@ -214,8 +250,8 @@
     <section class="card ky-card">
       <div class="section-heading">
         <div>
-          <h2>Ambigus <span class="count-pill">{{ filteredAmbiguous.length }}</span></h2>
-          <p>Plusieurs employés MyKyntus correspondent au même nom HTEL — résolution manuelle.</p>
+          <h2>Correspondances à vérifier <span class="count-pill">{{ filteredAmbiguous.length }}</span></h2>
+          <p>Une ou plusieurs fiches ressemblent au nom HTEL. Confirmez la bonne liaison après vérification, y compris pour les comptes désactivés.</p>
         </div>
       </div>
       @for (row of pagedAmbiguous; track row.idTechnicien) {
@@ -223,16 +259,24 @@
           <div class="ambiguous-head">
             <strong>{{ row.technicien }}</strong>
             <code class="id-chip">{{ row.idTechnicien }}</code>
-            <span class="muted">{{ row.code }}</span>
+            <span class="muted">{{ row.code }} — HTEL {{ row.actif === 1 ? 'actif' : 'inactif' }}</span>
+            <button type="button" class="ky-btn-secondary btn-sm" [disabled]="!canAct || row.actif !== 1 || !!row.linkedEmployeeId" (click)="createDespiteNameMatch(row)">Il s’agit d’une autre personne</button>
           </div>
+          @if (row.linkedEmployeeId) {
+            <p>Ce technicien est déjà lié. Ces ressemblances sont à vérifier comme d’éventuels doublons.
+              <button type="button" class="ky-btn-secondary btn-sm" [disabled]="!canAct" (click)="openEmployee(row.linkedEmployeeId)">Voir la fiche liée</button>
+            </p>
+          }
           <ul>
             @for (c of row.candidates; track c.employeeId) {
               <li>
-                <span>{{ c.lastName }} {{ c.firstName }} <span class="muted">({{ c.email }})</span></span>
-                <button type="button" class="ky-btn-secondary btn-sm" (click)="linkCandidate(c.employeeId, row.idTechnicien)">
+                <span>{{ c.lastName }} {{ c.firstName }} <span class="muted">({{ c.email }}) — {{ c.isActive ? 'actif' : 'désactivé' }}
+                  @if (c.idTechnicien) { — déjà lié à HTEL {{ c.idTechnicien }} }</span></span>
+                <button type="button" class="ky-btn-secondary btn-sm" [disabled]="!canAct || !!c.idTechnicien || !!row.linkedEmployeeId" (click)="linkCandidate(c.employeeId, row.idTechnicien)">
                   <app-lucide-icon [icon]="icons.link" className="w-3.5 h-3.5" />
-                  Lier
+                  Confirmer la liaison
                 </button>
+                <button type="button" class="ky-btn-secondary btn-sm" [disabled]="!canAct" (click)="openEmployee(c.employeeId)">Voir la fiche</button>
               </li>
             }
           </ul>
@@ -242,7 +286,7 @@
           @if (hasSearch) {
             Aucun cas ambigu pour « {{ searchTerm }} ».
           } @else {
-            Aucun cas ambigu.
+            Aucune correspondance à vérifier.
           }
         </p>
       }
@@ -262,6 +306,27 @@
     </section>
 
     <section class="card ky-card">
+      <h2>Absents de HTEL ou sans correspondance fiable <span class="count-pill">{{ filteredMissing.length }}</span></h2>
+      <p>Un identifiant absent est distingué d’une fiche jamais liée. Vérifiez la situation avant toute décision sur le compte.</p>
+      <div class="table-wrap"><table class="prime-table">
+        <thead><tr><th>Employé MyKyntus</th><th>Statut</th><th>Constat</th><th>Action RH</th></tr></thead>
+        <tbody>
+          @for (row of pagedMissing; track row.employeeId) {
+            <tr><td>{{ row.lastName }} {{ row.firstName }}<br />{{ row.email }}</td>
+              <td>{{ row.isActive ? 'Actif' : 'Désactivé' }}</td>
+              <td>{{ row.reason === 'LinkedIdMissing' ? 'Identifiant HTEL absent du catalogue : ' + row.idTechnicien : 'Fiche sans lien et sans correspondance fiable' }}</td>
+              <td><button type="button" class="ky-btn-secondary btn-sm" [disabled]="!canAct" (click)="openEmployee(row.employeeId)">Examiner la fiche</button></td></tr>
+          } @empty { <tr><td colspan="4" class="empty-row">Aucune fiche dans cette catégorie.</td></tr> }
+        </tbody>
+      </table></div>
+      <div class="pager">
+        <button type="button" class="ky-btn-secondary btn-sm" [disabled]="!canPrev('missing')" (click)="prevPage('missing')">Précédent</button>
+        <span>{{ pageLabel('missing') }}</span>
+        <button type="button" class="ky-btn-secondary btn-sm" [disabled]="!canNext('missing')" (click)="nextPage('missing')">Suivant</button>
+      </div>
+    </section>
+
+    <section class="card ky-card">
       <div class="section-heading">
         <div>
           <h2>Liaison manuelle</h2>
@@ -272,7 +337,7 @@
         <select class="ky-input" [(ngModel)]="linkEmployeeId">
           <option value="">Employé sans HTEL…</option>
           @for (e of filteredUnlinked; track e.employeeId) {
-            <option [value]="e.employeeId">{{ e.lastName }} {{ e.firstName }} — {{ e.email }}</option>
+            <option [value]="e.employeeId">{{ e.lastName }} {{ e.firstName }} — {{ e.email }} — {{ e.isActive ? 'actif' : 'désactivé' }}</option>
           }
         </select>
         <input
@@ -281,7 +346,7 @@
           [(ngModel)]="linkIdTechnicien"
           placeholder="id_technicien HTEL"
         />
-        <button type="button" class="ky-btn-primary" (click)="linkManual()">
+        <button type="button" class="ky-btn-primary" [disabled]="!canAct" (click)="linkManual()">
           <app-lucide-icon [icon]="icons.link" className="w-4 h-4" />
           Lier
         </button>

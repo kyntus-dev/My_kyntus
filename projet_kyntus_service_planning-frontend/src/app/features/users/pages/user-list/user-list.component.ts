@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
+import { HtelInboxComponent } from '../../components/htel-inbox.component';
 import { UserService, type OrgGroupScope } from '../../services/user.service';
 import { User } from '../../users-module';
 import { copyTextToClipboard } from '../../../../core/lib/clipboard.util';
@@ -42,6 +43,7 @@ import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toas
   standalone: true,
   imports: [
     CommonModule,
+    HtelInboxComponent,
     FormsModule,
     LucideIconComponent,
     PilotRotationHistoryModalComponent,

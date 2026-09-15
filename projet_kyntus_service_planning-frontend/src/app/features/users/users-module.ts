@@ -105,6 +105,7 @@ export interface EmployeeLifecycleStatus {
 }
 
 export interface CreateUserDto {
+  idTechnicien?: number | null;
   roleId: number;
   subServiceId?: number;
   managedSubServiceIds: number[];

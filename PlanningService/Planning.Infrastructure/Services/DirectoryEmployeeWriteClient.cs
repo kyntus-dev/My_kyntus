@@ -32,7 +32,8 @@ public interface IDirectoryEmployeeWriteClient
         string role,
         string? primeServiceId,
         DateTime hireDate,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        int? idTechnicien = null);
 
     Task<IReadOnlyList<DirectoryEmployeeCreateResult>> TryCreateEmployeesBulkAsync(
         IReadOnlyList<DirectoryEmployeeBulkCreateItem> items,
@@ -61,7 +62,8 @@ public sealed class DirectoryEmployeeWriteClient(
         string role,
         string? primeServiceId,
         DateTime hireDate,
-        CancellationToken ct = default) =>
+        CancellationToken ct = default,
+        int? idTechnicien = null) =>
         ExecuteWithRetriesAsync<DirectoryEmployeeCreateResult>(
             async () =>
             {
@@ -75,6 +77,7 @@ public sealed class DirectoryEmployeeWriteClient(
                     serviceId = primeServiceId,
                     parentId = (Guid?)null,
                     hireDate,
+                    idTechnicien,
                 };
 
                 var client = CreateClient();

@@ -1,0 +1,9 @@
+# Gateway build context: exclude host build outputs and local configuration.
+**/bin
+**/obj
+**/.vs
+**/.git
+**/.env
+**/.env.*
+**/*.user
+**/node_modules

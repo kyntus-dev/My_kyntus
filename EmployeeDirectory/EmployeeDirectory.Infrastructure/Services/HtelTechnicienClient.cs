@@ -34,29 +34,39 @@ public sealed class HtelTechnicienClient(
             response.EnsureSuccessStatusCode();
         }
 
-        var rows = await response.Content.ReadFromJsonAsync<List<HtelTechnicienJson>>(JsonOptions, ct)
-            ?? [];
-
-        return rows
-            .Where(r => r.IdTechnicien > 0)
+        List<HtelTechnicienJson?> rows;
+        try
+        {
+            rows = await response.Content.ReadFromJsonAsync<List<HtelTechnicienJson?>>(JsonOptions, ct)
+                ?? throw new JsonException("Catalogue HTEL null.");
+        }
+        catch (JsonException ex)
+        {
+            throw new HttpRequestException("Réponse HTEL invalide : un tableau complet de techniciens est attendu.", ex);
+        }
+        if (rows.Any(r => r is null || r.IdTechnicien is null || r.Actif is null))
+            throw new HttpRequestException("Réponse HTEL incomplète : identifiant ou statut manquant.");
+        var result = rows
             .Select(r => new HtelTechnicienDto(
-                r.IdTechnicien,
+                r!.IdTechnicien!.Value,
                 (r.Technicien ?? string.Empty).Trim(),
-                r.Actif,
+                r.Actif!.Value,
                 (r.Code ?? string.Empty).Trim()))
             .ToList();
+        HtelReconciliation.ValidateSnapshot(result);
+        return result;
     }
 
     private sealed class HtelTechnicienJson
     {
         [JsonPropertyName("id_technicien")]
-        public int IdTechnicien { get; set; }
+        public int? IdTechnicien { get; set; }
 
         [JsonPropertyName("technicien")]
         public string? Technicien { get; set; }
 
         [JsonPropertyName("actif")]
-        public int Actif { get; set; }
+        public int? Actif { get; set; }
 
         [JsonPropertyName("code")]
         public string? Code { get; set; }

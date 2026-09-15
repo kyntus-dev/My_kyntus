@@ -17,10 +17,10 @@ import { CreateUserDto, UpdateUserDto, type UserHrProfile } from '../../users-mo
 import { EmployeeFieldService } from '../../services/employee-field.service';
 import type { EmployeeImportFieldConfig } from '../../services/employee-import.service';
 import {
-  findUniqueHtelMatch,
   HtelApiService,
   type HtelTechnicienDto,
 } from '../../services/htel-api.service';
+import { htelIdentityMatches, suggestHtelIdentity } from '../../services/htel-identity.util';
 import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
 import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
 import { KyntusSelectSyncDirective } from '../../../../shared/directives/kyntus-select-sync.directive';
@@ -212,6 +212,13 @@ export class UserFormComponent implements OnInit, OnDestroy {
   htelIdTechnicien: number | null = null;
   htelCode = '';
   htelPreviewHint = '';
+  htelSourceName = '';
+  htelIdentityConfirmed = false;
+  htelLoading = false;
+  htelLoadError = '';
+  htelSelectionId: number | null = null;
+  htelCreationChoices: HtelTechnicienDto[] = [];
+  private htelAvailableIds = new Set<number>();
   private preferredIdTechnicien: number | null = null;
   private htelTechniciensCache: HtelTechnicienDto[] = [];
 
@@ -354,6 +361,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.isEditMode = !!this.route.snapshot.paramMap.get('id');
     this.fieldService.getFields(true).subscribe({
       next: (fields) => {
         this.customEmployeeFields = fields.filter((f) => f.isSystemField === false);
@@ -366,7 +374,6 @@ export class UserFormComponent implements OnInit, OnDestroy {
     this.loadOrgAndSubServices();
     this.loadBusinessDepartments();
     this.loadRoles();
-    this.preloadHtelTechniciens();
     void this.loadLinkableReferrals();
     const q = this.route.snapshot.queryParamMap;
     const referralId = q.get('referralId');
@@ -385,9 +392,10 @@ export class UserFormComponent implements OnInit, OnDestroy {
       const idTech = q.get('idTechnicien');
       if (lastName) this.form.lastName = lastName;
       if (firstName) this.form.firstName = firstName;
-      if (idTech && Number.isFinite(Number(idTech))) {
+      if (idTech && Number.isSafeInteger(Number(idTech)) && Number(idTech) > 0) {
         this.preferredIdTechnicien = Number(idTech);
         this.htelIdTechnicien = this.preferredIdTechnicien;
+        this.htelSelectionId = this.preferredIdTechnicien;
       }
       this.refreshHtelPreview();
     }
@@ -399,6 +407,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
     } else {
       this.startFormDraft();
     }
+    this.preloadHtelTechniciens();
   }
 
   ngOnDestroy(): void {
@@ -408,7 +417,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
   private draftKey(): string {
     return this.isEditMode && this.userId
       ? `user-form-edit-${this.userId}`
-      : 'user-form-create';
+      : this.preferredIdTechnicien ? `user-form-create-htel-${this.preferredIdTechnicien}` : 'user-form-create';
   }
 
   private startFormDraft(): void {
@@ -467,7 +476,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
     }
 
     this.resetCreateFormState();
+    this.htelIdentityConfirmed = false;
     this.startFormDraft();
+    if (this.preferredIdTechnicien) Object.assign(this.form, suggestHtelIdentity(this.htelSourceName));
     this.cdr.detectChanges();
   }
 
@@ -524,59 +535,91 @@ export class UserFormComponent implements OnInit, OnDestroy {
     this.clearOrgFilters();
   }
 
+  get htelSelectionOutsideChoices(): boolean {
+    return !!this.htelSelectionId && !this.htelCreationChoices.some(t => t.idTechnicien === this.htelSelectionId);
+  }
+
+  reloadHtel(): void { this.preloadHtelTechniciens(); }
+
   private preloadHtelTechniciens(): void {
-    this.htelApi.listTechniciens(true).subscribe({
-      next: (rows) => {
-        this.htelTechniciensCache = rows ?? [];
+    if (this.isEditMode) return; // La fiche existante se rapproche dans Liaisons HTEL.
+    this.htelLoading = true;
+    this.htelLoadError = '';
+    this.htelApi.getLiaisons().subscribe({
+      next: (report) => {
+        this.htelCreationChoices = report.orphansHtel.filter(t => t.actif === 1);
+        this.htelTechniciensCache = [
+          ...report.orphansHtel,
+          ...report.ambiguous.filter(t => !t.linkedEmployeeId).map(t => ({ idTechnicien: t.idTechnicien, technicien: t.technicien, actif: t.actif, code: t.code })),
+        ];
+        this.htelAvailableIds = new Set(this.htelTechniciensCache.filter(t => t.actif === 1).map(t => t.idTechnicien));
+        this.htelLoading = false;
         this.refreshHtelPreview();
+        if (this.preferredIdTechnicien && !this.form.firstName.trim() && !this.form.lastName.trim()) {
+          Object.assign(this.form, suggestHtelIdentity(this.htelSourceName));
+        }
         this.cdr.detectChanges();
       },
       error: (err) => {
-        this.htelTechniciensCache = [];
-        this.htelPreviewHint = formatHttpErrorMessage(
-          err,
-          'HTEL indisponible — vérifier la connexion à htel-groupe.fr.',
-        );
+        this.htelLoading = false;
+        this.htelAvailableIds.clear();
+        this.htelLoadError = formatHttpErrorMessage(err, 'HTEL indisponible. Réessayez la comparaison.');
         this.cdr.detectChanges();
       },
     });
   }
 
+  async selectHtelTechnicien(value: number | null): Promise<void> {
+    if (this.referralLockedFromUrl || this.passageProductionPathId) return;
+    if (value === this.preferredIdTechnicien) return;
+    if (this.form.firstName.trim() || this.form.lastName.trim() || this.form.email.trim()) {
+      const ok = await this.confirmService.confirm({
+        title: 'Changer de collaborateur',
+        message: 'Les saisies actuelles restent dans leur brouillon. Ouvrir le formulaire du collaborateur sélectionné ?',
+        confirmLabel: 'Ouvrir', cancelLabel: 'Annuler', variant: 'warning',
+      });
+      if (!ok) { this.htelSelectionId = this.preferredIdTechnicien; this.cdr.detectChanges(); return; }
+    }
+    this.draftBinder?.destroy();
+    this.resetCreateFormState();
+    this.selectedReferralId = '';
+    this.referralMatchResult = null;
+    this.referralMatchDismissed = false;
+    this.preferredIdTechnicien = value;
+    this.htelSelectionId = value;
+    this.htelIdTechnicien = value;
+    this.htelIdentityConfirmed = false;
+    this.htelSourceName = '';
+    this.htelCode = '';
+    this.startFormDraft();
+    this.refreshHtelPreview();
+    if (value && !this.form.firstName.trim() && !this.form.lastName.trim()) {
+      Object.assign(this.form, suggestHtelIdentity(this.htelSourceName));
+    }
+    await this.router.navigate([], { relativeTo: this.route,
+      queryParams: { idTechnicien: value, firstName: null, lastName: null },
+      queryParamsHandling: 'merge', replaceUrl: true });
+    this.cdr.detectChanges();
+  }
+
   private refreshHtelPreview(): void {
-    if (this.preferredIdTechnicien) {
-      const tech = this.htelTechniciensCache.find((t) => t.idTechnicien === this.preferredIdTechnicien);
-      if (tech) {
-        this.htelIdTechnicien = tech.idTechnicien;
-        this.htelCode = tech.code;
-        this.htelPreviewHint = `Liaison HTEL prévue : ${tech.technicien}`;
-        return;
-      }
-      this.htelIdTechnicien = this.preferredIdTechnicien;
-      if (!this.htelTechniciensCache.length) {
-        // Catalogue HTEL non chargé (clé absente / API down) — on garde l’id pour le link à l’enregistrement.
-        return;
-      }
-      this.htelPreviewHint = `Id technicien HTEL ${this.preferredIdTechnicien} introuvable dans le catalogue.`;
+    if (this.isEditMode) return;
+    if (!this.preferredIdTechnicien) {
+      this.htelIdTechnicien = null;
+      this.htelCode = '';
+      this.htelSourceName = '';
+      this.htelPreviewHint = 'Choisissez un collaborateur HTEL ci-dessus ou vérifiez les rapprochements proposés.';
       return;
     }
-    if (this.isEditMode && this.htelIdTechnicien && this.htelCode) {
-      this.htelPreviewHint = '';
+    const tech = this.htelTechniciensCache.find(t => t.idTechnicien === this.preferredIdTechnicien);
+    if (!tech || !this.htelAvailableIds.has(tech.idTechnicien)) {
+      this.htelPreviewHint = 'Ce technicien est déjà lié, inactif ou absent de HTEL. Vérifiez les liaisons avant de créer une fiche.';
       return;
     }
-    const match = findUniqueHtelMatch(this.form.firstName, this.form.lastName, this.htelTechniciensCache);
-    if (match) {
-      this.htelIdTechnicien = match.idTechnicien;
-      this.htelCode = match.code;
-      this.htelPreviewHint = `Correspondance HTEL unique : ${match.technicien} (liaison à l'enregistrement)`;
-    } else if (!this.isEditMode || !this.htelIdTechnicien) {
-      if (!this.isEditMode) {
-        this.htelIdTechnicien = null;
-        this.htelCode = '';
-      }
-      this.htelPreviewHint = this.form.firstName.trim() && this.form.lastName.trim()
-        ? 'Aucune correspondance HTEL unique pour ce nom — voir Liaisons HTEL.'
-        : '';
-    }
+    this.htelIdTechnicien = tech.idTechnicien;
+    this.htelCode = tech.code;
+    this.htelSourceName = tech.technicien;
+    this.htelPreviewHint = 'Identité issue de HTEL. Vérifiez la séparation Nom / Prénom et complétez les autres champs RH.';
   }
 
   loadRoles(): void {
@@ -2734,6 +2777,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
   private buildCreateUserDto(): CreateUserDto {
     return {
       ...this.buildUserMutationDto(),
+      idTechnicien: this.preferredIdTechnicien,
       hireDate: this.toISOString(this.form.hireDate),
       customFields: this.buildCustomFieldsPayload(),
     };
@@ -3031,6 +3075,13 @@ export class UserFormComponent implements OnInit, OnDestroy {
       this.currentWizardStep = 'pathway';
       return;
     }
+    if (!this.isEditMode && this.preferredIdTechnicien &&
+        (this.htelLoading || this.htelLoadError || !this.htelAvailableIds.has(this.preferredIdTechnicien)
+          || !this.htelIdentityConfirmed || !htelIdentityMatches(this.htelSourceName, this.form.firstName, this.form.lastName))) {
+      this.error = 'Vérifiez le collaborateur HTEL et confirmez la séparation Nom / Prénom avant de créer la fiche.';
+      this.currentWizardStep = 'identity';
+      return;
+    }
     if (!this.form.roleId || !this.form.firstName.trim() ||
         !this.form.lastName.trim() || !this.form.email.trim() || !this.form.hireDate) {
       this.error = 'Tous les champs obligatoires doivent être remplis.';
@@ -3156,20 +3207,6 @@ export class UserFormComponent implements OnInit, OnDestroy {
             ),
           ),
         ),
-        switchMap(({ user, referralResult }) => {
-          const guid = resolveUserGuid(user);
-          const idTech = this.preferredIdTechnicien ?? this.htelIdTechnicien;
-          if (!guid || !idTech) return of({ user, referralResult });
-          return this.htelApi.link(guid, idTech).pipe(
-            map(() => ({ user, referralResult, htelLinkOk: true as boolean })),
-            catchError((err) => {
-              this.toastService.error(
-                formatHttpErrorMessage(err, 'Employé créé mais liaison HTEL échouée.'),
-              );
-              return of({ user, referralResult, htelLinkOk: false as boolean });
-            }),
-          );
-        }),
       ).subscribe({
         next: ({ user, referralResult }) => {
           this.createdUserId = user.id;

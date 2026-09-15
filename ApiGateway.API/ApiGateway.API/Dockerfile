@@ -5,7 +5,9 @@ COPY ApiGateway.API.csproj ./
 RUN dotnet restore ApiGateway.API.csproj
 
 COPY . ./
-RUN dotnet publish ApiGateway.API.csproj -c Release -o /out
+RUN dotnet publish ApiGateway.API.csproj -c Release --no-restore -o /out \
+    && test -s /out/ApiGateway.API.runtimeconfig.json \
+    && test -s /out/ApiGateway.API.dll
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app

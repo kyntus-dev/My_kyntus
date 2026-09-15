@@ -256,6 +256,8 @@ public class UserService : IUserService
         ValidateCreateUserHrDates(dto);
         await _fieldService.ValidateCustomFieldsForCreateAsync(dto.CustomFields);
 
+        if (dto.IdTechnicien.HasValue && !IsDirectoryWriteMaster())
+            throw new InvalidOperationException("La création depuis HTEL nécessite l'annuaire central (Directory:WriteMaster). Contactez l'administrateur.");
         if (IsDirectoryWriteMaster())
             return await CreateUserDirectoryFirstAsync(dto, null, requireAuthSuccess: true);
 
@@ -1098,7 +1100,8 @@ public class UserService : IUserService
             dto.Email,
             roleName,
             primeServiceId,
-            dto.HireDate);
+            dto.HireDate,
+            idTechnicien: dto.IdTechnicien);
 
         if (!directoryResult.Success)
             throw new InvalidOperationException(
@@ -1115,6 +1118,7 @@ public class UserService : IUserService
             user = new User
             {
                 Guid = directoryResult.EmployeeId,
+                IdTechnicien = dto.IdTechnicien,
                 RoleId = dto.RoleId,
                 SubServiceId = dto.SubServiceId,
                 FirstName = dto.FirstName,
