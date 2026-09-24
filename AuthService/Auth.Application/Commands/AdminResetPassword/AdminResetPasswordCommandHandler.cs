@@ -33,6 +33,17 @@ public class AdminResetPasswordCommandHandler : IRequestHandler<AdminResetPasswo
         var user = await ResolveUserAsync(dto, ct)
             ?? throw new KeyNotFoundException("Utilisateur introuvable.");
 
+        user.CredentialVersion++;
+        user.FirstLoginTokenHash = null;
+        user.FirstLoginTokenExpiresAt = null;
+        if (user.MustChangePassword && FirstLoginRoles.IsEligible(user.Role.Name))
+            user.TemporaryPasswordExpiresAt = DateTime.UtcNow.AddHours(24);
+        else
+        {
+            user.MustChangePassword = false;
+            user.TemporaryPasswordExpiresAt = null;
+            user.PasswordChangedAt = DateTime.UtcNow;
+        }
         user.PasswordHash = _passwordHasher.HashPassword(dto.NewPassword.Trim());
         user.RefreshToken = null;
         user.RefreshTokenExpiryTime = null;
@@ -66,3 +77,4 @@ public class AdminResetPasswordCommandHandler : IRequestHandler<AdminResetPasswo
         return null;
     }
 }
+

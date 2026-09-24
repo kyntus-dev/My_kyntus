@@ -122,6 +122,12 @@ private apiUrl = `${environment.apiUrl}/Auth`;
     );
   }
 
+  completeFirstLogin(changeToken: string, password: string, confirmation: string): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/complete-first-login`, {
+      changeToken, newPassword: password, confirmPassword: confirmation
+    });
+  }
+
 logout(): Observable<any> {
 
   if (!this.isBrowser()) {

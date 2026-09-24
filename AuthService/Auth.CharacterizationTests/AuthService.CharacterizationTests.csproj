@@ -23,6 +23,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\tests\Kyntus.Characterization.Common\Kyntus.Characterization.Common.csproj" />
     <ProjectReference Include="..\Auth.API\Auth.API.csproj" />
+    <ProjectReference Include="..\..\Kyntus.Identity.Jwt\Kyntus.Identity.Jwt.csproj" />
   </ItemGroup>
 
 </Project>
+

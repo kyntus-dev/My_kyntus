@@ -27,6 +27,19 @@ builder.Services.AddAuthentication(options =>
 {
     // Sinon "sub" (GUID) est remappé vers NameIdentifier et /push/inbox, /me renvoient 401.
     options.MapInboundClaims = false;
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var sub = context.Principal?.FindFirst("sub")?.Value;
+            var rawVersion = context.Principal?.FindFirst("credential_version")?.Value ?? "0";
+            if (!Guid.TryParse(sub, out var subject) || !int.TryParse(rawVersion, out var version)
+                || version < 0 || !await context.HttpContext.RequestServices
+                    .GetRequiredService<Auth.Application.Security.IFirstLoginService>()
+                    .IsSessionValidAsync(subject, version, context.HttpContext.RequestAborted))
+                context.Fail("Session expirée ou changement de mot de passe requis.");
+        }
+    };
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
@@ -111,20 +124,8 @@ app.MapHealthChecks("/health");
 
 if (!isTesting)
 {
-    app.Lifetime.ApplicationStarted.Register(() =>
-    {
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                AuthDatabaseInitializer.Initialize(app.Services, app.Configuration);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"ERROR: Auth database initialization failed: {ex.Message}");
-            }
-        });
-    });
+    // Ne pas accepter de connexion tant que le schéma Auth n'est pas prêt.
+    AuthDatabaseInitializer.Initialize(app.Services, app.Configuration);
 }
 
 if (app.Environment.IsDevelopment())
@@ -141,3 +142,4 @@ app.MapControllers();
 app.Run();
 
 public partial class Program;
+

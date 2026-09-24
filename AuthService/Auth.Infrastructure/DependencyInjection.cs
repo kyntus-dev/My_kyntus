@@ -29,6 +29,7 @@ public static class DependencyInjection
             }
         });
 
+        services.AddScoped<Auth.Application.Security.IFirstLoginService, FirstLoginService>();
         services.AddKyntusCaching(configuration);
         services.AddHttpContextAccessor();
         services.AddScoped<IAccessAuditWriter, AccessAuditService>();
@@ -42,3 +43,4 @@ public static class DependencyInjection
         return services;
     }
 }
+

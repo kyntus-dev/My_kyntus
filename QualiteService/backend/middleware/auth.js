@@ -1,4 +1,5 @@
 const { verifyKyntusToken, extractKyntusClaims } = require("./kyntusJwt");
+const { isSessionValid } = require("./sessionValidation");
 const { hasKcqRole } = require("./kcqRoles");
 const { resolveCurrentUser, listAllowedPilotIds } = require("../services/directorySync");
 
@@ -9,6 +10,8 @@ async function auth(req, res, next) {
     const allowQueryToken = /picking-audio|\/stream\//i.test(req.path || "");
     const raw = authHeader || (allowQueryToken && queryToken ? `Bearer ${queryToken}` : "");
     const decoded = verifyKyntusToken(raw);
+    if (!await isSessionValid(raw.replace(/^Bearer\s+/i, "")))
+      return res.status(401).json({ message: "Session révoquée. Reconnectez-vous." });
     const claims = extractKyntusClaims(decoded);
     const { doc, mapped, scope } = await resolveCurrentUser(claims, raw);
 
@@ -55,3 +58,4 @@ auth.allowManagement = allowManagement;
 
 module.exports = auth;
 module.exports.allowManagement = allowManagement;
+

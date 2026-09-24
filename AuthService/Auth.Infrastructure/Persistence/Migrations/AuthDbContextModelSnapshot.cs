@@ -55,6 +55,14 @@ namespace Auth.Infrastructure.Persistence.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("MustChangePassword").HasColumnType("boolean");
+                    b.Property<int>("CredentialVersion").IsConcurrencyToken().HasColumnType("integer");
+                    b.Property<DateTime?>("TemporaryPasswordExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTime?>("PasswordChangedAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("FirstLoginTokenHash").HasMaxLength(64).HasColumnType("character varying(64)");
+                    b.Property<DateTime?>("FirstLoginTokenExpiresAt").HasColumnType("timestamp with time zone");
+                    b.HasIndex("FirstLoginTokenHash").IsUnique();
+
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
@@ -125,3 +133,4 @@ namespace Auth.Infrastructure.Persistence.Migrations
         }
     }
 }
+

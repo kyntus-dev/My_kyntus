@@ -39,6 +39,7 @@ public class JwtService : IJwtService
         var subjectId = user.SubjectId == Guid.Empty ? Guid.NewGuid() : user.SubjectId;
         var claims = new List<Claim>
         {
+            new("credential_version", user.CredentialVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             new(JwtRegisteredClaimNames.Sub, subjectId.ToString()),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, user.Username),
@@ -103,3 +104,4 @@ public class JwtService : IJwtService
         }
     }
 }
+

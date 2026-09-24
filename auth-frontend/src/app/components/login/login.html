@@ -79,7 +79,7 @@
       <div class="form-card">
         <div class="form-head">
           <p class="form-kicker">Portail collaborateurs</p>
-          <h1>Connexion</h1>
+          <h1>{{ requiresPasswordChange ? 'Créer votre mot de passe' : 'Connexion' }}</h1>
           <p>Identifiants collaborateurs Kyntus Morocco</p>
         </div>
 
@@ -87,7 +87,9 @@
           <span>Erreur</span> {{ errorMessage }}
         </div>
 
-        <form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+        <p role="status" *ngIf="successMessage">{{ successMessage }}</p>
+
+        <form *ngIf="!requiresPasswordChange" [formGroup]="loginForm" (ngSubmit)="onSubmit()">
           <div class="field">
             <label for="email">Adresse email</label>
             <input
@@ -132,6 +134,22 @@
           </button>
         </form>
 
+        <form *ngIf="requiresPasswordChange" [formGroup]="passwordChangeForm" (ngSubmit)="completeFirstLogin()">
+          <p>Avant d’accéder à l’application, choisissez un mot de passe personnel de 12 à 64 caractères, différent du mot de passe temporaire.</p>
+          <div class="field">
+            <label for="new-password">Nouveau mot de passe</label>
+            <input id="new-password" type="password" autocomplete="new-password" formControlName="password" minlength="12" maxlength="64" />
+          </div>
+          <div class="field">
+            <label for="confirm-password">Confirmer le mot de passe</label>
+            <input id="confirm-password" type="password" autocomplete="new-password" formControlName="confirmation" maxlength="64" />
+          </div>
+          <button class="btn-login" type="submit" [disabled]="loading || passwordChangeForm.invalid">
+            {{ loading ? 'Enregistrement…' : 'Enregistrer mon mot de passe' }}
+          </button>
+          <button type="button" class="btn-support" (click)="cancelPasswordChange()" [disabled]="loading">Retour à la connexion</button>
+        </form>
+
         <div class="card-footer">
           <p>Besoin d’aide ? Consultez <a routerLink="/assistance">Assistance</a>.</p>
         </div>
@@ -140,3 +158,4 @@
     </div>
   </main>
 </div>
+

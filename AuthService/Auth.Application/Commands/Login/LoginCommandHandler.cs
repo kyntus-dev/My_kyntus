@@ -1,4 +1,5 @@
 using Auth.Application.DTOs;
+using Auth.Application.Security;
 using Auth.Domain.Interfaces;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResponseDto
     public const int MaxFailedAttempts = 5;
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 
+    private readonly IFirstLoginService _firstLogin;
     private readonly IUserRepository _userRepository;
     private readonly IJwtService _jwtService;
     private readonly IPasswordHasher _passwordHasher;
@@ -23,8 +25,10 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResponseDto
         IJwtService jwtService,
         IPasswordHasher passwordHasher,
         ILogger<LoginCommandHandler> logger,
-        IAccessAuditWriter accessAudit)
+        IAccessAuditWriter accessAudit,
+        IFirstLoginService firstLogin)
     {
+        _firstLogin = firstLogin;
         _userRepository = userRepository;
         _jwtService = jwtService;
         _passwordHasher = passwordHasher;
@@ -79,6 +83,9 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResponseDto
             throw new UnauthorizedAccessException("Email ou mot de passe incorrect");
         }
 
+        if (user.MustChangePassword)
+            throw new PasswordChangeRequiredException(await _firstLogin.BeginAsync(user, ct));
+
         user.AccessFailedCount = 0;
         user.LockoutEnd = null;
         user.RefreshToken = _jwtService.GenerateRefreshToken();
@@ -92,3 +99,4 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResponseDto
             _jwtService.AccessTokenExpiresInSeconds);
     }
 }
+
