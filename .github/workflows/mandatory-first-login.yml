@@ -2,7 +2,7 @@ name: Mandatory first login
 on:
   pull_request:
   push:
-    branches: [feat/mandatory-first-login-password]
+    branches: [main]
 permissions:
   contents: read
 jobs:

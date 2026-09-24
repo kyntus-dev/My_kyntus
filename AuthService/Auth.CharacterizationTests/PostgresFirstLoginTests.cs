@@ -30,7 +30,7 @@ public class PostgresFirstLoginTests
         await admin.OpenAsync();
         await using (var create = new NpgsqlCommand($"CREATE SCHEMA {schema}", admin)) await create.ExecuteNonQueryAsync();
         var cs = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = schema }.ToString();
-        var options = new DbContextOptionsBuilder<AuthDbContext>().UseNpgsql(cs).Options;
+        var options = new DbContextOptionsBuilder<AuthDbContext>().UseNpgsql(cs, npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", schema)).Options;
         try
         {
             await using var db = new AuthDbContext(options);
@@ -70,7 +70,7 @@ public class PostgresFirstLoginTests
                 } catch (UnauthorizedAccessException) { return false; }
             }
             var outcomes = await Task.WhenAll(Complete(), Complete());
-            Assert.Single(outcomes.Where(x => x));
+            Assert.Single(outcomes, x => x);
             db.ChangeTracker.Clear();
             user = await db.Users.SingleAsync();
             Assert.False(user.MustChangePassword);
