@@ -111,6 +111,8 @@ public class RegisterFromPlanningCommandHandler
                 throw new ArgumentException(passwordError);
             user.PasswordHash = _passwordHasher.HashPassword(dto.DefaultPassword.Trim());
         }
+        // The role catalog is cached and detached: persist only its existing foreign key.
+        user.Role = null!;
         await _userRepository.CreateAsync(user, ct);
 
         _logger.LogInformation(
