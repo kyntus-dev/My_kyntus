@@ -34,8 +34,7 @@ public static class AuthDatabaseInitializer
 
         if (!migrated)
         {
-            Console.WriteLine("ERROR: EF migrations not applied after retries; skipping seed until next restart.");
-            return;
+            throw new InvalidOperationException("Auth migrations failed; HTTP startup aborted to protect credentials.");
         }
 
         try
@@ -320,7 +319,7 @@ public static class AuthDatabaseInitializer
         foreach (var (email, password) in rolePasswordByEmail)
         {
             var user = db.Users.FirstOrDefault(u => u.Email.ToLower() == email.ToLower());
-            if (user is null)
+            if (user is null || user.MustChangePassword || user.PasswordChangedAt is not null)
                 continue;
             if (passwordHasher.VerifyPassword(user.PasswordHash, password))
                 continue;
@@ -516,3 +515,4 @@ public static class AuthDatabaseInitializer
         Console.WriteLine("Auth user qualiticien@kyntus.ma added.");
     }
 }
+

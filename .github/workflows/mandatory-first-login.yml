@@ -1,0 +1,55 @@
+name: Mandatory first login
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  auth-and-migration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: first_login_tests
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      FIRST_LOGIN_TEST_POSTGRES: Host=localhost;Port=5432;Database=first_login_tests;Username=postgres;Password=test-only-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet test AuthService/Auth.Application.UnitTests/Auth.Application.UnitTests.csproj -c Release
+      - run: dotnet test AuthService/Auth.ArchitectureTests/Auth.ArchitectureTests.csproj -c Release
+      - run: dotnet test AuthService/Auth.CharacterizationTests/AuthService.CharacterizationTests.csproj -c Release
+      - name: Compile every backend using the session check
+        shell: bash
+        run: |
+          set -euo pipefail
+          for project in PlanningService/Planning.API/Planning.API.csproj FormationService/projetformationconges/Formation.API.csproj FormationService/Conge.API/Conge.API.csproj documentation_service_backend/Documentation.API/Documentation.API.csproj PrimeBackend/Prime.API/Prime.API.csproj EmployeeDirectory/EmployeeDirectory.API/EmployeeDirectory.API.csproj parrainage_service_backend/Parrainage.API/Parrainage.API.csproj; do
+            dotnet build "$project" -c Release
+          done
+  frontend-and-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+        working-directory: auth-frontend
+      - run: npm test -- --watch=false
+        working-directory: auth-frontend
+      - run: npm run build
+        working-directory: auth-frontend
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: QualiteService/backend
+      - run: node --test tests/sessionValidation.test.js
+        working-directory: QualiteService/backend
+      - run: node --check server.js
+        working-directory: QualiteService/backend

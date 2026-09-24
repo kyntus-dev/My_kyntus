@@ -49,6 +49,7 @@ public static class KyntusJwtExtensions
                 };
             });
 
+        services.AddKyntusSessionValidation(configuration);
         services.AddAuthorization();
         return services;
     }
@@ -119,3 +120,4 @@ public static class KyntusClaimsPrincipalExtensions
         }
     }
 }
+

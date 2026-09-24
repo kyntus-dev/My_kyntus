@@ -23,6 +23,9 @@ public class AuthDbContext : DbContext
 
         modelBuilder.Entity<User>(e =>
         {
+            e.Property(u => u.CredentialVersion).IsConcurrencyToken();
+            e.Property(u => u.FirstLoginTokenHash).HasMaxLength(64);
+            e.HasIndex(u => u.FirstLoginTokenHash).IsUnique();
             e.Property(u => u.Username).HasMaxLength(50);
             e.Property(u => u.Email).HasMaxLength(100);
             e.HasIndex(u => u.SubjectId).IsUnique();
@@ -65,3 +68,4 @@ public class AuthDbContext : DbContext
         });
     }
 }
+

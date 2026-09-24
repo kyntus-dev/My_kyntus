@@ -1,0 +1,53 @@
+# Liste exhaustive des fichiers de cette livraison
+
+47 fichiers créés ou modifiés. Le lien de chaque fichier ouvre sa version sur la branche GitHub. Appliquer le commit complet ; les tests et le workflow sont inclus pour conserver une validation reproductible.
+
+| Fichier | Statut |
+| --- | --- |
+| [.env.example](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/.env.example) | Modifié |
+| [.github/workflows/mandatory-first-login.yml](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/.github/workflows/mandatory-first-login.yml) | Créé |
+| [AuthService/Auth.API/Controllers/AuthController.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.API/Controllers/AuthController.cs) | Modifié |
+| [AuthService/Auth.API/Controllers/FirstLoginController.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.API/Controllers/FirstLoginController.cs) | Créé |
+| [AuthService/Auth.API/Program.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.API/Program.cs) | Modifié |
+| [AuthService/Auth.Application/Commands/AdminResetPassword/AdminResetPasswordCommandHandler.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Application/Commands/AdminResetPassword/AdminResetPasswordCommandHandler.cs) | Modifié |
+| [AuthService/Auth.Application/Commands/Login/LoginCommandHandler.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Application/Commands/Login/LoginCommandHandler.cs) | Modifié |
+| [AuthService/Auth.Application/Commands/RefreshToken/RefreshTokenCommandHandler.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Application/Commands/RefreshToken/RefreshTokenCommandHandler.cs) | Modifié |
+| [AuthService/Auth.Application/Commands/Register/RegisterCommandHandler.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Application/Commands/Register/RegisterCommandHandler.cs) | Modifié |
+| [AuthService/Auth.Application/Commands/RegisterFromPlanning/RegisterFromPlanningCommandHandler.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Application/Commands/RegisterFromPlanning/RegisterFromPlanningCommandHandler.cs) | Modifié |
+| [AuthService/Auth.Application/Security/IFirstLoginService.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Application/Security/IFirstLoginService.cs) | Créé |
+| [AuthService/Auth.CharacterizationTests/AuthService.CharacterizationTests.csproj](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.CharacterizationTests/AuthService.CharacterizationTests.csproj) | Modifié |
+| [AuthService/Auth.CharacterizationTests/FirstLoginTests.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.CharacterizationTests/FirstLoginTests.cs) | Créé |
+| [AuthService/Auth.CharacterizationTests/PostgresFirstLoginTests.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.CharacterizationTests/PostgresFirstLoginTests.cs) | Créé |
+| [AuthService/Auth.CharacterizationTests/SessionValidationTests.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.CharacterizationTests/SessionValidationTests.cs) | Créé |
+| [AuthService/Auth.Domain/Entities/User.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Domain/Entities/User.cs) | Modifié |
+| [AuthService/Auth.Infrastructure/AuthDatabaseInitializer.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Infrastructure/AuthDatabaseInitializer.cs) | Modifié |
+| [AuthService/Auth.Infrastructure/DependencyInjection.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Infrastructure/DependencyInjection.cs) | Modifié |
+| [AuthService/Auth.Infrastructure/Persistence/AuthDbContext.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Infrastructure/Persistence/AuthDbContext.cs) | Modifié |
+| [AuthService/Auth.Infrastructure/Persistence/Migrations/20260924090000_AddMandatoryFirstLogin.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Infrastructure/Persistence/Migrations/20260924090000_AddMandatoryFirstLogin.cs) | Créé |
+| [AuthService/Auth.Infrastructure/Persistence/Migrations/AuthDbContextModelSnapshot.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Infrastructure/Persistence/Migrations/AuthDbContextModelSnapshot.cs) | Modifié |
+| [AuthService/Auth.Infrastructure/Security/JwtService.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Infrastructure/Security/JwtService.cs) | Modifié |
+| [AuthService/Auth.Infrastructure/Services/FirstLoginService.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/AuthService/Auth.Infrastructure/Services/FirstLoginService.cs) | Créé |
+| [Kyntus.Identity.Jwt/KyntusJwtExtensions.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/Kyntus.Identity.Jwt/KyntusJwtExtensions.cs) | Modifié |
+| [Kyntus.Identity.Jwt/KyntusSessionValidation.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/Kyntus.Identity.Jwt/KyntusSessionValidation.cs) | Créé |
+| [PlanningService/Planning.API/Program.cs](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/PlanningService/Planning.API/Program.cs) | Modifié |
+| [QualiteService/backend/middleware/auth.js](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/QualiteService/backend/middleware/auth.js) | Modifié |
+| [QualiteService/backend/middleware/sessionValidation.js](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/QualiteService/backend/middleware/sessionValidation.js) | Créé |
+| [QualiteService/backend/server.js](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/QualiteService/backend/server.js) | Modifié |
+| [QualiteService/backend/tests/sessionValidation.test.js](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/QualiteService/backend/tests/sessionValidation.test.js) | Créé |
+| [auth-frontend/src/app/app.spec.ts](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/app.spec.ts) | Modifié |
+| [auth-frontend/src/app/components/dashboard/dashboard.spec.ts](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/components/dashboard/dashboard.spec.ts) | Modifié |
+| [auth-frontend/src/app/components/login/first-login.spec.ts](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/components/login/first-login.spec.ts) | Créé |
+| [auth-frontend/src/app/components/login/login.component.ts](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/components/login/login.component.ts) | Modifié |
+| [auth-frontend/src/app/components/login/login.html](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/components/login/login.html) | Modifié |
+| [auth-frontend/src/app/components/login/login.spec.ts](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/components/login/login.spec.ts) | Modifié |
+| [auth-frontend/src/app/components/register/register.spec.ts](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/components/register/register.spec.ts) | Modifié |
+| [auth-frontend/src/app/guards/auth-guard.spec.ts](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/guards/auth-guard.spec.ts) | Modifié |
+| [auth-frontend/src/app/guards/auth-guard.ts](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/guards/auth-guard.ts) | Modifié |
+| [auth-frontend/src/app/interceptors/auth.interceptor.ts](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/interceptors/auth.interceptor.ts) | Modifié |
+| [auth-frontend/src/app/services/auth.service.ts](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/auth-frontend/src/app/services/auth.service.ts) | Modifié |
+| [deploy/FIRST_LOGIN_FILES.md](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/deploy/FIRST_LOGIN_FILES.md) | Créé |
+| [deploy/FIRST_LOGIN_PRODUCTION.md](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/deploy/FIRST_LOGIN_PRODUCTION.md) | Créé |
+| [deploy/FIRST_LOGIN_TESTS.md](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/deploy/FIRST_LOGIN_TESTS.md) | Créé |
+| [deploy/first-login-enroll.py](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/deploy/first-login-enroll.py) | Créé |
+| [deploy/pending-files.txt](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/deploy/pending-files.txt) | Modifié |
+| [docker-compose.yml](https://github.com/kyntus-dev/My_kyntus/blob/feat/mandatory-first-login-password/docker-compose.yml) | Modifié |

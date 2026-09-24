@@ -11,7 +11,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const token = authService.getToken();
 
   // Ne pas ajouter le token pour les endpoints publics
-  const publicEndpoints = ['/register', '/login', '/refresh', '/check-email', '/check-username'];
+  const publicEndpoints = ['/complete-first-login', '/register', '/login', '/refresh', '/check-email', '/check-username'];
   const isPublicEndpoint = publicEndpoints.some(endpoint => req.url.includes(endpoint));
 
   // Cloner la requête et ajouter le token si disponible et nécessaire

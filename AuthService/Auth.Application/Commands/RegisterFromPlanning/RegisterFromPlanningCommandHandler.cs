@@ -12,6 +12,7 @@ public record RegisterFromPlanningCommand(RegisterFromPlanningDto Dto) : IReques
 public class RegisterFromPlanningCommandHandler
     : IRequestHandler<RegisterFromPlanningCommand, RegisterFromPlanningResponseDto>
 {
+    private readonly IFirstLoginService _firstLogin;
     private readonly IUserRepository _userRepository;
     private readonly IRoleRepository _roleRepository;
     private readonly IPasswordHasher _passwordHasher;
@@ -23,8 +24,10 @@ public class RegisterFromPlanningCommandHandler
         IRoleRepository roleRepository,
         IPasswordHasher passwordHasher,
         ISubjectIdResolver subjectIdResolver,
-        ILogger<RegisterFromPlanningCommandHandler> logger)
+        ILogger<RegisterFromPlanningCommandHandler> logger,
+        IFirstLoginService firstLogin)
     {
+        _firstLogin = firstLogin;
         _userRepository = userRepository;
         _roleRepository = roleRepository;
         _passwordHasher = passwordHasher;
@@ -63,12 +66,15 @@ public class RegisterFromPlanningCommandHandler
                 dirty = true;
             }
 
-            // Import / ré-provision : si un MDP est fourni, l'aligner (évite MDP inconnu après projection Directory).
-            if (!string.IsNullOrWhiteSpace(dto.DefaultPassword)
-                && PasswordPolicy.TryValidate(dto.DefaultPassword, out _))
+            // Synchronisation et réimport ne réinitialisent jamais le mot de passe.
+            // La réinitialisation explicite passe par admin/reset-password ou first-login/enroll.
+            if (dirty)
             {
-                existing.PasswordHash = _passwordHasher.HashPassword(dto.DefaultPassword.Trim());
-                dirty = true;
+                existing.CredentialVersion++;
+                existing.FirstLoginTokenHash = null;
+                existing.FirstLoginTokenExpiresAt = null;
+                existing.RefreshToken = null;
+                existing.RefreshTokenExpiryTime = null;
             }
 
             if (dirty)
@@ -82,9 +88,6 @@ public class RegisterFromPlanningCommandHandler
             };
         }
 
-        if (!PasswordPolicy.TryValidate(dto.DefaultPassword, out var passwordError))
-            throw new ArgumentException(passwordError);
-
         var user = new User
         {
             Username = dto.Email,
@@ -92,7 +95,7 @@ public class RegisterFromPlanningCommandHandler
             SubjectId = dto.EmployeeId != Guid.Empty
                 ? dto.EmployeeId
                 : _subjectIdResolver.ResolveForEmail(dto.Email),
-            PasswordHash = _passwordHasher.HashPassword(dto.DefaultPassword.Trim()),
+            Role = role,
             RoleId = role.Id,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
@@ -102,6 +105,14 @@ public class RegisterFromPlanningCommandHandler
             LockoutEnd = null,
         };
 
+        if (!_firstLogin.TryInitializeNewUser(user))
+        {
+            if (!PasswordPolicy.TryValidate(dto.DefaultPassword, out var passwordError))
+                throw new ArgumentException(passwordError);
+            user.PasswordHash = _passwordHasher.HashPassword(dto.DefaultPassword.Trim());
+        }
+        // The role catalog is cached and detached: persist only its existing foreign key.
+        user.Role = null!;
         await _userRepository.CreateAsync(user, ct);
 
         _logger.LogInformation(
@@ -140,3 +151,4 @@ public class RegisterFromPlanningCommandHandler
 }
 
 public class RegisterFromPlanningRoleNotFoundException : Exception;
+

@@ -48,6 +48,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, AuthRespo
             Email = registerDto.Email,
             SubjectId = _subjectIdResolver.ResolveForEmail(registerDto.Email),
             PasswordHash = _passwordHasher.HashPassword(registerDto.Password),
+            PasswordChangedAt = DateTime.UtcNow,
             RoleId = role.Id,
             RefreshToken = _jwtService.GenerateRefreshToken(),
             RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7),
@@ -62,3 +63,4 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, AuthRespo
             _jwtService.AccessTokenExpiresInSeconds);
     }
 }
+

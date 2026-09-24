@@ -35,6 +35,10 @@ export class LoginComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   loginForm!: FormGroup;
   errorMessage: string = '';
+  successMessage = '';
+  requiresPasswordChange = false;
+  passwordChangeForm!: FormGroup;
+  private changeToken: string | null = null;
   loading: boolean = false;
   showPassword: boolean = false;
   /** Conservé hors localStorage (clear tokens ne l’efface pas). */
@@ -69,6 +73,11 @@ export class LoginComponent implements OnInit {
       password: ['', [Validators.required, Validators.minLength(6)]]
     });
 
+    this.passwordChangeForm = this.fb.group({
+      password: ['', [Validators.required, Validators.minLength(12), Validators.maxLength(64)]],
+      confirmation: ['', [Validators.required]]
+    });
+
     this.authService.loading$.subscribe((loading: boolean) => {
       this.loading = loading;
     });
@@ -77,7 +86,9 @@ export class LoginComponent implements OnInit {
   }
 
   onSubmit(): void {
+    if (this.loading || this.requiresPasswordChange) return;
     this.errorMessage = '';
+    this.successMessage = '';
 
     if (this.loginForm.invalid) {
       this.markFormGroupTouched(this.loginForm);
@@ -129,10 +140,13 @@ export class LoginComponent implements OnInit {
     : callback;
 },
       error: (error: any) => {
-        console.error('Erreur de connexion', error);
         this.loading = false;
 
-        if (error.status === 401) {
+        if (error.status === 403 && error.error?.code === 'PASSWORD_CHANGE_REQUIRED') {
+          this.changeToken = error.error.changeToken;
+          this.requiresPasswordChange = true;
+          this.loginForm.get('password')?.reset('');
+        } else if (error.status === 401) {
           this.errorMessage = 'Email ou mot de passe incorrect';
         } else if (error.status === 0) {
           this.errorMessage = 'Impossible de contacter le serveur';
@@ -141,6 +155,41 @@ export class LoginComponent implements OnInit {
         }
       }
     });
+  }
+
+  completeFirstLogin(): void {
+    if (this.loading || !this.changeToken) return;
+    this.errorMessage = '';
+    if (this.passwordChangeForm.invalid) {
+      this.passwordChangeForm.markAllAsTouched();
+      return;
+    }
+    const { password, confirmation } = this.passwordChangeForm.value;
+    if (password !== confirmation) {
+      this.errorMessage = 'Les mots de passe ne correspondent pas.';
+      return;
+    }
+    this.loading = true;
+    this.authService.completeFirstLogin(this.changeToken, password, confirmation).subscribe({
+      next: () => {
+        this.loading = false;
+        this.cancelPasswordChange();
+        this.successMessage = 'Mot de passe enregistré. Connectez-vous avec votre nouveau mot de passe.';
+      },
+      error: (error: any) => {
+        this.loading = false;
+        if (error.status === 401 || error.status === 409) this.cancelPasswordChange();
+        this.errorMessage = error.error?.message || 'Impossible de modifier le mot de passe. Réessayez.';
+      }
+    });
+  }
+
+  cancelPasswordChange(): void {
+    if (this.loading) return;
+    this.changeToken = null;
+    this.requiresPasswordChange = false;
+    this.passwordChangeForm.reset();
+    this.errorMessage = '';
   }
 
   togglePasswordVisibility(): void {

@@ -31,7 +31,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, A
         if (user == null || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
             throw new UnauthorizedAccessException("Refresh token invalide ou expiré");
 
-        if (!user.IsActive)
+        if (!user.IsActive || user.MustChangePassword)
         {
             _logger.LogWarning("RefreshFailed: inactive account Email={Email}", user.Email);
             throw new UnauthorizedAccessException("Refresh token invalide ou expiré");
@@ -53,3 +53,4 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, A
             _jwtService.AccessTokenExpiresInSeconds);
     }
 }
+

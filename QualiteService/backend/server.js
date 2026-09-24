@@ -7,6 +7,7 @@ const path = require("path");
 const fs = require("fs");
 const { Server: SocketIOServer } = require("socket.io");
 
+const { isSessionValid } = require("./middleware/sessionValidation");
 const User = require("./models/User");
 const { verifyKyntusToken, extractKyntusClaims } = require("./middleware/kyntusJwt");
 
@@ -76,6 +77,14 @@ const io = new SocketIOServer(server, {
 app.set("io", io);
 app.set("socketClients", () => socketClients);
 
+io.use(async (socket, next) => {
+  if (!process.env.SESSION_VALIDATION_BASE_URL) return next();
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token || "";
+  if (typeof token !== "string" || !token || !await isSessionValid(token))
+    return next(new Error("Session expirée ou révoquée"));
+  next();
+});
+
 io.on("connection", async (socket) => {
   socketClients += 1;
   socket.on("disconnect", () => {
@@ -91,18 +100,34 @@ io.on("connection", async (socket) => {
 
     const decoded = verifyKyntusToken(token);
     const claims = extractKyntusClaims(decoded);
-    if (!claims.email) return;
+    if (!claims.email) { socket.disconnect(true); return; }
 
     const user = await User.findOne({ email: claims.email.toLowerCase() })
       .select("_id celluleId cell")
       .lean();
-    if (!user) return;
+    if (!user) { socket.disconnect(true); return; }
 
+    let checking = false;
+    const sessionTimer = setInterval(async () => {
+      if (checking) return;
+      checking = true;
+      try { if (!await isSessionValid(token)) socket.disconnect(true); }
+      finally { checking = false; }
+    }, 15000);
+    sessionTimer.unref();
+    socket.once("disconnect", () => clearInterval(sessionTimer));
+    socket.use(async (_packet, next) => {
+      if (!await isSessionValid(token)) {
+        socket.disconnect(true);
+        return next(new Error("Session révoquée"));
+      }
+      next();
+    });
     socket.join(`user:${user._id}`);
     const cell = (user.celluleId || user.cell || "").toString().trim();
     if (cell) socket.join(`cell:${cell}`);
   } catch (e) {
-    // anonymous sockets allowed
+    if (process.env.SESSION_VALIDATION_BASE_URL) socket.disconnect(true);
   }
 });
 
@@ -125,3 +150,4 @@ mongoose
   });
 
 module.exports = app;
+

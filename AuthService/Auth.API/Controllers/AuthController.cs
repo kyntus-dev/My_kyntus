@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Auth.Application.Security;
 using Auth.Application.Commands.AdminResetPassword;
 using Auth.Application.Commands.DeleteFromPlanning;
 using Auth.Application.Commands.Login;
@@ -50,6 +51,17 @@ public class AuthController : ControllerBase
         {
             var response = await _mediator.Send(new LoginCommand(loginDto));
             return Ok(response);
+        }
+        catch (PasswordChangeRequiredException ex)
+        {
+            Response.Headers.CacheControl = "no-store";
+            return StatusCode(403, new
+            {
+                code = "PASSWORD_CHANGE_REQUIRED",
+                changeToken = ex.Challenge.ChangeToken,
+                expiresIn = ex.Challenge.ExpiresIn,
+                message = ex.Message,
+            });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -263,3 +275,4 @@ public class AuthController : ControllerBase
         }
     }
 }
+

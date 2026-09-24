@@ -1,4 +1,5 @@
 using System.Text;
+using Kyntus.Identity.Jwt;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -62,6 +63,7 @@ builder.Services
         };
     });
 
+builder.Services.AddKyntusSessionValidation(builder.Configuration);
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
@@ -118,3 +120,4 @@ app.MapHub<ReclamationHub>("/hubs/reclamation");
 app.Run();
 
 public partial class Program;
+
