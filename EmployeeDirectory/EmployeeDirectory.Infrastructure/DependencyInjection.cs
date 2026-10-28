@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IOrgStructuralRoleExclusivityService, OrgStructuralRoleExclusivityService>();
         services.AddScoped<IPilotRotationTenureService, PilotRotationTenureService>();
         services.AddScoped<IDirectoryWriteService, DirectoryWriteService>();
+        services.AddScoped<IOrgScopeAssignmentService, OrgScopeAssignmentService>();
         services.AddScoped<IDirectoryReconciliationService, DirectoryReconciliationService>();
         services.AddHttpClient("DirectoryReconcile");
         services.AddHttpClient("Htel", (sp, client) =>

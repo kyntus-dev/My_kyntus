@@ -16,6 +16,8 @@ const overview = {
   services: [],
   sousServices: [],
   departments: [],
+  operationalDepartments: [],
+  unassignedPoles: [],
   employees: [
     {
       id: 'u1',

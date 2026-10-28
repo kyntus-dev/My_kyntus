@@ -69,6 +69,7 @@ import {
   orgAssignmentRequiresPole,
   orgAssignmentRequiresService,
   orgRoleAssignmentDepth,
+  orgRoleHistoricalDepth,
   needsPrimeStructureAssignment,
   isReferentTechniqueRole,
   isSuperviseurRole,
@@ -82,6 +83,11 @@ import {
   clearMultiOrgSelection,
   directoryAssignmentKindForRole,
   hydrateMultiOrgSelectionFromOverview,
+  hydrateScopeSelectionFromOverview,
+  cellulesOfActivity,
+  polesOfActivity,
+  servicesOfCellule,
+  type OrgScopeCoverage,
   removeOrgNodeSelection,
   resolveOrgNodePathLabel,
   summarizeMultiOrgSelection,
@@ -175,6 +181,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
   /** Périmètres multi-nœuds (Chef / Superviseur / RT) — ancre primaire séparée. */
   selectedOrgNodeIds: string[] = [];
   primaryOrgNodeId = '';
+  /** Réorganisation 2026 : périmètres détenus partiellement (seront complétés à l’enregistrement). */
+  partialOrgScopes: OrgScopeCoverage[] = [];
   orgMirrorWarning: string | null = null;
   orgStructureSearch = '';
   orgFilterPoleId = '';
@@ -753,6 +761,11 @@ export class UserFormComponent implements OnInit, OnDestroy {
 
   get roleDetectionSummary(): string {
     const depth = this.orgAssignmentDepth;
+    if (depth === 'activite') {
+      return isSuperviseurRole(this.selectedRoleName)
+        ? 'Périmètre : Activité → tous ses pôles et toutes ses cellules'
+        : 'Périmètre : Activité → tous ses pôles';
+    }
     if (depth === 'pole') return 'Affectation automatique : Département → Pôle';
     if (depth === 'cellule') return 'Affectation automatique : Département → Pôle → Cellule';
     if (depth === 'service') {
@@ -846,27 +859,80 @@ export class UserFormComponent implements OnInit, OnDestroy {
     return this.unassignedPoles.length > 0;
   }
 
+  /**
+   * Réorganisation 2026 : les responsables sont proposés d’après la structure
+   * (titulaires du pôle / de la cellule / du service sélectionné), sans exiger
+   * de choisir d’abord le niveau supérieur ; la hiérarchie (parentId) reste une source.
+   */
   get chefDeProjetOptions() {
     if (!this.orgOverview) return [];
-    return findStructureIncumbents(this.orgOverview, 'Chef de projet', { orgPoleId: this.orgPoleId });
+    const poleIds = this.orgPoleId.trim()
+      ? [this.orgPoleId.trim()]
+      : this.orgOperationalDeptId.trim()
+        ? polesOfActivity(this.operationalDepartments, this.orgOperationalDeptId)
+        : [];
+    return this.mergeIncumbents(
+      poleIds.map((orgPoleId) => findStructureIncumbents(this.orgOverview!, 'Chef de projet', { orgPoleId })),
+    );
   }
 
   get superviseurOptions() {
-    if (!this.orgOverview || !this.form.chefDeProjetId.trim()) return [];
-    return filterSuperviseursForChefDeProjet(
-      this.orgOverview,
-      this.form.chefDeProjetId,
-      this.orgCelluleId || undefined,
+    if (!this.orgOverview) return [];
+    const celluleIds = this.orgCelluleId.trim()
+      ? [this.orgCelluleId.trim()]
+      : this.orgOperationalDeptId.trim()
+        ? cellulesOfActivity(this.operationalDepartments, this.orgOperationalDeptId)
+        : [];
+    const fromStructure = celluleIds.map((orgCelluleId) =>
+      findStructureIncumbents(this.orgOverview!, 'Superviseur', { orgCelluleId }),
     );
+    const fromHierarchy = this.form.chefDeProjetId.trim()
+      ? filterSuperviseursForChefDeProjet(this.orgOverview, this.form.chefDeProjetId, undefined)
+      : [];
+    return this.mergeIncumbents([...fromStructure, fromHierarchy]);
   }
 
   get referentTechniqueOptions() {
-    if (!this.orgOverview || !this.form.superviseurId.trim()) return [];
-    return filterReferentsForSuperviseur(
-      this.orgOverview,
-      this.form.superviseurId,
-      this.orgServiceId || undefined,
+    if (!this.orgOverview) return [];
+    const serviceIds = this.orgServiceId.trim()
+      ? [this.orgServiceId.trim()]
+      : this.orgCelluleId.trim()
+        ? servicesOfCellule(this.operationalDepartments, this.unassignedPoles, this.orgCelluleId)
+        : [];
+    const fromStructure = serviceIds.map((orgServiceId) =>
+      findStructureIncumbents(this.orgOverview!, 'Référent technique', { orgServiceId }),
     );
+    const fromHierarchy = this.form.superviseurId.trim()
+      ? filterReferentsForSuperviseur(this.orgOverview, this.form.superviseurId, undefined)
+      : [];
+    return this.mergeIncumbents([...fromStructure, fromHierarchy]);
+  }
+
+  private mergeIncumbents(
+    groups: readonly (readonly { userId: string; displayName: string }[])[],
+  ): { userId: string; displayName: string }[] {
+    const seen = new Map<string, { userId: string; displayName: string }>();
+    for (const group of groups) {
+      for (const inc of group) {
+        if (inc.userId && !seen.has(inc.userId)) seen.set(inc.userId, inc);
+      }
+    }
+    return [...seen.values()].sort((a, b) => a.displayName.localeCompare(b.displayName, 'fr'));
+  }
+
+  /** Pilote : le service technique est masqué quand la cellule n’en contient qu’un (sélection auto). */
+  get isSingleServiceAutoSelected(): boolean {
+    const options = this.orgServiceOptions;
+    return this.showOrgServiceSelect && options.length === 1 && this.orgServiceId === options[0].id;
+  }
+
+  get partialOrgScopesHint(): string {
+    if (!this.supportsMultiOrg || this.partialOrgScopes.length === 0) return '';
+    const labels = this.partialOrgScopes.map(
+      (c) =>
+        `${resolveOrgNodePathLabel(this.operationalDepartments, this.unassignedPoles, this.orgAssignmentDepth, c.scopeId)} (${c.heldNodes}/${c.totalNodes})`,
+    );
+    return `Périmètre actuel partiel : ${labels.join(' · ')}. L’enregistrement l’étendra à la totalité, conformément aux règles de responsabilité.`;
   }
 
   get showSituationEnfantsChoice(): boolean {
@@ -894,7 +960,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
   }
 
   get ancienOrgAssignmentDepth(): OrgRoleAssignmentDepth {
-    return orgRoleAssignmentDepth(this.ancienSelectedRoleName);
+    return orgRoleHistoricalDepth(this.ancienSelectedRoleName);
   }
 
   get ancienShowOrgAssignmentBlock(): boolean {
@@ -1838,32 +1904,26 @@ export class UserFormComponent implements OnInit, OnDestroy {
         return 'Choisissez le superviseur parmi les titulaires de la cellule.';
       }
       if (this.referentTechniqueOptions.length > 0 && !this.form.referentTechniqueId.trim()) {
-        return 'Choisissez le référent technique parmi les titulaires du service.';
+        return 'Choisissez le référent technique parmi les titulaires de la cellule.';
       }
     }
     if (
       this.form.chefDeProjetId &&
       !this.chefDeProjetOptions.some((o) => o.userId === this.form.chefDeProjetId)
     ) {
-      return 'Le chef de projet sélectionné n\'appartient pas au pôle choisi.';
-    }
-    if (!this.form.chefDeProjetId.trim() && this.form.superviseurId.trim()) {
-      return 'Choisissez d\'abord le chef de projet.';
+      return 'Le chef de projet sélectionné n\'est pas rattaché à cette activité / ce pôle.';
     }
     if (
       this.form.superviseurId &&
       !this.superviseurOptions.some((o) => o.userId === this.form.superviseurId)
     ) {
-      return 'Le superviseur sélectionné n\'est pas rattaché au chef de projet choisi.';
-    }
-    if (!this.form.superviseurId.trim() && this.form.referentTechniqueId.trim()) {
-      return 'Choisissez d\'abord le superviseur.';
+      return 'Le superviseur sélectionné n\'est pas responsable de cette activité / cellule.';
     }
     if (
       this.form.referentTechniqueId &&
       !this.referentTechniqueOptions.some((o) => o.userId === this.form.referentTechniqueId)
     ) {
-      return 'Le référent technique sélectionné n\'est pas rattaché au superviseur choisi.';
+      return 'Le référent technique sélectionné n\'est pas responsable de cette cellule.';
     }
     return null;
   }
@@ -2004,6 +2064,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
     this.orgMirrorWarning = null;
     this.resetResponsables();
     this.ensureOrgPickerDefaults();
+    if (this.supportsMultiOrg && this.orgAssignmentDepth === 'activite' && deptId.trim()) {
+      this.applyMultiOrgLeafSelection();
+    }
     this.cdr.detectChanges();
   }
 
@@ -2035,6 +2098,12 @@ export class UserFormComponent implements OnInit, OnDestroy {
     this.form.subServiceId = null;
     this.resetResponsables();
     if (this.showOrgServiceSelect) {
+      const services = this.orgServiceOptions;
+      if (services.length === 1) {
+        // Organisation cible : un service technique par cellule → sélection automatique.
+        this.patchOrgService(services[0].id);
+        return;
+      }
       this.syncSubServiceFromOrg();
     } else {
       this.orgMirrorWarning = this.superviseurMirrorWarning();
@@ -2088,6 +2157,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
     const cleared = clearMultiOrgSelection();
     this.selectedOrgNodeIds = cleared.selectedOrgNodeIds;
     this.primaryOrgNodeId = cleared.primaryOrgNodeId;
+    this.partialOrgScopes = [];
     this.form.subServiceId = null;
     this.orgMirrorWarning = null;
     this.resetResponsables();
@@ -2109,6 +2179,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
   }
 
   removeSelectedOrgNode(nodeId: string): void {
+    this.partialOrgScopes = this.partialOrgScopes.filter((c) => c.scopeId !== nodeId.trim());
     const next = removeOrgNodeSelection(
       { selectedOrgNodeIds: this.selectedOrgNodeIds, primaryOrgNodeId: this.primaryOrgNodeId },
       nodeId,
@@ -2121,6 +2192,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
 
   private currentLeafOrgNodeId(): string {
     const depth = this.orgAssignmentDepth;
+    if (depth === 'activite') return this.orgOperationalDeptId.trim();
     if (depth === 'pole') return this.orgPoleId.trim();
     if (depth === 'cellule') return this.orgCelluleId.trim();
     if (depth === 'service') return this.orgServiceId.trim();
@@ -2145,7 +2217,12 @@ export class UserFormComponent implements OnInit, OnDestroy {
       return;
     }
     const depth = this.orgAssignmentDepth;
-    if (depth === 'pole') {
+    if (depth === 'activite') {
+      this.orgOperationalDeptId = primary;
+      this.orgPoleId = '';
+      this.orgCelluleId = '';
+      this.orgServiceId = '';
+    } else if (depth === 'pole') {
       const sel = findOperationalSelectionByPoleId(
         this.operationalDepartments,
         this.unassignedPoles,
@@ -2331,7 +2408,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
 
     this.applyOrgSelection(sel);
     this.syncSubServiceFromOrg();
-    if (this.supportsMultiOrg && this.orgAssignmentDepth === 'service' && this.orgServiceId.trim()) {
+    if (this.supportsMultiOrg) {
       this.applyMultiOrgLeafSelection();
     } else if (this.orgServiceId.trim()) {
       this.selectedOrgNodeIds = [this.orgServiceId.trim()];
@@ -2345,7 +2422,19 @@ export class UserFormComponent implements OnInit, OnDestroy {
     const overview = this.orgOverview;
     if (!overview || !guid.trim()) return false;
 
-    if (supportsMultiOrgSelection(roleName) || isPiloteRole(roleName)) {
+    if (supportsMultiOrgSelection(roleName)) {
+      const scoped = hydrateScopeSelectionFromOverview(overview, guid, roleName);
+      if (scoped && scoped.state.selectedOrgNodeIds.length > 0) {
+        this.selectedOrgNodeIds = scoped.state.selectedOrgNodeIds;
+        this.primaryOrgNodeId = scoped.state.primaryOrgNodeId;
+        this.partialOrgScopes = scoped.partialScopes;
+        this.syncCascadeFromPrimaryOrgNode();
+        this.orgMirrorWarning = null;
+        return true;
+      }
+    }
+
+    if (isPiloteRole(roleName)) {
       const hydrated = hydrateMultiOrgSelectionFromOverview(overview, guid, roleName);
       if (hydrated && hydrated.selectedOrgNodeIds.length > 0) {
         this.selectedOrgNodeIds = hydrated.selectedOrgNodeIds;
@@ -2618,15 +2707,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
       if (orgAssignmentRequiresService(depth) && !this.form.subServiceId) {
         return 'Un des services choisis n’est pas encore disponible dans Planning.';
       }
-      if (isSuperviseurRole(this.selectedRoleName)) {
-        for (const celluleId of this.selectedOrgNodeIds) {
-          const svcId = resolvePlanningServiceIdByPrimeCelluleId(this.planningServices, celluleId);
-          if (!svcId) {
-            return 'Une des cellules choisies n’est pas encore synchronisée dans Planning.';
-          }
-        }
-      }
-      return null;
+      return this.validateScopeSelection();
     }
 
     if (
@@ -2656,6 +2737,45 @@ export class UserFormComponent implements OnInit, OnDestroy {
       }
     }
     return null;
+  }
+
+  /**
+   * Réorganisation 2026 : chaque périmètre choisi doit contenir les nœuds sur lesquels
+   * la responsabilité sera développée (pôles, cellules synchronisées Planning, services).
+   */
+  private validateScopeSelection(): string | null {
+    const role = this.selectedRoleName;
+    const label = (id: string) =>
+      resolveOrgNodePathLabel(this.operationalDepartments, this.unassignedPoles, this.orgAssignmentDepth, id);
+    for (const scopeId of this.selectedOrgNodeIds) {
+      if (isChefDeProjetRole(role)) {
+        if (polesOfActivity(this.operationalDepartments, scopeId).length === 0) {
+          return `L’activité ${label(scopeId)} ne contient aucun pôle.`;
+        }
+      } else if (isSuperviseurRole(role)) {
+        const cellules = cellulesOfActivity(this.operationalDepartments, scopeId);
+        if (cellules.length === 0) {
+          return `L’activité ${label(scopeId)} ne contient aucune cellule.`;
+        }
+        for (const celluleId of cellules) {
+          if (!resolvePlanningServiceIdByPrimeCelluleId(this.planningServices, celluleId)) {
+            return 'Une des cellules de l’activité n’est pas encore synchronisée dans Planning.';
+          }
+        }
+      } else if (isReferentTechniqueRole(role)) {
+        if (servicesOfCellule(this.operationalDepartments, this.unassignedPoles, scopeId).length === 0) {
+          return `La cellule ${label(scopeId)} n’a pas de service : créez-le dans Organisation RH.`;
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Premier service technique de la cellule principale d’un référent technique. */
+  private primaryReferentServiceId(): string {
+    const cellule = (this.primaryOrgNodeId || this.orgCelluleId).trim();
+    if (!cellule) return '';
+    return servicesOfCellule(this.operationalDepartments, this.unassignedPoles, cellule)[0] ?? '';
   }
 
   private validateOperationalManagerAssignment(): string | null {
@@ -2704,6 +2824,12 @@ export class UserFormComponent implements OnInit, OnDestroy {
       subServiceId = undefined;
     } else if (isChefDeProjetRole(roleName) || isSuperviseurRole(roleName)) {
       subServiceId = undefined;
+    } else if (isReferentTechniqueRole(roleName)) {
+      // Référent rattaché à une cellule : ancre Planning = service de sa cellule principale.
+      const primeServiceId = this.primaryReferentServiceId();
+      subServiceId = primeServiceId
+        ? resolveSubServiceIdByPrimeServiceId(this.subServices, primeServiceId) ?? undefined
+        : undefined;
     }
     return {
       roleId: this.resolvedRoleId(),
@@ -2775,23 +2901,27 @@ export class UserFormComponent implements OnInit, OnDestroy {
     }
     const kind = directoryAssignmentKindForRole(roleName);
     if (kind && supportsMultiOrgSelection(roleName)) {
-      const nodeIds = [...this.selectedOrgNodeIds];
-      const primaryNodeId = this.primaryOrgNodeId.trim();
-      if (nodeIds.length === 0 || !primaryNodeId) {
+      const scopeIds = [...this.selectedOrgNodeIds];
+      const primaryScopeId = this.primaryOrgNodeId.trim();
+      if (scopeIds.length === 0 || !primaryScopeId) {
         return throwError(() => new Error('Sélection multi-périmètres incomplète.'));
       }
+      // Réorganisation 2026 : périmètre par activité (chef / superviseur) ou par cellule (référent),
+      // développé côté Directory en pôles / cellules / services.
       return defer(() =>
-        this.orgApi.reconcileEmployeeStructuralAssignments(
+        this.orgApi.reconcileEmployeeScopeAssignments(
           kind,
           employeeGuid,
-          nodeIds,
-          primaryNodeId,
-          'Formulaire employé — synchronisation multi-périmètres',
+          scopeIds,
+          primaryScopeId,
+          'Formulaire employé — périmètre de responsabilité',
         ),
       ).pipe(
-        map((result) => {
-          this.selectedOrgNodeIds = [...result.nodeIds];
-          this.primaryOrgNodeId = result.primaryNodeId;
+        map((scoped) => {
+          const result = scoped.assignments;
+          this.selectedOrgNodeIds = [...scoped.scopeIds];
+          this.primaryOrgNodeId = scoped.primaryScopeId;
+          this.partialOrgScopes = [];
           this.syncCascadeFromPrimaryOrgNode();
           if (result.revokedOtherKinds?.length) {
             for (const msg of result.revokedOtherKinds.map(
@@ -2854,7 +2984,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
   private buildEnsureEmployeeDto(employeeGuid: string, roleName: string) {
     const primeServiceId =
       (this.supportsMultiOrg && isReferentTechniqueRole(roleName)
-        ? this.primaryOrgNodeId.trim()
+        ? this.primaryReferentServiceId()
         : this.orgServiceId.trim()) || null;
     return {
       employeeId: employeeGuid,

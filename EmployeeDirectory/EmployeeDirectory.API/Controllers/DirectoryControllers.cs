@@ -170,8 +170,30 @@ public class DirectoryEmployeesController(IMediator mediator) : ControllerBase
 [ApiController]
 [Route("api/directory/org")]
 [Authorize]
-public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgController> logger) : ControllerBase
+public class DirectoryOrgController(
+    IMediator mediator,
+    ILogger<DirectoryOrgController> logger,
+    IOrgScopeAssignmentService scopes) : ControllerBase
 {
+    /// <summary>
+    /// Réorganisation 2026 : un nœud créé dans un périmètre déjà couvert en totalité
+    /// (activité pour superviseur / chef de projet, cellule pour référent technique)
+    /// est ajouté au responsable. Ne fait jamais échouer la création du nœud.
+    /// </summary>
+    private async Task PropagateScopeSafelyAsync(Func<Task<int>> propagate, string nodeId)
+    {
+        try
+        {
+            var extended = await propagate();
+            if (extended > 0)
+                logger.LogInformation("Org scope propagation: {Count} responsable(s) étendu(s) au nœud {NodeId}", extended, nodeId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Org scope propagation ignorée pour le nœud {NodeId}", nodeId);
+        }
+    }
+
     [HttpGet("overview")]
     public async Task<ActionResult<OrgOverviewDto>> Overview(CancellationToken ct)
     {
@@ -224,6 +246,7 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
         try
         {
             var id = await mediator.Send(new CreatePoleCommand(body.Name.Trim(), body.BusinessDepartmentId), ct);
+            await PropagateScopeSafelyAsync(() => scopes.PropagateAfterPoleAttachedAsync(id, User.GetSubjectId(), ct), id);
             return Ok(new { id });
         }
         catch (KeyNotFoundException e) { return NotFound(new { error = e.Message }); }
@@ -260,9 +283,10 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
     {
         try
         {
-            return await mediator.Send(new AttachPoleToDepartmentCommand(nodeId, body.BusinessDepartmentId), ct)
-                ? NoContent()
-                : NotFound();
+            if (!await mediator.Send(new AttachPoleToDepartmentCommand(nodeId, body.BusinessDepartmentId), ct))
+                return NotFound();
+            await PropagateScopeSafelyAsync(() => scopes.PropagateAfterPoleAttachedAsync(nodeId, User.GetSubjectId(), ct), nodeId);
+            return NoContent();
         }
         catch (KeyNotFoundException e) { return NotFound(new { error = e.Message }); }
         catch (InvalidOperationException e) { return Conflict(new { error = e.Message }); }
@@ -272,6 +296,7 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
     public async Task<ActionResult<object>> CreateCellule(string poleId, [FromBody] CreateNodeRequest body, CancellationToken ct)
     {
         var id = await mediator.Send(new CreateCelluleCommand(poleId, body.Name), ct);
+        await PropagateScopeSafelyAsync(() => scopes.PropagateAfterCelluleCreatedAsync(id, User.GetSubjectId(), ct), id);
         return Ok(new { id });
     }
 
@@ -279,6 +304,7 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
     public async Task<ActionResult<object>> CreateService(string celluleId, [FromBody] CreateNodeRequest body, CancellationToken ct)
     {
         var id = await mediator.Send(new CreateServiceCommand(celluleId, body.Name), ct);
+        await PropagateScopeSafelyAsync(() => scopes.PropagateAfterServiceCreatedAsync(id, User.GetSubjectId(), ct), id);
         return Ok(new { id });
     }
 
@@ -417,6 +443,47 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
         await mediator.Send(new ClearStructureRoleCommand(kind, nodeId, changedBy), ct);
         return NoContent();
     }
+}
+
+[ApiController]
+[Route("api/directory/org/scope-assignments")]
+[Authorize(Roles = "Admin,RH")]
+public class DirectoryOrgScopeController(IOrgScopeAssignmentService scopes) : ControllerBase
+{
+    /// <summary>
+    /// Réorganisation 2026 — affecte un responsable par périmètre métier :
+    /// Superviseur / ChefDeProjet → activités (ids de départements de production),
+    /// ReferentTechnique → cellules. Remplace exactement le périmètre du kind.
+    /// </summary>
+    [HttpPut("{kind}/employees/{employeeId:guid}")]
+    public async Task<ActionResult<OrgScopeReconcileResult>> Reconcile(
+        string kind,
+        Guid employeeId,
+        [FromBody] ReconcileEmployeeScopeRequest body,
+        CancellationToken ct)
+    {
+        if (body is null)
+            return BadRequest(new { error = "Corps de requête requis." });
+        try
+        {
+            return Ok(await scopes.ReconcileScopeAsync(
+                kind,
+                employeeId,
+                body.ScopeIds ?? [],
+                body.PrimaryScopeId ?? string.Empty,
+                User.GetSubjectId(),
+                body.Reason,
+                ct));
+        }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
+    }
+
+    /// <summary>Rapport lecture seule : couverture activité / cellule de chaque responsable.</summary>
+    [HttpGet("coverage")]
+    public async Task<ActionResult<IReadOnlyList<OrgScopeCoverageRowDto>>> Coverage(CancellationToken ct) =>
+        Ok(await scopes.GetCoverageReportAsync(ct));
 }
 
 [ApiController]
@@ -794,6 +861,10 @@ public record AssignRequest(
 public record ReconcileEmployeeAssignmentsRequest(
     IReadOnlyList<string>? NodeIds,
     string? PrimaryNodeId,
+    string? Reason);
+public record ReconcileEmployeeScopeRequest(
+    IReadOnlyList<string>? ScopeIds,
+    string? PrimaryScopeId,
     string? Reason);
 public record SetAuthSubjectRequest(Guid AuthSubjectId);
 public record EvaluatePolicyRequest(string Action, string ResourceType, string? ResourceId);

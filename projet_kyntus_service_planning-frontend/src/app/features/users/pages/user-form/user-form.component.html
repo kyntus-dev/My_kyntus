@@ -694,6 +694,10 @@
 
               <div class="org-picker-block">
 
+                @if (orgAssignmentHintText) {
+                  <p class="org-picker-hint">{{ orgAssignmentHintText }}</p>
+                }
+
                 @if (orgLoading) {
 
                   <p class="hint">Chargement de la structure…</p>
@@ -732,7 +736,7 @@
                     <div class="form-grid org-grid">
                       @if (showOrgOperationalDeptSelect) {
                         <div class="form-group">
-                          <label for="orgOperationalDept">Département de production @if (orgAssignmentRequired) { <span class="required">*</span> }</label>
+                          <label for="orgOperationalDept">@if (orgAssignmentDepth === 'activite') { Activité (département de production) } @else { Département de production } @if (orgAssignmentRequired) { <span class="required">*</span> }</label>
                           <select
                             class="ky-input"
                             id="orgOperationalDept"
@@ -796,7 +800,7 @@
                           </select>
                         </div>
                       }
-                      @if (showOrgServiceSelect) {
+                      @if (showOrgServiceSelect && !isSingleServiceAutoSelected) {
                         <div class="form-group">
                           <label for="orgService">Service @if (orgAssignmentRequired) { <span class="required">*</span> }</label>
                           <select
@@ -860,6 +864,9 @@
                         <strong>Périmètre :</strong> {{ selectedOrgSummary }}
                       </div>
                     }
+                    @if (partialOrgScopesHint) {
+                      <p class="field-hint">{{ partialOrgScopesHint }}</p>
+                    }
                     @if (additionalStructuralChargesHint) {
                       <p class="field-hint">{{ additionalStructuralChargesHint }}</p>
                     }
@@ -899,15 +906,15 @@
                   id="chefDeProjet"
                   [kyntusSelectSync]="form.chefDeProjetId"
                   (kyntusSelectSyncChange)="patchChefDeProjet($event)"
-                  [disabled]="!orgPoleId || chefDeProjetOptions.length === 0"
+                  [disabled]="chefDeProjetOptions.length === 0"
                 >
                   <option value="">— Sélectionner —</option>
                   @for (inc of chefDeProjetOptions; track inc.userId) {
                     <option [value]="inc.userId">{{ inc.displayName }}</option>
                   }
                 </select>
-                @if (orgPoleId && chefDeProjetOptions.length === 0) {
-                  <span class="hint">Aucun chef de projet sur ce pôle.</span>
+                @if ((orgPoleId || orgOperationalDeptId) && chefDeProjetOptions.length === 0) {
+                  <span class="hint">Aucun chef de projet rattaché à cette activité.</span>
                 }
 
               </div>
@@ -923,15 +930,15 @@
                   id="superviseur"
                   [kyntusSelectSync]="form.superviseurId"
                   (kyntusSelectSyncChange)="patchSuperviseur($event)"
-                  [disabled]="!form.chefDeProjetId || superviseurOptions.length === 0"
+                  [disabled]="superviseurOptions.length === 0"
                 >
                   <option value="">— Sélectionner —</option>
                   @for (inc of superviseurOptions; track inc.userId) {
                     <option [value]="inc.userId">{{ inc.displayName }}</option>
                   }
                 </select>
-                @if (form.chefDeProjetId && superviseurOptions.length === 0) {
-                  <span class="hint">Aucun superviseur rattaché à ce chef de projet.</span>
+                @if ((orgCelluleId || orgOperationalDeptId) && superviseurOptions.length === 0) {
+                  <span class="hint">Aucun superviseur responsable de cette activité.</span>
                 }
 
               </div>
@@ -947,15 +954,15 @@
                   id="referentTechnique"
                   [kyntusSelectSync]="form.referentTechniqueId"
                   (kyntusSelectSyncChange)="patchReferentTechnique($event)"
-                  [disabled]="!form.superviseurId || referentTechniqueOptions.length === 0"
+                  [disabled]="referentTechniqueOptions.length === 0"
                 >
                   <option value="">— Sélectionner —</option>
                   @for (inc of referentTechniqueOptions; track inc.userId) {
                     <option [value]="inc.userId">{{ inc.displayName }}</option>
                   }
                 </select>
-                @if (form.superviseurId && referentTechniqueOptions.length === 0) {
-                  <span class="hint">Aucun référent technique rattaché à ce superviseur.</span>
+                @if (orgCelluleId && referentTechniqueOptions.length === 0) {
+                  <span class="hint">Aucun référent technique responsable de cette cellule.</span>
                 }
 
               </div>
