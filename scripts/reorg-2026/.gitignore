@@ -4,3 +4,5 @@ sauvegardes/
 .dernier_export
 __pycache__/
 donnees/organisation_cible.csv
+donnees/deplacements_pilotes.csv
+donnees/nouveaux_comptes*

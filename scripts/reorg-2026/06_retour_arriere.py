@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Réorganisation 2026 — retour arrière applicatif (sans restauration de base).
+Réorganisation 2026 — retour arrière de la STRUCTURE créée à l'étape 04 (sans restauration de base).
 
-  journal_perimetres_*.json : restaure exactement les nœuds détenus avant l'étape 5
-                              (PUT /api/directory/org/assignments/{kind}/employees/{id}).
+À lancer APRÈS le retour arrière des pilotes (07_deplacer_pilotes.py --retour-arriere), sinon
+les nœuds sont encore utilisés et sont ignorés.
+
   journal_structure_*.json  : supprime, dans l'ordre inverse, les nœuds créés à l'étape 4
                               (services → cellules → pôles → activités). ATTENTION : l'API de
                               suppression ne vérifie pas l'usage d'un nœud ; ce script le fait
@@ -35,27 +36,14 @@ def main() -> int:
 
     path = Path(args.journal)
     entries = json.loads(path.read_text(encoding="utf-8"))
-    is_scope = path.name.startswith("journal_perimetres")
+    if not path.name.startswith("journal_structure"):
+        raise SystemExit("Journal attendu : rapport/journal_structure_*.json (étape 04).")
     print(f"{len(entries)} entrée(s) à annuler {'(simulation)' if not args.appliquer else ''}")
 
     api = None
     if args.appliquer:
         api = KyntusApi()
         api.login_if_needed()
-
-    if is_scope:
-        for e in entries:
-            nodes = e["nodesBefore"]
-            label = f"{e['kind']} {e['employeeId']} → {len(nodes)} nœud(s) d'origine"
-            if not nodes:
-                print(f"  ! {label} : aucun nœud avant → à retirer manuellement dans Organisation RH")
-                continue
-            primary = e["anchorBefore"] if e["anchorBefore"] in nodes else nodes[0]
-            print(f"  - {label}")
-            if api:
-                api.request("PUT", f"/api/directory/org/assignments/{e['kind']}/employees/{e['employeeId']}",
-                            {"nodeIds": nodes, "primaryNodeId": primary, "reason": "Retour arrière réorganisation 2026"})
-        return 0
 
     used: set[str] = set()
     if api:

@@ -5,7 +5,8 @@ Réorganisation 2026 — ÉTAPE 4 (APRÈS VALIDATION) : création des activités
 
   * Mode simulation par défaut : n'appelle aucune API d'écriture.
   * --appliquer : exécute les créations ADDITIVES de rapport/plan_structure.json.
-    Aucune suppression, aucun renommage, aucune modification d'affectation.
+    Aucune suppression, aucun renommage, aucune modification d'affectation ni de collaborateur.
+    Noms de pôles harmonisés par l'étape 03 (« Pôle technique », « Pôle BTB »).
   * Chaque création est journalisée (rapport/journal_structure_<horodatage>.json)
     pour le retour arrière (06_retour_arriere.py).
 
@@ -20,11 +21,9 @@ import json
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
 from kyntus_api import KyntusApi
-
-HERE = Path(__file__).resolve().parent
+from reorg_commun import export_dir
 
 
 def main() -> int:
@@ -33,7 +32,7 @@ def main() -> int:
     ap.add_argument("--appliquer", action="store_true", help="exécuter réellement (sinon simulation)")
     args = ap.parse_args()
 
-    export = Path(args.export) if args.export else Path((HERE / ".dernier_export").read_text().strip())
+    export = export_dir(args.export)
     plan = json.loads((export / "rapport" / "plan_structure.json").read_text(encoding="utf-8"))
     actions = plan["actions"]
     if not actions:
@@ -82,6 +81,7 @@ def main() -> int:
             else:
                 raise RuntimeError(f"Action inconnue : {kind}")
             refs[a["ref"]] = new_id
+            journal[-1]["ref"] = a["ref"]
             print(f"  ✔ {kind:<18} {a['name']}  → {new_id}")
             time.sleep(0.2)  # laisser l'outbox projeter vers Planning / Prime
     finally:

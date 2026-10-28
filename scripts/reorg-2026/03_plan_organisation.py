@@ -15,8 +15,9 @@ Correspondance des colonnes :
   Cellule  (fichier) → Cellule                                    (org_cellules)
   —                  → Service : niveau technique conservé, 1 service miroir par cellule (même nom)
 
-Si une activité du fichier correspond à un département existant sous un autre nom
-(ex. « Bytel Kyntus » ↔ « bouygues »), renseignez donnees/correspondance_activites.csv.
+Correspondances validées (classeur de décisions, Q1/Q3/Q4) : donnees/correspondance_activites.csv
+(Bytel Kyntus → OP-001, Orange → OP-002, Bytel TISSEO → à créer). Les noms de pôles sont
+harmonisés à la création (Q7 : « pole technique » → « Pôle technique »).
 Rien n'est supprimé : les nœuds absents du fichier sont seulement listés.
 """
 from __future__ import annotations
@@ -24,33 +25,14 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import re
 import sys
-import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-KIND = {"0": "ChefDeProjet", "1": "Superviseur", "2": "ReferentTechnique", "3": "Pilote"}
-
-
-def norm(value: str | None) -> str:
-    value = (value or "").replace("\xa0", " ")
-    value = unicodedata.normalize("NFKD", value)
-    value = "".join(ch for ch in value if not unicodedata.combining(ch))
-    value = re.sub(r"[^A-Za-z0-9&/ ]+", " ", value)
-    return re.sub(r"\s+", " ", value).strip().upper()
-
-
-def norm_pole(value: str | None) -> str:
-    return re.sub(r"^POLE ", "", norm(value))
-
-
-def read_csv(path: Path, delimiter: str = ",") -> list[dict[str, str]]:
-    if not path.exists():
-        return []
-    with path.open(newline="", encoding="utf-8-sig") as f:
-        return list(csv.DictReader(f, delimiter=delimiter))
+from reorg_commun import (
+    HERE, KIND, export_dir, find_department, harmonize_pole_label, load_activity_mapping,
+    norm, norm_pole, read_csv,
+)
 
 
 def main() -> int:
@@ -60,7 +42,7 @@ def main() -> int:
     ap.add_argument("--correspondances", default=str(HERE / "donnees" / "correspondance_activites.csv"))
     args = ap.parse_args()
 
-    export = Path(args.export) if args.export else Path((HERE / ".dernier_export").read_text().strip())
+    export = export_dir(args.export)
     out = export / "rapport"
     out.mkdir(parents=True, exist_ok=True)
 
@@ -71,11 +53,7 @@ def main() -> int:
     services = read_csv(export / "org_services.csv")
     employees = {e["Id"]: e for e in read_csv(export / "employees.csv")}
     assignments = read_csv(export / "org_assignments_actives.csv")
-    mapping = {
-        norm(r["activite_fichier"]): r["departement_existant"].strip()
-        for r in read_csv(Path(args.correspondances), ";")
-        if r.get("departement_existant", "").strip()
-    }
+    mapping = load_activity_mapping(Path(args.correspondances))
 
     # Arbre cible
     tree: dict[str, dict[str, dict[str, int]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
@@ -83,7 +61,7 @@ def main() -> int:
     for r in target:
         a, p, c = r["activite"], r["pole"], r["cellule"]
         labels.setdefault(norm(a), a)
-        labels.setdefault("P|" + norm(a) + "|" + norm_pole(p), p)
+        labels.setdefault("P|" + norm(a) + "|" + norm_pole(p), harmonize_pole_label(p))
         labels.setdefault("C|" + norm(a) + "|" + norm_pole(p) + "|" + norm(c), c)
         if r["type_ligne"] == "agent":
             tree[norm(a)][norm_pole(p)][norm(c)] += 1
@@ -91,14 +69,7 @@ def main() -> int:
             tree[norm(a)][norm_pole(p)].setdefault(norm(c), 0)
 
     def find_dept(activity_key: str) -> dict | None:
-        wanted = mapping.get(activity_key)
-        for d in depts:
-            if wanted and (d["Code"] == wanted or norm(d["Name"]) == norm(wanted) or d["Id"] == wanted):
-                return d
-        for d in depts:
-            if norm(d["Name"]) == activity_key:
-                return d
-        return None
+        return find_department(labels[activity_key], depts, mapping)
 
     actions: list[dict] = []
     lines: list[str] = ["# Plan de réorganisation — activités, pôles, cellules", ""]

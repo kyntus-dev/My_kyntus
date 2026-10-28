@@ -467,14 +467,16 @@ public class DirectoryOrgController(
 
 [ApiController]
 [Route("api/directory/org/scope-assignments")]
-[Authorize(Roles = "Admin,RH")]
+[Authorize]
 public class DirectoryOrgScopeController(IOrgScopeAssignmentService scopes) : ControllerBase
 {
     /// <summary>
     /// Réorganisation 2026 — affecte un responsable par périmètre métier :
     /// Superviseur / ChefDeProjet → activités (ids de départements de production),
     /// ReferentTechnique → cellules. Remplace exactement le périmètre du kind.
+    /// Mêmes droits que les autres écritures d'organisation (Admin / RH, ou délégation users:manage).
     /// </summary>
+    [OrgWriteAccess]
     [HttpPut("{kind}/employees/{employeeId:guid}")]
     public async Task<ActionResult<OrgScopeReconcileResult>> Reconcile(
         string kind,
@@ -501,6 +503,7 @@ public class DirectoryOrgScopeController(IOrgScopeAssignmentService scopes) : Co
     }
 
     /// <summary>Rapport lecture seule : couverture activité / cellule de chaque responsable.</summary>
+    [Authorize(Roles = "Admin,RH")]
     [HttpGet("coverage")]
     public async Task<ActionResult<IReadOnlyList<OrgScopeCoverageRowDto>>> Coverage(CancellationToken ct) =>
         Ok(await scopes.GetCoverageReportAsync(ct));

@@ -7,6 +7,7 @@
 #   bash scripts/reorg-2026/01_sauvegarde_et_export.sh
 # Variables optionnelles :
 #   PG_CONTAINER (défaut kyntus_db) · PGUSER (défaut postgres)
+#   SAUVEGARDE=0 pour un export seul (sans pg_dump)
 #   OUT (défaut scripts/reorg-2026/export_<horodatage>)
 # =============================================================================
 set -euo pipefail
@@ -24,7 +25,9 @@ psql_dir() { docker exec -i "$PG_CONTAINER" psql -U "$PGUSER" -d employee_direct
 psql_planning() { docker exec -i "$PG_CONTAINER" psql -U "$PGUSER" -d kyntus_db -v ON_ERROR_STOP=1 -At "$@"; }
 
 echo "== 1/3 Sauvegardes complètes (format custom, restaurables avec pg_restore)"
-for db in employee_directory_db kyntus_db prime_db conge_db auth_db; do
+df -h "$BACKUP_DIR" | tail -1 | awk '{print "   espace disque libre : "$4}'
+[ "${SAUVEGARDE:-1}" = "0" ] && echo "   (ignorées : SAUVEGARDE=0)"
+[ "${SAUVEGARDE:-1}" = "0" ] || for db in employee_directory_db kyntus_db prime_db conge_db auth_db; do
   if docker exec "$PG_CONTAINER" psql -U "$PGUSER" -lqt | cut -d'|' -f1 | grep -qw "$db"; then
     docker exec "$PG_CONTAINER" pg_dump -U "$PGUSER" -Fc "$db" > "$BACKUP_DIR/${db}_$STAMP.dump"
     echo "   ✔ $BACKUP_DIR/${db}_$STAMP.dump ($(du -h "$BACKUP_DIR/${db}_$STAMP.dump" | cut -f1))"
@@ -58,6 +61,10 @@ psql_planning -c "\copy (
   SELECT u.\"Id\", u.\"Guid\", u.\"FirstName\", u.\"LastName\", u.\"Email\", r.\"Name\" AS role, u.\"IsActive\", u.\"SubServiceId\"
   FROM \"Users\" u LEFT JOIN \"Roles\" r ON r.\"Id\" = u.\"RoleId\" ORDER BY u.\"LastName\"
 ) TO STDOUT WITH CSV HEADER" > "$OUT/planning_users.csv" || echo "   ⚠ export Planning ignoré (noms de tables différents) — non bloquant"
+# Miroirs Planning des services Directory (contrôle avant déplacement des pilotes, étape 07)
+psql_planning -c "\copy (
+  SELECT \"Id\", \"Name\", \"PrimeServiceId\" FROM \"SubServices\" ORDER BY \"Id\"
+) TO STDOUT WITH CSV HEADER" > "$OUT/planning_sub_services.csv" || { rm -f "$OUT/planning_sub_services.csv"; echo "   ⚠ export des sous-services Planning impossible"; }
 
 echo
 echo "Export terminé : $OUT"
