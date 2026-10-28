@@ -180,8 +180,6 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: ${KYNTUS_CONN_PLANNING:?Définir KYNTUS_CONN_PLANNING dans .env}
-      # Réorganisation 2026 : périmètre Planning du chef de projet = sous-services de ses pôles Directory
-      Planning__ChefDeProjetPerimeterFromPoles: ${KYNTUS_CP_PERIMETER_FROM_POLES:-true}
       Directory__BaseUrl: http://employee-directory-backend:8080/
       Directory__WriteMaster: "true"
       Directory__RequireEnsureOnWrite: "true"
@@ -382,8 +380,6 @@ services:
       Htel__TechniciensUrl: ${HTEL_TECHNICIENS_URL:-https://htel-groupe.fr/api/v1/techniciens}
       Htel__ApiKey: ${HTEL_API_KEY:-}
       Directory__EnablePrimeBootstrap: "false"
-      # Réorganisation 2026 : extension auto du périmètre superviseur / chef / référent aux nouveaux nœuds
-      Directory__OrgScopePropagation__Enabled: ${KYNTUS_ORG_SCOPE_PROPAGATION:-true}
       <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]
     ports:
       - "8565:8080"

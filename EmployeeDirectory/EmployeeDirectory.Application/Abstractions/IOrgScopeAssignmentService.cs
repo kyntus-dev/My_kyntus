@@ -50,4 +50,12 @@ public interface IOrgScopeAssignmentService
     /// cellules reçoivent les cellules du pôle.
     /// </summary>
     Task<int> PropagateAfterPoleAttachedAsync(string poleId, Guid? changedBy, CancellationToken ct = default);
+
+    /// <summary>
+    /// Après une affectation sur un seul nœud (page Organisation RH, import Excel, API historique) :
+    /// étend le responsable à son périmètre complet — superviseur / chef de projet à toute
+    /// l'activité du nœud, référent technique à toute la cellule du service. Les autres nœuds
+    /// déjà détenus sont conservés. Retourne le nombre de nœuds ajoutés.
+    /// </summary>
+    Task<int> ExpandAssignmentToScopeAsync(string kind, Guid employeeId, string nodeId, Guid? changedBy, CancellationToken ct = default);
 }

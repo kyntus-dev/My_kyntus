@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import csv
 import difflib
+import html
 import re
 import sys
 import unicodedata
@@ -38,7 +39,7 @@ FUZZY_THRESHOLD = 0.86
 
 
 def norm_text(value: str | None) -> str:
-    value = (value or "").replace("\xa0", " ")
+    value = html.unescape(value or "").replace("\xa0", " ")
     value = unicodedata.normalize("NFKD", value)
     value = "".join(ch for ch in value if not unicodedata.combining(ch))
     value = re.sub(r"[^A-Za-z0-9 ]+", " ", value.replace("-", " ").replace("'", " "))
@@ -138,8 +139,11 @@ def main() -> int:
                 ])
             continue
 
-        # Rapprochement approximatif (fautes de frappe, prénoms composés…)
-        best = difflib.get_close_matches(key, all_keys, n=3, cutoff=FUZZY_THRESHOLD)
+        # Rapprochement approximatif : nom partiel (ex. « Yasmine BELHOUSINE » ⊂ « BELHOUSINE DRISSI Yasmine »)
+        # puis fautes de frappe / prénoms composés.
+        tokens = set(key.split())
+        best = [k for k in all_keys if len(tokens) >= 2 and tokens < set(k.split())]
+        best += [k for k in difflib.get_close_matches(key, all_keys, n=3, cutoff=FUZZY_THRESHOLD) if k not in best]
         best_pilots = [
             (k, e) for k in best for e in by_key[k] if e["Role"].strip().lower() in PILOT_ROLES
         ]

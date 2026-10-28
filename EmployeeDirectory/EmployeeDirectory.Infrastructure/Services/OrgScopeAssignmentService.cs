@@ -20,6 +20,7 @@ public sealed class OrgScopeAssignmentService(
     IConfiguration? configuration = null) : IOrgScopeAssignmentService
 {
     private const string DefaultReason = "Affectation par périmètre (activité / cellule)";
+    private const string ExpandReason = "Extension au périmètre complet (activité / cellule) — règle réorganisation 2026";
     private const string PropagationReason = "Extension automatique du périmètre (nouveau nœud dans le périmètre couvert)";
 
     /// <summary>Interrupteur de sécurité : Directory__OrgScopePropagation__Enabled=false désactive l'extension auto.</summary>
@@ -255,6 +256,75 @@ public sealed class OrgScopeAssignmentService(
         }
 
         return extended;
+    }
+
+    public async Task<int> ExpandAssignmentToScopeAsync(
+        string kind,
+        Guid employeeId,
+        string nodeId,
+        Guid? changedBy,
+        CancellationToken ct = default)
+    {
+        if (!PropagationEnabled) return 0;
+        if (!Enum.TryParse<DomainAssignmentKind>(kind?.Trim(), true, out var k)
+            || k is not (DomainAssignmentKind.ChefDeProjet
+                or DomainAssignmentKind.Superviseur
+                or DomainAssignmentKind.ReferentTechnique))
+        {
+            return 0;
+        }
+
+        var id = (nodeId ?? string.Empty).Trim();
+        List<string> scopeNodes;
+        switch (k)
+        {
+            case DomainAssignmentKind.ChefDeProjet:
+            {
+                var deptId = await db.OrgPoles.AsNoTracking()
+                    .Where(p => p.Id == id).Select(p => p.BusinessDepartmentId).FirstOrDefaultAsync(ct);
+                if (deptId is null) return 0;
+                scopeNodes = await db.OrgPoles.AsNoTracking()
+                    .Where(p => p.BusinessDepartmentId == deptId)
+                    .Select(p => p.Id).ToListAsync(ct);
+                break;
+            }
+            case DomainAssignmentKind.Superviseur:
+            {
+                var poleId = await db.OrgCellules.AsNoTracking()
+                    .Where(c => c.Id == id).Select(c => c.PoleId).FirstOrDefaultAsync(ct);
+                if (poleId is null) return 0;
+                var deptId = await db.OrgPoles.AsNoTracking()
+                    .Where(p => p.Id == poleId).Select(p => p.BusinessDepartmentId).FirstOrDefaultAsync(ct);
+                if (deptId is null) return 0;
+                scopeNodes = await CellulesOfDepartmentAsync(deptId.Value, ct);
+                break;
+            }
+            default:
+            {
+                var celluleId = await db.OrgServices.AsNoTracking()
+                    .Where(s => s.Id == id).Select(s => s.CelluleId).FirstOrDefaultAsync(ct);
+                if (celluleId is null) return 0;
+                scopeNodes = await db.OrgServices.AsNoTracking()
+                    .Where(s => s.CelluleId == celluleId)
+                    .Select(s => s.Id).ToListAsync(ct);
+                break;
+            }
+        }
+
+        var current = await db.OrgAssignments.AsNoTracking()
+            .Where(a => a.EmployeeId == employeeId && a.Kind == k && a.EffectiveTo == null)
+            .OrderBy(a => a.EffectiveFrom)
+            .Select(a => a.NodeId)
+            .ToListAsync(ct);
+        if (!current.Contains(id, StringComparer.Ordinal))
+            return 0; // l'affectation d'origine n'a pas abouti : ne rien inférer
+
+        var missing = scopeNodes.Where(n => !current.Contains(n, StringComparer.Ordinal)).ToList();
+        if (missing.Count == 0) return 0;
+
+        await write.ReconcileEmployeeStructuralAssignmentsAsync(
+            k.ToString(), employeeId, current.Concat(missing).ToList(), id, changedBy, ExpandReason, ct);
+        return missing.Count;
     }
 
     /// <summary>

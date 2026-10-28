@@ -1,3 +1,4 @@
+using EmployeeDirectory.API.Filters;
 using EmployeeDirectory.Application.Abstractions;
 using EmployeeDirectory.Application.BusinessDepartments;
 using EmployeeDirectory.Application.Dtos;
@@ -278,6 +279,7 @@ public class DirectoryOrgController(
         }
     }
 
+    [OrgWriteAccess]
     [HttpPatch("structure/poles/{nodeId}/business-department")]
     public async Task<IActionResult> AttachPoleToDepartment(string nodeId, [FromBody] AttachPoleToDepartmentRequest body, CancellationToken ct)
     {
@@ -292,6 +294,7 @@ public class DirectoryOrgController(
         catch (InvalidOperationException e) { return Conflict(new { error = e.Message }); }
     }
 
+    [OrgWriteAccess]
     [HttpPost("structure/poles/{poleId}/cellules")]
     public async Task<ActionResult<object>> CreateCellule(string poleId, [FromBody] CreateNodeRequest body, CancellationToken ct)
     {
@@ -300,6 +303,7 @@ public class DirectoryOrgController(
         return Ok(new { id });
     }
 
+    [OrgWriteAccess]
     [HttpPost("structure/cellules/{celluleId}/services")]
     public async Task<ActionResult<object>> CreateService(string celluleId, [FromBody] CreateNodeRequest body, CancellationToken ct)
     {
@@ -308,30 +312,37 @@ public class DirectoryOrgController(
         return Ok(new { id });
     }
 
+    [OrgWriteAccess]
     [HttpPut("structure/poles/{nodeId}")]
     public async Task<IActionResult> RenamePole(string nodeId, [FromBody] CreateNodeRequest body, CancellationToken ct) =>
         await mediator.Send(new RenameOrgNodeCommand(OrgNodeLevel.Pole, nodeId, body.Name), ct) ? NoContent() : NotFound();
 
+    [OrgWriteAccess]
     [HttpPut("structure/poles/{poleId}/cellules/{nodeId}")]
     public async Task<IActionResult> RenameCellule(string poleId, string nodeId, [FromBody] CreateNodeRequest body, CancellationToken ct) =>
         await mediator.Send(new RenameOrgNodeCommand(OrgNodeLevel.Cellule, nodeId, body.Name), ct) ? NoContent() : NotFound();
 
+    [OrgWriteAccess]
     [HttpPut("structure/cellules/{celluleId}/services/{nodeId}")]
     public async Task<IActionResult> RenameService(string celluleId, string nodeId, [FromBody] CreateNodeRequest body, CancellationToken ct) =>
         await mediator.Send(new RenameOrgNodeCommand(OrgNodeLevel.Service, nodeId, body.Name), ct) ? NoContent() : NotFound();
 
+    [OrgWriteAccess]
     [HttpDelete("structure/poles/{nodeId}")]
     public async Task<IActionResult> DeletePole(string nodeId, CancellationToken ct) =>
         await mediator.Send(new DeleteOrgNodeCommand(OrgNodeLevel.Pole, nodeId), ct) ? NoContent() : NotFound();
 
+    [OrgWriteAccess]
     [HttpDelete("structure/poles/{poleId}/cellules/{nodeId}")]
     public async Task<IActionResult> DeleteCellule(string poleId, string nodeId, CancellationToken ct) =>
         await mediator.Send(new DeleteOrgNodeCommand(OrgNodeLevel.Cellule, nodeId), ct) ? NoContent() : NotFound();
 
+    [OrgWriteAccess]
     [HttpDelete("structure/cellules/{celluleId}/services/{nodeId}")]
     public async Task<IActionResult> DeleteService(string celluleId, string nodeId, CancellationToken ct) =>
         await mediator.Send(new DeleteOrgNodeCommand(OrgNodeLevel.Service, nodeId), ct) ? NoContent() : NotFound();
 
+    [OrgWriteAccess]
     [HttpPost("assignments/{kind}/{nodeId}")]
     public async Task<ActionResult<StructuralRoleAssignmentResult>> Assign(string kind, string nodeId, [FromBody] AssignRequest body, CancellationToken ct)
     {
@@ -356,6 +367,11 @@ public class DirectoryOrgController(
                 new AssignStructureRoleCommand(
                     kind, nodeId, employeeId, changedBy, body.Reason, revokeIds, forceOverride),
                 ct);
+            // Réorganisation 2026 : toute affectation unitaire (page Organisation RH, import Excel)
+            // respecte les règles de périmètre — superviseur / chef de projet → activité,
+            // référent technique → cellule.
+            await PropagateScopeSafelyAsync(
+                () => scopes.ExpandAssignmentToScopeAsync(kind, employeeId, nodeId, changedBy, ct), nodeId);
             return Ok(result);
         }
         catch (PilotRotationTenureException ex)
@@ -379,6 +395,7 @@ public class DirectoryOrgController(
     /// Synchronise exactement les nœuds managés d'un employé pour un kind
     /// (ChefDeProjet / Superviseur / ReferentTechnique).
     /// </summary>
+    [OrgWriteAccess]
     [HttpPut("assignments/{kind}/employees/{employeeId:guid}")]
     public async Task<ActionResult<StructuralAssignmentsReconcileResult>> ReconcileEmployeeAssignments(
         string kind,
@@ -417,6 +434,7 @@ public class DirectoryOrgController(
         }
     }
 
+    [OrgWriteAccess]
     [HttpDelete("assignments/Pilote/{serviceId}/employees/{employeeId:guid}")]
     public async Task<IActionResult> RemovePilot(string serviceId, Guid employeeId, CancellationToken ct)
     {
@@ -426,6 +444,7 @@ public class DirectoryOrgController(
             : NotFound();
     }
 
+    [OrgWriteAccess]
     [HttpDelete("assignments/{kind}/{nodeId}/employees/{employeeId:guid}")]
     public async Task<IActionResult> RemoveAssignment(string kind, string nodeId, Guid employeeId, CancellationToken ct)
     {
@@ -436,6 +455,7 @@ public class DirectoryOrgController(
             : NotFound();
     }
 
+    [OrgWriteAccess]
     [HttpDelete("assignments/{kind}/{nodeId}")]
     public async Task<IActionResult> Clear(string kind, string nodeId, CancellationToken ct)
     {

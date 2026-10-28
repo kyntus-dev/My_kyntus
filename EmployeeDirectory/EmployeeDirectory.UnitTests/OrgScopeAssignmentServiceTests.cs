@@ -277,6 +277,96 @@ public class OrgScopeAssignmentServiceTests : IDisposable
         Assert.Equal(3, partial.TotalNodes);
     }
 
+    // ── Affectation unitaire (page Organisation RH / import Excel) étendue au périmètre ──
+
+    [Fact]
+    public async Task Single_superviseur_assignment_is_extended_to_the_whole_activity()
+    {
+        var sup = SeedEmployee(KyntusRoleNames.Superviseur, "cell-st");
+        SeedAssignment(sup, DomainAssignmentKind.Superviseur, "cell-st", DomainNodeLevel.Cellule);
+
+        var added = await _scopes.ExpandAssignmentToScopeAsync("Superviseur", sup, "cell-st", null);
+
+        Assert.Equal(2, added);
+        Assert.Equal(["cell-btb", "cell-cv", "cell-st"], ActiveNodes(sup, DomainAssignmentKind.Superviseur));
+        var employee = await _db.Employees.AsNoTracking().FirstAsync(e => e.Id == sup);
+        Assert.Equal("cell-st", employee.CelluleId); // ancre = nœud choisi
+    }
+
+    [Fact]
+    public async Task Superviseur_extension_keeps_other_activities_and_co_holders()
+    {
+        var sup = SeedEmployee(KyntusRoleNames.Superviseur, "cell-ineo");
+        SeedAssignment(sup, DomainAssignmentKind.Superviseur, "cell-ineo", DomainNodeLevel.Cellule);
+        SeedAssignment(sup, DomainAssignmentKind.Superviseur, "cell-btb", DomainNodeLevel.Cellule);
+        var other = SeedEmployee(KyntusRoleNames.Superviseur, "cell-cv");
+        SeedAssignment(other, DomainAssignmentKind.Superviseur, "cell-cv", DomainNodeLevel.Cellule);
+
+        await _scopes.ExpandAssignmentToScopeAsync("Superviseur", sup, "cell-btb", null);
+
+        Assert.Equal(
+            ["cell-btb", "cell-cv", "cell-ineo", "cell-st"],
+            ActiveNodes(sup, DomainAssignmentKind.Superviseur));
+        Assert.Equal(["cell-cv"], ActiveNodes(other, DomainAssignmentKind.Superviseur));
+    }
+
+    [Fact]
+    public async Task Single_chef_de_projet_assignment_is_extended_to_every_pole_of_the_activity()
+    {
+        var cp = SeedEmployee(KyntusRoleNames.ChefDeProjet);
+        SeedAssignment(cp, DomainAssignmentKind.ChefDeProjet, "pole-tech", DomainNodeLevel.Pole);
+
+        var added = await _scopes.ExpandAssignmentToScopeAsync("ChefDeProjet", cp, "pole-tech", null);
+
+        Assert.Equal(1, added);
+        Assert.Equal(["pole-btb", "pole-tech"], ActiveNodes(cp, DomainAssignmentKind.ChefDeProjet));
+    }
+
+    [Fact]
+    public async Task Single_referent_assignment_is_extended_to_the_services_of_its_cellule_only()
+    {
+        _db.OrgServices.Add(new OrgService { Id = "svc-st-2", Name = "Support technicien bis", CelluleId = "cell-st" });
+        _db.SaveChanges();
+        var rt = SeedEmployee(KyntusRoleNames.ReferentTechnique);
+        SeedAssignment(rt, DomainAssignmentKind.ReferentTechnique, "svc-st", DomainNodeLevel.Service);
+
+        var added = await _scopes.ExpandAssignmentToScopeAsync("ReferentTechnique", rt, "svc-st", null);
+
+        Assert.Equal(1, added);
+        Assert.Equal(["svc-st", "svc-st-2"], ActiveNodes(rt, DomainAssignmentKind.ReferentTechnique));
+    }
+
+    [Fact]
+    public async Task Extension_does_nothing_when_the_original_assignment_is_not_held()
+    {
+        var sup = SeedEmployee(KyntusRoleNames.Employee);
+
+        Assert.Equal(0, await _scopes.ExpandAssignmentToScopeAsync("Superviseur", sup, "cell-st", null));
+        Assert.Empty(ActiveNodes(sup, DomainAssignmentKind.Superviseur));
+    }
+
+    [Fact]
+    public async Task Pilote_assignments_are_never_extended()
+    {
+        var pilot = SeedEmployee(KyntusRoleNames.Employee, "cell-st");
+        SeedAssignment(pilot, DomainAssignmentKind.Pilote, "svc-st", DomainNodeLevel.Service);
+
+        Assert.Equal(0, await _scopes.ExpandAssignmentToScopeAsync("Pilote", pilot, "svc-st", null));
+        Assert.Equal(["svc-st"], ActiveNodes(pilot, DomainAssignmentKind.Pilote));
+    }
+
+    [Fact]
+    public async Task Extension_is_disabled_by_the_feature_flag()
+    {
+        var scopes = new OrgScopeAssignmentService(
+            _db, _write, new FakeConfiguration("Directory:OrgScopePropagation:Enabled", "false"));
+        var sup = SeedEmployee(KyntusRoleNames.Superviseur, "cell-st");
+        SeedAssignment(sup, DomainAssignmentKind.Superviseur, "cell-st", DomainNodeLevel.Cellule);
+
+        Assert.Equal(0, await scopes.ExpandAssignmentToScopeAsync("Superviseur", sup, "cell-st", null));
+        Assert.Equal(["cell-st"], ActiveNodes(sup, DomainAssignmentKind.Superviseur));
+    }
+
     private List<string> ActiveNodes(Guid employeeId, DomainAssignmentKind kind) =>
         _db.OrgAssignments.AsNoTracking()
             .Where(a => a.EmployeeId == employeeId && a.Kind == kind && a.EffectiveTo == null)
