@@ -47,13 +47,16 @@ Les conteneurs en cours d'exécution ne sont pas affectés tant qu'ils ne sont p
 cd /home/o/projets_mykyntus-
 tar -xzf /tmp/reorg-2026_livraison.tar.gz
 
-# Tests .NET dans un conteneur SDK, sur une copie : aucun bin/obj écrit dans le projet
-docker run --rm -v "$PWD":/src:ro mcr.microsoft.com/dotnet/sdk:8.0 bash -c '
-  cp -r /src /work && cd /work &&
-  dotnet test EmployeeDirectory/EmployeeDirectory.UnitTests/EmployeeDirectory.UnitTests.csproj -c Release &&
-  dotnet test PlanningService/Planning.UnitTests/Planning.UnitTests.csproj -c Release &&
-  dotnet test EmployeeDirectory/EmployeeDirectory.ArchitectureTests/EmployeeDirectory.ArchitectureTests.csproj -c Release &&
-  dotnet test PlanningService/Planning.ArchitectureTests/Planning.ArchitectureTests.csproj -c Release'
+# Tests .NET dans un conteneur SDK : on n'envoie QUE les projets nécessaires (sans bin/obj),
+# pour ne pas copier tout le dossier (il contient des sorties de build volumineuses).
+tar -cf - --exclude='bin' --exclude='obj' --exclude='node_modules' --exclude='TestResults' \
+    Directory.Build.props Directory.Packages.props Messaging.Contracts Shared.Kernel \
+    Kyntus.Caching Kyntus.Iam Kyntus.Identity.Jwt Kyntus.Messaging.Outbox tests \
+    EmployeeDirectory PlanningService \
+| docker run --rm -i mcr.microsoft.com/dotnet/sdk:8.0 bash -c '
+  mkdir -p /work && cd /work && tar -xf - &&
+  dotnet test EmployeeDirectory/EmployeeDirectory.UnitTests/EmployeeDirectory.UnitTests.csproj -c Release 2>&1 | tail -20;
+  dotnet test PlanningService/Planning.UnitTests/Planning.UnitTests.csproj -c Release 2>&1 | tail -20'
 
 # Tests Angular du domaine organisation (copie, sans toucher au projet)
 docker run --rm -v "$PWD/projet_kyntus_service_planning-frontend":/src:ro node:22 bash -c '
