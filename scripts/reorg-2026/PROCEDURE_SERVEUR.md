@@ -1,4 +1,4 @@
-# Réorganisation 2026 — procédure serveur (livraisons v3 + v4 + v5)
+# Réorganisation 2026 — procédure serveur (livraisons v3 à v6)
 
 Serveur : `o@10.10.10.25` · Projet : `/home/o/projets_mykyntus-`.
 État de départ : version déployée `a0c0f0b` + patch v2 (déployé le 29/10 à 09:07) + structure créée par l'étape 04 (09:12).
@@ -421,3 +421,162 @@ for db in employee_directory_db kyntus_db prime_db conge_db auth_db; do
 done
 docker compose start employee-directory-backend planning-backend prime-backend conge-backend auth-backend
 ```
+
+---
+
+# Livraison v6 : liste Employés, export, e-mails
+
+À appliquer **après la v5** (code en place = a0c0f0b + v2 + v3 + v4 + v5). Les données de production ne sont pas modifiées : seules 3 nouvelles tables sont créées dans `kyntus_db` (`EmailOutboxMessages`, `NotificationEmailPreferences`, `NotificationEmailCursors`).
+
+| Fichier | Contenu |
+|---|---|
+| `reorg-2026-code-v6.patch` | 47 fichiers : Planning (backend + frontend), Prime, Parrainage, Documentation, contrat de message commun. |
+| `reorg-2026-compose-v6.patch` | 4 lignes dans `docker-compose.yml` (variables e-mail de `planning-backend`). Facultatif : sans lui, les valeurs par défaut s'appliquent et l'e-mail n'a pas de bouton « Ouvrir dans My Kyntus ». |
+
+**Ce qui change**
+
+1. **Employés** :
+   - colonne Organisation = Activité / Pôle / Cellule, libellés exacts (le service miroir n'est plus répété) ;
+   - l'ancien filtre « Service » est remplacé par trois filtres en cascade **Activité › Pôle › Cellule**, plus un filtre **Statut** (Tous / Actifs / Inactifs) et « Effacer les filtres » ;
+   - le badge « Inactif » n'apparaît plus deux fois.
+2. **Export Excel** (bouton « Exporter » de la liste, et page Import) : **Tous**, **Actifs** ou **Inactifs**, avec Activité, Pôle, Cellule, matricule, téléphone, embauche, ancienneté, niveau, statut.
+3. **Planning par e-mail** : à la publication (et à chaque republication), **chaque agent actif affecté** reçoit son planning de la semaine sur son **adresse professionnelle**. Avant, seuls les pilotes ayant un e-mail personnel le recevaient.
+4. **Notifications aussi par e-mail** (adresse professionnelle) :
+   - Planning et demandes (changement, renfort, exceptionnelle), Formation, alertes contrats (RH/Admin) ;
+   - Congés : nouvelle demande au valideur, validation, refus ou annulation à l'employé ;
+   - Réclamations et propositions, newsletters ;
+   - PRIME (prime approuvée ou refusée), Parrainage, Documentation (nouvelle demande aux RH, changement de statut au collaborateur).
+   L'historique n'est jamais envoyé : seules les notifications créées après le déploiement partent par e-mail.
+5. **Paramètres › Notifications par e-mail** : chacun peut couper ses e-mails de notification (le planning reste envoyé). Les comptes Admin et RH voient l'état des envois (en attente, envoyés, échecs avec le message d'erreur) et peuvent relancer les échecs.
+6. **Cadence** : 25 e-mails par minute au maximum (Microsoft 365 limite une boîte à 30 par minute). Une publication pour 150 agents part donc en 6 minutes environ. En cas d'erreur, nouvelles tentatives à 1, 5, 15, 60 et 180 minutes, puis abandon.
+
+**Services reconstruits** : `planning-backend`, `planning-frontend`, `prime-backend`, `parrainage-backend`, `documentation-backend`. Les autres conteneurs ne sont pas touchés.
+
+## v6-0 : copie (depuis Windows)
+
+```powershell
+cd C:\Users\omar.elmahi\Downloads
+scp reorg-2026-code-v6.patch reorg-2026-compose-v6.patch o@10.10.10.25:/tmp/
+```
+
+## v6-A : sauvegardes (ne modifie rien)
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(date +%Y%m%d_%H%M%S); echo "$STAMP" > ~/sauvegardes_reorg/STAMP_V6; echo "STAMP=$STAMP"
+: > ~/sauvegardes_reorg/images_avant_v6_$STAMP.txt
+for s in planning-backend planning-frontend prime-backend parrainage-backend documentation-backend; do
+  c=$(docker compose ps -q "$s"); img=$(docker inspect --format '{{.Config.Image}}' "$c"); id=$(docker inspect --format '{{.Image}}' "$c")
+  docker tag "$id" "reorg-avant-v6/$s:$STAMP" && echo "$s $img $id" | tee -a ~/sauvegardes_reorg/images_avant_v6_$STAMP.txt
+done
+( grep '^+++ b/' /tmp/reorg-2026-code-v6.patch | cut -c7- | sed 's/\t.*$//'; echo docker-compose.yml; echo .env ) | sort -u > ~/sauvegardes_reorg/fichiers_v6_$STAMP.txt
+tar -czf ~/sauvegardes_reorg/code_avant_v6_$STAMP.tar.gz --ignore-failed-read -T ~/sauvegardes_reorg/fichiers_v6_$STAMP.txt 2>/dev/null
+docker exec kyntus_db pg_dump -U postgres -Fc kyntus_db > ~/sauvegardes_reorg/kyntus_db_v6_$STAMP.dump && echo "OK kyntus_db"
+df -h / | tail -1
+```
+
+## v6-B : application protégée
+
+```bash
+cd /home/o/projets_mykyntus-
+if patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v6.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
+  echo "STOP : simulation non propre, rien n'a été modifié"; patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v6.patch | grep -iE "fail|already|assum|offset|fuzz"
+else
+  patch -p1 --batch < /tmp/reorg-2026-code-v6.patch > /dev/null && echo "PATCH V6 APPLIQUÉ PROPREMENT"
+fi
+```
+
+```bash
+# Variables e-mail dans docker-compose.yml (facultatif, même protection)
+if patch -p1 --batch --dry-run < /tmp/reorg-2026-compose-v6.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
+  echo "Compose non modifié (fichier différent du dépôt) : valeurs par défaut utilisées, pas de bouton dans les e-mails"
+else
+  patch -p1 --batch < /tmp/reorg-2026-compose-v6.patch > /dev/null && echo "COMPOSE V6 APPLIQUÉ"
+  grep -q '^KYNTUS_PUBLIC_APP_URL=' .env || echo 'KYNTUS_PUBLIC_APP_URL=http://10.10.10.25:8200' >> .env
+  grep '^KYNTUS_PUBLIC_APP_URL=' .env
+fi
+```
+
+## v6-C : compilation et tests (conteneur jetable)
+
+```bash
+cd /home/o/projets_mykyntus-
+tar -cf - --exclude='bin' --exclude='obj' --exclude='node_modules' --exclude='TestResults' \
+    Directory.Build.props Directory.Packages.props Messaging.Contracts Shared.Kernel \
+    Kyntus.Caching Kyntus.Iam Kyntus.Identity.Jwt Kyntus.Messaging.Outbox tests \
+    PlanningService PrimeBackend parrainage_service_backend documentation_service_backend \
+| docker run --rm -i mcr.microsoft.com/dotnet/sdk:8.0 bash -c '
+  mkdir -p /work && cd /work && tar -xf -
+  for p in PlanningService/Planning.API/Planning.API.csproj PrimeBackend/Prime.API/Prime.API.csproj \
+           parrainage_service_backend/Parrainage.API/Parrainage.API.csproj documentation_service_backend/Documentation.API/Documentation.API.csproj; do
+    echo "== $p"; dotnet build "$p" -c Release 2>&1 | grep -E " error |Error\(s\)" | tail -3
+  done
+  dotnet test PlanningService/Planning.UnitTests/Planning.UnitTests.csproj -c Release 2>&1 | grep -E "Failed |Passed!|Failed!" | tail -5'
+```
+
+Attendu : `0 Error(s)` pour les 4 projets ; pour les tests Planning, **un seul échec**, le même qu'avant (`ReinforcementRequestTests.Create_allows_own_SubServiceId_when_managed_list_empty`), et 17 tests de plus qu'avant la v6 (nouveaux tests e-mails). **Tout autre échec : arrêtez-vous** et faites le retour arrière v6 (code seulement).
+
+## v6-D : reconstruction et bascule
+
+```bash
+cd /home/o/projets_mykyntus-
+docker compose build planning-backend planning-frontend prime-backend parrainage-backend documentation-backend
+docker compose up -d --no-deps --no-build planning-backend planning-frontend prime-backend parrainage-backend documentation-backend
+sleep 90
+docker compose ps planning-backend planning-frontend prime-backend parrainage-backend documentation-backend
+docker logs --since 3m kyntus_planning_backend 2>&1 | grep -E "notification-emails|Patches schéma|Envoi des e-mails" | tail -5
+```
+
+Attendu : `✅ Patches schéma Planning appliqués.` sans ligne `⚠️ Patch notification-emails ignoré`, puis `Envoi des e-mails (plannings et notifications) démarré.`
+
+## v6-E : configurer l'envoi Microsoft 365 (dans l'application)
+
+**Avant** : dans le centre d'administration Microsoft 365, sur la boîte d'envoi choisie (par exemple `planning@kyntus.com`), activez « SMTP authentifié » (Utilisateurs › la boîte › Courrier › Gérer les applications de courrier › *SMTP authentifié*). Si la boîte a l'authentification multifacteur, utilisez un mot de passe d'application.
+
+Ensuite, avec un compte Admin : menu **Valider les plannings**, bloc **Génération automatique** :
+
+| Rubrique › champ | Valeur |
+|---|---|
+| Adresse RH › Adresse RH | **la boîte d'envoi**, ex. `planning@kyntus.com` (Microsoft 365 refuse un expéditeur différent : erreur `SendAsDenied`) |
+| Adresse RH › Nom affiché | `My Kyntus` (facultatif) |
+| Envoi des mails › Mode | SMTP (serveur mail) |
+| Hôte | `smtp.office365.com` |
+| Port | `587` |
+| SSL / STARTTLS | coché |
+| Utilisateur | la même boîte, ex. `planning@kyntus.com` |
+| Mot de passe | mot de passe de cette boîte (ou mot de passe d'application) |
+
+Cliquez sur **Enregistrer**, puis **Envoyer un mail de test** vers votre adresse. Puis **Paramètres › Notifications par e-mail** : l'état des envois doit indiquer le serveur configuré, 0 échec.
+
+> **Important — fin de l'authentification de base SMTP chez Microsoft.** Microsoft désactivera par défaut l'authentification par mot de passe sur SMTP AUTH **fin décembre 2026** ; l'administrateur du tenant pourra la réactiver temporairement, la date de retrait définitif sera annoncée au second semestre 2027. Après ce délai, il faudra passer à l'authentification moderne (OAuth / Microsoft Graph) ou à un service d'envoi (Brevo, SendGrid : déjà pris en charge dans « Mode d'envoi › Clé API »).
+
+**Recette** :
+
+- Employés : filtres Statut = Inactifs, puis Activité = Bytel Kyntus › Pôle technique › Prestations réseaux & CV ; boutons « Exporter » Tous / Actifs / Inactifs.
+- Publiez un planning de test : chaque agent affecté reçoit « Planning 2026-Wxx disponible » sur son adresse @kyntus.com (en quelques minutes selon le nombre d'agents).
+- Faites une demande de congé de test : le valideur reçoit l'e-mail « Nouvelle demande de congé ».
+
+Suivi en ligne de commande (lecture seule) :
+
+```bash
+docker exec kyntus_db psql -U postgres -d kyntus_db -c \
+ 'SELECT "Status", count(*) FROM "EmailOutboxMessages" GROUP BY 1 ORDER BY 1;'   # 0 attente, 1 envoyé, 2 échec, 3 abandonné
+docker exec kyntus_db psql -U postgres -d kyntus_db -c \
+ 'SELECT "ToEmail", "Subject", "Attempts", left("LastError", 120) FROM "EmailOutboxMessages" WHERE "Status" = 2 ORDER BY "Id" DESC LIMIT 10;'
+```
+
+**Couper tous les e-mails immédiatement** (sans retour arrière) : ajoutez `KYNTUS_NOTIFICATION_EMAIL_ENABLED=false` dans `.env`, puis `docker compose up -d --no-deps --no-build planning-backend`.
+
+## v6 : retour arrière (code seulement)
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(cat ~/sauvegardes_reorg/STAMP_V6)
+patch -p1 -R --batch < /tmp/reorg-2026-compose-v6.patch 2>/dev/null
+patch -p1 -R --batch < /tmp/reorg-2026-code-v6.patch
+while read -r s img id; do docker tag "reorg-avant-v6/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_v6_$STAMP.txt
+docker compose up -d --no-deps --no-build planning-backend planning-frontend prime-backend parrainage-backend documentation-backend
+```
+
+Les 3 tables e-mail restent en place et sont ignorées par la version précédente. Aucune autre donnée n'est concernée.
+
