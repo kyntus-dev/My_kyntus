@@ -4,8 +4,11 @@ Réorganisation 2026 — ÉTAPE 10 (APRÈS 07 ET 08) : suppression des pôles / 
 absents du fichier, dans les activités du fichier (Bytel Kyntus, Bytel TISSEO, Orange).
 
 Décisions du 29/10 :
-  * Seule la structure du fichier est conservée (+ compléments validés : SFR/ATS,
-    Pôle Sécurisation, Prestations réseaux & Malfaçons). Facturation et IT ne sont pas touchés.
+  * Seule la structure du fichier est conservée, plus les nœuds du fichier « Périmètre » :
+    compléments validés (SFR/ATS, Pôle Sécurisation, Prestations réseaux & Malfaçons) et
+    cellules confiées aux référents (Pôle client : Support Client, Satisfaction client,
+    Gestion des retards ; Pôle escalade et contrôle : toutes ses cellules).
+    Facturation et IT ne sont pas touchés.
   * Pilotes hors fichier encore affectés à un ancien nœud : comptes à désactiver (dans
     l'interface) AVANT la suppression ; leurs affectations sont ensuite clôturées.
   * Planning : les nœuds supprimés sont masqués et leurs plannings conservés (historique).
@@ -44,13 +47,31 @@ REASON = "Réorganisation 2026 — suppression des anciens nœuds"
 PROTECTED_ROLES = {"ADMIN", "RH", "AUDIT"}
 
 
-def build_plan(export: Path, targets: list[dict], mapping: dict, moves_ids: set[str]) -> dict:
+def referent_targets(rows: list[dict], poles: list[dict], cellules: list[dict], depts: list[dict], mapping: dict) -> list[dict]:
+    """Cellules confiées aux référents techniques dans le fichier Périmètre (« * » = tout le pôle)."""
+    out = []
+    for r in rows:
+        if (r.get("action") or "").strip() != "ReferentTechnique":
+            continue
+        wanted = [w.strip() for w in (r.get("cellules") or "").split("|") if w.strip()]
+        if wanted == ["*"]:
+            dept = find_department(r["activite"], depts, mapping)
+            pole = dept and next((p for p in poles if p["BusinessDepartmentId"] == dept["Id"]
+                                  and norm_pole(p["Name"]) == norm_pole(r["pole"])), None)
+            wanted = [c["Name"] for c in cellules if pole and c["PoleId"] == pole["Id"] and c["Name"].strip() not in ("", "-")]
+        out += [{"activite": r["activite"], "pole": r["pole"], "cellule": w} for w in wanted]
+    return out
+
+
+def build_plan(export: Path, targets: list[dict], mapping: dict, moves_ids: set[str],
+               responsables: list[dict] | None = None) -> dict:
     depts = [d for d in read_csv(export / "business_departments.csv") if d["Kind"] in ("0", "Operational")]
     poles = read_csv(export / "org_poles.csv")
     cellules = read_csv(export / "org_cellules.csv")
     services = read_csv(export / "org_services.csv")
     employees = {e["Id"]: e for e in read_csv(export / "employees.csv")}
     assignments = read_csv(export / "org_assignments_actives.csv")
+    targets = targets + referent_targets(responsables or [], poles, cellules, depts, mapping)
 
     blocking: list[str] = []
     scope_depts: dict[str, dict] = {}
@@ -231,6 +252,7 @@ def main() -> int:
     ap.add_argument("--cible", default=str(HERE / "donnees" / "organisation_cible.csv"))
     ap.add_argument("--complement", default=str(HERE / "donnees" / "organisation_complement.csv"))
     ap.add_argument("--deplacements", default=str(HERE / "donnees" / "deplacements_pilotes.csv"))
+    ap.add_argument("--responsables", default=str(HERE / "donnees" / "responsables_cible.csv"))
     ap.add_argument("--correspondances", default=str(HERE / "donnees" / "correspondance_activites.csv"))
     ap.add_argument("--appliquer", action="store_true")
     ap.add_argument("--pause", type=float, default=0.3)
@@ -240,7 +262,8 @@ def main() -> int:
     print(f"Export utilisé : {export}\n")
     targets = read_csv(Path(args.cible), ";") + read_csv(Path(args.complement), ";")
     moves_ids = {r["employee_id"] for r in read_csv(Path(args.deplacements), ";")}
-    plan = build_plan(export, targets, load_activity_mapping(Path(args.correspondances)), moves_ids)
+    plan = build_plan(export, targets, load_activity_mapping(Path(args.correspondances)), moves_ids,
+                      read_csv(Path(args.responsables), ";"))
     print_plan(plan)
 
     out = export / "rapport"
