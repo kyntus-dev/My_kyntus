@@ -34,6 +34,10 @@
       <option [value]="StatutDemande.Refusee">Refusée</option>
       <option [value]="StatutDemande.Annulee">Annulée</option>
     </select>
+    <select class="ky-input" [(ngModel)]="filtreCellule" (change)="onFiltreChange()" aria-label="Filtrer par cellule">
+      <option value="">Toutes les cellules</option>
+      <option *ngFor="let c of celluleOptions" [value]="c.value">{{ c.label }}</option>
+    </select>
     <input class="ky-input" type="text" placeholder="Rechercher par employé ou motif…"
       [(ngModel)]="filtreSearch" (input)="onFiltreChange()" />
   </div>
@@ -64,7 +68,10 @@
     <div class="cm-avatar">
         {{ (d.prenomEmploye || d.employeId).substring(0,1).toUpperCase() }}{{ (d.nomEmploye || '').substring(0,1).toUpperCase() }}
     </div>
-    <span>{{ d.prenomEmploye || '' }} {{ d.nomEmploye || (d.employeId | slice:0:8) + '…' }}</span>
+    <span>
+      {{ d.prenomEmploye || '' }} {{ d.nomEmploye || (d.employeId | slice:0:8) + '…' }}
+      <small class="cm-sub-type" *ngIf="celluleNom(d) as cellule">{{ cellule }}</small>
+    </span>
 </td>
           <td>
             {{ typeCongeLabels[d.typeConge] }}

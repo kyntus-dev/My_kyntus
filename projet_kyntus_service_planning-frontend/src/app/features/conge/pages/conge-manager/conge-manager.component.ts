@@ -14,6 +14,8 @@ import {
 } from '../../../../core/models/conge.models';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
+import type { EquipeMembreDto } from '../../../../core/models/conge.models';
+import { SANS_CELLULE, buildCelluleOptions, type CelluleOption } from '../../lib/conge-equipe.util';
 
 @Component({
   selector: 'app-conge-manager',
@@ -50,6 +52,10 @@ export class CongeManagerComponent implements OnInit {
 
   filtreStatut: StatutDemande | '' = '';
   filtreSearch  = '';
+  /** Filtre par cellule : rattachement des collaborateurs d'après l'organisation RH. */
+  filtreCellule = '';
+  celluleOptions: CelluleOption[] = [];
+  private membreParId = new Map<string, EquipeMembreDto>();
 
   get pageTitle(): string {
     return this.isRhFlow ? 'Validation RH des congés' : 'Validation superviseur des congés';
@@ -93,7 +99,25 @@ export class CongeManagerComponent implements OnInit {
     });
   }
 
+  /** Rattachement (cellule) des collaborateurs du périmètre, pour le filtre par cellule. */
+  private loadMembres(): void {
+    this.svc.getCongesEquipe(new Date().getFullYear()).subscribe({
+      next: (eq) => {
+        this.membreParId = new Map(eq.membres.map((m) => [m.employeId.toLowerCase(), m]));
+        this.celluleOptions = buildCelluleOptions(eq.membres);
+        this.appliquerFiltres();
+        this.cdr.detectChanges();
+      },
+      error: () => { /* filtre cellule indisponible : la liste reste utilisable */ },
+    });
+  }
+
+  celluleNom(d: DemandeCongeDto): string | null {
+    return this.membreParId.get(d.employeId.toLowerCase())?.celluleNom ?? null;
+  }
+
   loadDemandes(): void {
+    if (this.membreParId.size === 0) this.loadMembres();
     this.loading = true;
     this.cdr.detectChanges();
     this.svc.getDemandesByManager(this.managerId).subscribe({
@@ -115,6 +139,12 @@ export class CongeManagerComponent implements OnInit {
     let result = [...this.demandes];
     if (this.filtreStatut !== '') {
       result = result.filter(d => normalizeStatutDemande(d.statut) === +this.filtreStatut);
+    }
+    if (this.filtreCellule) {
+      result = result.filter(d => {
+        const celluleId = this.membreParId.get(d.employeId.toLowerCase())?.celluleId ?? null;
+        return this.filtreCellule === SANS_CELLULE ? !celluleId : celluleId === this.filtreCellule;
+      });
     }
     if (this.filtreSearch.trim()) {
       const q = this.filtreSearch.trim().toLowerCase();

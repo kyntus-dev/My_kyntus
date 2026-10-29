@@ -376,6 +376,15 @@ export const routes: Routes = [
                 .then(m => m.CongeManagerComponent),
           },
           {
+            // Congés de l'équipe : chaque responsable ne voit que son périmètre (contrôlé côté serveur).
+            path: 'equipe',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.congesEquipe },
+            loadComponent: () =>
+              import('./features/conge/pages/conge-equipe/conge-equipe.component')
+                .then(m => m.CongeEquipeComponent),
+          },
+          {
             path: 'historique',
             canActivate: [AuthGuard],
             data: { roles: ROLE_SETS.congesRhConfig, capability: 'conges.history' },

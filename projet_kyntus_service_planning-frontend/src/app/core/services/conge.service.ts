@@ -5,7 +5,8 @@ import { map } from 'rxjs/operators';
 import {
   DemandeCongeDto, SoldeCongeDto, DemanderCongeCommand,
   ValiderCongeRequest, RefuserCongeRequest, StatutDemande,
-  PeriodesInterditesDto, PeriodesInterditesScopesDto, QuotaCongeServiceDto, CongeDisponibiliteDto
+  PeriodesInterditesDto, PeriodesInterditesScopesDto, QuotaCongeServiceDto, CongeDisponibiliteDto,
+  EquipeCongesDto,
 } from '../models/conge.models';
 
 @Injectable({ providedIn: 'root' })
@@ -28,6 +29,11 @@ export class CongeService {
     return this.http.get<DemandeCongeDto[]>(
       `${this.base}/employe/${employeId}/historique?annee=${annee}`
     );
+  }
+
+  /** Congés de l'équipe du responsable connecté (périmètre de l'organisation RH). */
+  getCongesEquipe(annee: number): Observable<EquipeCongesDto> {
+    return this.http.get<EquipeCongesDto>(`${this.base}/equipe?annee=${annee}`);
   }
 
   getHistoriqueRh(annee: number): Observable<DemandeCongeDto[]> {

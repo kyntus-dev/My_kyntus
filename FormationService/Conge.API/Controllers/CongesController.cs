@@ -4,6 +4,7 @@ using Conge.Application.Commands.ConfigConge;
 using Conge.Application.Commands.DemanderConge;
 using Conge.Application.Commands.RefuserConge;
 using Conge.Application.Commands.ValiderConge;
+using Conge.Application.Queries.GetCongesEquipe;
 using Conge.Application.Queries.GetDemandesByEmploye;
 using Conge.Application.Queries.GetDemandesByManager;
 using Conge.Application.Queries.GetHistorique;
@@ -89,11 +90,66 @@ public class CongesController : ControllerBase
         if (actorId is null)
             return Unauthorized(new { message = "Sujet JWT manquant." });
 
-        if (!IsPrivilegedHrOrAdmin() && !IsSuperviseurRole() && actorId.Value != managerId)
-            return Forbid();
+        // Chacun ne consulte que sa propre file (RH / Admin : toutes).
+        if (!IsPrivilegedHrOrAdmin() && actorId.Value != managerId)
+        {
+            var email = User.GetEmail();
+            var actorSnap = await _employeRepo.GetByEmployeIdOrEmailAsync(actorId.Value, email, ct);
+            var managerSnap = await _employeRepo.GetByEmployeIdAsync(managerId, ct);
+            var isSelf = actorSnap?.EmployeId == managerId
+                || (managerSnap is not null && !string.IsNullOrWhiteSpace(email)
+                    && string.Equals(managerSnap.Email, email, StringComparison.OrdinalIgnoreCase));
+            if (!isSelf)
+                return Forbid();
+        }
 
         var result = await _mediator.Send(new GetDemandesByManagerQuery(managerId), ct);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// GET /api/conges/equipe?annee=2026 — Congés de l'équipe du responsable connecté :
+    /// superviseur (ses cellules), référent technique (ses services), chef de projet (ses pôles),
+    /// d'après l'organisation RH ; RH et Admin voient toute l'entreprise.
+    /// </summary>
+    [HttpGet("equipe")]
+    public async Task<IActionResult> GetCongesEquipe([FromQuery] int? annee, CancellationToken ct)
+    {
+        var actorId = RequireActorId();
+        if (actorId is null)
+            return Unauthorized(new { message = "Sujet JWT manquant." });
+        var year = annee is >= 2000 and <= 2100 ? annee.Value : DateTime.UtcNow.Year;
+
+        if (IsPrivilegedHrOrAdmin())
+            return Ok(await _mediator.Send(new GetCongesEquipeQuery(year, null, "Toute l'entreprise"), ct));
+
+        var role = User.GetAuthRole();
+        if (!KyntusRoleNames.IsSuperviseur(role)
+            && !KyntusRoleNames.IsReferentTechnique(role)
+            && !KyntusRoleNames.IsChefDeProjet(role)
+            && !KyntusRoleNames.IsSupportManager(role))
+            return Forbid();
+        if (_rebac is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Organisation RH indisponible." });
+
+        var actorSnap = await _employeRepo.GetByEmployeIdOrEmailAsync(actorId.Value, User.GetEmail(), ct);
+        var employeeId = actorSnap?.EmployeId ?? actorId.Value;
+        IReadOnlyList<Guid> team;
+        try
+        {
+            team = await _rebac.GetManagedEmployeeIdsAsync(employeeId, ct);
+        }
+        catch
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Organisation RH temporairement indisponible.",
+            });
+        }
+
+        return Ok(await _mediator.Send(
+            new GetCongesEquipeQuery(year, team, $"Votre équipe ({team.Count} collaborateur(s))"),
+            ct));
     }
 
     /// <summary>GET /api/conges/historique — Historique global par année (RH)</summary>

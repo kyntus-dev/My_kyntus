@@ -77,6 +77,26 @@ export interface DemandeCongeDto {
   validationNodeId?: string | null;
 }
 
+/** Collaborateur du périmètre d'un responsable (vue « Congés de l'équipe »). */
+export interface EquipeMembreDto {
+  employeId: string;
+  nom: string;
+  prenom: string;
+  role: string;
+  poleId: string | null;
+  poleNom: string | null;
+  celluleId: string | null;
+  celluleNom: string | null;
+}
+
+export interface EquipeCongesDto {
+  /** « Votre équipe (n collaborateur(s)) » ou « Toute l'entreprise ». */
+  perimetre: string;
+  annee: number;
+  membres: EquipeMembreDto[];
+  demandes: DemandeCongeDto[];
+}
+
 export interface SoldeCongeDto {
   employeId:    string;
   annee:        number;

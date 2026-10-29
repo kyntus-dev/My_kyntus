@@ -110,6 +110,15 @@ export const ROLE_SETS = {
 
   /** Config période interdite — RH / Admin. */
   congesRhConfig: [KyntusRoleNames.Admin, KyntusRoleNames.RH] as string[],
+  /** Congés de l'équipe : responsables d'équipe (périmètre organisation RH), RH et Admin. */
+  congesEquipe: [
+    KyntusRoleNames.Admin,
+    KyntusRoleNames.RH,
+    KyntusRoleNames.Manager,
+    KyntusRoleNames.Superviseur,
+    ...REFERENT_ALIASES,
+    ...CHEF_ALIASES,
+  ] as string[],
 
   /** Quotas service — Superviseur. */
   congesSuperviseurConfig: [KyntusRoleNames.Superviseur, KyntusRoleNames.Admin] as string[],
