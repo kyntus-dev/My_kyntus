@@ -732,6 +732,20 @@
                         }
                       }
                     </div>
+                  } @else if (showOrgCascade && supportsMultiOrg && scopeKind) {
+                    <!-- Responsables : périmètre du fichier « Périmètre » (activités, pôles, cellules — sélection multiple) -->
+                    <app-org-scope-tree-select
+                      [departments]="operationalDepartments"
+                      [unassignedPoles]="unassignedPoles"
+                      [kind]="scopeKind"
+                      [selected]="selectedOrgNodeIds"
+                      [primary]="primaryOrgNodeId"
+                      (selectedChange)="onScopeSelectionChange($event)"
+                      (primaryChange)="onScopePrimaryChange($event)"
+                    />
+                    @if (partialOrgScopesHint) {
+                      <p class="field-hint">{{ partialOrgScopesHint }}</p>
+                    }
                   } @else if (showOrgCascade) {
                     <div class="form-grid org-grid">
                       @if (showOrgOperationalDeptSelect) {
@@ -818,54 +832,10 @@
                         </div>
                       }
                     </div>
-                    @if (supportsMultiOrg) {
-                      <div class="multi-org-selection">
-                        <div class="multi-org-selection__header">
-                          <strong>{{ selectedOrgNodeIds.length }}</strong>
-                          périmètre(s) sélectionné(s)
-                          @if (canAddOrgNodeToSelection) {
-                            <button
-                              type="button"
-                              class="link-inline"
-                              (click)="addCurrentOrgNodeToSelection()"
-                            >
-                              Ajouter à la sélection
-                            </button>
-                          }
-                        </div>
-                        @if (selectedOrgChipItems.length === 0) {
-                          <p class="empty-results">
-                            Naviguez dans la cascade puis sélectionnez le nœud cible pour l’ajouter.
-                          </p>
-                        } @else {
-                          <ul class="org-chip-list">
-                            @for (chip of selectedOrgChipItems; track chip.id) {
-                              <li class="org-chip">
-                                <div class="org-chip__body">
-                                  <span class="org-chip__label">{{ chip.label }}</span>
-                                </div>
-                                <div class="org-chip__actions">
-                                  <button
-                                    type="button"
-                                    class="org-chip__remove"
-                                    (click)="removeSelectedOrgNode(chip.id)"
-                                    aria-label="Retirer ce périmètre"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              </li>
-                            }
-                          </ul>
-                        }
-                      </div>
-                    } @else if (orgServiceId || orgCelluleId || orgPoleId || orgOperationalDeptId) {
+                    @if (orgServiceId || orgCelluleId || orgPoleId || orgOperationalDeptId) {
                       <div class="selected-org">
                         <strong>Périmètre :</strong> {{ selectedOrgSummary }}
                       </div>
-                    }
-                    @if (partialOrgScopesHint) {
-                      <p class="field-hint">{{ partialOrgScopesHint }}</p>
                     }
                     @if (additionalStructuralChargesHint) {
                       <p class="field-hint">{{ additionalStructuralChargesHint }}</p>

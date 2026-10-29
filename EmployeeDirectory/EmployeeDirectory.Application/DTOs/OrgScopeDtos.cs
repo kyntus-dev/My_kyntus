@@ -1,10 +1,15 @@
 namespace EmployeeDirectory.Application.Dtos;
 
-/// <summary>Niveau de périmètre métier : "Activite" (département de production) ou "Cellule".</summary>
+/// <summary>
+/// Niveau de périmètre métier : activité (département de production), pôle ou cellule.
+/// « Mixte » quand un même responsable cumule des périmètres de niveaux différents.
+/// </summary>
 public static class OrgScopeLevels
 {
     public const string Activite = "Activite";
+    public const string Pole = "Pole";
     public const string Cellule = "Cellule";
+    public const string Mixte = "Mixte";
 }
 
 public record OrgScopeReconcileResult(

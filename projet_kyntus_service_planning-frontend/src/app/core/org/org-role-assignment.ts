@@ -126,14 +126,15 @@ export function orgAssignmentIsRequired(depth: OrgRoleAssignmentDepth): boolean 
 }
 
 export function orgAssignmentHint(roleName: string, depth: OrgRoleAssignmentDepth): string {
-  if (depth === 'activite') {
-    if (isSuperviseurRole(roleName)) {
-      return 'Superviseur : sélectionnez une ou plusieurs activités — il sera responsable de tous leurs pôles et de toutes leurs cellules.';
-    }
-    return 'Chef de projet : sélectionnez une ou plusieurs activités — il sera rattaché à tous leurs pôles.';
+  // Responsables : périmètre exact du fichier « Périmètre », sélection multiple.
+  if (isSuperviseurRole(roleName)) {
+    return 'Superviseur : cochez son périmètre du fichier Périmètre — activité(s), pôle(s) et/ou cellule(s). Il voit et gère les collaborateurs de ces cellules.';
   }
-  if (depth === 'cellule' && isReferentTechniqueRole(roleName)) {
-    return 'Référent technique : sélectionnez une ou plusieurs cellules (une principale obligatoire).';
+  if (isChefDeProjetRole(roleName)) {
+    return 'Chef de projet : cochez une ou plusieurs activités, ou seulement certains pôles.';
+  }
+  if (isReferentTechniqueRole(roleName)) {
+    return 'Référent technique : cochez ses cellules (ou un pôle entier) — il voit les collaborateurs de ces cellules.';
   }
   if (depth === 'pole') {
     return 'Chef de projet : sélectionnez un ou plusieurs pôles (un principal obligatoire).';

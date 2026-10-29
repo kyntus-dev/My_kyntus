@@ -8,9 +8,9 @@ import {
   isPiloteRole,
   isReferentTechniqueRole,
   isSuperviseurRole,
-  orgScopeLevelForRole,
   type OrgRoleAssignmentDepth,
 } from './org-role-assignment';
+import { compressHeldNodes, expandScopeNodes, scopeRoleKind } from './org-scope-tree';
 import {
   findOperationalSelectionByCelluleId,
   findOperationalSelectionByPoleId,
@@ -265,107 +265,51 @@ export function servicesOfCellule(
   return [];
 }
 
-function activityOfPole(
-  operationalDepartments: readonly OperationalDepartmentNode[],
-  poleId: string,
-): string | null {
-  const d = operationalDepartments.find((dept) => (dept.poles ?? []).some((p) => p.id === poleId));
-  return d?.id ?? null;
-}
-
-function activityOfCellule(
-  operationalDepartments: readonly OperationalDepartmentNode[],
-  celluleId: string,
-): string | null {
-  const d = operationalDepartments.find((dept) =>
-    (dept.poles ?? []).some((p) => (p.cellules ?? []).some((c) => c.id === celluleId)),
-  );
-  return d?.id ?? null;
-}
-
-function celluleOfService(
-  operationalDepartments: readonly OperationalDepartmentNode[],
-  unassignedPoles: readonly OrgPoleNode[],
-  serviceId: string,
-): string | null {
-  for (const pole of [...operationalDepartments.flatMap((d) => d.poles ?? []), ...unassignedPoles]) {
-    for (const cell of pole.cellules ?? []) {
-      if ((cell.services ?? []).some((s) => s.id === serviceId)) return cell.id;
-    }
-  }
-  return null;
-}
-
 /**
- * Réorganisation 2026 — reconstruit la sélection par périmètre (activités ou cellules)
- * à partir des affectations Directory existantes (pôles / cellules / services).
+ * Réorganisation 2026 — reconstruit le périmètre exact (activités, pôles et/ou cellules, comme
+ * dans le fichier « Périmètre ») à partir des affectations Directory existantes.
  */
 export function hydrateScopeSelectionFromOverview(
   overview: OrgAssignmentsOverview | null | undefined,
   employeeId: string,
   roleName: string,
 ): ScopeSelectionHydration | null {
-  const level = orgScopeLevelForRole(roleName);
+  const kind = scopeRoleKind(roleName);
   const guid = employeeId.trim();
-  if (!overview || !guid || !level) return null;
+  if (!overview || !guid || !kind) return null;
 
   const depts = overview.operationalDepartments ?? [];
   const unassigned = overview.unassignedPoles ?? [];
   const emp = overview.employees?.find((e) => e.id === guid);
 
-  let heldNodes: string[] = [];
-  let scopeOf: (nodeId: string) => string | null;
-  let totalOf: (scopeId: string) => number;
-  let anchorNode = '';
-
-  if (isChefDeProjetRole(roleName)) {
-    heldNodes = (overview.managerEtage ?? [])
-      .filter((a) => a.userId === guid)
-      .map((a) => (a.etageId ?? '').trim());
-    scopeOf = (n) => activityOfPole(depts, n);
-    totalOf = (sid) => polesOfActivity(depts, sid).length;
+  let heldNodes: string[];
+  let anchorNode: string;
+  if (kind === 'ChefDeProjet') {
+    heldNodes = (overview.managerEtage ?? []).filter((a) => a.userId === guid).map((a) => (a.etageId ?? '').trim());
     anchorNode = (emp?.poleId ?? '').trim();
-  } else if (isSuperviseurRole(roleName)) {
+  } else if (kind === 'Superviseur') {
     heldNodes = (overview.supervisorService ?? [])
       .filter((a) => a.userId === guid)
       .map((a) => (a.celluleId ?? a.serviceId ?? '').trim());
-    scopeOf = (n) => activityOfCellule(depts, n);
-    totalOf = (sid) => cellulesOfActivity(depts, sid).length;
     anchorNode = (emp?.celluleId ?? '').trim();
   } else {
     heldNodes = (overview.coachSousService ?? [])
       .filter((a) => a.userId === guid)
       .map((a) => (a.serviceId ?? a.sousServiceId ?? '').trim());
-    scopeOf = (n) => celluleOfService(depts, unassigned, n);
-    totalOf = (sid) => servicesOfCellule(depts, unassigned, sid).length;
     anchorNode = (emp?.serviceId ?? '').trim();
   }
 
-  heldNodes = [...new Set(heldNodes.filter(Boolean))];
-  const held = new Map<string, number>();
-  const unmappedNodeIds: string[] = [];
-  for (const node of heldNodes) {
-    const scope = scopeOf(node);
-    if (!scope) {
-      unmappedNodeIds.push(node);
-      continue;
-    }
-    held.set(scope, (held.get(scope) ?? 0) + 1);
-  }
+  const compressed = compressHeldNodes(depts, unassigned, kind, heldNodes);
+  if (compressed.scopeIds.length === 0) return null;
 
-  const scopeIds = [...held.keys()];
-  if (scopeIds.length === 0) return null;
-
-  const anchorScope = anchorNode ? scopeOf(anchorNode) : null;
-  const primaryOrgNodeId = anchorScope && scopeIds.includes(anchorScope) ? anchorScope : scopeIds[0];
-
-  const partialScopes = scopeIds
-    .map((scopeId) => ({ scopeId, heldNodes: held.get(scopeId) ?? 0, totalNodes: totalOf(scopeId) }))
-    .filter((c) => c.heldNodes < c.totalNodes);
+  // Principal = périmètre qui contient l'ancre actuelle, sinon le premier.
+  const primaryOrgNodeId =
+    compressed.scopeIds.find((s) => anchorNode && expandScopeNodes(depts, unassigned, kind, s).includes(anchorNode))
+    ?? compressed.scopeIds[0];
 
   return {
-    state: { selectedOrgNodeIds: scopeIds, primaryOrgNodeId },
-    partialScopes,
-    unmappedNodeIds,
+    state: { selectedOrgNodeIds: compressed.scopeIds, primaryOrgNodeId },
+    partialScopes: compressed.partial,
+    unmappedNodeIds: compressed.unmapped,
   };
 }

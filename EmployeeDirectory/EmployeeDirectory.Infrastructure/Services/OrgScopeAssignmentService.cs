@@ -9,8 +9,14 @@ using DomainAssignmentKind = EmployeeDirectory.Domain.Enums.OrgAssignmentKind;
 namespace EmployeeDirectory.Infrastructure.Services;
 
 /// <summary>
-/// Réorganisation 2026 — responsabilités par périmètre métier.
-/// Développe un périmètre (activité / cellule) en nœuds existants puis délègue à
+/// Réorganisation 2026 — responsabilités par périmètre métier, tel que défini dans le fichier
+/// « Périmètre » : chaque responsable reçoit une ou plusieurs activités, pôles ou cellules.
+/// <list type="bullet">
+/// <item>Chef de projet : activité(s) et/ou pôle(s) → affectations sur les pôles ;</item>
+/// <item>Superviseur : activité(s), pôle(s) et/ou cellule(s) → affectations sur les cellules ;</item>
+/// <item>Référent technique : activité(s), pôle(s) et/ou cellule(s) → affectations sur les services des cellules.</item>
+/// </list>
+/// Développe chaque périmètre en nœuds existants puis délègue à
 /// <see cref="IDirectoryWriteService.ReconcileEmployeeStructuralAssignmentsAsync"/> :
 /// mêmes événements outbox, même historique, même exclusivité inter-rôles.
 /// </summary>
@@ -19,8 +25,8 @@ public sealed class OrgScopeAssignmentService(
     IDirectoryWriteService write,
     IConfiguration? configuration = null) : IOrgScopeAssignmentService
 {
-    private const string DefaultReason = "Affectation par périmètre (activité / cellule)";
-    private const string ExpandReason = "Extension au périmètre complet (activité / cellule) — règle réorganisation 2026";
+    private const string DefaultReason = "Affectation par périmètre (activité / pôle / cellule)";
+    private const string ExpandReason = "Extension aux services de la cellule (référent technique)";
     private const string PropagationReason = "Extension automatique du périmètre (nouveau nœud dans le périmètre couvert)";
 
     /// <summary>Interrupteur de sécurité : Directory__OrgScopePropagation__Enabled=false désactive l'extension auto.</summary>
@@ -56,9 +62,7 @@ public sealed class OrgScopeAssignmentService(
         scopes.Remove(primary);
         scopes.Insert(0, primary);
 
-        var nodesByScope = assignmentKind == DomainAssignmentKind.ReferentTechnique
-            ? await ServicesByCelluleAsync(scopes, ct)
-            : await NodesByActivityAsync(assignmentKind, scopes, ct);
+        var (nodesByScope, levels) = await ResolveScopeNodesAsync(assignmentKind, scopes, ct);
 
         var nodeIds = new List<string>();
         foreach (var scope in scopes)
@@ -89,10 +93,11 @@ public sealed class OrgScopeAssignmentService(
             string.IsNullOrWhiteSpace(reason) ? DefaultReason : reason,
             ct);
 
+        var distinctLevels = levels.Values.Distinct().ToList();
         return new OrgScopeReconcileResult(
             assignmentKind.ToString(),
             employeeId.ToString(),
-            assignmentKind == DomainAssignmentKind.ReferentTechnique ? OrgScopeLevels.Cellule : OrgScopeLevels.Activite,
+            distinctLevels.Count == 1 ? distinctLevels[0] : OrgScopeLevels.Mixte,
             scopes,
             primary,
             result);
@@ -208,10 +213,17 @@ public sealed class OrgScopeAssignmentService(
             .FirstOrDefaultAsync(ct);
         if (deptId is null) return 0;
 
+        // Superviseurs qui couvrent toute l'activité, puis ceux qui couvrent tout le pôle de la cellule.
         var others = (await CellulesOfDepartmentAsync(deptId.Value, ct))
             .Where(c => c != id)
             .ToList();
-        return await ExtendFullCoverageAsync(DomainAssignmentKind.Superviseur, others, [id], changedBy, ct);
+        var extended = await ExtendFullCoverageAsync(DomainAssignmentKind.Superviseur, others, [id], changedBy, ct);
+        var poleOthers = await db.OrgCellules.AsNoTracking()
+            .Where(c => c.PoleId == cell.PoleId && c.Id != id)
+            .Select(c => c.Id)
+            .ToListAsync(ct);
+        extended += await ExtendFullCoverageAsync(DomainAssignmentKind.Superviseur, poleOthers, [id], changedBy, ct);
+        return extended;
     }
 
     public async Task<int> PropagateAfterServiceCreatedAsync(string serviceId, Guid? changedBy, CancellationToken ct = default)
@@ -274,42 +286,19 @@ public sealed class OrgScopeAssignmentService(
             return 0;
         }
 
+        // Périmètre exact du fichier Périmètre : un superviseur ou un chef de projet affecté à une
+        // cellule / un pôle garde ce périmètre (pas d'extension à l'activité entière).
+        // Seul le référent technique est étendu aux services de sa cellule (miroirs techniques).
+        if (k != DomainAssignmentKind.ReferentTechnique)
+            return 0;
+
         var id = (nodeId ?? string.Empty).Trim();
-        List<string> scopeNodes;
-        switch (k)
-        {
-            case DomainAssignmentKind.ChefDeProjet:
-            {
-                var deptId = await db.OrgPoles.AsNoTracking()
-                    .Where(p => p.Id == id).Select(p => p.BusinessDepartmentId).FirstOrDefaultAsync(ct);
-                if (deptId is null) return 0;
-                scopeNodes = await db.OrgPoles.AsNoTracking()
-                    .Where(p => p.BusinessDepartmentId == deptId)
-                    .Select(p => p.Id).ToListAsync(ct);
-                break;
-            }
-            case DomainAssignmentKind.Superviseur:
-            {
-                var poleId = await db.OrgCellules.AsNoTracking()
-                    .Where(c => c.Id == id).Select(c => c.PoleId).FirstOrDefaultAsync(ct);
-                if (poleId is null) return 0;
-                var deptId = await db.OrgPoles.AsNoTracking()
-                    .Where(p => p.Id == poleId).Select(p => p.BusinessDepartmentId).FirstOrDefaultAsync(ct);
-                if (deptId is null) return 0;
-                scopeNodes = await CellulesOfDepartmentAsync(deptId.Value, ct);
-                break;
-            }
-            default:
-            {
-                var celluleId = await db.OrgServices.AsNoTracking()
-                    .Where(s => s.Id == id).Select(s => s.CelluleId).FirstOrDefaultAsync(ct);
-                if (celluleId is null) return 0;
-                scopeNodes = await db.OrgServices.AsNoTracking()
-                    .Where(s => s.CelluleId == celluleId)
-                    .Select(s => s.Id).ToListAsync(ct);
-                break;
-            }
-        }
+        var celluleId = await db.OrgServices.AsNoTracking()
+            .Where(s => s.Id == id).Select(s => s.CelluleId).FirstOrDefaultAsync(ct);
+        if (celluleId is null) return 0;
+        var scopeNodes = await db.OrgServices.AsNoTracking()
+            .Where(s => s.CelluleId == celluleId)
+            .Select(s => s.Id).ToListAsync(ct);
 
         var current = await db.OrgAssignments.AsNoTracking()
             .Where(a => a.EmployeeId == employeeId && a.Kind == k && a.EffectiveTo == null)
@@ -382,83 +371,116 @@ public sealed class OrgScopeAssignmentService(
         return extended;
     }
 
-    private async Task<Dictionary<string, List<string>>> NodesByActivityAsync(
+    /// <summary>
+    /// Développe chaque périmètre (activité, pôle ou cellule) en nœuds d'affectation du rôle :
+    /// pôles (chef de projet), cellules (superviseur) ou services (référent technique).
+    /// </summary>
+    private async Task<(Dictionary<string, List<string>> Nodes, Dictionary<string, string> Levels)> ResolveScopeNodesAsync(
         DomainAssignmentKind kind,
         IReadOnlyList<string> scopes,
         CancellationToken ct)
     {
-        var deptIds = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var nodes = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var levels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var scope in scopes)
         {
-            if (!Guid.TryParse(scope, out var g))
-                throw new ArgumentException($"Identifiant d'activité invalide : {scope}");
-            deptIds[scope] = g;
-        }
-
-        var ids = deptIds.Values.ToList();
-        var depts = await db.BusinessDepartments.AsNoTracking()
-            .Where(d => ids.Contains(d.Id))
-            .ToListAsync(ct);
-
-        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (scope, deptId) in deptIds)
-        {
-            var dept = depts.FirstOrDefault(d => d.Id == deptId)
-                ?? throw new ArgumentException($"Activité introuvable : {scope}");
-            if (dept.Kind != BusinessDepartmentKind.Operational)
-                throw new ArgumentException($"« {dept.Name} » n'est pas un département de production.");
-            if (!dept.IsActive)
-                throw new ArgumentException($"L'activité « {dept.Name} » est inactive.");
-
-            List<string> nodes;
-            if (kind == DomainAssignmentKind.ChefDeProjet)
+            // 1) Activité (département de production)
+            if (Guid.TryParse(scope, out var deptId)
+                && await db.BusinessDepartments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == deptId, ct) is { } dept)
             {
-                nodes = await db.OrgPoles.AsNoTracking()
+                if (dept.Kind != BusinessDepartmentKind.Operational)
+                    throw new ArgumentException($"« {dept.Name} » n'est pas un département de production.");
+                if (!dept.IsActive)
+                    throw new ArgumentException($"L'activité « {dept.Name} » est inactive.");
+                var poleIds = await db.OrgPoles.AsNoTracking()
                     .Where(p => p.BusinessDepartmentId == deptId)
                     .OrderBy(p => p.Name).ThenBy(p => p.Id)
                     .Select(p => p.Id)
                     .ToListAsync(ct);
-                if (nodes.Count == 0)
-                    throw new ArgumentException($"L'activité « {dept.Name} » ne contient encore aucun pôle.");
-            }
-            else
-            {
-                nodes = await CellulesOfDepartmentAsync(deptId, ct);
-                if (nodes.Count == 0)
-                    throw new ArgumentException($"L'activité « {dept.Name} » ne contient encore aucune cellule.");
+                nodes[scope] = await NodesOfPolesAsync(kind, poleIds, $"L'activité « {dept.Name} »", ct);
+                levels[scope] = OrgScopeLevels.Activite;
+                continue;
             }
 
-            result[scope] = nodes;
+            // 2) Pôle
+            if (await db.OrgPoles.AsNoTracking().FirstOrDefaultAsync(p => p.Id == scope, ct) is { } pole)
+            {
+                nodes[scope] = await NodesOfPolesAsync(kind, [pole.Id], $"Le pôle « {pole.Name} »", ct);
+                levels[scope] = OrgScopeLevels.Pole;
+                continue;
+            }
+
+            // 3) Cellule
+            if (await db.OrgCellules.AsNoTracking().FirstOrDefaultAsync(c => c.Id == scope, ct) is { } cell)
+            {
+                if (kind == DomainAssignmentKind.ChefDeProjet)
+                    throw new ArgumentException(
+                        $"Un chef de projet est rattaché à une activité ou à des pôles, pas à la cellule « {cell.Name} ».");
+                nodes[scope] = kind == DomainAssignmentKind.Superviseur
+                    ? new List<string> { cell.Id }
+                    : await ServicesOfCellulesAsync([cell.Id], requireEach: true, ct);
+                levels[scope] = OrgScopeLevels.Cellule;
+                continue;
+            }
+
+            throw new ArgumentException($"Périmètre introuvable : {scope}");
         }
 
-        return result;
+        return (nodes, levels);
     }
 
-    private async Task<Dictionary<string, List<string>>> ServicesByCelluleAsync(
-        IReadOnlyList<string> scopes,
+    private async Task<List<string>> NodesOfPolesAsync(
+        DomainAssignmentKind kind,
+        IReadOnlyList<string> poleIds,
+        string label,
         CancellationToken ct)
     {
-        var cellules = await db.OrgCellules.AsNoTracking()
-            .Where(c => scopes.Contains(c.Id))
-            .Select(c => new { c.Id, c.Name })
-            .ToListAsync(ct);
-
-        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var scope in scopes)
+        if (kind == DomainAssignmentKind.ChefDeProjet)
         {
-            var cell = cellules.FirstOrDefault(c => string.Equals(c.Id, scope, StringComparison.OrdinalIgnoreCase))
-                ?? throw new ArgumentException($"Cellule introuvable : {scope}");
+            if (poleIds.Count == 0)
+                throw new ArgumentException($"{label} ne contient encore aucun pôle.");
+            return poleIds.ToList();
+        }
+
+        var celluleIds = await db.OrgCellules.AsNoTracking()
+            .Where(c => poleIds.Contains(c.PoleId))
+            .OrderBy(c => c.Name).ThenBy(c => c.Id)
+            .Select(c => c.Id)
+            .ToListAsync(ct);
+        if (celluleIds.Count == 0)
+            throw new ArgumentException($"{label} ne contient encore aucune cellule.");
+        if (kind == DomainAssignmentKind.Superviseur)
+            return celluleIds;
+
+        var services = await ServicesOfCellulesAsync(celluleIds, requireEach: false, ct);
+        if (services.Count == 0)
+            throw new ArgumentException($"{label} ne contient aucun service : créez les services de ses cellules.");
+        return services;
+    }
+
+    private async Task<List<string>> ServicesOfCellulesAsync(
+        IReadOnlyList<string> celluleIds,
+        bool requireEach,
+        CancellationToken ct)
+    {
+        var result = new List<string>();
+        foreach (var celluleId in celluleIds)
+        {
             var services = await db.OrgServices.AsNoTracking()
-                .Where(s => s.CelluleId == cell.Id)
+                .Where(s => s.CelluleId == celluleId)
                 .OrderBy(s => s.Name).ThenBy(s => s.Id)
                 .Select(s => s.Id)
                 .ToListAsync(ct);
-            if (services.Count == 0)
+            if (services.Count == 0 && requireEach)
+            {
+                var name = await db.OrgCellules.AsNoTracking()
+                    .Where(c => c.Id == celluleId).Select(c => c.Name).FirstOrDefaultAsync(ct) ?? celluleId;
                 throw new ArgumentException(
-                    $"La cellule « {cell.Name} » n'a aucun service : créez son service avant d'y affecter un référent technique.");
-            result[scope] = services;
+                    $"La cellule « {name} » n'a aucun service : créez son service avant d'y affecter un référent technique.");
+            }
+            result.AddRange(services);
         }
-
         return result;
     }
 

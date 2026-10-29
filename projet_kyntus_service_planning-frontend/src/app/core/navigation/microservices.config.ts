@@ -205,6 +205,7 @@ export const MICROSERVICES: Microservice[] = [
       { label: 'Mes changements d’horaire', route: '/mes-demandes-changement', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
       { label: 'Mes demandes exceptionnelles', route: '/mes-demandes-exceptionnelles', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
       { label: 'Mes renforts samedi', route: '/mes-renforts', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
+      { label: 'Membres de mon équipe', route: '/mon-equipe', roles: ROLE_SETS.congesEquipe.filter((r) => r !== 'Admin' && r !== 'RH'), hat: 'team' },
       { label: 'Planning de l’équipe', route: '/planning/equipe', roles: ['Manager', 'Coach', 'Référent technique', 'Superviseur'], hat: 'team' },
       { label: 'Traiter les changements', route: '/planning/change-requests', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team' },
       { label: 'Traiter les demandes exceptionnelles', route: '/planning/exceptional-requests', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team' },

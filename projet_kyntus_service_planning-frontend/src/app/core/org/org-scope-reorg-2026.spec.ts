@@ -114,7 +114,7 @@ describe('réorganisation 2026 — règles de périmètre par rôle', () => {
     expect(resolveOrgNodePathLabel(depts, [], 'activite', 'd-bytel')).toBe('OP-001 — Bytel Kyntus');
   });
 
-  it('hydrate un superviseur limité à une cellule comme périmètre partiel de son activité', () => {
+  it('hydrate un superviseur limité à une cellule avec son périmètre exact (la cellule)', () => {
     const ov = overview({
       employees: [{ id: 'sup', firstName: 'S', lastName: 'Up', role: 'Superviseur', celluleId: 'c-valk' } as never],
       supervisorService: [{ id: '1', userId: 'sup', celluleId: 'c-valk', serviceId: 'c-valk' }],
@@ -122,8 +122,8 @@ describe('réorganisation 2026 — règles de périmètre par rôle', () => {
 
     const hydrated = hydrateScopeSelectionFromOverview(ov, 'sup', 'Superviseur');
 
-    expect(hydrated?.state).toEqual({ selectedOrgNodeIds: ['d-orange'], primaryOrgNodeId: 'd-orange' });
-    expect(hydrated?.partialScopes).toEqual([{ scopeId: 'd-orange', heldNodes: 1, totalNodes: 3 }]);
+    expect(hydrated?.state).toEqual({ selectedOrgNodeIds: ['c-valk'], primaryOrgNodeId: 'c-valk' });
+    expect(hydrated?.partialScopes).toEqual([]);
   });
 
   it('hydrate un superviseur multi-activités avec ancre principale et couverture complète', () => {
@@ -138,12 +138,13 @@ describe('réorganisation 2026 — règles de périmètre par rôle', () => {
 
     const hydrated = hydrateScopeSelectionFromOverview(ov, 'sup', 'Superviseur');
 
-    expect(hydrated?.state.selectedOrgNodeIds).toEqual(['d-bytel', 'd-tisseo']);
-    expect(hydrated?.state.primaryOrgNodeId).toBe('d-tisseo');
+    // Activités à un seul pôle / pôle à une seule cellule : affichés au niveau le plus précis.
+    expect(hydrated?.state.selectedOrgNodeIds).toEqual(['p-tech', 'c-btb']);
+    expect(hydrated?.state.primaryOrgNodeId).toBe('c-btb');
     expect(hydrated?.partialScopes).toEqual([]);
   });
 
-  it('hydrate un chef de projet par activité et un référent par cellule', () => {
+  it('hydrate un chef de projet sur son pôle et un référent sur sa cellule', () => {
     const ov = overview({
       employees: [
         { id: 'cp', firstName: 'C', lastName: 'P', role: 'Chef de projet', poleId: 'p-ca' } as never,
@@ -154,8 +155,8 @@ describe('réorganisation 2026 — règles de périmètre par rôle', () => {
     });
 
     const cp = hydrateScopeSelectionFromOverview(ov, 'cp', 'Chef de projet');
-    expect(cp?.state.selectedOrgNodeIds).toEqual(['d-orange']);
-    expect(cp?.partialScopes).toEqual([{ scopeId: 'd-orange', heldNodes: 1, totalNodes: 2 }]);
+    expect(cp?.state.selectedOrgNodeIds).toEqual(['p-ca']);
+    expect(cp?.partialScopes).toEqual([]);
 
     const rt = hydrateScopeSelectionFromOverview(ov, 'rt', 'Référent technique');
     expect(rt?.state).toEqual({ selectedOrgNodeIds: ['c-ineo'], primaryOrgNodeId: 'c-ineo' });

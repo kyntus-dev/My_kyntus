@@ -2,10 +2,15 @@
 """
 Réorganisation 2026 — ÉTAPE 8 (APRÈS VALIDATION) : périmètres des responsables.
 
-Source : donnees/responsables_cible.csv (fichier « Périmètre » validé) :
-  action = Superviseur        → toute l'activité (toutes ses cellules)
-           ChefDeProjet       → toute l'activité (tous ses pôles)
-           ReferentTechnique  → les cellules listées (« | »), ou « * » = toutes les cellules du pôle
+Source : donnees/responsables_cible.csv (fichier « Périmètre » validé) — chaque responsable reçoit
+EXACTEMENT le périmètre du fichier (activité, pôle ou cellule(s), plusieurs possibles) :
+  colonnes activite / pole / cellules :
+    activité seule                  → toute l'activité
+    activité + pôle (+ « * »)       → tout le pôle
+    activité + pôle + cellules « | »→ ces cellules
+  action = Superviseur        → affectations sur les cellules du périmètre
+           ChefDeProjet       → affectations sur les pôles du périmètre (activité ou pôle)
+           ReferentTechnique  → affectations sur les services des cellules du périmètre
            RETIRER_SUPERVISEUR→ fin des affectations superviseur (historique conservé)
            INCHANGE           → aucune action (ligne documentaire)
 
@@ -81,38 +86,50 @@ class Context:
         return active[0], ""
 
     def resolve_scope(self, row: dict) -> tuple[list[str], str, str]:
-        """Retourne (scopeIds, libellé, erreur)."""
+        """Retourne (scopeIds, libellé, erreur) au niveau écrit dans le fichier."""
         action = row["action"]
         dept = find_department(row["activite"], self.depts, self.mapping)
         if not dept:
             return [], "", f"activité « {row['activite']} » introuvable"
-        if action in ("Superviseur", "ChefDeProjet"):
-            return [dept["Id"]], f"{self.dept_label[dept['Id']]} (activité entière)", ""
+        if not (row.get("pole") or "").strip():
+            return [dept["Id"]], f"{dept['Name']} (activité entière)", ""
         pole = next((p for p in self.poles
                      if p["BusinessDepartmentId"] == dept["Id"] and norm_pole(p["Name"]) == norm_pole(row["pole"])), None)
         if not pole:
             return [], "", f"pôle « {harmonize_pole_label(row['pole'])} » introuvable dans {dept['Name']} (lancer 03 + 04)"
+        wanted = [w.strip() for w in (row.get("cellules") or "").split("|") if w.strip()]
+        if not wanted or wanted == ["*"]:
+            return [pole["Id"]], f"{dept['Name']} / {pole['Name']} (pôle entier)", ""
+        if action == "ChefDeProjet":
+            return [], "", "un chef de projet est rattaché à une activité ou à un pôle, pas à des cellules"
         pole_cells = [c for c in self.cellules if c["PoleId"] == pole["Id"]]
-        wanted = [w.strip() for w in (row["cellules"] or "").split("|") if w.strip()]
-        if wanted == ["*"]:
-            cells = [c for c in pole_cells if c["Name"].strip() not in ("", "-")]
-        else:
-            cells = []
-            for w in wanted:
-                c = next((c for c in pole_cells if norm(c["Name"]) == norm(w)), None)
-                if not c:
-                    return [], "", f"cellule « {w} » introuvable dans le pôle « {pole['Name']} » (lancer 03 + 04)"
-                cells.append(c)
-        if not cells:
-            return [], "", f"aucune cellule dans le pôle « {pole['Name']} »"
+        cells = []
+        for w in wanted:
+            c = next((c for c in pole_cells if norm(c["Name"]) == norm(w)), None)
+            if not c:
+                return [], "", f"cellule « {w} » introuvable dans le pôle « {pole['Name']} » (lancer 03 + 04)"
+            cells.append(c)
         return [c["Id"] for c in cells], f"{dept['Name']} / {pole['Name']} / " + " | ".join(c["Name"] for c in cells), ""
 
     def expected_nodes(self, kind: str, scope_ids: list[str]) -> set[str]:
-        if kind == "Superviseur":
-            return {c["Id"] for c in self.cellules if self.pole_dept.get(c["PoleId"]) in scope_ids}
+        """Nœuds d'affectation attendus pour un périmètre mixte (activités, pôles, cellules)."""
+        dept_ids = {d["Id"] for d in self.depts}
+        pole_ids = {p["Id"] for p in self.poles}
+        poles: set[str] = set()
+        cells: set[str] = set()
+        for sid in scope_ids:
+            if sid in dept_ids:
+                poles |= {p["Id"] for p in self.poles if p["BusinessDepartmentId"] == sid}
+            elif sid in pole_ids:
+                poles.add(sid)
+            else:
+                cells.add(sid)
         if kind == "ChefDeProjet":
-            return {p["Id"] for p in self.poles if p["BusinessDepartmentId"] in scope_ids}
-        return {s["Id"] for s in self.services if s["CelluleId"] in scope_ids}
+            return poles
+        cells |= {c["Id"] for c in self.cellules if c["PoleId"] in poles}
+        if kind == "Superviseur":
+            return cells
+        return {s["Id"] for s in self.services if s["CelluleId"] in cells}
 
 
 def build_plan(ctx: Context, rows: list[dict]) -> list[dict]:

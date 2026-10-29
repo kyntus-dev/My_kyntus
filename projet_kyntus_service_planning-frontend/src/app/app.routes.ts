@@ -411,6 +411,15 @@ export const routes: Routes = [
         ],
       },
       {
+        // Membres de l'équipe d'un responsable (périmètre du fichier Périmètre, contrôlé côté serveur).
+        path: 'mon-equipe',
+        canActivate: [AuthGuard],
+        data: { roles: ROLE_SETS.congesEquipe },
+        loadComponent: () =>
+          import('./features/users/pages/my-team/my-team.component')
+            .then(m => m.MyTeamComponent),
+      },
+      {
         path: 'mes-conges',
         canActivate: [AuthGuard],
         data: { roles: ROLE_SETS.mesConges, capability: 'conges.self' },
