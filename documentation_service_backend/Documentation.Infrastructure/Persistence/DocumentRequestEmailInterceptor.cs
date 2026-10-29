@@ -114,7 +114,7 @@ public sealed class DocumentRequestEmailInterceptor(
 
     public static NotificationEmailRequestedMessage? ForStatusChange(DocumentRequest r)
     {
-        var (title, body) = r.Status switch
+        (string? title, string? body) = r.Status switch
         {
             DocumentRequestStatus.Approved => ("Demande de document validée", $"Votre demande de document{Reference(r)} a été validée."),
             DocumentRequestStatus.Rejected => ("Demande de document refusée",
