@@ -1,335 +1,282 @@
-# Réorganisation 2026 — procédure serveur
+# Réorganisation 2026 — procédure serveur (livraison v3)
 
-Serveur : `o@10.10.10.25` · Projet : `/home/o/projets_mykyntus-` · Version en production : commit `a0c0f0b`.
+Serveur : `o@10.10.10.25` · Projet : `/home/o/projets_mykyntus-`.
+État de départ : version déployée `a0c0f0b` + patch v2 (déployé le 29/10 à 09:07) + structure créée par l'étape 04 (09:12).
 
-## Ce qui est livré
+## Contenu de la livraison v3
 
 | Fichier | Contenu |
 |---|---|
-| `reorg-2026-code-v2.patch` | Modifications de code, appliquées sur la version déployée (17 fichiers, 3 services seulement). |
-| `reorg-2026-scripts.tar.gz` | Scripts de données (`scripts/reorg-2026/`) et décisions du classeur. Ces fichiers ne contiennent pas de code applicatif. |
-| `Nouveaux_pilotes_a_creer.xlsx` | Les 14 comptes à créer depuis l'interface, avec leur affectation cible. |
+| `reorg-2026-code-v3.patch` | Patch incrémental appliqué sur l'état actuel du serveur (24 fichiers, 2 services reconstruits). |
+| `reorg-2026-scripts-v3.tar.gz` | Scripts de données et données validées (`scripts/reorg-2026`, `scripts/aide`). |
+| `Nouveaux_pilotes_a_creer.xlsx` | Les 14 comptes pilotes à créer depuis l'interface. |
 
-**Services reconstruits** : `employee-directory-backend`, `planning-backend`, `planning-frontend`.
-Aucun autre conteneur n'est reconstruit ni redémarré (`--no-deps`). Aucune migration de base, aucun changement de `docker-compose.yml` ni de `.env`.
+**Services reconstruits** : `planning-backend` et `planning-frontend`. `employee-directory-backend` n'est pas modifié dans cette livraison. Aucun autre conteneur n'est touché (`--no-deps --no-build`), et `docker-compose.yml`, `.env` et la passerelle restent inchangés.
 
-**Règles appliquées par le code**
+**Ce qui change**
 
-- Un superviseur couvre toutes les cellules de son activité, même quand on ne lui affecte qu'une cellule (page Organisation RH, import Excel ou fiche employé).
-- Un chef de projet couvre tous les pôles de son activité. Dans Planning, il voit les collaborateurs de ces pôles.
-- Un référent technique couvre tous les services de sa cellule et peut être choisi comme responsable de cellule.
-- Pour créer, renommer ou supprimer des pôles, cellules et services, ou pour affecter des responsables et des pilotes, il faut l'un des droits suivants :
-  - le rôle Admin ou RH ;
-  - la permission `users:manage` déjà déléguée dans l'IAM : c'est celle que Planning exige pour gérer les utilisateurs.
+1. **Espace Aide** dans le menu, avec deux entrées : « Guide de l'application » et « Assistance ».
+   - Chaque rôle voit son propre parcours de guides : vidéo, document ou lien.
+   - Bouton « Marquer comme consulté », progression « x / n consultés » et badge sur le menu.
+   - À l'arrivée sur l'accueil, s'il reste des guides à voir, l'utilisateur est conduit vers le guide une fois par session (« Passer pour l'instant »).
+   - Les comptes Admin et RH gèrent les guides (ajout, modification, archivage) sur la même page.
+   - Base de données : seulement 2 nouvelles tables, `AppGuides` et `AppGuideViews`, créées automatiquement au démarrage de Planning. Aucune table existante n'est modifiée.
+2. **Affichage** : les écrans qui ne s'affichaient qu'après un clic se rafraîchissent maintenant seuls (Zone.js réactivé dans l'application).
+3. **Projection Organisation → Planning fiabilisée** : les 3 cellules non projetées hier (Support technicien, Prestations réseaux & CV, BTB) sont réparées au redémarrage de Planning, et le problème ne se reproduit plus.
 
-  Sans ces droits, l'API répond 403.
-
-**Durée et créneau** : la phase C redémarre 3 conteneurs (environ 1 minute d'indisponibilité de Planning). Les phases D et E modifient des données : faites-les hors production (question Q14).
-
-> Règle de sécurité : **ne jamais lancer `docker compose up` sans `--no-deps --no-build`** dans cette procédure, et **jamais `--build` sur l'ensemble des services**.
+> Règle de sécurité : **ne jamais lancer `docker compose up` sans `--no-deps --no-build`**.
 
 ---
 
-## Phase 0 : copie des fichiers sur le serveur (depuis votre poste Windows)
+## Phase 0 : copie (depuis Windows)
 
 ```powershell
 cd C:\Users\omar.elmahi\Downloads
-scp reorg-2026-code-v2.patch reorg-2026-scripts.tar.gz o@10.10.10.25:/tmp/
-ssh o@10.10.10.25
+scp reorg-2026-code-v3.patch reorg-2026-scripts-v3.tar.gz o@10.10.10.25:/tmp/
 ```
 
-## Phase A : contrôles et sauvegardes (ne modifie rien)
-
-Collez **un bloc à la fois**.
+## Phase A : sauvegardes (ne modifie rien)
 
 ```bash
 cd /home/o/projets_mykyntus-
 mkdir -p ~/sauvegardes_reorg
-STAMP=$(date +%Y%m%d_%H%M%S); echo "$STAMP" > ~/sauvegardes_reorg/STAMP_REORG; echo "STAMP=$STAMP"
-df -h / | tail -1          # il faut au moins 3 Go libres pour reconstruire 3 images
-```
-
-```bash
-# A2. Sauvegarde des fichiers touchés et des images en service (retour arrière instantané)
-cd /home/o/projets_mykyntus-
-grep '^+++ b/' /tmp/reorg-2026-code-v2.patch | cut -c7- > ~/sauvegardes_reorg/fichiers_patch_$STAMP.txt
-tar -czf ~/sauvegardes_reorg/code_avant_$STAMP.tar.gz --ignore-failed-read \
-    -T ~/sauvegardes_reorg/fichiers_patch_$STAMP.txt 2>/dev/null
-: > ~/sauvegardes_reorg/images_avant_$STAMP.txt
-for s in employee-directory-backend planning-backend planning-frontend; do
+STAMP=$(date +%Y%m%d_%H%M%S); echo "$STAMP" > ~/sauvegardes_reorg/STAMP_V3; echo "STAMP=$STAMP"
+df -h / | tail -1
+# Images en service (= patch v2) pour un retour arrière instantané
+: > ~/sauvegardes_reorg/images_avant_v3_$STAMP.txt
+for s in planning-backend planning-frontend; do
   c=$(docker compose ps -q "$s"); img=$(docker inspect --format '{{.Config.Image}}' "$c"); id=$(docker inspect --format '{{.Image}}' "$c")
-  docker tag "$id" "reorg-avant/$s:$STAMP" && echo "$s $img $id" | tee -a ~/sauvegardes_reorg/images_avant_$STAMP.txt
+  docker tag "$id" "reorg-avant-v3/$s:$STAMP" && echo "$s $img $id" | tee -a ~/sauvegardes_reorg/images_avant_v3_$STAMP.txt
 done
-```
-
-```bash
-# A3. Sauvegarde des bases (format custom, restaurable)
+grep '^+++ b/' /tmp/reorg-2026-code-v3.patch | cut -c7- > ~/sauvegardes_reorg/fichiers_patch_v3_$STAMP.txt
+tar -czf ~/sauvegardes_reorg/code_avant_v3_$STAMP.tar.gz --ignore-failed-read -T ~/sauvegardes_reorg/fichiers_patch_v3_$STAMP.txt 2>/dev/null
 for db in employee_directory_db kyntus_db prime_db conge_db auth_db; do
-  docker exec kyntus_db pg_dump -U postgres -Fc "$db" > ~/sauvegardes_reorg/${db}_$STAMP.dump \
-    && echo "OK $db $(du -h ~/sauvegardes_reorg/${db}_$STAMP.dump | cut -f1)"
+  docker exec kyntus_db pg_dump -U postgres -Fc "$db" > ~/sauvegardes_reorg/${db}_v3_$STAMP.dump && echo "OK $db"
 done
 ```
 
-## Phase B : application du code et tests (les conteneurs en service ne sont pas touchés)
-
-Les trois blocs suivants partent d'un état sûr, quel que soit l'état du disque :
-- R1 remet chaque fichier concerné dans sa version déployée (copie depuis `~/kyntus_a0c0f0b`). Les fichiers qui n'existent pas dans cette version sont mis de côté dans `~/quarantaine_reorg_<STAMP>`, rien n'est supprimé.
-- R2 contrôle le résultat.
-- R3 n'applique le patch que si la simulation est parfaite.
-
-**Si R2 affiche une ligne `HORS a0c0f0b` ou `ECART`, ou si R3 affiche `STOP`, arrêtez-vous et envoyez-moi la sortie.**
+**Espace disque.** La reconstruction du frontend télécharge Zone.js et refait la couche `npm ci`, ce qui demande environ 1 Go. Si `df` affiche moins de 3 Go libres, libérez uniquement le cache de construction Docker ancien. Cette commande ne touche ni les images, ni les conteneurs, ni les volumes de données :
 
 ```bash
-# R1. Remise à l'état a0c0f0b des fichiers concernés (rien n'est supprimé)
+docker builder du | tail -1
+docker builder prune -f --filter until=24h
+df -h / | tail -1
+```
+
+## Phase B : application du patch et tests
+
+```bash
+# B1. Fichier résiduel d'une ancienne livraison (signalé « HORS a0c0f0b » ce matin) : mis de côté, pas supprimé
 cd /home/o/projets_mykyntus-
-STAMP=$(cat ~/sauvegardes_reorg/STAMP_REORG)
-Q=~/quarantaine_reorg_$STAMP; mkdir -p "$Q"
-grep '^+++ b/' /tmp/reorg-2026-code-v2.patch | cut -c7- > ~/sauvegardes_reorg/fichiers_patch_v2_$STAMP.txt
-while read -r f; do
-  if [ -e ~/kyntus_a0c0f0b/"$f" ]; then cp -p ~/kyntus_a0c0f0b/"$f" "$f" && echo "remis a0c0f0b : $f"
-  elif [ -e "$f" ]; then mkdir -p "$Q/$(dirname "$f")" && mv "$f" "$Q/$f" && echo "mis de côté  : $f"; fi
-done < ~/sauvegardes_reorg/fichiers_patch_v2_$STAMP.txt
-find EmployeeDirectory PlanningService projet_kyntus_service_planning-frontend/src \
-     -path '*/node_modules' -prune -o -type f \( -name '*.rej' -o -name '*.orig' \) -print |
-while read -r f; do mkdir -p "$Q/$(dirname "$f")" && mv "$f" "$Q/$f" && echo "mis de côté  : $f"; done
+STAMP=$(cat ~/sauvegardes_reorg/STAMP_V3); Q=~/quarantaine_reorg_$STAMP; mkdir -p "$Q/PlanningService/Planning.Infrastructure/Services"
+[ -e PlanningService/Planning.Infrastructure/Services/ChefDeProjetPerimeter.cs ] && \
+  mv PlanningService/Planning.Infrastructure/Services/ChefDeProjetPerimeter.cs "$Q/PlanningService/Planning.Infrastructure/Services/" && echo "mis de côté : ChefDeProjetPerimeter.cs"
 ```
 
 ```bash
-# R2. Contrôle — aucun fichier source hors a0c0f0b dans les 3 services
+# B2. Application protégée : rien n'est écrit si la simulation n'est pas parfaite
 cd /home/o/projets_mykyntus-
-find EmployeeDirectory PlanningService projet_kyntus_service_planning-frontend/src \
-     \( -name bin -o -name obj -o -name node_modules -o -name .angular \) -prune -o -type f -print |
-while read -r f; do [ -e ~/kyntus_a0c0f0b/"$f" ] || echo "HORS a0c0f0b : $f"; done
-while read -r f; do [ -e ~/kyntus_a0c0f0b/"$f" ] && ! cmp -s "$f" ~/kyntus_a0c0f0b/"$f" && echo "ECART : $f"; done < ~/sauvegardes_reorg/fichiers_patch_v2_$STAMP.txt
-echo "contrôle terminé (aucune ligne HORS/ECART attendue)"
-```
-
-```bash
-# R3. Application protégée (n'écrit rien si la simulation n'est pas parfaite)
-cd /home/o/projets_mykyntus-
-if patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v2.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
-  echo "STOP : simulation non propre, rien n'a été modifié"; patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v2.patch | grep -iE "fail|already|assum|offset|fuzz"
+if patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v3.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
+  echo "STOP : simulation non propre, rien n'a été modifié"; patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v3.patch | grep -iE "fail|already|assum|offset|fuzz"
 else
-  patch -p1 --batch < /tmp/reorg-2026-code-v2.patch > /dev/null && echo "PATCH APPLIQUÉ PROPREMENT ($(wc -l < ~/sauvegardes_reorg/fichiers_patch_v2_$STAMP.txt) fichiers)"
+  patch -p1 --batch < /tmp/reorg-2026-code-v3.patch > /dev/null && echo "PATCH V3 APPLIQUÉ PROPREMENT"
 fi
 ```
 
-
-Tests .NET dans un conteneur SDK jetable. Seuls les projets nécessaires sont envoyés (sans `bin`/`obj`) :
-
 ```bash
+# B3. Tests .NET (conteneur jetable)
 cd /home/o/projets_mykyntus-
 tar -cf - --exclude='bin' --exclude='obj' --exclude='node_modules' --exclude='TestResults' \
     Directory.Build.props Directory.Packages.props Messaging.Contracts Shared.Kernel \
     Kyntus.Caching Kyntus.Iam Kyntus.Identity.Jwt Kyntus.Messaging.Outbox tests \
     EmployeeDirectory PlanningService \
 | docker run --rm -i mcr.microsoft.com/dotnet/sdk:8.0 bash -c '
-  mkdir -p /work && cd /work && tar -xf - && set -e
-  dotnet build EmployeeDirectory/EmployeeDirectory.API/EmployeeDirectory.API.csproj -c Release 2>&1 | tail -3
-  dotnet test EmployeeDirectory/EmployeeDirectory.UnitTests/EmployeeDirectory.UnitTests.csproj -c Release 2>&1 | tail -4
-  dotnet test EmployeeDirectory/EmployeeDirectory.ArchitectureTests/EmployeeDirectory.ArchitectureTests.csproj -c Release 2>&1 | tail -4
-  dotnet test PlanningService/Planning.UnitTests/Planning.UnitTests.csproj -c Release 2>&1 | tail -4'
+  mkdir -p /work && cd /work && tar -xf -
+  dotnet build PlanningService/Planning.API/Planning.API.csproj -c Release 2>&1 | tail -3
+  dotnet test PlanningService/Planning.UnitTests/Planning.UnitTests.csproj -c Release 2>&1 | grep -E "Failed |Passed!|Failed!" | tail -5'
 ```
 
-Résultat attendu : `Build succeeded` et `Passed!` sur les trois projets de tests, avec 0 échec.
-**Si un test échoue, arrêtez-vous** et passez au « Retour arrière, cas 1 » : rien n'a été reconstruit.
+Résultat attendu :
 
-## Phase C : reconstruction et bascule des 3 services
+- `0 Error(s)` pour la compilation.
+- `Failed: 1, Passed: 325, Total: 326` pour les tests. Le seul échec attendu est `ReinforcementRequestTests.Create_allows_own_SubServiceId_when_managed_list_empty`, qui existait déjà dans la version déployée. Il concerne le code des renforts du samedi, auquel cette livraison ne touche pas.
+- **Tout autre échec : arrêtez-vous** et passez au retour arrière, cas 1.
+
+## Phase C : reconstruction et bascule (planning-backend + planning-frontend)
 
 ```bash
 cd /home/o/projets_mykyntus-
-# 1. Construction seule : les conteneurs en service continuent de tourner
-docker compose build employee-directory-backend planning-backend planning-frontend
+docker compose build planning-backend planning-frontend
+docker compose up -d --no-deps --no-build planning-backend planning-frontend
+sleep 60
+docker compose ps planning-backend planning-frontend
+docker logs --since 3m kyntus_planning_backend 2>&1 | grep -E "app-guides|Patches schéma|org mirror" | tail -5
+docker ps --format 'table {{.Names}}\t{{.Status}}' | sort      # seuls les 2 conteneurs ont « Up < 2 minutes »
 ```
 
+Attendu dans les journaux : `✅ Patches schéma Planning appliqués.` sans ligne `⚠️ Patch app-guides ignoré`, puis `Planning org mirror (Directory) : N action(s).`, qui correspond à la réparation des 3 cellules.
+
+**Recette dans l'interface.** Videz le cache du navigateur avec Ctrl + F5.
+
+- Le menu affiche « Aide » avec « Guide de l'application » et « Assistance ».
+- Avec un compte Admin, ouvrez Aide › Guide de l'application › « Ajouter un guide ». Indiquez le titre « Guide Pilotes », le type Vidéo, le rôle Pilote et un fichier de 28 Mo au maximum. Enregistrez.
+- Avec un compte Pilote, sur l'accueil, vous arrivez sur le guide avec le badge 1. Le bouton « Marquer comme consulté » fait passer à « 1 / 1 consultés » et le badge disparaît.
+- Naviguez dans quelques écrans (Planning, Prime, Documentation) : ils s'affichent sans clic supplémentaire.
+
+**Vidéo de plus de 28 Mo** (limite de la passerelle pour un envoi depuis le navigateur ; 150 Mo au maximum) :
+
+```powershell
+scp C:\Users\omar.elmahi\Downloads\Guide_Pilotes.mp4 o@10.10.10.25:/tmp/
+```
 ```bash
-# 2. Bascule des 3 conteneurs uniquement
 cd /home/o/projets_mykyntus-
-docker compose up -d --no-deps --no-build employee-directory-backend planning-backend planning-frontend
-sleep 40
-docker compose ps employee-directory-backend planning-backend planning-frontend
-curl -fsS http://localhost:8565/api/directory/health && echo "  ← Directory OK"
-docker logs --since 3m kyntus_employee_directory_backend 2>&1 | grep -iE "fail|exception" | tail -10
-docker logs --since 3m kyntus_planning_backend 2>&1 | grep -iE "fail|exception" | grep -v 23505 | tail -10
-# Les autres conteneurs n'ont pas redémarré (colonne « Up » inchangée)
-docker ps --format 'table {{.Names}}\t{{.Status}}' | sort
+bash scripts/aide/publier_guide_video.sh /tmp/Guide_Pilotes.mp4 "Guide Pilotes" "Pilote" 1
 ```
 
-L'erreur 23505 `IX_SubServiceShiftConfigs_Template_SubServiceId_Label` existait avant la livraison (modèles de créneaux en double) et n'est pas liée à ces changements.
-
-**Contrôles d'API** (compte Admin) :
-
-```bash
-read -p "Email Admin : " KEMAIL; read -s -p "Mot de passe : " KPASS; echo
-TOKEN=$(curl -s -X POST http://localhost:8500/api/auth/login -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$KEMAIL\",\"password\":\"$KPASS\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["accessToken"])')
-curl -s -o /dev/null -w "couverture (Admin)      : %{http_code} (200 attendu)\n" -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8500/api/directory/org/scope-assignments/coverage
-curl -s -o /dev/null -w "couverture (sans jeton) : %{http_code} (401 attendu)\n" \
-  http://localhost:8500/api/directory/org/scope-assignments/coverage
-```
-
-Contrôle facultatif avec un compte **Pilote** : la création d'une cellule doit être refusée (403) et rien n'est créé.
-
-```bash
-read -p "Email Pilote : " PEMAIL; read -s -p "Mot de passe : " PPASS; echo
-PTOKEN=$(curl -s -X POST http://localhost:8500/api/auth/login -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$PEMAIL\",\"password\":\"$PPASS\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["accessToken"])')
-curl -s -o /dev/null -w "création par un pilote : %{http_code} (403 attendu)\n" -X POST \
-  -H "Authorization: Bearer $PTOKEN" -H 'Content-Type: application/json' -d '{"name":"test-droits"}' \
-  http://localhost:8500/api/directory/org/structure/poles/pole-inexistant/cellules
-```
-
-**Recette dans l'interface** (Utilisateurs → fiche → « Poste & organisation ») :
-
-| Cas | Attendu |
-|---|---|
-| Rôle Superviseur | Seule l'« Activité (département de production) » est demandée. L'enregistrement couvre toutes les cellules de l'activité. |
-| Rôle Chef de projet | Activité seule. Tous les pôles de l'activité sont couverts. |
-| Rôle Référent technique | Activité → Pôle → Cellule (sans Service). Tous les services de la cellule sont couverts. |
-| Rôle Pilote | Activité → Pôle → Cellule. Le service est sélectionné automatiquement s'il est unique. |
-| Responsables d'un pilote | Superviseur et référent technique sélectionnables, même sans chef de projet sur le pôle. |
-| Superviseur existant limité à une cellule | Message « Périmètre actuel partiel… » à l'ouverture de sa fiche. Il est corrigé à l'enregistrement. |
-| Chef de projet connecté | Il voit dans Planning les collaborateurs de son activité. |
-| Compte sans droit (Pilote) | Aucune création ni affectation possible (403). |
+(Le script est fourni dans `reorg-2026-scripts-v3.tar.gz`, extrait en phase D.)
 
 ---
 
-## Phase D : création de la structure (données, créations uniquement)
-
-Scripts : on les extrait à côté des exports existants (aucun fichier de code n'est touché).
+## Phase D : données — pilotes (après votre validation)
 
 ```bash
 cd /home/o/projets_mykyntus-
-tar -xzf /tmp/reorg-2026-scripts.tar.gz
-rm -f scripts/reorg-2026/05_appliquer_perimetres.py      # ancien script, remplacé par la saisie dans l'interface
+tar -xzf /tmp/reorg-2026-scripts-v3.tar.gz
 cd scripts/reorg-2026
 if command -v python3 >/dev/null; then PY=python3; else PY="docker run --rm -it --network host -e KYNTUS_GATEWAY -e KYNTUS_EMAIL -v $PWD:$PWD -w $PWD python:3.12-slim python3"; fi
 export KYNTUS_GATEWAY=http://localhost:8500
 read -p "Email Admin : " KYNTUS_EMAIL; export KYNTUS_EMAIL
 ```
 
+**D1. Dans l'interface** (Utilisateurs → fiche → Modifier → case « Compte actif » → Enregistrer) :
+
+- **Réactivez** Amal LZEKRI et Imane MAACHI.
+- **Désactivez** AZARIOH SAMIR et `employee@kyntus.ma`, le compte de démonstration.
+
+**D2. Déplacement des pilotes** :
+
 ```bash
-# D1. Sauvegarde et export à jour
 bash 01_sauvegarde_et_export.sh
-# D2. Plan avec vos décisions (Q1 à Q7). Attendu : create_department × 1 (Bytel TISSEO),
-#     create_pole × 4 (Pôle technique, Pôle BTB, CA, Appels Post), create_cellule × 9, create_service × 9
-$PY 03_plan_organisation.py | head -30
-# D3. Simulation puis création (le mot de passe Admin est demandé)
-$PY 04_appliquer_structure.py
-$PY 04_appliquer_structure.py --appliquer
+$PY 07_deplacer_pilotes.py                      # SIMULATION
 ```
 
-Contrôle : sous Organisation, « bouygues » (OP-001) contient « Pôle technique », « Bytel TISSEO » existe avec « Pôle BTB », et « orange » contient « CA » et « Appels Post ». L'existant est inchangé.
+Attendu :
 
-## Phase E : comptes et pilotes
-
-**E1. Statuts, depuis l'interface** (Utilisateurs → fiche → Modifier → case « Compte actif » → Enregistrer) :
-
-| Compte | Action |
-|---|---|
-| Amal LZEKRI | Cocher « Compte actif » (Q9). **Avant E2.** |
-| Imane MAACHI | Cocher « Compte actif » (Q9). **Avant E2.** |
-| AZARIOH SAMIR (azariohsamir@kyntus.ma) | Décocher « Compte actif » |
-| Auth Employee (employee@kyntus.ma) | Décocher « Compte actif ». C'est le compte de démonstration : sa connexion sera désactivée. |
-
-Les comptes ne sont pas supprimés et l'historique est conservé. N'utilisez pas le bouton Supprimer : il efface définitivement.
-
-**E2. Déplacement des 146 pilotes du fichier** (141 correspondances exactes, 3 confirmées, 2 comptes « LIER »).
-
-```bash
-cd /home/o/projets_mykyntus-/scripts/reorg-2026
-sleep 30                                   # laisse Planning projeter les nouvelles cellules
-bash 01_sauvegarde_et_export.sh            # sauvegarde et export à jour (structure et statuts)
-$PY 07_deplacer_pilotes.py                 # SIMULATION
-```
-
-Résultat attendu de la simulation :
-
-- `146 ligne(s) : A_DEPLACER × 146` (ou un peu moins si certains sont déjà en place) ;
-- aucune ligne `BLOQUANT` ;
+- `A_DEPLACER × 146` (LZEKRI et MAACHI compris, une fois réactivées) ;
+- aucun `BLOQUANT` ;
 - `✔ Les 9 cellule(s) cible(s) existent dans Planning`.
 
-Le détail figure dans `export_…/rapport/plan_deplacements_pilotes.csv`. Un compte d'un autre rôle n'est jamais modifié, et un compte inactif est signalé puis ignoré.
+Si la simulation annonce encore des cellules non projetées, réparez-les puis refaites l'export :
 
 ```bash
-# Essai sur 3 pilotes, puis vérification dans l'interface (fiche + planning du pilote)
-$PY 07_deplacer_pilotes.py --appliquer --limite 3
+read -s -p "Mot de passe Admin : " KPASS; echo
+TOKEN=$(curl -s -X POST http://localhost:8500/api/auth/login -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$KYNTUS_EMAIL\",\"password\":\"$KPASS\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["accessToken"])')
+curl -s -X POST -H "Authorization: Bearer $TOKEN" http://localhost:8500/api/admin/org-reconciliation/sync-from-directory | python3 -m json.tool
+SAUVEGARDE=0 bash 01_sauvegarde_et_export.sh && $PY 07_deplacer_pilotes.py
 ```
 
+Ensuite, faites d'abord un essai sur 3 pilotes et vérifiez leur fiche et leur planning, puis traitez le reste :
+
 ```bash
-# Tout le reste : nouvel export (les 3 premiers passent « déjà en place »), puis application
+$PY 07_deplacer_pilotes.py --appliquer --limite 3
 SAUVEGARDE=0 bash 01_sauvegarde_et_export.sh
 $PY 07_deplacer_pilotes.py --appliquer
 ```
 
-Chaque exécution produit un journal `export_…/rapport/journal_pilotes_<date>.json`, qui sert au retour arrière.
+## Phase E : données — compléments de structure et responsables (fichier « Périmètre »)
 
-**E3. Les 14 nouveaux pilotes** : créez-les dans Utilisateurs → Nouvel utilisateur, rôle Pilote, avec l'affectation indiquée dans `Nouveaux_pilotes_a_creer.xlsx`. Le mail interne est fourni par RH.
+**E1. Nouveaux nœuds** (validés) :
 
-**E4. Les responsables** : depuis la fiche de chaque superviseur, chef de projet ou référent technique, choisissez la ou les activités (ou cellules) cibles. Le message « Périmètre actuel partiel » signale ceux à revoir. Le rapport de couverture est disponible en lecture seule :
+- Orange › SFR › ATS ;
+- Bytel Kyntus › Pôle Sécurisation › Sécurisation ;
+- Bytel TISSEO › Pôle BTB › Prestations réseaux & Malfaçons.
+
+Chaque cellule reçoit son service technique.
+
+```bash
+SAUVEGARDE=0 bash 01_sauvegarde_et_export.sh
+$PY 03_plan_organisation.py | head -12          # attendu : create_pole × 2, create_cellule × 3, create_service × 3
+$PY 04_appliquer_structure.py                   # simulation
+$PY 04_appliquer_structure.py --appliquer
+```
+
+**E2. Périmètres des responsables** :
+
+```bash
+sleep 30
+bash 01_sauvegarde_et_export.sh                 # sauvegarde complète juste avant
+$PY 08_appliquer_responsables.py                # SIMULATION
+```
+
+Relisez la simulation : chaque ligne indique le compte trouvé, son rôle actuel et le périmètre cible.
+
+- Un **superviseur** couvre son activité entière, conformément à la règle. Ismail BERAHOU, Idealisoa RADAOROSON et AYMANE YOUSFI reçoivent donc toute leur activité, et pas seulement le pôle ou la cellule écrits dans le fichier.
+- Les **7 nouveaux responsables** deviennent Référents techniques. Leur ancienne affectation de pilote est clôturée, avec l'historique conservé.
+- **Loukmane KHATIRI** : ses affectations de superviseur sont retirées. **Zouheir BELHOUJI** et **Nadia TIRHANIME** restent inchangés.
+- Une ligne `IGNORE` signale un compte introuvable, inactif ou porté par des homonymes. Traitez ce compte dans l'interface, puis relancez la simulation.
+
+```bash
+$PY 08_appliquer_responsables.py --appliquer
+```
+
+**E3. Dans l'interface** :
+
+- Désactivez le compte de Loukmane KHATIRI (case « Compte actif »).
+- Créez les 14 nouveaux pilotes à partir de `Nouveaux_pilotes_a_creer.xlsx`.
+
+**E4. Contrôle en lecture seule** :
 
 ```bash
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8500/api/directory/org/scope-assignments/coverage \
   | python3 -c 'import sys,json; [print(r["employeeName"],"|",r["kind"],"|",r["scopeLabel"],"|",r["heldNodes"],"/",r["totalNodes"]) for r in json.load(sys.stdin)]'
 ```
 
-**E5. Contrôles en lecture seule** :
-
-```bash
-# Pilotes actifs par service (Directory)
-docker exec kyntus_db psql -U postgres -d employee_directory_db -c "
-SELECT d.\"Name\" AS activite, p.\"Name\" AS pole, c.\"Name\" AS cellule, count(*) AS pilotes
-FROM org_assignments a JOIN org_services s ON s.\"Id\"=a.\"NodeId\" JOIN org_cellules c ON c.\"Id\"=s.\"CelluleId\"
-JOIN org_poles p ON p.\"Id\"=c.\"PoleId\" LEFT JOIN business_departments d ON d.\"Id\"=p.\"BusinessDepartmentId\"
-WHERE a.\"Kind\"=3 AND a.\"EffectiveTo\" IS NULL GROUP BY 1,2,3 ORDER BY 1,2,3;"
-# Même répartition côté Planning (utilisateurs actifs par sous-service miroir)
-docker exec kyntus_db psql -U postgres -d kyntus_db -c "
-SELECT ss.\"Name\", count(u.\"Id\") FROM \"SubServices\" ss JOIN \"Users\" u ON u.\"SubServiceId\"=ss.\"Id\" AND u.\"IsActive\"
-WHERE ss.\"PrimeServiceId\" IS NOT NULL GROUP BY 1 ORDER BY 1;"
-```
-
-Les anciens pôles et cellules restent en place, sans suppression. Leur archivage pourra se faire plus tard, une fois vides.
-
 ---
 
 ## Retour arrière
 
-**Cas 1 : code seulement** (avant ou après la phase C ; aucune donnée concernée) :
+**Cas 1 : code v3** (aucune donnée concernée) :
 
 ```bash
 cd /home/o/projets_mykyntus-
-STAMP=$(cat ~/sauvegardes_reorg/STAMP_REORG)
-patch -p1 -R --batch < /tmp/reorg-2026-code-v2.patch          # remet les fichiers en a0c0f0b
-# Si la phase C a été faite : on remet les images d'avant, sans reconstruire
-while read -r s img id; do docker tag "reorg-avant/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_$STAMP.txt
-docker compose up -d --no-deps --no-build employee-directory-backend planning-backend planning-frontend
+STAMP=$(cat ~/sauvegardes_reorg/STAMP_V3)
+patch -p1 -R --batch < /tmp/reorg-2026-code-v3.patch
+while read -r s img id; do docker tag "reorg-avant-v3/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_v3_$STAMP.txt
+docker compose up -d --no-deps --no-build planning-backend planning-frontend
 ```
 
-**Cas 2 : annuler les déplacements de pilotes** (du plus récent au plus ancien journal) :
+Les tables `AppGuides` et `AppGuideViews` restent en place et sont simplement ignorées par la version précédente.
+
+**Retour à la version a0c0f0b d'origine.** Les images d'avant le patch v2 sont étiquetées `reorg-avant/*:20261029_085024`. Pour Directory, utilisez l'étiquette `reorg-avant/employee-directory-backend:20261029_085024` et le même principe : `docker tag`, puis `up --no-deps --no-build`.
+
+**Cas 2 : responsables** (journal de l'étape 08) :
 
 ```bash
 cd /home/o/projets_mykyntus-/scripts/reorg-2026
-ls -1t export_*/rapport/journal_pilotes_*.json
-$PY 07_deplacer_pilotes.py --retour-arriere export_XXX/rapport/journal_pilotes_XXX.json              # simulation
+$PY 08_appliquer_responsables.py --retour-arriere export_XXX/rapport/journal_responsables_XXX.json            # simulation
+$PY 08_appliquer_responsables.py --retour-arriere export_XXX/rapport/journal_responsables_XXX.json --appliquer
+```
+
+**Cas 3 : pilotes** (journaux de l'étape 07, du plus récent au plus ancien) :
+
+```bash
 $PY 07_deplacer_pilotes.py --retour-arriere export_XXX/rapport/journal_pilotes_XXX.json --appliquer
 ```
 
-**Cas 3 : supprimer la structure créée en phase D** (après le cas 2 ; tout nœud encore utilisé est ignoré) :
+**Cas 4 : structure créée** (après les cas 2 et 3 ; les nœuds encore utilisés sont ignorés) :
 
 ```bash
-$PY 06_retour_arriere.py --journal export_XXX/rapport/journal_structure_XXX.json              # simulation
 $PY 06_retour_arriere.py --journal export_XXX/rapport/journal_structure_XXX.json --appliquer
 ```
 
-**Cas 4 : dernier recours, restauration des bases** de la phase A. Restaurez toutes les bases ensemble, car les projections Planning, Prime et Congé dépendent du Directory :
+**Cas 5 : dernier recours, restauration complète des bases** (dumps `*_v3_<STAMP>.dump` de la phase A) :
 
 ```bash
-STAMP=$(cat ~/sauvegardes_reorg/STAMP_REORG)
-cd /home/o/projets_mykyntus-
+STAMP=$(cat ~/sauvegardes_reorg/STAMP_V3); cd /home/o/projets_mykyntus-
 docker compose stop employee-directory-backend planning-backend prime-backend conge-backend auth-backend
 for db in employee_directory_db kyntus_db prime_db conge_db auth_db; do
-  docker exec -i kyntus_db pg_restore -U postgres -d "$db" --clean --if-exists --no-owner < ~/sauvegardes_reorg/${db}_$STAMP.dump
+  docker exec -i kyntus_db pg_restore -U postgres -d "$db" --clean --if-exists --no-owner < ~/sauvegardes_reorg/${db}_v3_$STAMP.dump
 done
 docker compose start employee-directory-backend planning-backend prime-backend conge-backend auth-backend
 ```
