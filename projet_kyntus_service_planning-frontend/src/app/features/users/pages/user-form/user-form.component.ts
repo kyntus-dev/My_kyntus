@@ -1523,22 +1523,27 @@ export class UserFormComponent implements OnInit, OnDestroy {
       }
     }
 
-    const lastPart = label.split('/').pop()?.trim().toLowerCase() ?? '';
-    if (!lastPart) return;
+    // Correspondance sur la fin du libellé complet (un nom peut contenir « / », ex. « FTTO / Atlas »).
+    const fullLabel = label.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!fullLabel) return;
+    const endsWithName = (name: string): boolean => {
+      const n = name.trim().toLowerCase().replace(/\s+/g, ' ');
+      return !!n && (fullLabel === n || fullLabel.endsWith(`/ ${n}`) || fullLabel.endsWith(`/${n}`));
+    };
 
     for (const md of this.operationalDepartments) {
       for (const pole of md.poles) {
-        if (depth === 'pole' && pole.name.toLowerCase() === lastPart) {
+        if (depth === 'pole' && endsWithName(pole.name)) {
           apply(md.id, pole.id, '', '');
           return;
         }
         for (const cellule of pole.cellules) {
-          if (depth === 'cellule' && cellule.name.toLowerCase() === lastPart) {
+          if (depth === 'cellule' && endsWithName(cellule.name)) {
             apply(md.id, pole.id, cellule.id, '');
             return;
           }
           for (const service of cellule.services) {
-            if (depth === 'service' && service.name.toLowerCase() === lastPart) {
+            if (depth === 'service' && endsWithName(service.name)) {
               apply(md.id, pole.id, cellule.id, service.id);
               return;
             }

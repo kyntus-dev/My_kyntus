@@ -183,6 +183,33 @@ export function findOperationalSelectionByPoleId(
   return null;
 }
 
+/**
+ * Libellés structurés d'une sélection (département, pôle, cellule, service).
+ * À utiliser plutôt que de redécouper le résumé « a / b / c » : un nom peut lui-même
+ * contenir « / » (ex. « FTTO / Atlas »), et un niveau absent décalerait les colonnes.
+ */
+export function operationalSelectionNames(
+  operationalDepartments: readonly OperationalDepartmentNode[],
+  unassignedPoles: readonly OrgPoleNode[],
+  operationalDeptId: string,
+  poleId: string,
+  celluleId: string,
+  serviceId: string,
+): { operationalDepartment: string | null; pole: string | null; cellule: string | null; service: string | null } {
+  const md = operationalDeptId
+    ? operationalDepartments.find((d) => d.id === operationalDeptId)
+    : findOperationalDeptForPole(operationalDepartments, poleId);
+  const pole = resolvePoleNode(operationalDepartments, unassignedPoles, poleId);
+  const cellule = resolveCelluleNode(operationalDepartments, unassignedPoles, celluleId);
+  const service = cellule?.services.find((s) => s.id === serviceId);
+  return {
+    operationalDepartment: md?.name ?? (isUnassignedPole(unassignedPoles, poleId) ? 'Sans département' : null),
+    pole: pole?.name ?? null,
+    cellule: cellule?.name ?? null,
+    service: service?.name ?? null,
+  };
+}
+
 export function operationalSelectionSummary(
   operationalDepartments: readonly OperationalDepartmentNode[],
   unassignedPoles: readonly OrgPoleNode[],
@@ -316,7 +343,7 @@ export function buildSubServiceOrgLabels(
     }
     const opSel = findOperationalSelectionByServiceId(operationalDepartments, unassignedPoles, primeId);
     if (opSel) {
-      const summary = operationalSelectionSummary(
+      const names = operationalSelectionNames(
         operationalDepartments,
         unassignedPoles,
         opSel.operationalDeptId,
@@ -324,14 +351,11 @@ export function buildSubServiceOrgLabels(
         opSel.celluleId,
         opSel.serviceId,
       );
-      const parts = summary === '—' ? [] : summary.split(' / ');
       return {
         subServiceId: sub.id,
         name: sub.name,
-        operationalDepartment: parts[0] ?? null,
-        pole: parts[1] ?? null,
-        cellule: parts[2] ?? null,
-        service: parts[3] ?? sub.name,
+        ...names,
+        service: names.service ?? sub.name,
       };
     }
     const legacySel = findOrgSelectionByPrimeServiceId(legacyDepartments, primeId);

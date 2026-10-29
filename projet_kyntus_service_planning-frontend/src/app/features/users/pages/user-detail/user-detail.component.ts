@@ -28,6 +28,7 @@ import {
   orgCellLabel,
   orgDepartmentLabel,
   orgPerimeterSummary,
+  orgServiceIsCelluleMirror,
   type BusinessDepartmentRef,
   type DirectoryEmployeeOrgRef,
   type UserOrgPerimeterView,
@@ -91,6 +92,11 @@ export class UserDetailComponent implements OnInit {
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.loadUser(id);
+  }
+
+  /** Service miroir de la cellule (même nom) : colonne Service masquée pour éviter le doublon. */
+  get serviceIsCelluleMirror(): boolean {
+    return orgServiceIsCelluleMirror(this.perimeter);
   }
 
   get perimeterSummary(): string {

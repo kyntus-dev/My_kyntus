@@ -6,7 +6,7 @@ import {
   findOperationalSelectionByCelluleId,
   findOperationalSelectionByPoleId,
   findOperationalSelectionByServiceId,
-  operationalSelectionSummary,
+  operationalSelectionNames,
   resolvePoleNode,
 } from './operational-org-picker';
 import { findOrgSelectionByPrimeServiceId, poleCells } from './planning-org-picker';
@@ -113,12 +113,19 @@ export function orgDepartmentLabel(
   return view.operationalDepartment?.trim() || null;
 }
 
+/** Service technique identique à sa cellule (service miroir) : inutile de l'afficher deux fois. */
+export function orgServiceIsCelluleMirror(view: Pick<UserOrgPerimeterView, 'cellule' | 'service'>): boolean {
+  const cellule = view.cellule?.trim().toLowerCase();
+  const service = view.service?.trim().toLowerCase();
+  return !!cellule && !!service && cellule === service;
+}
+
 export function orgPerimeterSummary(view: UserOrgPerimeterView): string {
   const parts = [
     orgDepartmentLabel(view),
     view.pole,
     view.cellule,
-    view.service,
+    orgServiceIsCelluleMirror(view) ? null : view.service,
   ].filter((p) => !!p?.trim());
   return parts.length ? parts.join(' / ') : '—';
 }
@@ -137,7 +144,7 @@ function namesFromOperationalSelection(
   unassignedPoles: readonly OrgPoleNode[],
   sel: { operationalDeptId: string; poleId: string; celluleId: string; serviceId: string },
 ): UserOrgPerimeterView {
-  const summary = operationalSelectionSummary(
+  return operationalSelectionNames(
     operationalDepartments,
     unassignedPoles,
     sel.operationalDeptId,
@@ -145,13 +152,6 @@ function namesFromOperationalSelection(
     sel.celluleId,
     sel.serviceId,
   );
-  const parts = summary === '—' ? [] : summary.split(' / ');
-  return {
-    operationalDepartment: parts[0] ?? null,
-    pole: parts[1] ?? null,
-    cellule: parts[2] ?? null,
-    service: parts[3] ?? null,
-  };
 }
 
 function namesFromLegacySelection(

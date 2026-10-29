@@ -153,7 +153,7 @@
             }
           </div>
           <div class="org-breadcrumb">{{ perimeterSummary }}</div>
-          <dl class="field-grid field-grid--org">
+          <dl class="field-grid field-grid--org" [class.field-grid--org-3]="serviceIsCelluleMirror">
             <div class="field">
               <dt>Département</dt>
               <dd class="field__value field__value--accent">{{ orgCellLabel(orgDepartmentLabel(perimeter)) }}</dd>
@@ -166,10 +166,12 @@
               <dt>Cellule</dt>
               <dd class="field__value">{{ orgCellLabel(perimeter.cellule) }}</dd>
             </div>
-            <div class="field">
-              <dt>Service</dt>
-              <dd class="field__value field__value--accent">{{ orgCellLabel(perimeter.service) }}</dd>
-            </div>
+            @if (!serviceIsCelluleMirror) {
+              <div class="field">
+                <dt>Service</dt>
+                <dd class="field__value field__value--accent">{{ orgCellLabel(perimeter.service) }}</dd>
+              </div>
+            }
           </dl>
         </section>
 
