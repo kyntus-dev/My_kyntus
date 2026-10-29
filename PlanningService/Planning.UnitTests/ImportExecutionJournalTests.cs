@@ -130,6 +130,12 @@ public class ImportExecutionJournalTests
             Task.CompletedTask;
 
         public Task<List<UserDto>> GetAllUsersAsync() => Task.FromResult(new List<UserDto>());
+        public Task<List<UserDto>> GetUsersForSupervisorAsync(int authUserId, CancellationToken ct = default) =>
+            Task.FromResult(new List<UserDto>());
+        public Task<bool> CanSupervisorAccessUserAsync(int authUserId, int targetUserId, CancellationToken ct = default) =>
+            Task.FromResult(false);
+        public Task<bool> CanSupervisorAccessSubServiceAsync(int authUserId, int subServiceId, CancellationToken ct = default) =>
+            Task.FromResult(false);
         public Task<List<UserDto>> GetUsersBySubServiceAsync(int subServiceId) => Task.FromResult(new List<UserDto>());
         public Task<UserDto?> GetUserByIdAsync(int id) => Task.FromResult<UserDto?>(null);
         public Task<UserDto?> GetUserByGuidAsync(Guid employeeGuid) => Task.FromResult<UserDto?>(null);
