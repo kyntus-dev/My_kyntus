@@ -10,6 +10,7 @@ import { AlertTriangle, Award, Eye, History, KeyRound, Pencil, Search, Trash2 } 
 import type { OrgAssignmentsOverview } from '../../../prime/services/prime-org-api.service';
 import { PilotRotationHistoryModalComponent } from '../../../prime/components/pilot-rotation-history-modal.component';
 import { BodyPortalDirective } from '../../../../shared/directives/body-portal.directive';
+import { EmployeeDeactivateDialogComponent } from '../../components/employee-deactivate-dialog.component';
 import {
   enrichUserOrgPerimeter,
   orgCellLabel,
@@ -52,6 +53,7 @@ import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toas
     LucideIconComponent,
     PilotRotationHistoryModalComponent,
     BodyPortalDirective,
+    EmployeeDeactivateDialogComponent,
   ],
   templateUrl: './user-list.component.html',
   styleUrls: ['./user-list.component.css']
@@ -356,12 +358,13 @@ export class UserListComponent implements OnInit, OnDestroy {
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   }
-  runAction(action: 'level' | 'history' | 'reset' | 'delete', user: User): void {
+  runAction(action: 'level' | 'history' | 'reset' | 'deactivate' | 'reactivate', user: User): void {
     this.closeActions();
     if (action === 'level') this.openLevelModal(user);
     else if (action === 'history') this.openPilotRotationHistory(user);
     else if (action === 'reset') void this.resetPassword(user);
-    else void this.deleteUser(user.id);
+    else if (action === 'deactivate') this.deactivateTarget = user;
+    else void this.reactivateUser(user);
   }
 
   goimport(): void { this.router.navigate(['/import']); }
@@ -423,17 +426,42 @@ export class UserListComponent implements OnInit, OnDestroy {
     });
   }
 
-  async deleteUser(id: number): Promise<void> {
+  /** Collaborateur en cours de désactivation (boîte de dialogue ouverte). */
+  deactivateTarget: User | null = null;
+  deactivating = false;
+
+  confirmDeactivate(dateSortie: string): void {
+    const user = this.deactivateTarget;
+    if (!user || this.deactivating) return;
+    this.deactivating = true;
+    this.userService.deactivateUser(user.id, dateSortie).subscribe({
+      next: () => {
+        this.deactivating = false;
+        this.deactivateTarget = null;
+        this.toastService.success(`${user.lastName} ${user.firstName} est désactivé(e). Son historique est conservé.`);
+        this.loadUsers();
+      },
+      error: (err) => {
+        this.deactivating = false;
+        this.toastService.error(err?.error?.message ?? 'Désactivation impossible.');
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  async reactivateUser(user: User): Promise<void> {
     const ok = await this.confirmService.confirm({
-      title: 'Supprimer l\'employé',
-      message: 'Supprimer cet employé ?',
-      confirmLabel: 'Supprimer',
-      variant: 'danger',
+      title: 'Réactiver le collaborateur',
+      message: `Réactiver ${user.lastName} ${user.firstName} ? Il pourra de nouveau se connecter ; pensez à vérifier son affectation.`,
+      confirmLabel: 'Réactiver',
     });
     if (!ok) return;
-    this.userService.deleteUser(id).subscribe({
-      next: () => this.loadUsers(),
-      error: (err) => this.toastService.error(`Erreur: ${err.error?.message}`),
+    this.userService.reactivateUser(user.id).subscribe({
+      next: () => {
+        this.toastService.success(`${user.lastName} ${user.firstName} est réactivé(e).`);
+        this.loadUsers();
+      },
+      error: (err) => this.toastService.error(err?.error?.message ?? 'Réactivation impossible.'),
     });
   }
 

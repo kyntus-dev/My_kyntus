@@ -97,9 +97,14 @@ public sealed class DirectoryReadService(
         var employees = await db.Employees.AsNoTracking()
             .Include(e => e.BusinessDepartment)
             .Where(e => e.IsActive).ToListAsync(ct);
-        var activeAssignments = await db.OrgAssignments.AsNoTracking()
-            .Where(a => a.EffectiveTo == null)
-            .ToListAsync(ct);
+        // Affectations en cours des seuls comptes actifs : un collaborateur désactivé (sortie)
+        // n'apparaît plus comme titulaire (chef de projet, superviseur, référent technique, pilote).
+        var activeEmployeeIds = employees.Select(e => e.Id).ToHashSet();
+        var activeAssignments = (await db.OrgAssignments.AsNoTracking()
+                .Where(a => a.EffectiveTo == null)
+                .ToListAsync(ct))
+            .Where(a => activeEmployeeIds.Contains(a.EmployeeId))
+            .ToList();
 
         var etages = poles.Select(p => new EtageNodeDto(p.Id, p.Name)).ToList();
         var services = poles.SelectMany(p => p.Cellules.Select(c => new ServiceNodeDto(c.Id, c.Name, p.Id))).ToList();

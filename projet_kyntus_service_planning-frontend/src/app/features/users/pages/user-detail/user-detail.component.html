@@ -30,13 +30,28 @@
             <app-lucide-icon [icon]="icons.key" className="w-4 h-4" />
             {{ resettingPassword ? 'Réinitialisation…' : 'Réinitialiser le mot de passe' }}
           </button>
-          <button type="button" class="ky-btn-danger" (click)="deleteUser()">
-            <app-lucide-icon [icon]="icons.trash" className="w-4 h-4" />
-            Supprimer
-          </button>
+          @if (user.isActive !== false) {
+            <button type="button" class="ky-btn-danger" (click)="deactivateOpen = true">
+              <app-lucide-icon [icon]="icons.deactivate" className="w-4 h-4" />
+              Désactiver (sortie)
+            </button>
+          } @else {
+            <button type="button" class="ky-btn-secondary" (click)="reactivateUser()">
+              <app-lucide-icon [icon]="icons.reactivate" className="w-4 h-4" />
+              Réactiver
+            </button>
+          }
         }
       </div>
     </app-kyntus-page-header>
+
+    <app-employee-deactivate-dialog
+      [open]="deactivateOpen"
+      [employeeName]="user ? user.lastName + ' ' + user.firstName : ''"
+      [busy]="deactivating"
+      (confirmed)="confirmDeactivate($event)"
+      (cancel)="deactivateOpen = false"
+    />
 
     @if (resetCredentials) {
       <div class="ky-card credentials-oneshot-panel" style="margin-bottom: 1rem; padding: 1rem;">

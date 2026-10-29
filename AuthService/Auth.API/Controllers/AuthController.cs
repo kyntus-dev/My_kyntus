@@ -6,6 +6,7 @@ using Auth.Application.Commands.Logout;
 using Auth.Application.Commands.RefreshToken;
 using Auth.Application.Commands.RegisterFromPlanning;
 using Auth.Application.Commands.RegisterFromPlanningBatch;
+using Auth.Application.Commands.SetActiveFromPlanning;
 using Auth.Application.DTOs;
 using Auth.Application.Queries.AccessAudit;
 using Auth.Application.Queries.CheckEmail;
@@ -219,6 +220,18 @@ public class AuthController : ControllerBase
         }
     }
 
+    /// <summary>Active / désactive un compte (sortie d'un collaborateur) sans le supprimer.</summary>
+    [HttpPut("users/from-planning/{authUserId:int}/active")]
+    [RequireInternalService]
+    public async Task<IActionResult> SetActiveFromPlanning(int authUserId, [FromBody] SetActiveFromPlanningRequest body)
+    {
+        var found = await _mediator.Send(new SetActiveFromPlanningCommand(authUserId, body.IsActive));
+        if (!found)
+            return NotFound(new { message = $"Utilisateur Auth {authUserId} introuvable." });
+        _logger.LogInformation("Compte Auth {Id} {Etat} depuis Planning.", authUserId, body.IsActive ? "réactivé" : "désactivé");
+        return NoContent();
+    }
+
     [HttpDelete("users/from-planning/{authUserId:int}")]
     [RequireInternalService]
     public async Task<IActionResult> DeleteFromPlanning(int authUserId)
@@ -263,3 +276,5 @@ public class AuthController : ControllerBase
         }
     }
 }
+
+public sealed record SetActiveFromPlanningRequest(bool IsActive);

@@ -241,13 +241,55 @@ public class UsersController(
         }
     }
 
+    /// <summary>
+    /// Ancienne « suppression » : désormais une désactivation (sortie). Rien n'est supprimé,
+    /// pour garder plannings, congés, primes et historique.
+    /// </summary>
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    public Task<IActionResult> Delete(int id, CancellationToken ct) =>
+        SetActive(id, isActive: false, dateSortie: null, ct);
+
+    /// <summary>Sortie d'un collaborateur : compte bloqué, données conservées.</summary>
+    [HttpPost("{id}/deactivate")]
+    public Task<IActionResult> Deactivate(int id, [FromBody] DeactivateUserRequest? body, CancellationToken ct) =>
+        SetActive(id, isActive: false, body?.DateSortie, ct);
+
+    /// <summary>Réintégration d'un collaborateur désactivé.</summary>
+    [HttpPost("{id}/reactivate")]
+    public Task<IActionResult> Reactivate(int id, CancellationToken ct) =>
+        SetActive(id, isActive: true, dateSortie: null, ct);
+
+    /// <summary>Annule une création incomplète (étape suivante en échec). Refusé après 30 minutes.</summary>
+    [HttpPost("{id}/rollback-creation")]
+    public async Task<IActionResult> RollbackCreation(int id, CancellationToken ct)
+    {
+        if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
+        try
+        {
+            return await userService.RollbackFailedCreationAsync(id, ct)
+                ? NoContent()
+                : NotFound(new { message = $"Utilisateur {id} introuvable." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private async Task<IActionResult> SetActive(int id, bool isActive, DateOnly? dateSortie, CancellationToken ct)
     {
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
         if (!await CanAccessUserAsync(id, ct)) return Forbid();
-        var result = await userService.DeleteUserAsync(id);
-        if (!result)
+        if (!isActive)
+        {
+            var target = await userService.GetUserByIdAsync(id);
+            if (target is null)
+                return NotFound(new { message = $"Utilisateur {id} introuvable." });
+            if (target.AuthUserId is int targetAuth && targetAuth == User.GetAuthUserId())
+                return BadRequest(new { message = "Vous ne pouvez pas désactiver votre propre compte." });
+        }
+        var found = await userService.SetUserActiveAsync(id, isActive, dateSortie, ct);
+        if (!found)
             return NotFound(new { message = $"Utilisateur {id} introuvable." });
         return NoContent();
     }
@@ -344,3 +386,5 @@ public class UsersController(
         }
     }
 }
+
+public sealed record DeactivateUserRequest(DateOnly? DateSortie);

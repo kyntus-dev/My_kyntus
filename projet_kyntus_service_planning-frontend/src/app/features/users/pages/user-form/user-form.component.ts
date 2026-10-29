@@ -448,7 +448,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
 
   /** Annule une création partielle (Directory/Planning/Auth) après échec d'une étape post-create. */
   private compensateFailedCreate$(userId: number, err: unknown, fallback: string): Observable<never> {
-    return this.userService.deleteUser(userId).pipe(
+    return this.userService.rollbackCreation(userId).pipe(
       catchError(() => of(void 0)),
       switchMap(() => throwError(() => new Error(formatHttpErrorMessage(err, fallback)))),
     );

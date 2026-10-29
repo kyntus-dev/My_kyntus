@@ -1376,6 +1376,7 @@ public class UserService : IUserService
         user.LastName = dto.LastName;
         user.Email = dto.Email;
         user.HireDate = dto.HireDate;
+        var activeChanged = user.IsActive != dto.IsActive;
         user.IsActive = dto.IsActive;
         user.Level = dto.Level;
 
@@ -1390,6 +1391,8 @@ public class UserService : IUserService
 
         if (user.AuthUserId.HasValue)
             await SyncToAuthServiceAsync(user);
+        if (activeChanged)
+            await SyncAuthActiveAsync(user);
 
         if (!IsDirectoryWriteMaster())
         {
@@ -1412,48 +1415,98 @@ public class UserService : IUserService
         return ToDto(user, custom.GetValueOrDefault(id), EmptyOrgNameContext, hrProfile);
     }
 
-    public async Task<bool> DeleteUserAsync(int id)
+    public async Task<bool> SetUserActiveAsync(
+        int id,
+        bool isActive,
+        DateOnly? dateSortie = null,
+        CancellationToken ct = default)
     {
         var user = await _context.Users
             .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Id == id);
+            .FirstOrDefaultAsync(u => u.Id == id, ct);
         if (user == null) return false;
 
-        var employeeGuid = user.Guid;
-        var authUserId = user.AuthUserId;
-
-        if (authUserId.HasValue)
+        user.IsActive = isActive;
+        var profile = await _context.UserHrProfiles.FirstOrDefaultAsync(p => p.UserId == id, ct);
+        if (!isActive)
         {
-            try
+            if (profile is null)
             {
-                var response = await _httpClient.DeleteAsync($"api/auth/users/from-planning/{authUserId.Value}");
-                if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
-                {
-                    var body = await response.Content.ReadAsStringAsync();
-                    _logger.LogWarning("Suppression Auth échouée pour {Email} ({Status}): {Body}",
-                        user.Email, response.StatusCode, body);
-                }
+                profile = new UserHrProfile { UserId = id };
+                _context.UserHrProfiles.Add(profile);
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Suppression Auth indisponible pour {Email}", user.Email);
-            }
+            profile.EnFormation = false;
+            profile.DateSortie = dateSortie ?? profile.DateSortie ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+        else if (profile is not null)
+        {
+            // Réintégration : la date de sortie précédente ne s'applique plus.
+            profile.DateSortie = null;
         }
 
+        await _context.SaveChangesAsync(ct);
+
+        // Connexion bloquée (ou rétablie) côté Auth ; le compte n'est jamais supprimé.
+        await SyncAuthActiveAsync(user, ct);
+
         if (IsDirectoryWriteMaster())
-            await _directoryEmployeeWrite.TryDeleteEmployeeAsync(employeeGuid);
+        {
+            await _directoryEmployeeWrite.TryUpdateEmployeeAsync(user, ct);
+        }
         else
-            await _directoryEmployeeEnsure.TryDeleteFromPlanningAsync(employeeGuid);
+        {
+            await PublishEmployeUpdatedForUserAsync(user, user.SubServiceId);
+            await _context.SaveChangesAsync(ct);
+            await _directoryEmployeeEnsure.TryEnsureFromPlanningAsync(user);
+        }
 
-        var managedLinks = _context.UserSubServices.Where(us => us.UserId == id);
-        _context.UserSubServices.RemoveRange(managedLinks);
-
-        var managedServiceLinks = _context.UserManagedServices.Where(us => us.UserId == id);
-        _context.UserManagedServices.RemoveRange(managedServiceLinks);
-
-        _context.Users.Remove(user);
-        await _context.SaveChangesAsync();
+        _logger.LogInformation(
+            "Collaborateur {UserId} ({Email}) {Etat}.",
+            user.Id,
+            user.Email,
+            isActive ? "réactivé" : $"désactivé (sortie le {profile?.DateSortie:dd/MM/yyyy})");
         return true;
+    }
+
+    public async Task<bool> RollbackFailedCreationAsync(int id, CancellationToken ct = default)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
+        if (user == null) return false;
+        if (DateTime.UtcNow - user.CreatedAt > TimeSpan.FromMinutes(30))
+            throw new InvalidOperationException(
+                "Ce compte n'est pas une création en cours : il ne peut pas être supprimé, seulement désactivé.");
+
+        _logger.LogWarning("Annulation de la création incomplète de {Email} (id {Id}).", user.Email, user.Id);
+        await RollbackImportCreatedUserCoreAsync(user, ct);
+        return true;
+    }
+
+    /// <summary>Aligne l'état « compte actif » d'Auth sur Planning (connexion et renouvellement de session).</summary>
+    private async Task SyncAuthActiveAsync(User user, CancellationToken ct = default)
+    {
+        if (!user.AuthUserId.HasValue)
+            return;
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync(
+                $"api/auth/users/from-planning/{user.AuthUserId.Value}/active",
+                new { isActive = user.IsActive },
+                ct);
+            if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
+            {
+                var body = await response.Content.ReadAsStringAsync(ct);
+                _logger.LogWarning(
+                    "Auth : état actif={Active} non appliqué pour {Email} ({Status}) : {Body}",
+                    user.IsActive,
+                    user.Email,
+                    response.StatusCode,
+                    body);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Auth indisponible : état actif={Active} non appliqué pour {Email}", user.IsActive, user.Email);
+        }
     }
 
     public async Task<bool> ExitAfterInitialTrainingRejectionAsync(
@@ -1487,28 +1540,8 @@ public class UserService : IUserService
         else
             await _directoryEmployeeEnsure.TryEnsureFromPlanningAsync(user);
 
-        if (user.AuthUserId.HasValue)
-        {
-            try
-            {
-                var response = await _httpClient.DeleteAsync(
-                    $"api/auth/users/from-planning/{user.AuthUserId.Value}",
-                    ct);
-                if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
-                {
-                    var body = await response.Content.ReadAsStringAsync(ct);
-                    _logger.LogWarning(
-                        "Suppression Auth après rejet formation échouée pour {Email} ({Status}): {Body}",
-                        user.Email,
-                        response.StatusCode,
-                        body);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Auth indisponible après rejet formation pour {Email}", user.Email);
-            }
-        }
+        // Compte bloqué, jamais supprimé : l'historique reste consultable.
+        await SyncAuthActiveAsync(user, ct);
 
         _logger.LogInformation(
             "Sortie employé {Guid} ({Email}) après rejet formation initiale. Motif: {Reason}",

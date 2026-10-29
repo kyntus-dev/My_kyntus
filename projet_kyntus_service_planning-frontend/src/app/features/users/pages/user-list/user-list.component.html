@@ -194,10 +194,22 @@
         <button type="button" (click)="runAction('level', selected)">Modifier le niveau contractuel</button>
         <button type="button" (click)="runAction('history', selected)">Historique des rotations</button>
         <button type="button" [disabled]="resettingUserId !== null" (click)="runAction('reset', selected)">Réinitialiser le mot de passe</button>
-        <button type="button" class="danger-action" (click)="runAction('delete', selected)">Supprimer l’employé</button>
+        @if (selected.isActive !== false) {
+          <button type="button" class="danger-action" (click)="runAction('deactivate', selected)">Désactiver (sortie)</button>
+        } @else {
+          <button type="button" (click)="runAction('reactivate', selected)">Réactiver</button>
+        }
       </div>
     </div>
   }
+
+  <app-employee-deactivate-dialog
+    [open]="!!deactivateTarget"
+    [employeeName]="deactivateTarget ? deactivateTarget.lastName + ' ' + deactivateTarget.firstName : ''"
+    [busy]="deactivating"
+    (confirmed)="confirmDeactivate($event)"
+    (cancel)="deactivateTarget = null"
+  />
 
   @if (levelModalOpen && levelModalUser) {
     <div class="level-modal-backdrop" appBodyPortal (click)="closeLevelModal()">

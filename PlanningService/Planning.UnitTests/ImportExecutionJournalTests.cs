@@ -152,7 +152,8 @@ public class ImportExecutionJournalTests
             CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<ImportChunkCreateResultDto>>(Array.Empty<ImportChunkCreateResultDto>());
         public Task<UserDto?> UpdateUserAsync(int id, UpdateUserDto dto) => throw new NotImplementedException();
-        public Task<bool> DeleteUserAsync(int id) => throw new NotImplementedException();
+        public Task<bool> SetUserActiveAsync(int id, bool isActive, DateOnly? dateSortie = null, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<bool> RollbackFailedCreationAsync(int id, CancellationToken ct = default) => throw new NotImplementedException();
         public Task SyncMissingAuthUsersAsync() => Task.CompletedTask;
         public Task SyncUserRoleToAuthAsync(int userId, CancellationToken ct = default) => Task.CompletedTask;
         public Task<UserDto?> GetUserByAuthIdAsync(int authUserId) => Task.FromResult<UserDto?>(null);
