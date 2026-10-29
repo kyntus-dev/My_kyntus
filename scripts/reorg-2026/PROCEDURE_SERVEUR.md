@@ -1,4 +1,4 @@
-# Réorganisation 2026 — procédure serveur (livraisons v3 + v4)
+# Réorganisation 2026 — procédure serveur (livraisons v3 + v4 + v5)
 
 Serveur : `o@10.10.10.25` · Projet : `/home/o/projets_mykyntus-`.
 État de départ : version déployée `a0c0f0b` + patch v2 (déployé le 29/10 à 09:07) + structure créée par l'étape 04 (09:12).
@@ -9,6 +9,7 @@ Serveur : `o@10.10.10.25` · Projet : `/home/o/projets_mykyntus-`.
 |---|---|
 | `reorg-2026-code-v3.patch` | Patch incrémental appliqué sur l'état actuel du serveur (24 fichiers, 2 services reconstruits). |
 | `reorg-2026-code-v4.patch` | Patch appliqué après la v3 (12 fichiers, Planning seulement) : les nœuds supprimés de l'Organisation RH sont masqués dans Planning, avec l'historique conservé. |
+| `reorg-2026-code-v5.patch` | Patch appliqué après la v4 (7 fichiers, `planning-frontend` seulement) : les noms d'activité, de pôle et de cellule s'affichent exactement comme enregistrés, sans découpage ni doublon. |
 | `Comptes_a_desactiver.xlsx` | Les 15 pilotes hors fichier, affectés à une cellule supprimée, à désactiver avant la suppression (phase F). |
 | `reorg-2026-scripts-v3.tar.gz` | Scripts de données et données validées (`scripts/reorg-2026`, `scripts/aide`). |
 | `Nouveaux_pilotes_a_creer.xlsx` | Les 14 comptes pilotes à créer depuis l'interface. |
@@ -26,6 +27,10 @@ Serveur : `o@10.10.10.25` · Projet : `/home/o/projets_mykyntus-`.
 2. **Affichage** : les écrans qui ne s'affichaient qu'après un clic se rafraîchissent maintenant seuls (Zone.js réactivé dans l'application).
 3. **Projection Organisation → Planning fiabilisée** : les 3 cellules non projetées hier (Support technicien, Prestations réseaux & CV, BTB) sont réparées au redémarrage de Planning, et le problème ne se reproduit plus.
 4. **v4 — anciens nœuds masqués dans Planning** : un pôle, une cellule ou un service supprimé dans l'Organisation RH disparaît des listes de Planning. Les plannings déjà publiés restent rattachés et consultables. Base de données : une colonne `IsArchived` ajoutée à 3 tables (valeur par défaut « visible »), rien n'est supprimé.
+5. **v5 — libellés identiques au fichier partout** :
+   - les noms contenant « / » (« Support Technicien RAC / SAV / PRESTA RESEAUX / Support VIP », « FTTO / Atlas ») ne sont plus découpés en Cellule + Service dans la fiche employé, le formulaire et les listes ;
+   - le service technique qui porte le même nom que sa cellule n'est plus affiché en double : la fiche montre Activité / Pôle / Cellule, comme le fichier ;
+   - aucune donnée n'est modifiée par ce patch : il corrige seulement l'affichage.
 
 > Règle de sécurité : **ne jamais lancer `docker compose up` sans `--no-deps --no-build`**.
 
@@ -35,7 +40,7 @@ Serveur : `o@10.10.10.25` · Projet : `/home/o/projets_mykyntus-`.
 
 ```powershell
 cd C:\Users\omar.elmahi\Downloads
-scp reorg-2026-code-v3.patch reorg-2026-code-v4.patch reorg-2026-scripts-v3.tar.gz o@10.10.10.25:/tmp/
+scp reorg-2026-code-v3.patch reorg-2026-code-v4.patch reorg-2026-code-v5.patch reorg-2026-scripts-v3.tar.gz o@10.10.10.25:/tmp/
 ```
 
 ## Phase A : sauvegardes (ne modifie rien)
@@ -51,7 +56,7 @@ for s in planning-backend planning-frontend; do
   c=$(docker compose ps -q "$s"); img=$(docker inspect --format '{{.Config.Image}}' "$c"); id=$(docker inspect --format '{{.Image}}' "$c")
   docker tag "$id" "reorg-avant-v3/$s:$STAMP" && echo "$s $img $id" | tee -a ~/sauvegardes_reorg/images_avant_v3_$STAMP.txt
 done
-cat /tmp/reorg-2026-code-v3.patch /tmp/reorg-2026-code-v4.patch | grep '^+++ b/' | cut -c7- | sort -u > ~/sauvegardes_reorg/fichiers_patch_v3_$STAMP.txt
+cat /tmp/reorg-2026-code-v3.patch /tmp/reorg-2026-code-v4.patch /tmp/reorg-2026-code-v5.patch | grep '^+++ b/' | cut -c7- | sort -u > ~/sauvegardes_reorg/fichiers_patch_v3_$STAMP.txt
 tar -czf ~/sauvegardes_reorg/code_avant_v3_$STAMP.tar.gz --ignore-failed-read -T ~/sauvegardes_reorg/fichiers_patch_v3_$STAMP.txt 2>/dev/null
 for db in employee_directory_db kyntus_db prime_db conge_db auth_db; do
   docker exec kyntus_db pg_dump -U postgres -Fc "$db" > ~/sauvegardes_reorg/${db}_v3_$STAMP.dump && echo "OK $db"
@@ -96,7 +101,17 @@ else
 fi
 ```
 
-Si la v3 est déjà déployée, n'appliquez que le bloc B2 bis : sa simulation n'est propre que sur une v3 en place.
+```bash
+# B2 ter. Patch v5 (affichage des libellés), même protection (à appliquer après la v4)
+cd /home/o/projets_mykyntus-
+if patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v5.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
+  echo "STOP : simulation non propre, rien n'a été modifié"; patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v5.patch | grep -iE "fail|already|assum|offset|fuzz"
+else
+  patch -p1 --batch < /tmp/reorg-2026-code-v5.patch > /dev/null && echo "PATCH V5 APPLIQUÉ PROPREMENT"
+fi
+```
+
+Chaque patch ne s'applique proprement que sur le précédent : si la v3 est déjà déployée, commencez au bloc B2 bis ; si la v4 l'est aussi, n'appliquez que le bloc B2 ter, puis reconstruisez seulement `planning-frontend` en phase C.
 
 ```bash
 # B3. Tests .NET (conteneur jetable)
@@ -137,6 +152,7 @@ Attendu dans les journaux : `✅ Patches schéma Planning appliqués.` sans lign
 - Avec un compte Admin, ouvrez Aide › Guide de l'application › « Ajouter un guide ». Indiquez le titre « Guide Pilotes », le type Vidéo, le rôle Pilote et un fichier de 28 Mo au maximum. Enregistrez.
 - Avec un compte Pilote, sur l'accueil, vous arrivez sur le guide avec le badge 1. Le bouton « Marquer comme consulté » fait passer à « 1 / 1 consultés » et le badge disparaît.
 - Naviguez dans quelques écrans (Planning, Prime, Documentation) : ils s'affichent sans clic supplémentaire.
+- Fiche d'un employé : le bloc organisation affiche Activité / Pôle / Cellule. Un nom contenant « / » apparaît entier dans la colonne Cellule.
 
 **Vidéo de plus de 28 Mo** (limite de la passerelle pour un envoi depuis le navigateur ; 150 Mo au maximum) :
 
@@ -201,14 +217,20 @@ $PY 07_deplacer_pilotes.py --appliquer
 
 ## Phase E : données — compléments de structure et responsables (fichier « Périmètre »)
 
-**E0. Libellé de l'activité OP-001** (décision du 29/10) : « bouygues » devient « Bytel Kyntus ». Seul le nom change ; code, pôles, affectations et historique restent identiques.
+**E0. Libellés des activités, exactement comme dans le fichier** (décision du 29/10) :
+
+- OP-001 « bouygues » devient « Bytel Kyntus » ;
+- OP-002 « orange » devient « Orange » ;
+- Bytel TISSEO (OP-005) porte déjà le nom du fichier.
+
+Seul le nom change ; code, pôles, affectations et historique restent identiques. Planning, Prime et Congé reçoivent le nouveau nom automatiquement.
 
 ```bash
-$PY 09_renommer_activite.py                     # simulation : affiche « bouygues » → « Bytel Kyntus »
+$PY 09_renommer_activite.py                     # simulation : affiche les 2 changements de nom
 $PY 09_renommer_activite.py --appliquer
 ```
 
-Pour revenir en arrière : `$PY 09_renommer_activite.py --nom "bouygues" --appliquer`.
+Pour revenir en arrière : `$PY 09_renommer_activite.py --code OP-001 --nom "bouygues" --appliquer`, et de même avec `--code OP-002 --nom "orange"`.
 
 **E1. Nouveaux nœuds** (validés) :
 
@@ -316,13 +338,46 @@ $PY 10_supprimer_anciens_noeuds.py --appliquer
 
 ---
 
+## Phase G : contrôle final de conformité au fichier (lecture seule)
+
+Ce contrôle compare l'application au fichier Contrat / Pôle / Cellule / Collaborateur, libellé par libellé. Il ne modifie rien.
+
+```bash
+cd /home/o/projets_mykyntus-/scripts/reorg-2026
+SAUVEGARDE=0 bash 01_sauvegarde_et_export.sh
+$PY 11_controle_conformite.py
+```
+
+Le script vérifie trois choses :
+
+1. **Chaque collaborateur du fichier** : activité, pôle et cellule enregistrés doivent être exactement ceux du fichier. Exemple : GHAZI Charaf Eddine → `Bytel Kyntus / Pôle technique / Prestations réseaux & CV`.
+2. **Structure** : aucun pôle ni cellule hors fichier dans Bytel Kyntus, Bytel TISSEO et Orange.
+3. **Planning** : chaque cellule existe dans Planning sous le même nom.
+
+Résultat attendu : `Collaborateurs du fichier conformes : 146 / 146` puis `✔ CONFORME AU FICHIER`.
+
+Sinon, chaque écart est listé avec la valeur attendue et la valeur constatée, et le détail est écrit dans `export_…/rapport/controle_conformite.csv` :
+
+| Statut | Signification |
+|---|---|
+| `MAUVAISE AFFECTATION` | Le collaborateur n'est pas dans la bonne cellule. Relancez l'étape 07. |
+| `LIBELLÉ DIFFÉRENT` | Bonne cellule, mais le nom diffère (majuscules, accents). Corrigez le nom dans Organisation RH. |
+| `COMPTE INACTIF` / `COMPTE INTROUVABLE` | Compte à réactiver ou à créer. |
+| `HORS FICHIER` | Ancien nœud encore présent : relancez la phase F. |
+| `ABSENT DE PLANNING` / `NOM DIFFÉRENT DANS PLANNING` | Lancez la synchronisation `sync-from-directory` (phase D2). |
+
+Note sur les pôles : le fichier écrit « pole technique », « pole BTB ». L'application affiche « Pôle technique », « Pôle BTB », comme tous les autres pôles, selon la décision d'harmonisation (Q7). Le contrôle attend donc cette forme.
+
+---
+
 ## Retour arrière
 
-**Cas 1 : code v3** (aucune donnée concernée) :
+**Cas 1 : code v3 à v5** (aucune donnée concernée) :
 
 ```bash
 cd /home/o/projets_mykyntus-
 STAMP=$(cat ~/sauvegardes_reorg/STAMP_V3)
+patch -p1 -R --batch < /tmp/reorg-2026-code-v5.patch
 patch -p1 -R --batch < /tmp/reorg-2026-code-v4.patch
 patch -p1 -R --batch < /tmp/reorg-2026-code-v3.patch
 while read -r s img id; do docker tag "reorg-avant-v3/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_v3_$STAMP.txt
