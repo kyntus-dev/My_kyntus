@@ -186,6 +186,15 @@ $PY 07_deplacer_pilotes.py --appliquer
 
 ## Phase E : données — compléments de structure et responsables (fichier « Périmètre »)
 
+**E0. Libellé de l'activité OP-001** (décision du 29/10) : « bouygues » devient « Bytel Kyntus ». Seul le nom change ; code, pôles, affectations et historique restent identiques.
+
+```bash
+$PY 09_renommer_activite.py                     # simulation : affiche « bouygues » → « Bytel Kyntus »
+$PY 09_renommer_activite.py --appliquer
+```
+
+Pour revenir en arrière : `$PY 09_renommer_activite.py --nom "bouygues" --appliquer`.
+
 **E1. Nouveaux nœuds** (validés) :
 
 - Orange › SFR › ATS ;
@@ -213,7 +222,7 @@ Relisez la simulation : chaque ligne indique le compte trouvé, son rôle actuel
 
 - Un **superviseur** couvre son activité entière, conformément à la règle. Ismail BERAHOU, Idealisoa RADAOROSON et AYMANE YOUSFI reçoivent donc toute leur activité, et pas seulement le pôle ou la cellule écrits dans le fichier.
 - Les **7 nouveaux responsables** deviennent Référents techniques. Leur ancienne affectation de pilote est clôturée, avec l'historique conservé.
-- **Loukmane KHATIRI** : ses affectations de superviseur sont retirées. **Zouheir BELHOUJI** et **Nadia TIRHANIME** restent inchangés.
+- **Loukmane KHATIRI** et **Zouheir BELHOUJI** : leurs affectations de superviseur sont retirées (décision du 29/10), avec l'historique conservé. **Nadia TIRHANIME** reste inchangée.
 - Une ligne `IGNORE` signale un compte introuvable, inactif ou porté par des homonymes. Traitez ce compte dans l'interface, puis relancez la simulation.
 
 ```bash
@@ -222,7 +231,7 @@ $PY 08_appliquer_responsables.py --appliquer
 
 **E3. Dans l'interface** :
 
-- Désactivez le compte de Loukmane KHATIRI (case « Compte actif »).
+- Désactivez le compte de Loukmane KHATIRI (case « Compte actif »). Le compte de Zouheir BELHOUJI reste actif.
 - Créez les 14 nouveaux pilotes à partir de `Nouveaux_pilotes_a_creer.xlsx`.
 
 **E4. Contrôle en lecture seule** :
