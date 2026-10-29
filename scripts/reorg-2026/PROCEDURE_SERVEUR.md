@@ -6,7 +6,7 @@ Serveur : `o@10.10.10.25` · Projet : `/home/o/projets_mykyntus-` · Version en 
 
 | Fichier | Contenu |
 |---|---|
-| `reorg-2026-code.patch` | Modifications de code, appliquées sur la version déployée (16 fichiers, 3 services seulement). |
+| `reorg-2026-code-v2.patch` | Modifications de code, appliquées sur la version déployée (17 fichiers, 3 services seulement). |
 | `reorg-2026-scripts.tar.gz` | Scripts de données (`scripts/reorg-2026/`) et décisions du classeur. Ces fichiers ne contiennent pas de code applicatif. |
 | `Nouveaux_pilotes_a_creer.xlsx` | Les 14 comptes à créer depuis l'interface, avec leur affectation cible. |
 
@@ -34,7 +34,7 @@ Aucun autre conteneur n'est reconstruit ni redémarré (`--no-deps`). Aucune mig
 
 ```powershell
 cd C:\Users\omar.elmahi\Downloads
-scp reorg-2026-code.patch reorg-2026-scripts.tar.gz o@10.10.10.25:/tmp/
+scp reorg-2026-code-v2.patch reorg-2026-scripts.tar.gz o@10.10.10.25:/tmp/
 ssh o@10.10.10.25
 ```
 
@@ -50,20 +50,9 @@ df -h / | tail -1          # il faut au moins 3 Go libres pour reconstruire 3 im
 ```
 
 ```bash
-# A1. Le code sur disque doit être celui de la production (a0c0f0b) pour les fichiers touchés
-cd /home/o/projets_mykyntus-
-grep '^+++ b/' /tmp/reorg-2026-code.patch | cut -c7- > ~/sauvegardes_reorg/fichiers_patch_$STAMP.txt
-patch -p1 --batch --dry-run < /tmp/reorg-2026-code.patch | grep -iE "fail|reject|already|ignored" \
-  && echo "STOP : le code sur disque diffère de a0c0f0b" || echo "OK : le patch s'applique proprement"
-if [ -d ~/kyntus_a0c0f0b ]; then
-  while read -r f; do [ -e ~/kyntus_a0c0f0b/"$f" ] && ! cmp -s "$f" ~/kyntus_a0c0f0b/"$f" && echo "ECART $f"; done \
-    < ~/sauvegardes_reorg/fichiers_patch_$STAMP.txt; echo "comparaison avec ~/kyntus_a0c0f0b terminée"
-fi
-```
-
-```bash
 # A2. Sauvegarde des fichiers touchés et des images en service (retour arrière instantané)
 cd /home/o/projets_mykyntus-
+grep '^+++ b/' /tmp/reorg-2026-code-v2.patch | cut -c7- > ~/sauvegardes_reorg/fichiers_patch_$STAMP.txt
 tar -czf ~/sauvegardes_reorg/code_avant_$STAMP.tar.gz --ignore-failed-read \
     -T ~/sauvegardes_reorg/fichiers_patch_$STAMP.txt 2>/dev/null
 : > ~/sauvegardes_reorg/images_avant_$STAMP.txt
@@ -83,10 +72,48 @@ done
 
 ## Phase B : application du code et tests (les conteneurs en service ne sont pas touchés)
 
+Les trois blocs suivants partent d'un état sûr, quel que soit l'état du disque :
+- R1 remet chaque fichier concerné dans sa version déployée (copie depuis `~/kyntus_a0c0f0b`). Les fichiers qui n'existent pas dans cette version sont mis de côté dans `~/quarantaine_reorg_<STAMP>`, rien n'est supprimé.
+- R2 contrôle le résultat.
+- R3 n'applique le patch que si la simulation est parfaite.
+
+**Si R2 affiche une ligne `HORS a0c0f0b` ou `ECART`, ou si R3 affiche `STOP`, arrêtez-vous et envoyez-moi la sortie.**
+
 ```bash
+# R1. Remise à l'état a0c0f0b des fichiers concernés (rien n'est supprimé)
 cd /home/o/projets_mykyntus-
-patch -p1 --batch < /tmp/reorg-2026-code.patch && echo "PATCH APPLIQUÉ"
+STAMP=$(cat ~/sauvegardes_reorg/STAMP_REORG)
+Q=~/quarantaine_reorg_$STAMP; mkdir -p "$Q"
+grep '^+++ b/' /tmp/reorg-2026-code-v2.patch | cut -c7- > ~/sauvegardes_reorg/fichiers_patch_v2_$STAMP.txt
+while read -r f; do
+  if [ -e ~/kyntus_a0c0f0b/"$f" ]; then cp -p ~/kyntus_a0c0f0b/"$f" "$f" && echo "remis a0c0f0b : $f"
+  elif [ -e "$f" ]; then mkdir -p "$Q/$(dirname "$f")" && mv "$f" "$Q/$f" && echo "mis de côté  : $f"; fi
+done < ~/sauvegardes_reorg/fichiers_patch_v2_$STAMP.txt
+find EmployeeDirectory PlanningService projet_kyntus_service_planning-frontend/src \
+     -path '*/node_modules' -prune -o -type f \( -name '*.rej' -o -name '*.orig' \) -print |
+while read -r f; do mkdir -p "$Q/$(dirname "$f")" && mv "$f" "$Q/$f" && echo "mis de côté  : $f"; done
 ```
+
+```bash
+# R2. Contrôle — aucun fichier source hors a0c0f0b dans les 3 services
+cd /home/o/projets_mykyntus-
+find EmployeeDirectory PlanningService projet_kyntus_service_planning-frontend/src \
+     \( -name bin -o -name obj -o -name node_modules -o -name .angular \) -prune -o -type f -print |
+while read -r f; do [ -e ~/kyntus_a0c0f0b/"$f" ] || echo "HORS a0c0f0b : $f"; done
+while read -r f; do [ -e ~/kyntus_a0c0f0b/"$f" ] && ! cmp -s "$f" ~/kyntus_a0c0f0b/"$f" && echo "ECART : $f"; done < ~/sauvegardes_reorg/fichiers_patch_v2_$STAMP.txt
+echo "contrôle terminé (aucune ligne HORS/ECART attendue)"
+```
+
+```bash
+# R3. Application protégée (n'écrit rien si la simulation n'est pas parfaite)
+cd /home/o/projets_mykyntus-
+if patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v2.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
+  echo "STOP : simulation non propre, rien n'a été modifié"; patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v2.patch | grep -iE "fail|already|assum|offset|fuzz"
+else
+  patch -p1 --batch < /tmp/reorg-2026-code-v2.patch > /dev/null && echo "PATCH APPLIQUÉ PROPREMENT ($(wc -l < ~/sauvegardes_reorg/fichiers_patch_v2_$STAMP.txt) fichiers)"
+fi
+```
+
 
 Tests .NET dans un conteneur SDK jetable. Seuls les projets nécessaires sont envoyés (sans `bin`/`obj`) :
 
@@ -273,7 +300,7 @@ Les anciens pôles et cellules restent en place, sans suppression. Leur archivag
 ```bash
 cd /home/o/projets_mykyntus-
 STAMP=$(cat ~/sauvegardes_reorg/STAMP_REORG)
-patch -p1 -R --batch < /tmp/reorg-2026-code.patch          # remet les fichiers en a0c0f0b
+patch -p1 -R --batch < /tmp/reorg-2026-code-v2.patch          # remet les fichiers en a0c0f0b
 # Si la phase C a été faite : on remet les images d'avant, sans reconstruire
 while read -r s img id; do docker tag "reorg-avant/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_$STAMP.txt
 docker compose up -d --no-deps --no-build employee-directory-backend planning-backend planning-frontend
