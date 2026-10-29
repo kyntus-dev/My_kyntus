@@ -22,6 +22,12 @@ public class SubService
     [MaxLength(64)]
     public string? PrimeServiceId { get; set; }
 
+    /// <summary>
+    /// Nœud supprimé dans l'Organisation RH : masqué des listes Planning, mais conservé
+    /// (avec ses plannings) pour l'historique.
+    /// </summary>
+    public bool IsArchived { get; set; }
+
     /// <summary>Active la configuration multi-modes de shifts pour cette cellule.</summary>
     public bool MultiShiftModesEnabled { get; set; }
 

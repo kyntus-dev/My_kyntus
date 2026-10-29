@@ -708,6 +708,21 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>
+    /// Nœuds d'organisation supprimés dans l'Organisation RH : masqués des listes Planning,
+    /// conservés avec leurs plannings pour l'historique (colonnes additives, défaut = visible).
+    /// </summary>
+    public static async Task EnsureOrgMirrorArchiveColumnsAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "Floors" ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            ALTER TABLE "Services" ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            ALTER TABLE "SubServices" ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            """,
+            ct);
+    }
+
     /// <summary>Espace Aide : guides de l'application et suivi « consulté » (tables additives).</summary>
     public static async Task EnsureAppGuidesAsync(AppDbContext db, CancellationToken ct = default)
     {
