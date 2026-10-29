@@ -8,9 +8,14 @@
       <h1 class="page-title">Import / Export Employés</h1>
       <p class="page-sub">Importer jusqu'à 200+ employés en une seule opération</p>
     </div>
-    <button class="btn-export ky-btn-secondary" (click)="exportUsers()">
-      Exporter tous les employés
-    </button>
+    <div class="export-group" role="group" aria-label="Exporter les employés en Excel">
+      <span class="export-group-label">Exporter :</span>
+      @for (scope of exportScopes; track scope.value) {
+        <button type="button" class="btn-export ky-btn-secondary" [disabled]="!!exporting" (click)="exportUsers(scope.value)">
+          {{ exporting === scope.value ? 'Export…' : scope.label }}
+        </button>
+      }
+    </div>
   </div>
 
   <div class="content-grid">

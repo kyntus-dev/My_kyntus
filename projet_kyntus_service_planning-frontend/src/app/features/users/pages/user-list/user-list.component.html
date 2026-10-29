@@ -14,8 +14,17 @@
         <details class="toolbar-menu" #generalMenu>
           <summary class="ky-btn-secondary">Autres actions</summary>
           <div class="toolbar-dropdown">
-            <button type="button" (click)="generalMenu.open = false; goimport()">Importer / Exporter</button>
+            <button type="button" (click)="generalMenu.open = false; goimport()">Importer</button>
             <button type="button" (click)="generalMenu.open = false; openGroupReset()">Régénérer par groupe</button>
+          </div>
+        </details>
+        <details class="toolbar-menu" #exportMenu>
+          <summary class="ky-btn-secondary" [attr.aria-busy]="!!exporting">{{ exporting ? 'Export en cours…' : 'Exporter' }}</summary>
+          <div class="toolbar-dropdown">
+            <p>Fichier Excel avec l'organisation (activité, pôle, cellule).</p>
+            <button type="button" [disabled]="!!exporting || loading" (click)="exportMenu.open = false; exportEmployees('all')">Tous les employés</button>
+            <button type="button" [disabled]="!!exporting || loading" (click)="exportMenu.open = false; exportEmployees('active')">Employés actifs</button>
+            <button type="button" [disabled]="!!exporting || loading" (click)="exportMenu.open = false; exportEmployees('inactive')">Employés inactifs</button>
           </div>
         </details>
         <button type="button" class="ky-btn-primary" (click)="createUser()"><span aria-hidden="true">+</span> Nouvel employé</button>
@@ -28,14 +37,43 @@
           placeholder="Nom, email, matricule, CIN ou téléphone…" [(ngModel)]="searchTerm" (input)="onSearch()" />
       </div>
       <label class="service-filter">
-        <span>Service</span>
-        <select class="ky-input" [ngModel]="serviceFilter" (ngModelChange)="onServiceFilterChange($event)" aria-label="Filtrer les employés par service">
-          <option value="">Tous les services</option>
-          @for (option of serviceFilterOptions; track option.value) {
+        <span>Statut</span>
+        <select class="ky-input" [ngModel]="statusFilter" (ngModelChange)="onStatusFilterChange($event)" aria-label="Filtrer les employés par statut">
+          @for (scope of statusScopes; track scope.value) {
+            <option [value]="scope.value">{{ scope.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="service-filter">
+        <span>Activité</span>
+        <select class="ky-input" [ngModel]="orgFilter.activite" (ngModelChange)="onOrgFilterChange('activite', $event)" aria-label="Filtrer les employés par activité">
+          <option value="">Toutes les activités</option>
+          @for (option of orgFilterOptions.activites; track option.value) {
             <option [value]="option.value">{{ option.label }}</option>
           }
         </select>
       </label>
+      <label class="service-filter">
+        <span>Pôle</span>
+        <select class="ky-input" [ngModel]="orgFilter.pole" (ngModelChange)="onOrgFilterChange('pole', $event)" aria-label="Filtrer les employés par pôle">
+          <option value="">Tous les pôles</option>
+          @for (option of orgFilterOptions.poles; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="service-filter">
+        <span>Cellule</span>
+        <select class="ky-input" [ngModel]="orgFilter.cellule" (ngModelChange)="onOrgFilterChange('cellule', $event)" aria-label="Filtrer les employés par cellule">
+          <option value="">Toutes les cellules</option>
+          @for (option of orgFilterOptions.cellules; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      @if (hasActiveFilters) {
+        <button type="button" class="ky-btn-secondary clear-filters" (click)="clearFilters()">Effacer les filtres</button>
+      }
       <details class="toolbar-menu column-picker">
         <summary class="ky-btn-secondary">Colonnes</summary>
         <div class="toolbar-dropdown">
@@ -62,8 +100,12 @@
       </div>
     } @else if (filteredUsers.length === 0) {
       <div class="state-box empty">
-        <p>Aucun employé ne correspond à "<strong>{{ searchTerm }}</strong>"</p>
-        <button class="btn btn-outline ky-btn-secondary" (click)="searchTerm=''; onSearch()">Effacer la recherche</button>
+        <p>{{ emptyStateMessage }}</p>
+        @if (searchTerm.trim()) {
+          <button class="btn btn-outline ky-btn-secondary" (click)="searchTerm=''; onSearch()">Effacer la recherche</button>
+        } @else if (hasActiveFilters) {
+          <button class="btn btn-outline ky-btn-secondary" (click)="clearFilters()">Effacer les filtres</button>
+        }
       </div>
     } @else {
       <div class="table-wrapper" #employeeTable (scroll)="rememberScroll($event)" tabindex="0" role="region" aria-label="Liste des employés, défilement du tableau">
@@ -103,8 +145,13 @@
                 @if (showColumn('organisation')) {
                   <td data-label="Organisation" class="organisation-cell">
                     <strong>{{ orgCellLabel(orgDepartmentLabel(perimeter)) }}</strong>
-                    <span>{{ orgCellLabel(perimeter.pole) }} / {{ orgCellLabel(perimeter.cellule) }}</span>
-                    <span>{{ orgCellLabel(perimeter.service) }}</span>
+                    @if (!perimeter.isSupport) {
+                      <span title="Pôle">{{ orgCellLabel(perimeter.pole) }}</span>
+                      <span class="org-cellule" title="Cellule">{{ orgCellLabel(perimeter.cellule) }}</span>
+                      @if (perimeter.service && !orgServiceIsCelluleMirror(perimeter)) {
+                        <span class="org-service" title="Service">{{ perimeter.service }}</span>
+                      }
+                    }
                   </td>
                 }
                 @if (showColumn('matricule')) { <td data-label="Matricule">{{ matriculeDisplay(user) }}</td> }

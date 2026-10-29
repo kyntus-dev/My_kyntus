@@ -403,7 +403,7 @@
 .employee-heading,.employee-filters,.toolbar-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .employee-heading{margin-bottom:16px}.employee-heading .ky-page-title{margin:0 0 6px}.employee-heading .ky-page-subtitle{margin:0}.toolbar-actions{justify-content:flex-end}
 .employee-filters .search-box{padding:0;flex:1;min-width:180px;max-width:620px}.search-input{min-width:0;width:100%}
-.service-filter{display:flex;align-items:center;gap:8px;flex:0 1 300px;min-width:220px;color:var(--text-muted);font-size:12px;font-weight:700}.service-filter select{min-width:0;width:100%;padding:9px 32px 9px 11px;font-size:13px;font-weight:500;color:var(--text-primary)}
+.service-filter{display:flex;align-items:center;gap:8px;flex:0 1 230px;min-width:170px;color:var(--text-muted);font-size:12px;font-weight:700}.service-filter select{min-width:0;width:100%;padding:9px 32px 9px 11px;font-size:13px;font-weight:500;color:var(--text-primary)}
 .toolbar-menu{position:relative}.toolbar-menu summary{list-style:none;cursor:pointer}.toolbar-menu summary::-webkit-details-marker{display:none}
 .toolbar-dropdown{position:absolute;top:calc(100% + 6px);right:0;width:260px;max-width:calc(100vw - 32px);max-height:50vh;overflow-y:auto;z-index:20;padding:10px;background:var(--bg-card,white);border:1px solid var(--border-color,#dbe3ef);border-radius:12px;box-shadow:0 8px 24px #14263b26}
 .toolbar-dropdown p{font-size:12px;padding:6px;color:var(--text-muted)}.toolbar-dropdown button,.toolbar-dropdown label{display:flex;width:100%;gap:10px;text-align:left;padding:10px;align-items:center;border-radius:6px}.toolbar-dropdown button:hover,.toolbar-dropdown label:hover{background:var(--bg-input)}.toolbar-dropdown input{width:17px;height:17px}
@@ -434,3 +434,9 @@
 .employee-table td,.employee-table .col-person,.employee-table .col-actions{display:block;position:static;width:auto;min-width:0;max-width:none;padding:7px 0;border:0;box-shadow:none;white-space:normal}
 .employee-table td[data-label]:not(.col-person)::before{content:attr(data-label);display:block;font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:4px}.employee-table .col-actions{text-align:left}.employee-table .action-group{display:flex}.employee-table .btn-action{height:42px;min-width:42px}.employee-table .btn-detail{flex:1}.employee-pagination{padding:8px;gap:8px;font-size:12px}.pagination-buttons{width:100%;justify-content:space-between}.toolbar-actions .toolbar-dropdown{right:auto;left:0}
 }
+/* Filtres d'organisation, statut et export */
+.employee-filters .clear-filters{padding:9px 12px;font-size:13px;white-space:nowrap}
+.organisation-cell .org-cellule{color:var(--text-primary);font-weight:500}
+.organisation-cell .org-service{font-style:italic}
+.toolbar-dropdown button:disabled{opacity:.55;cursor:not-allowed}
+.toolbar-dropdown button:disabled:hover{background:none}

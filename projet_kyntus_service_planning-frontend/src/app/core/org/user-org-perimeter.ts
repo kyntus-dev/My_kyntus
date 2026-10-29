@@ -62,7 +62,8 @@ export function applyOperationalBusinessDepartmentToPerimeter(
   const dept = businessDepartments.find((d) => d.id === employee.businessDepartmentId);
   const kind = (employee.businessDepartmentKind ?? dept?.kind ?? '').toLowerCase();
   if (kind !== 'operational') return view;
-  const label = resolveSupportDepartmentLabel(employee.businessDepartmentId, businessDepartments);
+  // Activité de production : nom seul, exactement comme dans le fichier d'organisation (sans code).
+  const label = dept?.name?.trim() || dept?.code?.trim();
   if (!label) return view;
   return { ...view, operationalDepartment: label };
 }
