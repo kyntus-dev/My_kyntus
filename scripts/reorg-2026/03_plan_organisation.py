@@ -40,13 +40,15 @@ def main() -> int:
     ap.add_argument("--export")
     ap.add_argument("--cible", default=str(HERE / "donnees" / "organisation_cible.csv"))
     ap.add_argument("--correspondances", default=str(HERE / "donnees" / "correspondance_activites.csv"))
+    ap.add_argument("--complement", default=str(HERE / "donnees" / "organisation_complement.csv"),
+                    help="nœuds supplémentaires validés (fichier des périmètres responsables)")
     args = ap.parse_args()
 
     export = export_dir(args.export)
     out = export / "rapport"
     out.mkdir(parents=True, exist_ok=True)
 
-    target = read_csv(Path(args.cible), ";")
+    target = read_csv(Path(args.cible), ";") + read_csv(Path(args.complement), ";")
     depts = [d for d in read_csv(export / "business_departments.csv") if d["Kind"] in ("0", "Operational")]
     poles = read_csv(export / "org_poles.csv")
     cellules = read_csv(export / "org_cellules.csv")

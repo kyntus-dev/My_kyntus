@@ -6,3 +6,4 @@ __pycache__/
 donnees/organisation_cible.csv
 donnees/deplacements_pilotes.csv
 donnees/nouveaux_comptes*
+donnees/responsables_cible.csv
