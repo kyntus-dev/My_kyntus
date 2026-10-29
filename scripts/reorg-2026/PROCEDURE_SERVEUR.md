@@ -257,7 +257,7 @@ $PY 08_appliquer_responsables.py                # SIMULATION
 
 Relisez la simulation : chaque ligne indique le compte trouvé, son rôle actuel et le périmètre cible.
 
-- Un **superviseur** couvre son activité entière, conformément à la règle. Ismail BERAHOU, Idealisoa RADAOROSON et AYMANE YOUSFI reçoivent donc toute leur activité, et pas seulement le pôle ou la cellule écrits dans le fichier.
+- Chaque responsable reçoit **exactement le périmètre écrit dans le fichier** (règle v8) : activité entière, pôle entier ou cellule(s). Ismail BERAHOU : Bytel Kyntus › Pôle escalade et contrôle ; Idealisoa RADAOROSON et AYMANE YOUSFI : Orange › SFR › ATS ; Asmae RAMDANI : toute l'activité Bytel Kyntus ; Salima DRIFF : toute l'activité Bytel TISSEO. (Avant la v8, un superviseur recevait toute son activité : voir « Livraison v8 ».)
 - Les **7 nouveaux responsables** deviennent Référents techniques. Leur ancienne affectation de pilote est clôturée, avec l'historique conservé.
 - **Loukmane KHATIRI** et **Zouheir BELHOUJI** : leurs affectations de superviseur sont retirées (décision du 29/10), avec l'historique conservé. **Nadia TIRHANIME** reste inchangée.
 - Une ligne `IGNORE` signale un compte introuvable, inactif ou porté par des homonymes. Traitez ce compte dans l'interface, puis relancez la simulation.
@@ -692,3 +692,142 @@ docker compose up -d --no-deps --no-build auth-backend employee-directory-backen
 
 Les comptes désactivés entre-temps restent désactivés côté Auth (comportement voulu) ; pour en rétablir un, utilisez « Réactiver » avant le retour arrière.
 
+
+---
+
+# Livraison v8 : périmètres exacts du fichier « Périmètre », sélection multiple
+
+À appliquer **après la v7**. Elle ne modifie aucune donnée par elle-même : les périmètres en base ne changent qu'à l'étape v8-E (relance de l'étape 08), après simulation et votre validation.
+
+| Fichier | Contenu |
+|---|---|
+| `reorg-2026-code-v8.patch` | 16 fichiers : Organisation RH (Directory) et Planning frontend. |
+| `reorg-2026-scripts-v4.tar.gz` | Scripts de données, dont `08_appliquer_responsables.py` et `donnees/responsables_cible.csv` mis à jour. |
+
+**Ce qui change**
+
+1. **Périmètre exact** : chaque superviseur, référent technique et chef de projet reçoit le périmètre écrit dans le fichier, au bon niveau :
+
+   | Niveau choisi | Superviseur | Référent technique | Chef de projet |
+   |---|---|---|---|
+   | Activité entière | toutes ses cellules | tous les services de ses cellules | tous ses pôles |
+   | Pôle entier | les cellules du pôle | les services du pôle | le pôle |
+   | Cellule(s) | ces cellules | leurs services | non autorisé |
+
+   **Changement de règle** : un superviseur ne reçoit plus automatiquement toute son activité. Ismail BERAHOU est limité au Pôle escalade et contrôle ; Idealisoa RADAOROSON et AYMANE YOUSFI à Orange › SFR › ATS. Asmae RAMDANI (Bytel Kyntus) et Salima DRIFF (Bytel TISSEO) gardent leur activité entière, comme dans le fichier.
+   Une nouvelle cellule créée dans un pôle ou une activité couverts entièrement est ajoutée automatiquement au responsable.
+2. **Sélection multiple** dans la fiche employé (Modifier › Responsabilité) : arbre activités › pôles › cellules à cocher. Plusieurs pôles ou cellules, et même plusieurs activités, peuvent être cochés ; cocher un parent couvre ses enfants. Le périmètre « Principal » sert d'ancre à la fiche (bouton « Définir principal »).
+3. **« Membres de mon équipe »** (menu Planning, pour superviseurs, référents techniques et chefs de projet) : liste en lecture seule des collaborateurs actifs de leur périmètre, avec filtres activité › pôle › cellule, recherche et effectif par cellule. La même règle de périmètre s'applique à « Congés de l'équipe » (v7).
+
+**Services reconstruits** : `employee-directory-backend`, `planning-frontend`.
+
+## v8-0 : copie (depuis Windows)
+
+```powershell
+cd C:\Users\omar.elmahi\Downloads
+scp reorg-2026-code-v8.patch reorg-2026-scripts-v4.tar.gz o@10.10.10.25:/tmp/
+```
+
+## v8-A : sauvegardes (ne modifie rien)
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(date +%Y%m%d_%H%M%S); echo "$STAMP" > ~/sauvegardes_reorg/STAMP_V8; echo "STAMP=$STAMP"
+: > ~/sauvegardes_reorg/images_avant_v8_$STAMP.txt
+for s in employee-directory-backend planning-frontend; do
+  c=$(docker compose ps -q "$s"); img=$(docker inspect --format '{{.Config.Image}}' "$c"); id=$(docker inspect --format '{{.Image}}' "$c")
+  docker tag "$id" "reorg-avant-v8/$s:$STAMP" && echo "$s $img $id" | tee -a ~/sauvegardes_reorg/images_avant_v8_$STAMP.txt
+done
+grep '^+++ b/' /tmp/reorg-2026-code-v8.patch | cut -c7- | sed 's/\t.*$//' | sort -u > ~/sauvegardes_reorg/fichiers_v8_$STAMP.txt
+tar -czf ~/sauvegardes_reorg/code_avant_v8_$STAMP.tar.gz --ignore-failed-read -T ~/sauvegardes_reorg/fichiers_v8_$STAMP.txt 2>/dev/null
+tar -czf ~/sauvegardes_reorg/scripts_avant_v8_$STAMP.tar.gz --exclude='export_*' scripts/reorg-2026
+docker exec kyntus_db pg_dump -U postgres -Fc employee_directory_db > ~/sauvegardes_reorg/employee_directory_db_v8_$STAMP.dump && echo "OK employee_directory_db"
+```
+
+## v8-B : application protégée
+
+```bash
+cd /home/o/projets_mykyntus-
+if patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v8.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
+  echo "STOP : simulation non propre, rien n'a été modifié"; patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v8.patch | grep -iE "fail|already|assum|offset|fuzz"
+else
+  patch -p1 --batch < /tmp/reorg-2026-code-v8.patch > /dev/null && echo "PATCH V8 APPLIQUÉ PROPREMENT"
+fi
+tar -xzf /tmp/reorg-2026-scripts-v4.tar.gz && echo "SCRIPTS V4 EXTRAITS"
+```
+
+Les dossiers `export_…` déjà présents ne sont pas touchés.
+
+## v8-C : compilation et tests (conteneur jetable)
+
+```bash
+cd /home/o/projets_mykyntus-
+tar -cf - --exclude='bin' --exclude='obj' --exclude='node_modules' --exclude='TestResults' \
+    Directory.Build.props Directory.Packages.props Messaging.Contracts Shared.Kernel \
+    Kyntus.Caching Kyntus.Iam Kyntus.Identity.Jwt Kyntus.Messaging.Outbox tests EmployeeDirectory \
+| docker run --rm -i mcr.microsoft.com/dotnet/sdk:8.0 bash -c '
+  mkdir -p /work && cd /work && tar -xf -
+  dotnet build EmployeeDirectory/EmployeeDirectory.API/EmployeeDirectory.API.csproj -c Release 2>&1 | grep -E " error |Error\(s\)" | tail -3
+  dotnet test EmployeeDirectory/EmployeeDirectory.UnitTests/EmployeeDirectory.UnitTests.csproj -c Release --filter "FullyQualifiedName~OrgScope" 2>&1 | grep -E "Failed |Passed!|Failed!" | tail -8'
+```
+
+Attendu : `0 Error(s)` et `Passed!` pour les tests de périmètre. **Tout échec : arrêtez-vous** (retour arrière v8). Le frontend est compilé par `docker compose build` à l'étape suivante ; une erreur y arrête la construction sans toucher au service en ligne.
+
+## v8-D : reconstruction et bascule
+
+```bash
+cd /home/o/projets_mykyntus-
+docker compose build employee-directory-backend planning-frontend
+docker compose up -d --no-deps --no-build employee-directory-backend planning-frontend
+sleep 60
+docker compose ps employee-directory-backend planning-frontend
+```
+
+## v8-E : périmètres du fichier (données, après votre validation)
+
+Relance de l'étape 08 avec la règle « périmètre exact ». Simulation d'abord :
+
+```bash
+cd /home/o/projets_mykyntus-/scripts/reorg-2026
+if command -v python3 >/dev/null; then PY=python3; else PY="docker run --rm -it --network host -e KYNTUS_GATEWAY -e KYNTUS_EMAIL -v $PWD:$PWD -w $PWD python:3.12-slim python3"; fi
+export KYNTUS_GATEWAY=http://localhost:8500
+read -p "Email Admin : " KYNTUS_EMAIL; export KYNTUS_EMAIL
+bash 01_sauvegarde_et_export.sh                 # sauvegarde complète + export à jour
+$PY 08_appliquer_responsables.py                # SIMULATION
+```
+
+Attendu en simulation :
+
+- `A_APPLIQUER` pour Ismail BERAHOU (Bytel Kyntus › Pôle escalade et contrôle), Idealisoa RADAOROSON et AYMANE YOUSFI (Orange › SFR › ATS) : leurs cellules hors périmètre seront retirées, avec l'historique conservé ;
+- `DEJA_EN_PLACE` pour les responsables dont le périmètre est déjà exact ;
+- aucun `BLOQUANT`. Une ligne `IGNORE` signale un compte introuvable, inactif ou homonyme : traitez-le dans l'interface puis relancez la simulation.
+
+Si la simulation vous convient :
+
+```bash
+$PY 08_appliquer_responsables.py --appliquer
+SAUVEGARDE=0 bash 01_sauvegarde_et_export.sh && $PY 08_appliquer_responsables.py   # contrôle : tout en DEJA_EN_PLACE
+```
+
+Retour arrière des périmètres : `$PY 08_appliquer_responsables.py --retour-arriere export_XXX/rapport/journal_responsables_XXX.json` (simulation), puis la même commande avec `--appliquer`.
+
+**Recette** (Ctrl + F5) :
+
+- Fiche d'Ismail BERAHOU › Modifier › Responsabilité : l'arbre montre « Pôle escalade et contrôle » coché (Pôle entier), ses cellules couvertes, et la puce « Principal ».
+- Fiche d'Idealisoa RADAOROSON : seule la cellule ATS est cochée.
+- Sur un compte de test superviseur : cocher deux cellules de deux pôles différents, enregistrer, rouvrir : les deux cellules sont conservées.
+- Avec le compte d'un superviseur : Planning › « Membres de mon équipe » ne liste que les collaborateurs de son périmètre ; « Congés de l'équipe » affiche la même équipe.
+- Fiche d'un pilote d'ATS › Responsables : Idealisoa RADAOROSON et AYMANE YOUSFI sont proposés ; Ismail BERAHOU ne l'est plus.
+
+## v8 : retour arrière (code seulement)
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(cat ~/sauvegardes_reorg/STAMP_V8)
+patch -p1 -R --batch < /tmp/reorg-2026-code-v8.patch
+tar -xzf ~/sauvegardes_reorg/scripts_avant_v8_$STAMP.tar.gz
+while read -r s img id; do docker tag "reorg-avant-v8/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_v8_$STAMP.txt
+docker compose up -d --no-deps --no-build employee-directory-backend planning-frontend
+```
+
+Les périmètres posés en v8-E restent en base : pour revenir aux périmètres précédents, utilisez d'abord le retour arrière de l'étape 08 (journal ci-dessus). En dernier recours, la base complète se restaure depuis `employee_directory_db_v8_$STAMP.dump` (`pg_restore --clean`), service `employee-directory-backend` arrêté.
