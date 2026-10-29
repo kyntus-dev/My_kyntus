@@ -22,6 +22,9 @@ import type {
  * Rôles : voir core/org/kyntus-role-names.ts (aligné Messaging.Contracts/KyntusRoleNames).
  */
 
+/** Route de l'espace Aide › Guide de l'application. */
+export const APP_GUIDE_ROUTE = '/aide/guide';
+
 export interface MenuItem {
   label: string;
   /** Lien interne (routerLink) au sein de la SPA. */
@@ -103,6 +106,7 @@ const ICONS = {
   award: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>',
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
   shield: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+  help: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
   eye: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
 };
 
@@ -317,6 +321,16 @@ export const MICROSERVICES: Microservice[] = [
       { label: 'Mon espace', isSectionHeader: true, roles: QUALITE_CQ_PILOT_ROLES, hat: 'self' },
       { label: 'Mes évaluations', route: '/qualite/cq?view=mine', roles: QUALITE_CQ_PILOT_ROLES, hat: 'self' },
       { label: 'Mes coachings', route: '/qualite/cq?view=coachings-me', roles: QUALITE_CQ_PILOT_ROLES, hat: 'self' },
+    ],
+  },
+  {
+    // Espace Aide : visible par tous les utilisateurs connectés, dans les deux casquettes.
+    id: 'aide',
+    label: 'Aide',
+    icon: ICONS.help,
+    children: [
+      { label: 'Guide de l\'application', route: APP_GUIDE_ROUTE, hat: 'both' },
+      { label: 'Assistance', route: '/assistance', hat: 'both' },
     ],
   },
 ];

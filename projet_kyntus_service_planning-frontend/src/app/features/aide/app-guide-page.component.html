@@ -1,0 +1,208 @@
+<div class="guide-page">
+  <app-kyntus-page-header title="Guide de l’application" [subtitle]="'Parcours pour le rôle ' + roleLabel()">
+    <div actions class="guide-actions">
+      @if (my(); as m) {
+        <span class="guide-progress" [class.guide-progress--done]="m.total > 0 && m.viewedCount === m.total">
+          {{ m.viewedCount }} / {{ m.total }} consultés
+        </span>
+      }
+      @if (pending() > 0) {
+        <button type="button" class="ky-btn-secondary" (click)="skipForNow()">Passer pour l’instant</button>
+      }
+    </div>
+  </app-kyntus-page-header>
+
+  @if (error()) {
+    <div class="guide-alert" role="alert">{{ error() }}</div>
+  }
+
+  @if (loading() && !my()) {
+    <div class="guide-card guide-empty">Chargement du guide…</div>
+  } @else if (my(); as m) {
+    @if (m.guides.length === 0) {
+      <div class="guide-card guide-empty">
+        <strong>Aucun guide n’est encore disponible pour votre rôle.</strong>
+        @if (isManager()) {
+          <span>Ajoutez un guide dans « Gérer les guides » ci-dessous.</span>
+        } @else {
+          <span>Consultez l’Assistance en attendant ; les guides apparaîtront ici dès leur publication.</span>
+        }
+      </div>
+    } @else {
+      <div class="guide-layout">
+        <aside class="guide-card guide-list" aria-label="Parcours">
+          <div class="guide-list-title">Parcours</div>
+          @for (g of m.guides; track g.id) {
+            <button
+              type="button"
+              class="guide-item"
+              [class.guide-item--active]="g.id === selected()?.id"
+              (click)="select(g)">
+              <span class="guide-item-text">
+                <strong>{{ g.title }}</strong>
+                <span>{{ kindLabel(g.kind) }}</span>
+              </span>
+              @if (g.viewed) {
+                <span class="guide-item-check" title="Consulté">✓</span>
+              }
+            </button>
+          }
+        </aside>
+
+        @if (selected(); as g) {
+          <section class="guide-card guide-viewer">
+            <div class="guide-viewer-head">
+              <h2>{{ g.title }}</h2>
+              @if (g.viewed) {
+                <span class="guide-viewed-chip">Consulté</span>
+              } @else {
+                <button type="button" class="ky-btn-secondary" [disabled]="marking()" (click)="markViewed(g)">
+                  Marquer comme consulté
+                </button>
+              }
+            </div>
+            @if (g.description) {
+              <p class="guide-description">{{ g.description }}</p>
+            }
+
+            @if (g.kind === 'Video' && (g.mediaAssetId || (g.externalUrl && isDirectVideoUrl(g.externalUrl)))) {
+              @if (videoUrl(); as url) {
+                <video class="guide-video" [src]="url" controls preload="metadata" (ended)="onVideoEnded(g)"></video>
+              } @else {
+                <div class="guide-video guide-video--loading">{{ videoLoading() ? 'Chargement de la vidéo…' : 'Vidéo indisponible' }}</div>
+              }
+            } @else {
+              <div class="guide-open">
+                <span>
+                  {{ g.kind === 'Document' ? 'Document' : g.kind === 'Link' ? 'Lien' : 'Vidéo' }}
+                  {{ g.mediaFileName ? '« ' + g.mediaFileName + ' »' : '' }}
+                </span>
+                <button type="button" class="ky-btn-primary" (click)="openFile(g)">Ouvrir</button>
+              </div>
+            }
+          </section>
+        }
+      </div>
+    }
+  }
+
+  @if (isManager()) {
+    <section class="guide-admin">
+      <div class="guide-admin-head">
+        <div>
+          <h2>Gérer les guides</h2>
+          <p>Visible par les rôles Admin et RH. Un guide sans rôle ciblé s’affiche pour tout le monde.</p>
+        </div>
+        @if (!form()) {
+          <button type="button" class="ky-btn-primary" (click)="newGuide()">Ajouter un guide</button>
+        }
+      </div>
+
+      @if (form(); as f) {
+        <form class="guide-card guide-form" (ngSubmit)="save()">
+          <label class="guide-field">
+            <span>Titre</span>
+            <input type="text" name="title" maxlength="200" required [ngModel]="f.title" (ngModelChange)="patchForm({ title: $event })" />
+          </label>
+          <label class="guide-field">
+            <span>Description (facultatif)</span>
+            <textarea name="description" rows="2" maxlength="2000" [ngModel]="f.description" (ngModelChange)="patchForm({ description: $event })"></textarea>
+          </label>
+          <div class="guide-form-row">
+            <label class="guide-field">
+              <span>Type</span>
+              <select name="kind" [ngModel]="f.kind" (ngModelChange)="patchForm({ kind: $event })">
+                <option value="Video">Vidéo</option>
+                <option value="Document">Document</option>
+                <option value="Link">Lien</option>
+              </select>
+            </label>
+            <label class="guide-field guide-field--small">
+              <span>Ordre</span>
+              <input type="number" name="sortOrder" [ngModel]="f.sortOrder" (ngModelChange)="patchForm({ sortOrder: $event })" />
+            </label>
+            <label class="guide-check">
+              <input type="checkbox" name="isActive" [ngModel]="f.isActive" (ngModelChange)="patchForm({ isActive: $event })" />
+              <span>Publié</span>
+            </label>
+          </div>
+
+          @if (f.kind !== 'Link') {
+            <div class="guide-field">
+              <span>Fichier {{ f.kind === 'Video' ? '(mp4, webm, mov — 28 Mo max. depuis le navigateur)' : '(PDF, Word, Excel)' }}</span>
+              <div class="guide-file">
+                <input
+                  type="file"
+                  [accept]="f.kind === 'Video' ? 'video/mp4,video/webm,video/quicktime' : '.pdf,.doc,.docx,.xls,.xlsx'"
+                  (change)="onFileSelected($event)" />
+                @if (uploading()) {
+                  <span class="guide-muted">Envoi en cours…</span>
+                } @else if (f.mediaFileName) {
+                  <span class="guide-muted">Fichier : {{ f.mediaFileName }}</span>
+                }
+              </div>
+            </div>
+          }
+          <label class="guide-field">
+            <span>{{ f.kind === 'Link' ? 'Adresse du lien' : 'Ou adresse d’un fichier en ligne (facultatif)' }}</span>
+            <input type="url" name="externalUrl" placeholder="https://…" [ngModel]="f.externalUrl" (ngModelChange)="patchForm({ externalUrl: $event })" />
+          </label>
+
+          <fieldset class="guide-roles">
+            <legend>Rôles ciblés</legend>
+            @for (r of roleOptions; track r) {
+              <label class="guide-check">
+                <input type="checkbox" [checked]="hasRole(r)" (change)="toggleRole(r, $any($event.target).checked)" />
+                <span>{{ r }}</span>
+              </label>
+            }
+          </fieldset>
+
+          @if (formError()) {
+            <div class="guide-alert" role="alert">{{ formError() }}</div>
+          }
+          <div class="guide-form-actions">
+            <button type="button" class="ky-btn-secondary" (click)="cancelForm()">Annuler</button>
+            <button type="submit" class="ky-btn-primary" [disabled]="saving() || uploading() || !f.title.trim()">
+              {{ f.id == null ? 'Créer le guide' : 'Enregistrer' }}
+            </button>
+          </div>
+        </form>
+      }
+
+      <div class="guide-card guide-table-wrap">
+        <table class="guide-table">
+          <thead>
+            <tr>
+              <th>Ordre</th>
+              <th>Titre</th>
+              <th>Type</th>
+              <th>Rôles</th>
+              <th>Consultations</th>
+              <th>Statut</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (g of adminList(); track g.id) {
+              <tr [class.guide-row--archived]="!g.isActive">
+                <td>{{ g.sortOrder }}</td>
+                <td>{{ g.title }}</td>
+                <td>{{ kindLabel(g.kind) }}</td>
+                <td>{{ rolesLabel(g.targetRoles) }}</td>
+                <td>{{ g.viewCount }}</td>
+                <td>{{ g.isActive ? 'Publié' : 'Archivé' }}</td>
+                <td class="guide-table-actions">
+                  <button type="button" class="guide-link-btn" (click)="editGuide(g)">Modifier</button>
+                  <button type="button" class="guide-link-btn" (click)="toggleActive(g)">{{ g.isActive ? 'Archiver' : 'Republier' }}</button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="guide-muted">Aucun guide pour l’instant.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+</div>

@@ -119,6 +119,7 @@ public static class DependencyInjection
         services.AddScoped<IReclamationNotificationService, ReclamationNotificationService>();
         services.AddScoped<INewsletterService, NewsletterService>();
         services.AddScoped<IMediaAssetService, MediaAssetService>();
+        services.AddScoped<IAppGuideService, AppGuideService>();
         services.AddScoped<ITicketCommentService, TicketCommentService>();
         services.AddScoped<IEmployePublisher, EmployePublisher>();
 
@@ -170,7 +171,15 @@ public static class DependencyInjection
                     cfg.ReceiveEndpoint("planning-directory-hr-profile", e =>
                         e.ConfigureConsumer<DirectoryEmployeeHrProfileProjectionConsumer>(ctx));
                     cfg.ReceiveEndpoint("planning-directory-org", e =>
-                        e.ConfigureConsumer<PlanningDirectoryOrgProjectionConsumer>(ctx));
+                    {
+                        // Les événements pôle → cellule → service arrivent en rafale : un traitement
+                        // séquentiel respecte leur ordre, et les nouvelles tentatives couvrent le cas
+                        // où un parent n'est pas encore projeté (sinon le message part en erreur et
+                        // le service n'existe pas dans Planning).
+                        e.ConcurrentMessageLimit = 1;
+                        e.UseMessageRetry(r => r.Intervals(500, 2000, 5000, 15000, 30000));
+                        e.ConfigureConsumer<PlanningDirectoryOrgProjectionConsumer>(ctx);
+                    });
                     cfg.ReceiveEndpoint("planning-initial-training-rejected", e =>
                         e.ConfigureConsumer<InitialTrainingRejectedConsumer>(ctx));
                     cfg.ReceiveEndpoint("planning-initial-training-completed", e =>

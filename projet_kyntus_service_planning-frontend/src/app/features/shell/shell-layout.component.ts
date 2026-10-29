@@ -55,6 +55,8 @@ import { DocumentationNavigationService } from '../documentation/services/docume
 
 import { AuditInterfaceNavService } from '../documentation/services/audit-interface-nav.service';
 import { PlatformAccessService } from '../../core/platform-access/platform-access.service';
+import { AppGuideService } from '../../core/help/app-guide.service';
+import { APP_GUIDE_ROUTE } from '../../core/navigation/microservices.config';
 
 
 
@@ -121,6 +123,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   readonly shellUi = inject(KyntusShellUiService);
   readonly workspace = inject(WorkspaceHatService);
   private readonly platformAccess = inject(PlatformAccessService);
+  private readonly appGuides = inject(AppGuideService);
 
   readonly icons = {
     bell: Bell,
@@ -195,6 +198,12 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
       if (!this.role) return;
       this.refreshGroups();
     });
+    // Badge « Guide de l'application » : suit le nombre de guides non consultés.
+    effect(() => {
+      this.appGuides.pendingCount();
+      if (!this.role) return;
+      this.refreshGroups();
+    });
   }
 
 
@@ -243,6 +252,8 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
     this.refreshGroups();
 
+    this.appGuides.refresh().subscribe(() => this.offerAppGuideOnboarding());
+
     void this.deptContext.load().finally(() => this.refreshGroups());
     void this.platformAccess.ensureLoaded().finally(() => this.refreshGroups());
 
@@ -263,6 +274,19 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   }
 
 
+
+  /**
+   * Accueil guidé : à l'arrivée sur l'accueil, s'il reste des guides à consulter pour le rôle,
+   * l'utilisateur est conduit une fois par session vers « Guide de l'application »
+   * (bouton « Passer pour l'instant » disponible).
+   */
+  private offerAppGuideOnboarding(): void {
+    const path = this.router.url.split('?')[0];
+    if (path !== '/home' && path !== '/') return;
+    if (!this.appGuides.shouldOfferOnboarding()) return;
+    this.appGuides.skipOnboardingForSession();
+    void this.router.navigateByUrl(APP_GUIDE_ROUTE);
+  }
 
   private refreshGroups(): void {
 

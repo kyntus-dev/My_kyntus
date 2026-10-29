@@ -6,7 +6,8 @@ public enum MediaOwnerType
     Newsletter = 1,
     Reclamation = 2,
     Proposition = 3,
-    TicketComment = 4
+    TicketComment = 4,
+    AppGuide = 5
 }
 
 public enum MediaKind

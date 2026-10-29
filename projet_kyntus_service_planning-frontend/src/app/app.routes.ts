@@ -75,6 +75,15 @@ export const routes: Routes = [
             .then(m => m.AssistanceComponent),
       },
 
+      // ─── AIDE : guide de l'application (parcours par rôle) ──
+      { path: 'aide', redirectTo: 'aide/guide', pathMatch: 'full' },
+      {
+        path: 'aide/guide',
+        loadComponent: () =>
+          import('./features/aide/app-guide-page.component')
+            .then(m => m.AppGuidePageComponent),
+      },
+
       // ─── QUALITÉ & AMÉLIORATION ──────────────────
       {
         path: 'reclamations',

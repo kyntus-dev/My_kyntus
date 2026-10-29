@@ -1,6 +1,7 @@
 ﻿import { Injectable, inject } from '@angular/core';
 
-import { MICROSERVICES, Microservice, MenuItem } from './microservices.config';
+import { APP_GUIDE_ROUTE, MICROSERVICES, Microservice, MenuItem } from './microservices.config';
+import { AppGuideService } from '../help/app-guide.service';
 import { buildPrimeMenuItemsForRole } from './prime-menu.config';
 import { buildParrainageMenuItemsForRole } from './parrainage-menu.config';
 import {
@@ -30,6 +31,7 @@ export class NavigationMenuService {
   private readonly inboxBadge = inject(AllowanceInboxBadgeService);
   private readonly workspace = inject(WorkspaceHatService);
   private readonly access = inject(PlatformAccessService);
+  private readonly appGuides = inject(AppGuideService);
 
   buildVisibleGroups(jwtRole: string): Microservice[] {
     void this.access.ensureLoaded();
@@ -52,6 +54,15 @@ export class NavigationMenuService {
     }
     if (group.id === 'documentation' && group.dynamicChildren) {
       return { ...group, children: this.filterDocumentationChildren(jwtRole) };
+    }
+    if (group.id === 'aide') {
+      const pending = this.appGuides.pendingCount();
+      return {
+        ...group,
+        children: group.children
+          .filter((c) => this.itemAllowed(c, jwtRole))
+          .map((c) => (c.route === APP_GUIDE_ROUTE && pending > 0 ? { ...c, menuBadge: pending } : c)),
+      };
     }
     return {
       ...group,

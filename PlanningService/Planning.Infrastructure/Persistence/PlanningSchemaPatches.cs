@@ -708,6 +708,40 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>Espace Aide : guides de l'application et suivi « consulté » (tables additives).</summary>
+    public static async Task EnsureAppGuidesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "AppGuides" (
+                "Id" serial PRIMARY KEY,
+                "Title" character varying(200) NOT NULL,
+                "Description" character varying(2000) NULL,
+                "Kind" integer NOT NULL DEFAULT 0,
+                "MediaAssetId" integer NULL,
+                "ExternalUrl" character varying(1000) NULL,
+                "TargetRoles" character varying(1000) NOT NULL DEFAULT '',
+                "SortOrder" integer NOT NULL DEFAULT 0,
+                "IsActive" boolean NOT NULL DEFAULT true,
+                "CreatedBy" character varying(128) NOT NULL DEFAULT '',
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedAt" timestamp with time zone NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_AppGuides_IsActive_SortOrder"
+              ON "AppGuides" ("IsActive", "SortOrder");
+
+            CREATE TABLE IF NOT EXISTS "AppGuideViews" (
+                "Id" serial PRIMARY KEY,
+                "GuideId" integer NOT NULL,
+                "UserKey" character varying(128) NOT NULL,
+                "ViewedAt" timestamp with time zone NOT NULL DEFAULT now()
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_AppGuideViews_GuideId_UserKey"
+              ON "AppGuideViews" ("GuideId", "UserKey");
+            """,
+            ct);
+    }
+
     /// <summary>Index lecture fréquents (grille, demandes exceptionnelles, users actifs).</summary>
     public static async Task EnsurePerfIndexesAsync(AppDbContext db, CancellationToken ct = default)
     {

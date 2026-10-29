@@ -52,6 +52,8 @@ public class AppDbContext : DbContext
     public DbSet<CampaignAnalytics> CampaignAnalytics { get; set; } = null!;
     public DbSet<MediaAsset> MediaAssets { get; set; } = null!;
     public DbSet<TicketComment> TicketComments { get; set; } = null!;
+    public DbSet<AppGuide> AppGuides { get; set; } = null!;
+    public DbSet<AppGuideView> AppGuideViews { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -555,6 +557,27 @@ public class AppDbContext : DbContext
             e.Property(x => x.AuthorNom).HasMaxLength(200);
             e.Property(x => x.Text).HasMaxLength(4000);
             e.HasIndex(x => new { x.OwnerType, x.OwnerId });
+        });
+
+        // ── Espace Aide : guides de l'application ──
+        modelBuilder.Entity<AppGuide>(e =>
+        {
+            e.ToTable("AppGuides");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(2000);
+            e.Property(x => x.ExternalUrl).HasMaxLength(1000);
+            e.Property(x => x.TargetRoles).HasMaxLength(1000);
+            e.Property(x => x.CreatedBy).HasMaxLength(128);
+            e.HasIndex(x => new { x.IsActive, x.SortOrder });
+        });
+
+        modelBuilder.Entity<AppGuideView>(e =>
+        {
+            e.ToTable("AppGuideViews");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UserKey).HasMaxLength(128).IsRequired();
+            e.HasIndex(x => new { x.GuideId, x.UserKey }).IsUnique();
         });
     }
 }
