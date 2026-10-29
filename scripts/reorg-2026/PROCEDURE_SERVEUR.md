@@ -1,4 +1,4 @@
-# Réorganisation 2026 — procédure serveur (livraisons v3 à v6)
+# Réorganisation 2026 — procédure serveur (livraisons v3 à v7)
 
 Serveur : `o@10.10.10.25` · Projet : `/home/o/projets_mykyntus-`.
 État de départ : version déployée `a0c0f0b` + patch v2 (déployé le 29/10 à 09:07) + structure créée par l'étape 04 (09:12).
@@ -579,4 +579,116 @@ docker compose up -d --no-deps --no-build planning-backend planning-frontend pri
 ```
 
 Les 3 tables e-mail restent en place et sont ignorées par la version précédente. Aucune autre donnée n'est concernée.
+
+---
+
+# Livraison v7 : responsables, sortie des collaborateurs, congés de l'équipe
+
+À appliquer **après la v6**. Aucune table n'est créée ni modifiée ; aucune donnée n'est supprimée.
+
+| Fichier | Contenu |
+|---|---|
+| `reorg-2026-code-v7.patch` | 30 fichiers : Auth, Organisation RH (Directory), Congés, Planning (backend + frontend). |
+
+**Ce qui change**
+
+1. **Responsables (formulaire employé)** : seuls les titulaires **actifs** de l'organisation RH sont proposés. Un compte désactivé (ex. Loukmane KHATIRI) n'apparaît plus, même s'il lui reste une affectation. Les titulaires proposés sont ceux posés par l'étape 08 (fichier Périmètre) : **lancez l'étape 08 si ce n'est pas fait** (phase E2).
+2. **« Supprimer » devient « Désactiver (sortie) »**, dans la liste et dans la fiche, avec une date de sortie :
+   - le compte ne peut plus se connecter (sessions ouvertes coupées) ;
+   - il n'est plus proposé comme responsable ni planifié ;
+   - **rien n'est supprimé** : plannings, congés, primes et historique restent ; il est visible avec le filtre Statut = Inactifs ;
+   - « Réactiver » le rétablit.
+   La seule suppression qui reste est l'annulation automatique d'une création restée incomplète (moins de 30 minutes).
+   Décocher « Compte actif » dans le formulaire bloque désormais aussi la connexion (avant, seul Planning était mis à jour).
+3. **Congés de l'équipe** (menu Congés et absences) : chaque responsable ne voit que son équipe, d'après l'organisation RH :
+   - superviseur : les collaborateurs de ses cellules (toute son activité après l'étape 08) ;
+   - référent technique : les collaborateurs de ses cellules (ses services) ;
+   - chef de projet : ses pôles ; RH et Admin : toute l'entreprise.
+   Filtres **Cellule**, statut, période et recherche ; indicateurs « absents aujourd'hui », « absents dans les 7 jours », « en attente ».
+4. **Valider les congés** : filtre **Cellule** et nom de la cellule sous chaque collaborateur. Un superviseur ne peut plus ouvrir la file d'un autre superviseur.
+
+**Services reconstruits** : `auth-backend`, `employee-directory-backend`, `conge-backend`, `planning-backend`, `planning-frontend`.
+
+## v7-0 : copie (depuis Windows)
+
+```powershell
+cd C:\Users\omar.elmahi\Downloads
+scp reorg-2026-code-v7.patch o@10.10.10.25:/tmp/
+```
+
+## v7-A : sauvegardes (ne modifie rien)
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(date +%Y%m%d_%H%M%S); echo "$STAMP" > ~/sauvegardes_reorg/STAMP_V7; echo "STAMP=$STAMP"
+: > ~/sauvegardes_reorg/images_avant_v7_$STAMP.txt
+for s in auth-backend employee-directory-backend conge-backend planning-backend planning-frontend; do
+  c=$(docker compose ps -q "$s"); img=$(docker inspect --format '{{.Config.Image}}' "$c"); id=$(docker inspect --format '{{.Image}}' "$c")
+  docker tag "$id" "reorg-avant-v7/$s:$STAMP" && echo "$s $img $id" | tee -a ~/sauvegardes_reorg/images_avant_v7_$STAMP.txt
+done
+grep '^+++ b/' /tmp/reorg-2026-code-v7.patch | cut -c7- | sed 's/\t.*$//' | sort -u > ~/sauvegardes_reorg/fichiers_v7_$STAMP.txt
+tar -czf ~/sauvegardes_reorg/code_avant_v7_$STAMP.tar.gz --ignore-failed-read -T ~/sauvegardes_reorg/fichiers_v7_$STAMP.txt 2>/dev/null
+for db in auth_db employee_directory_db conge_db kyntus_db; do
+  docker exec kyntus_db pg_dump -U postgres -Fc "$db" > ~/sauvegardes_reorg/${db}_v7_$STAMP.dump && echo "OK $db"
+done
+```
+
+## v7-B : application protégée
+
+```bash
+cd /home/o/projets_mykyntus-
+if patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v7.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
+  echo "STOP : simulation non propre, rien n'a été modifié"; patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v7.patch | grep -iE "fail|already|assum|offset|fuzz"
+else
+  patch -p1 --batch < /tmp/reorg-2026-code-v7.patch > /dev/null && echo "PATCH V7 APPLIQUÉ PROPREMENT"
+fi
+```
+
+## v7-C : compilation et tests (conteneur jetable)
+
+```bash
+cd /home/o/projets_mykyntus-
+tar -cf - --exclude='bin' --exclude='obj' --exclude='node_modules' --exclude='TestResults' \
+    Directory.Build.props Directory.Packages.props Messaging.Contracts Shared.Kernel \
+    Kyntus.Caching Kyntus.Iam Kyntus.Identity.Jwt Kyntus.Messaging.Outbox tests \
+    AuthService EmployeeDirectory FormationService PlanningService \
+| docker run --rm -i mcr.microsoft.com/dotnet/sdk:8.0 bash -c '
+  mkdir -p /work && cd /work && tar -xf -
+  for p in AuthService/Auth.API/Auth.API.csproj EmployeeDirectory/EmployeeDirectory.API/EmployeeDirectory.API.csproj \
+           FormationService/Conge.API/Conge.API.csproj PlanningService/Planning.API/Planning.API.csproj; do
+    echo "== $p"; dotnet build "$p" -c Release 2>&1 | grep -E " error |Error\(s\)" | tail -3
+  done
+  dotnet test PlanningService/Planning.UnitTests/Planning.UnitTests.csproj -c Release 2>&1 | grep -E "Failed |Passed!|Failed!" | tail -5'
+```
+
+Attendu : `0 Error(s)` pour les 4 projets ; tests Planning : le même unique échec qu'avant. **Tout autre échec : arrêtez-vous** (retour arrière v7).
+
+## v7-D : reconstruction et bascule
+
+```bash
+cd /home/o/projets_mykyntus-
+docker compose build auth-backend employee-directory-backend conge-backend planning-backend planning-frontend
+docker compose up -d --no-deps --no-build auth-backend employee-directory-backend conge-backend planning-backend planning-frontend
+sleep 90
+docker compose ps auth-backend employee-directory-backend conge-backend planning-backend planning-frontend
+```
+
+**Recette** (Ctrl + F5) :
+
+- Fiche d'un pilote de Bytel Kyntus › Modifier › Responsables : Loukmane KHATIRI n'est plus proposé une fois son compte désactivé ; après l'étape 08, le superviseur proposé est celui du fichier Périmètre.
+- Employés › ⋯ › « Désactiver (sortie) » sur un compte de test : il passe en Inactif, ne peut plus se connecter, puis « Réactiver ».
+- Avec un compte superviseur : Congés et absences › « Congés de l'équipe » ne montre que ses cellules ; filtre Cellule.
+- Avec un compte référent technique : même écran, limité à ses cellules ; pas de bouton de validation.
+
+## v7 : retour arrière (code seulement)
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(cat ~/sauvegardes_reorg/STAMP_V7)
+patch -p1 -R --batch < /tmp/reorg-2026-code-v7.patch
+while read -r s img id; do docker tag "reorg-avant-v7/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_v7_$STAMP.txt
+docker compose up -d --no-deps --no-build auth-backend employee-directory-backend conge-backend planning-backend planning-frontend
+```
+
+Les comptes désactivés entre-temps restent désactivés côté Auth (comportement voulu) ; pour en rétablir un, utilisez « Réactiver » avant le retour arrière.
 
