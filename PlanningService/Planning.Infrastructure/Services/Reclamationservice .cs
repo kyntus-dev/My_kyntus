@@ -54,8 +54,8 @@ namespace Planning.Infrastructure.Services
             await AddHistoriqueAsync(reclamation.Id, "Reclamation soumise",
                 reclamation.Status.ToString(), auteurId, auteurNom);
             await _notif.NotifyManagersAsync(
-                "Nouvelle reclamation",
-                $"{auteurNom} a soumis une reclamation : {dto.Titre}",
+                "Nouvelle r\u00e9clamation",
+                $"{auteurNom} a soumis une r\u00e9clamation : {dto.Titre}",
                 "info");
 
             _logger.LogInformation("Reclamation {Id} soumise par {Auteur}", reclamation.Id, auteurNom);
@@ -129,8 +129,8 @@ namespace Planning.Infrastructure.Services
             await _context.SaveChangesAsync();
             await _notif.NotifyAuteurAsync(
       rec.AuteurId,
-      "R?clamation mise ? jour",
-      $"Votre r?clamation '{rec.Titre}' est maintenant : {dto.Status}",
+      "R\u00e9clamation mise \u00e0 jour",
+      $"Votre r\u00e9clamation '{rec.Titre}' est maintenant : {dto.Status}",
       dto.Status == ReclamationStatus.Traitee ? "success" :
       dto.Status == ReclamationStatus.Rejetee ? "warning" : "info"
   );
@@ -154,8 +154,8 @@ namespace Planning.Infrastructure.Services
             await AddHistoriqueAsync(id, "Assign? ?", dto.AssigneeNom, assigneurId, assigneurNom);
             await _notif.NotifyAuteurAsync(
                 rec.AuteurId,
-                "R?clamation assign?e",
-                $"Votre r?clamation '{rec.Titre}' a ?t? assign?e ? {dto.AssigneeNom}",
+                "R\u00e9clamation assign\u00e9e",
+                $"Votre r\u00e9clamation '{rec.Titre}' a \u00e9t\u00e9 assign\u00e9e \u00e0 {dto.AssigneeNom}",
                 "info"
             );
         }
@@ -176,8 +176,8 @@ namespace Planning.Infrastructure.Services
                 $"{ancienne} ? {dto.Priorite}", userId, userNom);
             await _notif.NotifyAuteurAsync(
     rec.AuteurId,
-    "Priorit? mise ? jour",
-    $"La priorit? de '{rec.Titre}' est maintenant : {dto.Priorite}",
+    "Priorit\u00e9 mise \u00e0 jour",
+    $"La priorit\u00e9 de '{rec.Titre}' est maintenant : {dto.Priorite}",
     dto.Priorite == Priority.Critique ? "warning" : "info"
 );
         }

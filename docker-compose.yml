@@ -193,6 +193,10 @@ services:
       Smtp__Password: ${KYNTUS_SMTP_PASSWORD:-}
       Smtp__From: ${KYNTUS_SMTP_FROM:-}
       Smtp__EnableSsl: ${KYNTUS_SMTP_ENABLE_SSL:-true}
+      # E-mails des plannings publiés et des notifications (file d'envoi, cadence Microsoft 365)
+      NotificationEmail__Enabled: ${KYNTUS_NOTIFICATION_EMAIL_ENABLED:-true}
+      NotificationEmail__MaxPerMinute: ${KYNTUS_NOTIFICATION_EMAIL_MAX_PER_MINUTE:-25}
+      NotificationEmail__PublicAppUrl: ${KYNTUS_PUBLIC_APP_URL:-}
       KYNTUS_PLANNING_DEMO_SEED: ${KYNTUS_PLANNING_DEMO_SEED:-false}
       KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
       <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]

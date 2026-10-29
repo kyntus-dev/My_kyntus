@@ -134,7 +134,7 @@ namespace Planning.Infrastructure.Services
             // ? Notifier l'auteur
             await _notif.NotifyAuteurAsync(
                 prop.AuteurId,
-                "Proposition ùvaluùe",
+                "Proposition \u00e9valu\u00e9e",
                 $"Votre proposition '{prop.Titre}' est maintenant : {dto.Status}",
                 dto.Status == PropositionStatus.Approuvee ? "success" :
                 dto.Status == PropositionStatus.Implementee ? "success" :
@@ -159,8 +159,8 @@ namespace Planning.Infrastructure.Services
             // ? Notifier l'auteur
             await _notif.NotifyAuteurAsync(
                 prop.AuteurId,
-                "Proposition assignùe",
-                $"Votre proposition '{prop.Titre}' a ùtù assignùe ù {dto.AssigneeNom}",
+                "Proposition assign\u00e9e",
+                $"Votre proposition '{prop.Titre}' a \u00e9t\u00e9 assign\u00e9e \u00e0 {dto.AssigneeNom}",
                 "info"
             );
         }
@@ -183,8 +183,8 @@ namespace Planning.Infrastructure.Services
             // ? Notifier l'auteur
             await _notif.NotifyAuteurAsync(
                 prop.AuteurId,
-                "Prioritù mise ù jour",
-                $"La prioritù de votre proposition '{prop.Titre}' est maintenant : {dto.Priorite}",
+                "Priorit\u00e9 mise \u00e0 jour",
+                $"La priorit\u00e9 de votre proposition '{prop.Titre}' est maintenant : {dto.Priorite}",
                 dto.Priorite == Priority.Critique ? "warning" : "info"
             );
         }

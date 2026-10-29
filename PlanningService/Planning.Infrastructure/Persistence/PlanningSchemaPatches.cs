@@ -757,6 +757,47 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>File d'envoi des e-mails, préférences utilisateur et curseur des notifications.</summary>
+    public static async Task EnsureNotificationEmailTablesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "EmailOutboxMessages" (
+                "Id" bigserial PRIMARY KEY,
+                "ToEmail" character varying(320) NOT NULL,
+                "RecipientUserId" integer NULL,
+                "Category" character varying(40) NOT NULL,
+                "Subject" character varying(300) NOT NULL,
+                "HtmlBody" text NOT NULL,
+                "DedupKey" character varying(200) NULL,
+                "Status" integer NOT NULL DEFAULT 0,
+                "Attempts" integer NOT NULL DEFAULT 0,
+                "NextAttemptAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "LastError" character varying(1000) NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "SentAt" timestamp with time zone NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_EmailOutboxMessages_Status_NextAttemptAt"
+              ON "EmailOutboxMessages" ("Status", "NextAttemptAt");
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_EmailOutboxMessages_DedupKey"
+              ON "EmailOutboxMessages" ("DedupKey") WHERE "DedupKey" IS NOT NULL;
+
+            CREATE TABLE IF NOT EXISTS "NotificationEmailPreferences" (
+                "UserId" integer PRIMARY KEY,
+                "EmailEnabled" boolean NOT NULL DEFAULT true,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now()
+            );
+
+            CREATE TABLE IF NOT EXISTS "NotificationEmailCursors" (
+                "Id" character varying(32) PRIMARY KEY,
+                "LastPlanningNotificationId" integer NOT NULL DEFAULT 0,
+                "LastContractNotificationId" integer NOT NULL DEFAULT 0,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now()
+            );
+            """,
+            ct);
+    }
+
     /// <summary>Index lecture fréquents (grille, demandes exceptionnelles, users actifs).</summary>
     public static async Task EnsurePerfIndexesAsync(AppDbContext db, CancellationToken ct = default)
     {

@@ -79,6 +79,58 @@
 
   <section class="ks-settings-section">
     <h2>
+      <app-lucide-icon [icon]="icons.mail" className="w-5 h-5 inline" />
+      Notifications par e-mail
+    </h2>
+    <div class="ks-settings-card">
+      @if (emailNotif.preference(); as pref) {
+        <label class="ks-toggle-row">
+          <span>
+            Recevoir aussi mes notifications par e-mail
+            <small class="ks-toggle-hint">
+              @if (pref.emailAddress) { Adresse : {{ pref.emailAddress }} } @else { Aucune adresse professionnelle valide sur votre compte }
+            </small>
+          </span>
+          <input type="checkbox" [checked]="pref.emailEnabled" [disabled]="emailNotif.busy()" (change)="toggleEmailNotifications()" />
+        </label>
+        <p class="ks-settings-hint">
+          Votre planning de la semaine vous est toujours envoyé à sa publication, même si cette option est désactivée.
+          @if (!pref.mailConfigured) { L'envoi d'e-mails n'est pas encore configuré sur le serveur. }
+        </p>
+      } @else {
+        <p class="ks-settings-hint">Préférence e-mail indisponible pour ce compte.</p>
+      }
+
+      @if (canSeeEmailStatus() && emailNotif.status(); as st) {
+        <div class="ks-email-status" aria-live="polite">
+          <h3>État des envois</h3>
+          @if (!st.enabled) {
+            <p class="ks-email-alert">Envoi coupé (KYNTUS_NOTIFICATION_EMAIL_ENABLED=false).</p>
+          } @else if (!st.mailConfigured) {
+            <p class="ks-email-alert">Serveur mail non configuré : renseignez le SMTP dans Planning › Validation › Email expéditeur.</p>
+          }
+          <dl>
+            <div><dt>En attente</dt><dd>{{ st.pending }}</dd></div>
+            <div><dt>Envoyés (24 h)</dt><dd>{{ st.sentLast24h }}</dd></div>
+            <div><dt>Échecs (7 j)</dt><dd [class.ks-email-bad]="st.failedLast7Days > 0">{{ st.failedLast7Days }}</dd></div>
+            <div><dt>Cadence</dt><dd>{{ st.maxPerMinute }} / min</dd></div>
+          </dl>
+          @if (st.lastSentAt) { <p class="ks-settings-hint">Dernier envoi : {{ st.lastSentAt | date: 'dd/MM/yyyy HH:mm' }}</p> }
+          @if (st.recentFailures.length) {
+            <ul class="ks-email-failures">
+              @for (f of st.recentFailures; track f.id) {
+                <li><strong>{{ f.to }}</strong> — {{ f.subject }}<br /><small>{{ f.error }}</small></li>
+              }
+            </ul>
+            <button type="button" [disabled]="emailNotif.busy()" (click)="retryFailedEmails()">Relancer les échecs</button>
+          }
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="ks-settings-section">
+    <h2>
       <app-lucide-icon [icon]="icons.bell" className="w-5 h-5 inline" />
       Notifications bureau
     </h2>

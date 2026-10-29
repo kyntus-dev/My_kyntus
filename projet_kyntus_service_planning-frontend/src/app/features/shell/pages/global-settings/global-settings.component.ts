@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { KyntusThemeService } from '../../../../core/theme/kyntus-theme.service';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
@@ -10,7 +11,9 @@ import type { KyntusNotificationPreferences } from '../../../../core/settings/ky
 import { NavigationActionsService } from '../../../../core/navigation/navigation-actions.service';
 import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
 import { DesktopPushService } from '../../../../core/notifications/desktop-push.service';
-import { Moon, Sun, Shield, ExternalLink, Bell } from 'lucide';
+import { NotificationEmailService } from '../../../../core/notifications/notification-email.service';
+import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
+import { Moon, Sun, Shield, ExternalLink, Bell, Mail } from 'lucide';
 
 interface AdminLink {
   label: string;
@@ -35,26 +38,48 @@ const NOTIF_PREF_LABELS: { key: keyof KyntusNotificationPreferences; label: stri
 @Component({
   selector: 'app-global-settings',
   standalone: true,
-  imports: [RouterLink, LucideIconComponent],
+  imports: [RouterLink, LucideIconComponent, DatePipe],
   templateUrl: './global-settings.component.html',
   styleUrl: './global-settings.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class GlobalSettingsComponent {
+export class GlobalSettingsComponent implements OnInit {
   readonly theme = inject(KyntusThemeService);
   readonly session = inject(KyntusSessionService);
   readonly prefs = inject(KyntusUserPreferencesService);
   readonly desktopPush = inject(DesktopPushService);
+  readonly emailNotif = inject(NotificationEmailService);
+  private readonly toast = inject(KyntusToastService);
   private readonly nav = inject(NavigationActionsService);
   private readonly router = inject(Router);
 
-  readonly icons = { moon: Moon, sun: Sun, shield: Shield, external: ExternalLink, bell: Bell };
+  readonly icons = { moon: Moon, sun: Sun, shield: Shield, external: ExternalLink, bell: Bell, mail: Mail };
   readonly notifPrefLabels = NOTIF_PREF_LABELS;
 
   readonly user = computed(() => this.session.getStoredUser());
   readonly role = computed(() => this.session.getRole());
   readonly displayName = computed(() => this.session.getDisplayName());
   readonly initials = computed(() => personInitials(this.user() ?? {}));
+  /** État de la file d'envoi : réservé aux comptes Admin et RH. */
+  readonly canSeeEmailStatus = computed(() => ['admin', 'rh'].includes((this.role() || '').toLowerCase()));
+
+  ngOnInit(): void {
+    void this.emailNotif.loadPreference();
+    if (this.canSeeEmailStatus()) void this.emailNotif.loadStatus();
+  }
+
+  async toggleEmailNotifications(): Promise<void> {
+    const current = this.emailNotif.preference();
+    if (!current || this.emailNotif.busy()) return;
+    const ok = await this.emailNotif.setEmailEnabled(!current.emailEnabled);
+    if (!ok) this.toast.error("Préférence e-mail non enregistrée. Réessayez.");
+  }
+
+  async retryFailedEmails(): Promise<void> {
+    const count = await this.emailNotif.retryFailed();
+    if (count === null) this.toast.error('Relance impossible.');
+    else this.toast.success(count ? `${count} e-mail(s) remis en file d'envoi.` : 'Aucun e-mail en échec à relancer.');
+  }
 
   readonly adminLinks = computed(() => {
     const role = (this.role() || '').toLowerCase();

@@ -17,9 +17,21 @@ public sealed class MailKitPlanningEmailSender(
     IHttpClientFactory httpFactory,
     IConfiguration configuration,
     AppDbContext db,
-    ILogger<MailKitPlanningEmailSender> logger) : IPlanningEmailSender
+    ILogger<MailKitPlanningEmailSender> logger) : IPlanningEmailSender, IPlanningEmailReadiness
 {
     public bool IsConfigured => ResolveFromEnvOnly() is not null;
+
+    public async Task<bool> IsReadyAsync(CancellationToken ct = default)
+    {
+        var settings = await db.PlanningAutoGenerateSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == PlanningAutoGenerateSettings.SingletonId, ct);
+        // Même ordre que l'envoi : clé API si choisie et renseignée, sinon SMTP (écran ou .env).
+        if (PlanningMailApiSettings.IsApiKeyMode(settings?.MailSendMode)
+            && PlanningMailApiSettings.HasApiKey(settings?.MailApiKey))
+            return true;
+        return ResolveConnection(settings) is not null;
+    }
 
     public Task SendHtmlAsync(string to, string subject, string htmlBody, CancellationToken ct = default) =>
         SendCoreAsync(to, subject, htmlBody, requireConfigured: false, ct);
@@ -51,7 +63,7 @@ public sealed class MailKitPlanningEmailSender(
         if (conn is null)
         {
             if (requireConfigured)
-                throw new InvalidOperationException(
+                throw new MailNotConfiguredException(
                     "Envoi mail non configuré. Choisissez « Clé API » (Brevo / SendGrid) ou renseignez le SMTP dans Auto-génération.");
             logger.LogInformation("SMTP / API mail non configuré — email planning ignoré pour {To}.", to);
             return;

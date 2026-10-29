@@ -54,6 +54,9 @@ public class AppDbContext : DbContext
     public DbSet<TicketComment> TicketComments { get; set; } = null!;
     public DbSet<AppGuide> AppGuides { get; set; } = null!;
     public DbSet<AppGuideView> AppGuideViews { get; set; } = null!;
+    public DbSet<EmailOutboxMessage> EmailOutboxMessages { get; set; } = null!;
+    public DbSet<NotificationEmailPreference> NotificationEmailPreferences { get; set; } = null!;
+    public DbSet<NotificationEmailCursor> NotificationEmailCursors { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -578,6 +581,35 @@ public class AppDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.UserKey).HasMaxLength(128).IsRequired();
             e.HasIndex(x => new { x.GuideId, x.UserKey }).IsUnique();
+        });
+
+        // ── E-mails : file d'envoi, préférences, curseur des notifications ──
+        modelBuilder.Entity<EmailOutboxMessage>(e =>
+        {
+            e.ToTable("EmailOutboxMessages");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ToEmail).HasMaxLength(320).IsRequired();
+            e.Property(x => x.Category).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Subject).HasMaxLength(300).IsRequired();
+            e.Property(x => x.HtmlBody).IsRequired();
+            e.Property(x => x.DedupKey).HasMaxLength(200);
+            e.Property(x => x.LastError).HasMaxLength(1000);
+            e.HasIndex(x => new { x.Status, x.NextAttemptAt });
+            e.HasIndex(x => x.DedupKey).IsUnique().HasFilter("\"DedupKey\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<NotificationEmailPreference>(e =>
+        {
+            e.ToTable("NotificationEmailPreferences");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.UserId).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<NotificationEmailCursor>(e =>
+        {
+            e.ToTable("NotificationEmailCursors");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasMaxLength(32);
         });
     }
 }

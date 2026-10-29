@@ -9,6 +9,7 @@ using Planning.Domain.Enums;
 using Planning.Infrastructure.Hubs;
 using Planning.Application.Abstractions;
 using Planning.Domain.Entities;
+using Planning.Application.NotificationEmail;
 
 namespace Planning.Infrastructure.Services
 {
@@ -19,19 +20,22 @@ namespace Planning.Infrastructure.Services
         private readonly IUserService _userService;
         private readonly IMediaAssetService _media;
         private readonly ILogger<NewsletterService> _logger;
+        private readonly INotificationEmailQueue? _emails;
 
         public NewsletterService(
             AppDbContext context,
             IHubContext<NewsletterHub> hubContext,
             IUserService userService,
             IMediaAssetService media,
-            ILogger<NewsletterService> logger)
+            ILogger<NewsletterService> logger,
+            INotificationEmailQueue? emails = null)
         {
             _context = context;
             _hubContext = hubContext;
             _userService = userService;
             _media = media;
             _logger = logger;
+            _emails = emails;
         }
 
         // ────────────────────────────────────────────────────────────────────────
@@ -364,6 +368,29 @@ namespace Planning.Infrastructure.Services
             _logger.LogInformation(
                 "Campagne [{Id}] publiée vers le groupe '{Group}' ({Count} destinataires)",
                 campaignId, signalRGroup, users.Count);
+
+            // ── E-mail : chaque destinataire est prévenu sur son adresse professionnelle ──
+            if (_emails is not null)
+            {
+                try
+                {
+                    var subject = campaign.Newsletter.Subject?.Trim();
+                    await _emails.EnqueueNotificationAsync(
+                        new NotificationEmailRecipients(UserIds: users.Select(u => u.Id).ToList()),
+                        new NotificationEmailContent(
+                            "newsletter",
+                            campaign.Newsletter.Title,
+                            string.IsNullOrEmpty(subject)
+                                ? "Une nouvelle communication est disponible dans My Kyntus."
+                                : $"{subject}\nLa communication complète est disponible dans My Kyntus.",
+                            "/mes-newsletters",
+                            $"newsletter:{campaign.Id}"));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "E-mails de la campagne [{Id}] non mis en file.", campaignId);
+                }
+            }
 
             return true;
         }

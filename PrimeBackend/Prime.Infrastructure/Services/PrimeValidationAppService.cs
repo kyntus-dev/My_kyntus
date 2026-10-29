@@ -23,7 +23,8 @@ public sealed class PrimeValidationAppService(
     AnomalyDetectionService anomalies,
     PrimeFicheMergedPreviewAccessService previewAccess,
     IDesktopPushClient desktopPush,
-    ILogger<PrimeValidationAppService> logger) : IPrimeValidationAppService
+    ILogger<PrimeValidationAppService> logger,
+    MassTransit.IPublishEndpoint? bus = null) : IPrimeValidationAppService
 {
     private const string GlobalPoolRoleFicheErrorMessage =
         "Ce rôle valide le fichier synthèse globale PRIME (écran « Synthèse globale »), pas les fiches individuelles.";
@@ -579,6 +580,26 @@ public sealed class PrimeValidationAppService(
                 "prime",
                 "/prime"),
             ct);
+
+        // Même notification par e-mail (envoyée par Planning, qui détient la configuration mail).
+        if (bus is null)
+            return;
+        try
+        {
+            await bus.Publish(new Kyntus.Messaging.Contracts.NotificationEmailRequestedMessage
+            {
+                Source = "prime",
+                Title = approved ? "Prime approuvée" : "Prime refusée",
+                Body = approved ? "Votre prime a été approuvée." : "Votre prime a été refusée.",
+                Route = "/prime",
+                AuthUserIds = authUserIds,
+                EmployeeIds = subjectIds,
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "E-mail de notification PRIME non publié pour {EmployeeId}.", employeeId);
+        }
     }
 
     private static string CsvEscape(string? s)

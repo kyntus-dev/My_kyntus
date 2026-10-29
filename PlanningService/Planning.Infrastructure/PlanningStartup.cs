@@ -73,6 +73,7 @@ public static class PlanningStartup
                 await TryPatch("media-ticket-comments", () => PlanningSchemaPatches.EnsureMediaAndTicketCommentsAsync(db));
                 await TryPatch("app-guides", () => PlanningSchemaPatches.EnsureAppGuidesAsync(db));
                 await TryPatch("org-mirror-archive", () => PlanningSchemaPatches.EnsureOrgMirrorArchiveColumnsAsync(db));
+                await TryPatch("notification-emails", () => PlanningSchemaPatches.EnsureNotificationEmailTablesAsync(db));
                 await TryPatch("perf-indexes", () => PlanningSchemaPatches.EnsurePerfIndexesAsync(db));
                 Console.WriteLine("✅ Patches schéma Planning appliqués.");
             }

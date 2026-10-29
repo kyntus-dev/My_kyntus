@@ -13,6 +13,8 @@ using Planning.Infrastructure.Persistence;
 using Planning.Infrastructure.Services;
 using Planning.Infrastructure.Services.EmployeeImport;
 using Shared.Kernel.Push;
+using Planning.Application.NotificationEmail;
+using Planning.Infrastructure.Services.NotificationEmail;
 using PlanningServiceImpl = Planning.Infrastructure.Services.PlanningService;
 
 namespace Planning.Infrastructure;
@@ -52,8 +54,17 @@ public static class DependencyInjection
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
-        services.AddScoped<IPlanningEmailSender, MailKitPlanningEmailSender>();
+        services.AddScoped<MailKitPlanningEmailSender>();
+        services.AddScoped<IPlanningEmailSender>(sp => sp.GetRequiredService<MailKitPlanningEmailSender>());
+        services.AddScoped<IPlanningEmailReadiness>(sp => sp.GetRequiredService<MailKitPlanningEmailSender>());
         services.AddScoped<IPilotPlanningPersonalEmailService, PilotPlanningPersonalEmailService>();
+        // E-mails des plannings et des notifications : file d'envoi + boucle d'envoi à cadence limitée.
+        services.Configure<NotificationEmailOptions>(configuration.GetSection(NotificationEmailOptions.SectionName));
+        services.AddScoped<INotificationEmailQueue, NotificationEmailQueue>();
+        services.AddScoped<EmailOutboxProcessor>();
+        services.AddScoped<INotificationEmailSettingsService, NotificationEmailSettingsService>();
+        if (!isTesting)
+            services.AddHostedService<NotificationEmailHostedService>();
 
         services.AddScoped<IFloorService, FloorService>();
         services.AddScoped<IRoleService, RoleService>();
@@ -133,6 +144,8 @@ public static class DependencyInjection
             {
                 x.AddConsumer<CongeValideConsumer>();
                 x.AddConsumer<CongeRefuseConsumer>();
+                x.AddConsumer<CongeNotificationEmailConsumer>();
+                x.AddConsumer<NotificationEmailRequestedConsumer>();
                 x.AddConsumer<OrgStructureConsumer>();
                 x.AddConsumer<DirectoryEmployeeProjectionConsumer>();
                 x.AddConsumer<DirectoryEmployeeHrProfileProjectionConsumer>();
@@ -164,6 +177,17 @@ public static class DependencyInjection
                         e.ConfigureConsumer<CongeValideConsumer>(ctx));
                     cfg.ReceiveEndpoint("planning-conge-refuse", e =>
                         e.ConfigureConsumer<CongeRefuseConsumer>(ctx));
+                    // E-mails : files dédiées, indépendantes des traitements métier ci-dessus.
+                    cfg.ReceiveEndpoint("planning-conge-email", e =>
+                    {
+                        e.UseMessageRetry(r => r.Intervals(1000, 5000, 15000));
+                        e.ConfigureConsumer<CongeNotificationEmailConsumer>(ctx);
+                    });
+                    cfg.ReceiveEndpoint("planning-notification-email", e =>
+                    {
+                        e.UseMessageRetry(r => r.Intervals(1000, 5000, 15000));
+                        e.ConfigureConsumer<NotificationEmailRequestedConsumer>(ctx);
+                    });
                     cfg.ReceiveEndpoint("planning-org-structure", e =>
                         e.ConfigureConsumer<OrgStructureConsumer>(ctx));
                     cfg.ReceiveEndpoint("planning-directory-employee", e =>

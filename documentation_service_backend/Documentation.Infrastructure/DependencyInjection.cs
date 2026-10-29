@@ -150,7 +150,10 @@ public static class DependencyInjection
                     npgsql.MigrationsHistoryTable("__ef_migrations_history", "documentation");
                 });
                 options.UseSnakeCaseNamingConvention();
+                // Demandes de documents doublées par e-mail (envoi par Planning).
+                options.AddInterceptors(sp.GetRequiredService<DocumentRequestEmailInterceptor>());
             });
+            services.AddScoped<DocumentRequestEmailInterceptor>();
 
             services.AddScoped<IDocumentationDmsAdminAppService, DocumentationDmsAdminAppService>();
             services.AddScoped<IDirectoryQueryAppService, DirectoryQueryAppService>();
