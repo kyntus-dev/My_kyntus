@@ -71,6 +71,39 @@ public class CongeValidationFinalizerTests
         Assert.Single(publisher.Valides);
     }
 
+    /// <summary>
+    /// v9 : une demande adressée directement au service RH (congé d'un responsable,
+    /// cellule sans superviseur) attend sa décision — elle n'est jamais auto-validée.
+    /// </summary>
+    [Fact]
+    public async Task Collapse_laisse_les_demandes_adressees_au_rh()
+    {
+        var emp = EmployeSnapshot.Creer(
+            Guid.NewGuid(), "Berahou", "Ismail", "ismail@test.com",
+            Guid.NewGuid(), Guid.NewGuid(), "Svc",
+            DateTime.UtcNow.AddYears(-3), role: "Superviseur");
+        var solde = SoldeConge.Initialiser(emp.EmployeId, 18, DateTime.Today.Year);
+        var debut = DateTime.UtcNow.Date.AddDays(30);
+        var demande = DemandeConge.CreerCongeAnnuel(
+            emp.EmployeId, emp.ManagerId, debut, debut.AddDays(3), solde, emp,
+            statutInitial: StatutDemande.EnAttenteRh);
+
+        var publisher = new FakePublisher();
+        var finalizer = new CongeValidationFinalizer(
+            new FakeDemandeRepo { Items = { demande } },
+            new FakeSoldeRepo { Items = { solde } },
+            new FakeEmployeRepo { Employees = { emp } },
+            new FakeUnitOfWork(),
+            publisher,
+            new FakeWorkflow(rhRequired: false));
+
+        await finalizer.CollapsePendingRhIfDisabledAsync(CancellationToken.None);
+
+        Assert.Equal(StatutDemande.EnAttenteRh, demande.Statut);
+        Assert.Empty(publisher.Valides);
+        Assert.Equal(18, solde.SoldeRestant);
+    }
+
     private sealed class FakeWorkflow(bool rhRequired) : ILeaveWorkflowPolicy
     {
         public Task<bool> IsRhValidationRequiredAsync(CancellationToken ct = default)

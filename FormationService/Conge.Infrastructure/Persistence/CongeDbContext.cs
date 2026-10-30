@@ -17,6 +17,7 @@ public class CongeDbContext : DbContext, IUnitOfWork
     public DbSet<PeriodeInterditeConge> PeriodesInterdites => Set<PeriodeInterditeConge>();
     public DbSet<QuotaCongeService> QuotasCongeService => Set<QuotaCongeService>();
     public DbSet<OrgNodeConge> OrgNodesConge => Set<OrgNodeConge>();
+    public DbSet<CongeWorkflowConfig> CongeWorkflowConfigs => Set<CongeWorkflowConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

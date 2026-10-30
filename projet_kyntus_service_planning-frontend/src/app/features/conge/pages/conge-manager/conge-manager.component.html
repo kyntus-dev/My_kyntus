@@ -14,6 +14,18 @@
     Consultation uniquement : la validation des congés n’est pas activée pour votre rôle.
   </p>
 
+  <div class="cm-circuit" *ngIf="isRhFlow">
+    <p class="cm-circuit-text">{{ rhExplication }}</p>
+    <div class="cm-circuit-actions" *ngIf="isAdmin">
+      <span class="cm-circuit-state">
+        Circuit : <strong>{{ etapeRhRequise ? 'superviseur puis RH' : 'superviseur seul' }}</strong>
+      </span>
+      <button type="button" class="ky-btn-secondary" (click)="basculerCircuit(!etapeRhRequise)">
+        {{ etapeRhRequise ? 'Passer au superviseur seul' : 'Rétablir l’étape RH' }}
+      </button>
+    </div>
+  </div>
+
   <div class="cm-stats-grid">
     <div class="cm-stat-card pending">
       <span class="cm-stat-value">{{ nbActionnable }}</span>

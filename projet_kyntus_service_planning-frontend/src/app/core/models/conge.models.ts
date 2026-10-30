@@ -155,6 +155,58 @@ export interface CongeDisponibiliteDto {
   joursSatures: string[];
 }
 
+/** Occupation d'un jour pour le calendrier de demande (v9). */
+export interface CongeJourDto {
+  /** yyyy-MM-dd */
+  jour: string;
+  absents: number;
+  /** Quota de la cellule atteint : jour grisé, non sélectionnable. */
+  sature: boolean;
+  moisInterdit: boolean;
+  /** L'agent a déjà une demande sur ce jour. */
+  dejaDemande: boolean;
+}
+
+export interface CongeDisponibiliteMoisDto {
+  annee: number;
+  mois: number;
+  nodeId: string | null;
+  nodeNom: string | null;
+  quota: number | null;
+  effectif: number;
+  moisInterdits: number[];
+  jours: CongeJourDto[];
+}
+
+/** Absence d'un collègue de la même cellule (sans motif ni type de congé). */
+export interface CelluleAbsenceDto {
+  employeId: string;
+  collaborateur: string;
+  dateDebut: string;
+  dateFin: string;
+  nombreJours: number;
+  statut: StatutDemande;
+  estMoi: boolean;
+}
+
+export interface CelluleCongesDto {
+  celluleId: string | null;
+  celluleNom: string;
+  annee: number;
+  effectif: number;
+  quotaMaxAbsents: number | null;
+  absences: CelluleAbsenceDto[];
+}
+
+/** Circuit de validation des congés en vigueur. */
+export interface CongeWorkflowDto {
+  /** Vrai = ancien circuit : superviseur puis RH. */
+  etapeRhRequise: boolean;
+  updatedAt: string;
+  updatedBy: string | null;
+  demandesEnAttenteRh: number;
+}
+
 /** Normalise un statut API (nombre ou nom enum string). */
 export function normalizeStatutDemande(raw: StatutDemande | string | number): StatutDemande {
   if (typeof raw === 'number') return raw as StatutDemande;

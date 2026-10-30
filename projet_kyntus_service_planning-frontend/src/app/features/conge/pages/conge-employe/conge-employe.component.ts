@@ -19,6 +19,17 @@ import {
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { formatHttpErrorMessage } from '../../../../core/lib/http-error-message.util';
 
+/** Case du calendrier de demande, avec l'occupation de la cellule ce jour-là. */
+type CalendarCell = {
+  date: string | null;
+  day: number | null;
+  blocked: boolean;
+  selected: boolean;
+  inRange: boolean;
+  absents: number;
+  dejaDemande: boolean;
+};
+
 @Component({
   selector: 'app-conge-employe',
   standalone: true,
@@ -48,6 +59,12 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
   disponibiliteMotif: string | null = null;
   /** Jours yyyy-MM-dd saturés (quota) ou interdits pour le mois affiché. */
   blockedDays = new Set<string>();
+  /** Occupation par jour du mois affiché (absents, saturation, demande déjà posée). */
+  joursInfo = new Map<string, { absents: number; sature: boolean; dejaDemande: boolean }>();
+  /** Quota d'absents simultanés de la cellule (null = aucun quota défini). */
+  quotaCellule: number | null = null;
+  celluleNom: string | null = null;
+  effectifCellule = 0;
   calendarMonth = new Date();
   selectingEnd = false;
 
@@ -273,36 +290,30 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
     return `${this.moisLabels[m] ?? m} ${y}`;
   }
 
-  get calendarCells(): {
-    date: string | null;
-    day: number | null;
-    blocked: boolean;
-    selected: boolean;
-    inRange: boolean;
-  }[] {
+  get calendarCells(): CalendarCell[] {
     const y = this.calendarMonth.getFullYear();
     const m = this.calendarMonth.getMonth();
     const first = new Date(y, m, 1);
     const daysInMonth = new Date(y, m + 1, 0).getDate();
     const startPad = (first.getDay() + 6) % 7;
-    const cells: {
-      date: string | null;
-      day: number | null;
-      blocked: boolean;
-      selected: boolean;
-      inRange: boolean;
-    }[] = [];
+    const cells: CalendarCell[] = [];
     for (let i = 0; i < startPad; i++) {
-      cells.push({ date: null, day: null, blocked: false, selected: false, inRange: false });
+      cells.push({
+        date: null, day: null, blocked: false, selected: false,
+        inRange: false, absents: 0, dejaDemande: false,
+      });
     }
     for (let day = 1; day <= daysInMonth; day++) {
       const date = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const info = this.joursInfo.get(date);
       cells.push({
         date,
         day,
         blocked: this.isDayBlocked(date),
         selected: date === this.form.dateDebut || date === this.form.dateFin,
         inRange: this.isDateInSelectedRange(date),
+        absents: info?.absents ?? 0,
+        dejaDemande: info?.dejaDemande ?? false,
       });
     }
     return cells;
@@ -357,36 +368,68 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
     this.checkDisponibilite();
   }
 
+  /**
+   * Occupation du mois affiché : absents par jour, jours saturés par le quota de la
+   * cellule et mois interdits. Les jours saturés sont grisés et non sélectionnables.
+   */
   private loadMonthBlockedDays(): void {
     if (!this.employeId) return;
     const y = this.calendarMonth.getFullYear();
     const m = this.calendarMonth.getMonth();
     const lastDay = new Date(y, m + 1, 0).getDate();
-    const debut = `${y}-${String(m + 1).padStart(2, '0')}-01`;
-    const fin = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    this.svc.getDisponibilite(this.employeId, debut + 'T00:00:00Z', fin + 'T00:00:00Z').subscribe({
+    const moisInterditDays = (): Set<string> => {
+      const next = new Set<string>();
+      if (this.moisInterdits.includes(m + 1)) {
+        for (let day = 1; day <= lastDay; day++) {
+          next.add(`${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+        }
+      }
+      return next;
+    };
+
+    this.svc.getDisponibiliteMois(this.employeId, y, m + 1).subscribe({
       next: (r) => {
         this.moisInterdits = r.moisInterdits?.length ? r.moisInterdits : this.moisInterdits;
-        const next = new Set<string>(r.joursSatures ?? []);
-        if (this.moisInterdits.includes(m + 1)) {
-          for (let day = 1; day <= lastDay; day++) {
-            next.add(`${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
-          }
+        this.quotaCellule = r.quota;
+        this.celluleNom = r.nodeNom;
+        this.effectifCellule = r.effectif;
+        const next = moisInterditDays();
+        const info = new Map<string, { absents: number; sature: boolean; dejaDemande: boolean }>();
+        for (const j of r.jours ?? []) {
+          info.set(j.jour, { absents: j.absents, sature: j.sature, dejaDemande: j.dejaDemande });
+          if (j.sature || j.moisInterdit) next.add(j.jour);
         }
+        this.joursInfo = info;
         this.blockedDays = next;
         this.cdr.detectChanges();
       },
       error: () => {
-        const next = new Set<string>();
-        if (this.moisInterdits.includes(m + 1)) {
-          for (let day = 1; day <= lastDay; day++) {
-            next.add(`${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
-          }
-        }
-        this.blockedDays = next;
+        this.joursInfo = new Map();
+        this.blockedDays = moisInterditDays();
         this.cdr.detectChanges();
       },
     });
+  }
+
+  /** Infobulle d'un jour du calendrier : occupation ou motif du blocage. */
+  dayTitle(date: string | null): string {
+    if (!date) return '';
+    const month = Number(date.slice(5, 7));
+    if (this.moisInterdits.includes(month)) return 'Mois interdit aux congés';
+    if (
+      this.form.typeConge === TypeConge.Annuel
+      && this.dateEligibiliteYmd
+      && date < this.dateEligibiliteYmd
+    ) {
+      return `Congé annuel possible à partir du ${this.dateEligibiliteLabel}`;
+    }
+    const info = this.joursInfo.get(date);
+    if (!info) return '';
+    const cellule = this.celluleNom ? ` — ${this.celluleNom}` : '';
+    if (info.dejaDemande) return `Vous avez déjà une demande ce jour${cellule}`;
+    if (this.quotaCellule === null) return `${info.absents} absent(s)${cellule}`;
+    const etat = info.sature ? 'complet' : 'disponible';
+    return `${info.absents}/${this.quotaCellule} absent(s) — ${etat}${cellule}`;
   }
 
   onTypeCongeChange(): void {

@@ -103,6 +103,17 @@ public class PeriodeInterditeCongeConfiguration : IEntityTypeConfiguration<Perio
     }
 }
 
+public class CongeWorkflowConfigConfiguration : IEntityTypeConfiguration<CongeWorkflowConfig>
+{
+    public void Configure(EntityTypeBuilder<CongeWorkflowConfig> builder)
+    {
+        builder.ToTable("conge_workflow_config");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.EtapeRhRequise).IsRequired();
+        builder.Property(x => x.UpdatedAt).IsRequired();
+    }
+}
+
 public class QuotaCongeServiceConfiguration : IEntityTypeConfiguration<QuotaCongeService>
 {
     public void Configure(EntityTypeBuilder<QuotaCongeService> builder)

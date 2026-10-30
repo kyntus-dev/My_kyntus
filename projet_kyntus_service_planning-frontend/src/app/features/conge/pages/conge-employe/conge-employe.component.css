@@ -110,6 +110,23 @@
   font-weight: 600;
   color: var(--text-primary);
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1;
+}
+/* Occupation du jour : « absents / quota » de la cellule. */
+.ce-cal-occ {
+  font-size: 0.56rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.ce-cal-day.is-selected .ce-cal-occ { color: inherit; }
+/* Jour où l'agent a déjà une demande. */
+.ce-cal-day.is-mine:not(.is-selected) {
+  outline: 1px dashed var(--blue-600);
 }
 .ce-cal-day.is-empty {
   background: transparent;

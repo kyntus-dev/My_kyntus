@@ -1,0 +1,121 @@
+<div class="ky-page-shell">
+  <app-kyntus-page-header
+    title="Congés de ma cellule"
+    [subtitle]="(data()?.celluleNom ?? 'Votre cellule') + ' — ' + affichees().length + ' absence(s) affichée(s)'">
+    <div actions>
+      <a routerLink="/conges" class="ky-btn-secondary">Mes congés</a>
+      <button type="button" class="ky-btn-secondary btn-refresh" (click)="load()" [disabled]="loading()">
+        <app-lucide-icon [icon]="icons.refresh" className="w-4 h-4" />
+        Actualiser
+      </button>
+    </div>
+  </app-kyntus-page-header>
+
+  <div class="kpi-row">
+    <div class="kpi-card ky-card kc-blue">
+      <span class="kpi-label">Effectif de la cellule</span>
+      <span class="kpi-value">{{ data()?.effectif ?? 0 }}</span>
+    </div>
+    <div class="kpi-card ky-card kc-rose">
+      <span class="kpi-label">Absents aujourd'hui</span>
+      <span class="kpi-value">{{ kpi().absentsAujourdhui }}</span>
+    </div>
+    <div class="kpi-card ky-card kc-amber">
+      <span class="kpi-label">Absents dans les 7 jours</span>
+      <span class="kpi-value">{{ kpi().absents7Jours }}</span>
+    </div>
+    <div class="kpi-card ky-card kc-green">
+      <span class="kpi-label">Demandes en cours</span>
+      <span class="kpi-value">{{ kpi().enAttente }}</span>
+    </div>
+  </div>
+
+  <div class="filters-panel ky-card">
+    <div class="filters-toolbar">
+      <select class="filter-ctl ky-input filter-ctl--year" aria-label="Année"
+        [ngModel]="annee()" (ngModelChange)="changeAnnee($event)">
+        @for (y of yearOptions; track y) {
+          <option [ngValue]="y">{{ y }}</option>
+        }
+      </select>
+
+      <select class="filter-ctl ky-input" aria-label="Période"
+        [ngModel]="periode()" (ngModelChange)="periode.set($event)">
+        <option value="a-venir">En cours et à venir</option>
+        <option value="mois">Mois en cours</option>
+        <option value="annee">Toute l'année</option>
+      </select>
+
+      <span class="cc-quota">{{ quotaLabel() }}</span>
+    </div>
+  </div>
+
+  <div class="table-card ky-card">
+    @if (loading()) {
+      <div class="state-loading">
+        <div class="spinner"></div>
+        <span>Chargement des congés de votre cellule…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-error">{{ error() }}</div>
+    } @else {
+      <div class="cc-strip">
+        <div class="cc-strip-head">
+          <span class="cc-strip-title">Occupation du mois</span>
+          <select class="filter-ctl ky-input cc-strip-mois" aria-label="Mois"
+            [ngModel]="moisAffiche()" (ngModelChange)="changeMois($event)">
+            @for (m of [1,2,3,4,5,6,7,8,9,10,11,12]; track m) {
+              <option [ngValue]="m">{{ m }}</option>
+            }
+          </select>
+        </div>
+        <div class="cc-strip-days">
+          @for (j of occupation(); track j.jour) {
+            <span class="cc-day" [class.is-sature]="j.sature" [class.is-libre]="j.absents === 0"
+              [attr.title]="jourTitle(j)">
+              <span class="cc-day-num">{{ j.numero }}</span>
+              <span class="cc-day-abs">{{ j.absents }}</span>
+            </span>
+          }
+        </div>
+        <p class="cc-legend">
+          Jours en rouge : quota de la cellule atteint — ces dates ne sont plus sélectionnables dans une nouvelle demande.
+        </p>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="prime-table">
+          <thead>
+            <tr>
+              <th>Collaborateur</th>
+              <th>Du</th>
+              <th>Au</th>
+              <th>Jours</th>
+              <th>État</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (a of affichees(); track a.employeId + a.dateDebut) {
+              <tr [class.is-me]="a.estMoi">
+                <td class="td-user">
+                  <span class="user-name">{{ a.collaborateur }}</span>
+                  @if (a.estMoi) { <span class="cc-me">moi</span> }
+                </td>
+                <td class="td-dates">{{ formatDate(a.dateDebut) }}</td>
+                <td class="td-dates">{{ formatDate(a.dateFin) }}</td>
+                <td class="td-days">{{ a.nombreJours }}j</td>
+                <td><span class="statut-badge" [ngClass]="statutClass(a.statut)">{{ statutLabels[a.statut] }}</span></td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="5">
+                  <div class="empty-state">Aucune absence sur cette période dans votre cellule.</div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</div>

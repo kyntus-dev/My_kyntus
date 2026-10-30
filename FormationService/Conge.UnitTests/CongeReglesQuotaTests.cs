@@ -166,8 +166,9 @@ public class CongeReglesQuotaTests
             regles.AssertQuotaServiceDisponibleAsync(serviceId, debut, fin));
     }
 
+    /// <summary>v9 : « déjà posé ou obtenu » — une demande en attente occupe sa place.</summary>
     [Fact]
-    public async Task EnAttente_ne_compte_pas_dans_quota()
+    public async Task EnAttente_compte_dans_quota()
     {
         var serviceId = Guid.NewGuid();
         var managerId = Guid.NewGuid();
@@ -186,7 +187,42 @@ public class CongeReglesQuotaTests
         demandeRepo.Occupying.Add(pending);
 
         var regles = new CongeReglesService(new FakePeriodeRepo(), quotaRepo, demandeRepo, empRepo);
-        await regles.AssertQuotaServiceDisponibleAsync(serviceId, debut, fin); // ne throw pas
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            regles.AssertQuotaServiceDisponibleAsync(serviceId, debut, fin));
+    }
+
+    /// <summary>Calendrier : jours saturés du mois, pour les griser avant la sélection.</summary>
+    [Fact]
+    public async Task Mois_signale_les_jours_satures()
+    {
+        var celluleId = "cell-ats";
+        var managerId = Guid.NewGuid();
+        var empRepo = new FakeEmployeRepo();
+        var demandeRepo = new FakeDemandeRepo();
+        var quotaRepo = new FakeQuotaRepo { Quota = QuotaCongeService.Creer(celluleId, 1, scopeKind: QuotaScopeKinds.Cellule) };
+
+        var e1 = EmployeSnapshot.Creer(
+            Guid.NewGuid(), "A", "A", "a@t.com", managerId, Guid.Empty, "S",
+            DateTime.UtcNow.AddYears(-2), celluleId: celluleId);
+        var e2 = EmployeSnapshot.Creer(
+            Guid.NewGuid(), "B", "B", "b@t.com", managerId, Guid.Empty, "S",
+            DateTime.UtcNow.AddYears(-2), celluleId: celluleId);
+        empRepo.Employees.AddRange([e1, e2]);
+
+        var debut = new DateTime(2026, 11, 9);
+        var fin = new DateTime(2026, 11, 11);
+        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, 2026);
+        demandeRepo.Occupying.Add(DemandeConge.CreerCongeAnnuel(e1.EmployeId, managerId, debut, fin, solde, e1));
+
+        var regles = new CongeReglesService(new FakePeriodeRepo(), quotaRepo, demandeRepo, empRepo);
+        var mois = await regles.EvaluerMoisAsync(e2.EmployeId, 2026, 11);
+
+        Assert.Equal(1, mois.Quota);
+        Assert.Equal(2, mois.Effectif);
+        Assert.Equal(30, mois.Jours.Count);
+        var satures = mois.Jours.Where(j => j.Sature).Select(j => j.Jour.Day).ToList();
+        Assert.Equal(new[] { 9, 10, 11 }, satures);
+        Assert.All(mois.Jours, j => Assert.False(j.DejaDemande));
     }
 
     [Fact]

@@ -385,6 +385,15 @@ export const routes: Routes = [
                 .then(m => m.CongeEquipeComponent),
           },
           {
+            // Congés de sa propre cellule : visible par tout collaborateur (cellule déduite côté serveur).
+            path: 'ma-cellule',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.mesConges, capability: 'conges.self' },
+            loadComponent: () =>
+              import('./features/conge/pages/conge-cellule/conge-cellule.component')
+                .then(m => m.CongeCelluleComponent),
+          },
+          {
             path: 'historique',
             canActivate: [AuthGuard],
             data: { roles: ROLE_SETS.congesRhConfig, capability: 'conges.history' },

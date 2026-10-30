@@ -22,11 +22,23 @@ public interface IQuotaCongeServiceRepository
     void Update(QuotaCongeService quota);
 }
 
+public interface ICongeWorkflowConfigRepository
+{
+    /// <summary>Ligne unique (créée au défaut v9 si absente).</summary>
+    Task<CongeWorkflowConfig> GetOrCreateAsync(CancellationToken ct = default);
+    void Update(CongeWorkflowConfig config);
+}
+
 public static class CongeQuotaStatuts
 {
-    /// <summary>Statuts qui occupent une place dans le quota service.</summary>
+    /// <summary>
+    /// Statuts qui occupent une place dans le quota de la cellule / du service.
+    /// v9 : une demande en attente de décision occupe sa place, comme un congé validé —
+    /// « déjà posé ou obtenu ». Un refus ou une annulation la libère.
+    /// </summary>
     public static readonly StatutDemande[] Occupants =
     {
+        StatutDemande.EnAttente,
         StatutDemande.EnAttenteRh,
         StatutDemande.Validee
     };

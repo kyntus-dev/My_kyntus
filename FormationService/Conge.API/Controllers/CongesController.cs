@@ -4,6 +4,7 @@ using Conge.Application.Commands.ConfigConge;
 using Conge.Application.Commands.DemanderConge;
 using Conge.Application.Commands.RefuserConge;
 using Conge.Application.Commands.ValiderConge;
+using Conge.Application.Queries.GetCongesCellule;
 using Conge.Application.Queries.GetCongesEquipe;
 using Conge.Application.Queries.GetDemandesByEmploye;
 using Conge.Application.Queries.GetDemandesByManager;
@@ -208,6 +209,43 @@ public class CongesController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// GET /api/conges/disponibilite/mois — Occupation du mois (absents par jour, jours
+    /// saturés par le quota, mois interdits) pour griser le calendrier de demande.
+    /// </summary>
+    [HttpGet("disponibilite/mois")]
+    public async Task<IActionResult> GetDisponibiliteMois(
+        [FromQuery] Guid employeId,
+        [FromQuery] int annee,
+        [FromQuery] int mois,
+        CancellationToken ct)
+    {
+        if (annee is < 2000 or > 2100 || mois is < 1 or > 12)
+            return BadRequest(new { message = "Année ou mois invalide." });
+
+        var access = await ResolveEmployeAccessAsync(employeId, ct);
+        if (access.Error is not null)
+            return access.Error;
+
+        return Ok(await _mediator.Send(
+            new GetDisponibiliteMoisQuery(access.CanonicalId, annee, mois), ct));
+    }
+
+    /// <summary>
+    /// GET /api/conges/ma-cellule — Absences des collègues de sa propre cellule
+    /// (nom, dates, statut), pour éviter les chevauchements. Accessible à tous.
+    /// </summary>
+    [HttpGet("ma-cellule")]
+    public async Task<IActionResult> GetCongesMaCellule([FromQuery] int? annee, CancellationToken ct)
+    {
+        var access = await ResolveEmployeAccessAsync(Guid.Empty, ct);
+        if (access.Error is not null)
+            return access.Error;
+
+        var year = annee is >= 2000 and <= 2100 ? annee.Value : DateTime.UtcNow.Year;
+        return Ok(await _mediator.Send(new GetCongesCelluleQuery(access.CanonicalId, year), ct));
+    }
+
     // ── Config ───────────────────────────────────────────────────────────────
 
     [HttpGet("config/periodes-interdites")]
@@ -277,6 +315,23 @@ public class CongesController : ControllerBase
     public async Task<IActionResult> GetQuotaService(string serviceId, CancellationToken ct)
         => Ok(await _mediator.Send(new GetQuotaServiceByIdQuery(serviceId), ct));
 
+    /// <summary>GET /api/conges/config/workflow — Circuit de validation en vigueur.</summary>
+    [HttpGet("config/workflow")]
+    public async Task<IActionResult> GetWorkflow(CancellationToken ct)
+        => Ok(await _mediator.Send(new GetCongeWorkflowQuery(), ct));
+
+    /// <summary>
+    /// PUT /api/conges/config/workflow — Bascule du circuit (Admin).
+    /// Désactiver l'étape RH finalise les demandes déjà validées par un superviseur.
+    /// </summary>
+    [HttpPut("config/workflow")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateWorkflow(
+        [FromBody] UpdateCongeWorkflowRequest body,
+        CancellationToken ct)
+        => Ok(await _mediator.Send(
+            new UpdateCongeWorkflowCommand(body.EtapeRhRequise, RequireActorId()), ct));
+
     // ── Validation / Refus ───────────────────────────────────────────────────
 
     /// <summary>PUT /api/conges/{id}/valider-superviseur</summary>
@@ -295,7 +350,11 @@ public class CongesController : ControllerBase
         if (iam is not null)
             return iam;
 
-        if (!IsPrivilegedHrOrAdmin())
+        var suivi = RhSuiviSeulement(StatutDemande.EnAttente);
+        if (suivi is not null)
+            return suivi;
+
+        if (!IsAdmin())
         {
             var forbidden = await EnsureCanActOnDemandeAsync(id, actorId.Value, requireSuperviseurScope: true, ct);
             if (forbidden is not null)
@@ -346,9 +405,13 @@ public class CongesController : ControllerBase
         if (demande is null)
             return NotFound();
 
+        var suivi = RhSuiviSeulement(demande.Statut);
+        if (suivi is not null)
+            return suivi;
+
         if (demande.Statut == StatutDemande.EnAttente)
         {
-            if (!IsPrivilegedHrOrAdmin())
+            if (!IsAdmin())
             {
                 var forbidden = await EnsureCanActOnDemandeAsync(id, actorId.Value, requireSuperviseurScope: true, ct);
                 if (forbidden is not null)
@@ -384,9 +447,13 @@ public class CongesController : ControllerBase
         if (demande is null)
             return NotFound();
 
+        var suivi = RhSuiviSeulement(demande.Statut);
+        if (suivi is not null)
+            return suivi;
+
         if (demande.Statut == StatutDemande.EnAttente)
         {
-            if (!IsPrivilegedHrOrAdmin())
+            if (!IsAdmin())
             {
                 var forbidden = await EnsureCanActOnDemandeAsync(id, actorId.Value, requireSuperviseurScope: true, ct);
                 if (forbidden is not null)
@@ -462,6 +529,27 @@ public class CongesController : ControllerBase
         var role = User.GetAuthRole();
         return string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
             || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsAdmin()
+        => string.Equals(User.GetAuthRole(), "Admin", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsRh()
+        => string.Equals(User.GetAuthRole(), "RH", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// v9 : le service RH suit les congés sans les trancher. Il ne décide que des demandes
+    /// qui lui sont adressées (statut « en attente RH ») : congé d'un responsable,
+    /// cellule sans superviseur actif, ou deuxième étape du circuit à deux étapes.
+    /// </summary>
+    private IActionResult? RhSuiviSeulement(StatutDemande statut)
+    {
+        if (!IsRh() || statut == StatutDemande.EnAttenteRh)
+            return null;
+        return StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            message = "Le service RH suit les demandes sans les valider : la décision appartient au superviseur de la cellule.",
+        });
     }
 
     private bool IsSuperviseurRole()
@@ -571,6 +659,7 @@ public record UpdatePeriodesInterditesRequest(
     Guid? UpdatedBy = null,
     string? ScopeKind = null,
     string? ScopeId = null);
+public record UpdateCongeWorkflowRequest(bool EtapeRhRequise);
 public record UpsertQuotaServiceRequest(
     string ServiceId,
     int MaxAbsentsSimultanes,

@@ -235,6 +235,7 @@ export const MICROSERVICES: Microservice[] = [
     icon: ICONS.leave,
     children: [
       { label: 'Mes congés', route: '/mes-conges', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'conges.self' },
+      { label: 'Congés de ma cellule', route: '/conges/ma-cellule', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'conges.self' },
       { label: 'Valider les congés', route: '/conges/validation', roles: [...MANAGER_ROLES, 'Superviseur'], hat: 'team', capability: 'conges.validation' },
       { label: "Congés de l'équipe", route: '/conges/equipe', roles: ROLE_SETS.congesEquipe, hat: 'team' },
       { label: 'Absences', route: '/absences-planning', roles: MANAGER_ROLES, hat: 'team', capability: 'conges.validation' },

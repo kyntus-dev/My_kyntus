@@ -97,3 +97,28 @@ public record CongeDisponibiliteDto(
     string? Motif,
     IReadOnlyList<int> MoisInterdits,
     IReadOnlyList<string> JoursSatures);
+
+/// <summary>Occupation d'un jour pour le calendrier de demande (v9).</summary>
+public record CongeJourDto(
+    string Jour,
+    int Absents,
+    bool Sature,
+    bool MoisInterdit,
+    bool DejaDemande);
+
+public record CongeDisponibiliteMoisDto(
+    int Annee,
+    int Mois,
+    string? NodeId,
+    string? NodeNom,
+    int? Quota,
+    int Effectif,
+    IReadOnlyList<int> MoisInterdits,
+    IReadOnlyList<CongeJourDto> Jours);
+
+/// <summary>Circuit de validation en vigueur (v9).</summary>
+public record CongeWorkflowDto(
+    bool EtapeRhRequise,
+    DateTime UpdatedAt,
+    Guid? UpdatedBy,
+    int DemandesEnAttenteRh);

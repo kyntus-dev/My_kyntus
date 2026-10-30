@@ -345,3 +345,24 @@ public class QuotaCongeServiceRepository : IQuotaCongeServiceRepository
     public void Update(QuotaCongeService quota)
         => _context.QuotasCongeService.Update(quota);
 }
+public class CongeWorkflowConfigRepository : ICongeWorkflowConfigRepository
+{
+    private readonly CongeDbContext _context;
+
+    public CongeWorkflowConfigRepository(CongeDbContext context) => _context = context;
+
+    public async Task<CongeWorkflowConfig> GetOrCreateAsync(CancellationToken ct = default)
+    {
+        var row = await _context.CongeWorkflowConfigs
+            .FirstOrDefaultAsync(c => c.Id == CongeWorkflowConfig.SingletonId, ct);
+        if (row is not null)
+            return row;
+
+        row = CongeWorkflowConfig.CreerParDefaut();
+        await _context.CongeWorkflowConfigs.AddAsync(row, ct);
+        await _context.SaveChangesAsync(ct);
+        return row;
+    }
+
+    public void Update(CongeWorkflowConfig config) => _context.CongeWorkflowConfigs.Update(config);
+}

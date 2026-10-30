@@ -20,8 +20,7 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
     private readonly ICongeEventPublisher _eventPublisher;
     private readonly CongeReglesService _regles;
     private readonly IEmployeSnapshotEnsure _ensure;
-    private readonly ILeaveWorkflowPolicy _workflow;
-    private readonly CongeValidationFinalizer _finalizer;
+    private readonly LeaveRoutingService _routing;
 
     public DemanderCongeHandler(
         IDemandeCongeRepository demandeRepo,
@@ -31,8 +30,7 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
         ICongeEventPublisher eventPublisher,
         CongeReglesService regles,
         IEmployeSnapshotEnsure ensure,
-        ILeaveWorkflowPolicy workflow,
-        CongeValidationFinalizer finalizer)
+        LeaveRoutingService routing)
     {
         _demandeRepo = demandeRepo;
         _soldeRepo = soldeRepo;
@@ -41,8 +39,7 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
         _eventPublisher = eventPublisher;
         _regles = regles;
         _ensure = ensure;
-        _workflow = workflow;
-        _finalizer = finalizer;
+        _routing = routing;
     }
 
     public async Task<Guid> Handle(DemanderCongeCommand request, CancellationToken ct)
@@ -58,23 +55,15 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
             ?? await _employeRepo.GetByEmployeIdAsync(request.EmployeId, ct)
             ?? throw new EmployeNotFoundException(request.EmployeId);
 
-        Guid validateurId;
-        var statutInitial = StatutDemande.EnAttente;
+        // v9 : la demande part au superviseur de la cellule ; à défaut (congé d'un
+        // responsable, cellule sans superviseur actif) elle est adressée au service RH.
+        var routage = await _routing.ResolveAsync(employe, ct);
+        var validateurId = routage.ValidateurId != Guid.Empty ? routage.ValidateurId : employe.ManagerId;
+        var statutInitial = routage.DecisionRh ? StatutDemande.EnAttenteRh : StatutDemande.EnAttente;
+        if (routage.DecisionRh && routage.ValidateurId == Guid.Empty)
+            throw new EmployeNotFoundException(Guid.Empty);
 
-        if (KyntusRoleNames.IsSuperviseur(employe.Role))
-        {
-            var adminRh = await _employeRepo.GetAdminOuRhAsync(ct)
-                ?? throw new EmployeNotFoundException(Guid.Empty);
-            validateurId = adminRh.EmployeId;
-            statutInitial = StatutDemande.EnAttenteRh;
-        }
-        else
-        {
-            // Compat : premier responsable connu (ManagerId snapshot).
-            validateurId = employe.ManagerId;
-        }
-
-        var (validationNodeId, validationNodeLevel) = ResolveValidationNode(employe);
+        var (validationNodeId, validationNodeLevel) = (routage.NodeId, routage.NodeLevel);
 
         var dateFinEffective = request.TypeConge == TypeConge.Exceptionnel && request.TypeExceptionnel.HasValue
             ? request.DateDebut.AddDays(PolitiqueConge.GetDureeExceptionnelle(request.TypeExceptionnel.Value) - 1)
@@ -135,14 +124,8 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
         await _demandeRepo.AddAsync(demande, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        if (statutInitial == StatutDemande.EnAttenteRh
-            && !await _workflow.IsRhValidationRequiredAsync(ct))
-        {
-            demande.FinaliserSansEtapeRh(employe.EmployeId, employe.NomComplet, employe.Role);
-            await _finalizer.PersistAndPublishAsync(demande, employe.EmployeId, employe.NomComplet, ct);
-            return demande.Id;
-        }
-
+        // Une demande adressée au service RH attend sa décision : elle n'est jamais
+        // auto-validée, même quand l'étape RH du circuit standard est désactivée.
         foreach (var domainEvent in demande.DomainEvents)
         {
             if (domainEvent is CongeDemandeEvent)
@@ -158,17 +141,7 @@ public class DemanderCongeHandler : IRequestHandler<DemanderCongeCommand, Guid>
         return demande.Id;
     }
 
-    /// <summary>Cellule préférée, sinon service Directory / legacy Guid.</summary>
+    /// <summary>Cellule préférée, sinon service Directory / legacy Guid (voir <see cref="LeaveRoutingService"/>).</summary>
     internal static (string? NodeId, string? Level) ResolveValidationNode(EmployeSnapshot employe)
-    {
-        if (!string.IsNullOrWhiteSpace(employe.CelluleId))
-            return (employe.CelluleId, "Cellule");
-        if (!string.IsNullOrWhiteSpace(employe.OrgServiceId))
-            return (employe.OrgServiceId, "Service");
-        if (employe.ServiceId != Guid.Empty)
-            return (employe.ServiceId.ToString(), "Service");
-        if (!string.IsNullOrWhiteSpace(employe.PoleId))
-            return (employe.PoleId, "Pole");
-        return (null, null);
-    }
+        => LeaveRoutingService.ResolveValidationNode(employe);
 }

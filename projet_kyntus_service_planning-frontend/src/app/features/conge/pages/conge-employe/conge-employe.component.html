@@ -151,12 +151,19 @@
                 [class.is-blocked]="cell.blocked"
                 [class.is-selected]="cell.selected"
                 [class.is-range]="cell.inRange && !cell.selected"
+                [class.is-mine]="cell.dejaDemande"
+                [attr.title]="dayTitle(cell.date)"
+                [attr.aria-label]="cell.day ? cell.day + ' — ' + dayTitle(cell.date) : null"
                 (click)="onCalendarDayClick(cell)">
-                {{ cell.day || '' }}
+                <span class="ce-cal-num">{{ cell.day || '' }}</span>
+                <span class="ce-cal-occ" *ngIf="cell.date && quotaCellule !== null">{{ cell.absents }}/{{ quotaCellule }}</span>
               </button>
             </div>
             <p class="ce-cal-hint">
-              Jours grisés = quota atteint ou mois interdit.
+              Jours grisés = quota de la cellule atteint ou mois interdit.
+              <span *ngIf="quotaCellule !== null">
+                Quota {{ celluleNom || 'de votre cellule' }} : {{ quotaCellule }} absent(s) simultané(s) sur {{ effectifCellule }} personne(s).
+              </span>
               <span *ngIf="isDateFinManuelle()"> Cliquez début puis fin.</span>
             </p>
           </div>

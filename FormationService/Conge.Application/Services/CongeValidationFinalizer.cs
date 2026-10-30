@@ -19,7 +19,12 @@ public sealed class CongeValidationFinalizer(
         if (await workflow.IsRhValidationRequiredAsync(ct))
             return true;
 
-        var pending = (await demandeRepo.GetByStatutAsync(StatutDemande.EnAttenteRh, ct)).ToList();
+        // Seules les demandes déjà tranchées par un superviseur sont finalisées :
+        // celles adressées directement au service RH (congé d'un responsable, cellule
+        // sans superviseur actif) attendent sa décision.
+        var pending = (await demandeRepo.GetByStatutAsync(StatutDemande.EnAttenteRh, ct))
+            .Where(d => d.SuperviseurDecideurId is not null)
+            .ToList();
         foreach (var demande in pending)
         {
             try

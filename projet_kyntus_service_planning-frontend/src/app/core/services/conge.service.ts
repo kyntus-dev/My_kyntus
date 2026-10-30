@@ -6,7 +6,7 @@ import {
   DemandeCongeDto, SoldeCongeDto, DemanderCongeCommand,
   ValiderCongeRequest, RefuserCongeRequest, StatutDemande,
   PeriodesInterditesDto, PeriodesInterditesScopesDto, QuotaCongeServiceDto, CongeDisponibiliteDto,
-  EquipeCongesDto,
+  EquipeCongesDto, CongeDisponibiliteMoisDto, CelluleCongesDto, CongeWorkflowDto,
 } from '../models/conge.models';
 
 @Injectable({ providedIn: 'root' })
@@ -50,6 +50,27 @@ export class CongeService {
     return this.http.get<CongeDisponibiliteDto>(
       `${this.base}/disponibilite?employeId=${employeId}&debut=${encodeURIComponent(debut)}&fin=${encodeURIComponent(fin)}`
     );
+  }
+
+  /** Occupation du mois : absents par jour et jours saturés (calendrier grisé). */
+  getDisponibiliteMois(employeId: string, annee: number, mois: number): Observable<CongeDisponibiliteMoisDto> {
+    return this.http.get<CongeDisponibiliteMoisDto>(
+      `${this.base}/disponibilite/mois?employeId=${employeId}&annee=${annee}&mois=${mois}`
+    );
+  }
+
+  /** Absences des collègues de sa propre cellule (nom, dates, statut). */
+  getCongesMaCellule(annee: number): Observable<CelluleCongesDto> {
+    return this.http.get<CelluleCongesDto>(`${this.base}/ma-cellule?annee=${annee}`);
+  }
+
+  getWorkflow(): Observable<CongeWorkflowDto> {
+    return this.http.get<CongeWorkflowDto>(`${this.base}/config/workflow`);
+  }
+
+  /** Bascule du circuit (Admin). */
+  updateWorkflow(etapeRhRequise: boolean): Observable<CongeWorkflowDto> {
+    return this.http.put<CongeWorkflowDto>(`${this.base}/config/workflow`, { etapeRhRequise });
   }
 
   getPeriodesInterdites(query?: {
