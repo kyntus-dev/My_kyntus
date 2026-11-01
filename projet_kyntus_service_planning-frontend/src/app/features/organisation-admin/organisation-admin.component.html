@@ -1,0 +1,307 @@
+<div class="ky-page-shell oa">
+  <app-kyntus-page-header
+    title="Contrats, pôles et cellules"
+    subtitle="Gérez la structure et l’affectation des agents. « Archiver » ne supprime rien : l’historique est conservé.">
+    <div actions>
+      <a routerLink="/organisation" class="ky-btn-secondary">Responsables</a>
+      <button type="button" class="ky-btn-secondary" (click)="load()" [disabled]="loading() || busy()">Actualiser</button>
+    </div>
+  </app-kyntus-page-header>
+
+  <nav class="oa-tabs" role="tablist" aria-label="Organisation administrative">
+    <button type="button" role="tab" class="oa-tab" [class.is-active]="onglet() === 'structure'"
+      [attr.aria-selected]="onglet() === 'structure'" (click)="onglet.set('structure')">Structure</button>
+    <button type="button" role="tab" class="oa-tab" [class.is-active]="onglet() === 'agents'"
+      [attr.aria-selected]="onglet() === 'agents'" (click)="onglet.set('agents')">Affectation des agents</button>
+    <button type="button" role="tab" class="oa-tab" [class.is-active]="onglet() === 'archives'"
+      [attr.aria-selected]="onglet() === 'archives'" (click)="onglet.set('archives')">
+      Archives
+      @if (archives().length + contratsArchives().length) {
+        <span class="oa-count">{{ archives().length + contratsArchives().length }}</span>
+      }
+    </button>
+  </nav>
+
+  @if (loading()) {
+    <div class="ky-card oa-state">Chargement de l’organisation…</div>
+  } @else if (error()) {
+    <div class="ky-card oa-state oa-state--error">{{ error() }}</div>
+  } @else {
+
+    <!-- ═══════════════════ STRUCTURE ═══════════════════ -->
+    @if (onglet() === 'structure') {
+      <div class="oa-toolbar">
+        <button type="button" class="ky-btn-primary" (click)="nouveauContrat()" [disabled]="busy()">+ Nouveau contrat</button>
+      </div>
+
+      @for (d of depts(); track d.id) {
+        <section class="ky-card oa-dept">
+          <header class="oa-dept-head">
+            <div>
+              <h2 class="oa-dept-name">{{ d.name }}</h2>
+              <span class="oa-meta">{{ codeParContrat().get(d.id) || d.code }} · {{ d.poles.length }} pôle(s)</span>
+            </div>
+            <div class="oa-actions">
+              <button type="button" class="oa-link" (click)="nouveauPole(d)" [disabled]="busy()">+ Pôle</button>
+              <button type="button" class="oa-link" (click)="renommerContrat(d)" [disabled]="busy()">Renommer</button>
+              <button type="button" class="oa-link oa-link--warn" (click)="archiverContrat(d)" [disabled]="busy()">Archiver</button>
+            </div>
+          </header>
+
+          <ul class="oa-poles">
+            @for (p of d.poles; track p.id) {
+              <ng-container *ngTemplateOutlet="poleTpl; context: { $implicit: p }" />
+            } @empty {
+              <li class="oa-empty">Aucun pôle. Ajoutez-en un avec « + Pôle ».</li>
+            }
+          </ul>
+        </section>
+      } @empty {
+        <div class="ky-card oa-state">Aucun contrat actif. Créez-en un avec « + Nouveau contrat ».</div>
+      }
+
+      @if (unassigned().length) {
+        <section class="ky-card oa-dept">
+          <header class="oa-dept-head">
+            <div>
+              <h2 class="oa-dept-name">Pôles non rattachés</h2>
+              <span class="oa-meta">À rattacher à un contrat depuis « Responsables ».</span>
+            </div>
+          </header>
+          <ul class="oa-poles">
+            @for (p of unassigned(); track p.id) {
+              <ng-container *ngTemplateOutlet="poleTpl; context: { $implicit: p }" />
+            }
+          </ul>
+        </section>
+      }
+    }
+
+    <!-- ═══════════════════ AGENTS ═══════════════════ -->
+    @if (onglet() === 'agents') {
+      <div class="oa-agents">
+        <aside class="ky-card oa-side">
+          <label class="oa-label" for="oa-act">Contrat</label>
+          <select id="oa-act" class="ky-input" [ngModel]="filtreActivite()" (ngModelChange)="choisirActivite($event)">
+            <option value="">Tous les contrats</option>
+            @for (d of depts(); track d.id) { <option [value]="d.id">{{ d.name }}</option> }
+          </select>
+
+          @if (filtreActivite()) {
+            <label class="oa-label" for="oa-pole">Pôle</label>
+            <select id="oa-pole" class="ky-input" [ngModel]="filtrePole()" (ngModelChange)="filtrePole.set($event)">
+              <option value="">Tous les pôles</option>
+              @for (p of polesFiltre(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
+            </select>
+          }
+
+          <ul class="oa-cell-list" role="listbox" aria-label="Cellules">
+            <li>
+              <button type="button" class="oa-cell-item" [class.is-active]="celluleSel() === SANS_CELLULE"
+                (click)="choisirCellule(SANS_CELLULE)">
+                <span>Agents sans cellule</span>
+                <span class="oa-count">{{ effectifs().get(SANS_CELLULE) ?? 0 }}</span>
+              </button>
+            </li>
+            @for (c of cellulesFiltre(); track c.id) {
+              <li>
+                <button type="button" class="oa-cell-item" [class.is-active]="celluleSel() === c.id"
+                  (click)="choisirCellule(c.id)" [attr.title]="celluleLabel(index().get(c.id))">
+                  <span>{{ c.name }}</span>
+                  <span class="oa-count">{{ effectifs().get(c.id) ?? 0 }}</span>
+                </button>
+              </li>
+            }
+          </ul>
+        </aside>
+
+        <section class="ky-card oa-main">
+          @if (!celluleSel()) {
+            <p class="oa-hint">Choisissez une cellule à gauche pour voir ses membres et les déplacer.</p>
+          } @else {
+            <header class="oa-main-head">
+              <h2 class="oa-main-title">{{ libelleCelluleSel() }}</h2>
+              <input class="ky-input oa-search" type="search" placeholder="Rechercher un agent…"
+                aria-label="Rechercher un agent" [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+            </header>
+
+            <div class="table-wrapper">
+              <table class="prime-table">
+                <thead>
+                  <tr>
+                    <th class="oa-col-check">
+                      <input type="checkbox" aria-label="Tout sélectionner"
+                        [checked]="membresDeplacables().length > 0 && selection().size === membresDeplacables().length"
+                        [disabled]="!membresDeplacables().length" (change)="toutSelectionner()" />
+                    </th>
+                    <th>Collaborateur</th>
+                    <th>Rôle</th>
+                    <th>E-mail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (m of membres(); track m.id) {
+                    <tr>
+                      <td class="oa-col-check">
+                        @if (isMovableAgent(m)) {
+                          <input type="checkbox" [checked]="estSelectionne(m.id)" (change)="toggleAgent(m.id)"
+                            [attr.aria-label]="'Sélectionner ' + m.lastName + ' ' + m.firstName" />
+                        } @else {
+                          <span class="oa-lock" title="Responsable : se gère depuis sa fiche (Responsabilité)">—</span>
+                        }
+                      </td>
+                      <td>{{ m.lastName }} {{ m.firstName }}</td>
+                      <td>{{ m.role }}</td>
+                      <td class="oa-muted">{{ m.email }}</td>
+                    </tr>
+                  } @empty {
+                    <tr><td colspan="4"><div class="empty-state">Aucun membre.</div></td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <div class="oa-move" [class.is-disabled]="!selection().size">
+              <span class="oa-move-title">{{ selection().size }} agent(s) sélectionné(s) — déplacer vers :</span>
+              <div class="oa-move-row">
+                <select class="ky-input" aria-label="Contrat d’arrivée" [ngModel]="cibleActivite()" (ngModelChange)="choisirCibleActivite($event)">
+                  <option value="">Contrat…</option>
+                  @for (d of depts(); track d.id) { <option [value]="d.id">{{ d.name }}</option> }
+                </select>
+                <select class="ky-input" aria-label="Pôle d’arrivée" [ngModel]="ciblePole()" (ngModelChange)="choisirCiblePole($event)" [disabled]="!cibleActivite()">
+                  <option value="">Pôle…</option>
+                  @for (p of polesCible(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
+                </select>
+                <select class="ky-input" aria-label="Cellule d’arrivée" [ngModel]="cibleCellule()" (ngModelChange)="choisirCibleCellule($event)" [disabled]="!ciblePole()">
+                  <option value="">Cellule…</option>
+                  @for (c of cellulesCible(); track c.id) { <option [value]="c.id">{{ c.name }}</option> }
+                </select>
+                @if (servicesCible().length > 1) {
+                  <select class="ky-input" aria-label="Service d’arrivée" [ngModel]="cibleService()" (ngModelChange)="cibleService.set($event)">
+                    <option value="">Service…</option>
+                    @for (s of servicesCible(); track s.id) { <option [value]="s.id">{{ s.name }}</option> }
+                  </select>
+                }
+                <button type="button" class="ky-btn-primary" (click)="deplacer()"
+                  [disabled]="busy() || !selection().size || !cibleCellule()">Déplacer</button>
+                @if (celluleSel() !== SANS_CELLULE) {
+                  <button type="button" class="ky-btn-secondary" (click)="retirer()"
+                    [disabled]="busy() || !selection().size">Retirer de la cellule</button>
+                }
+              </div>
+            </div>
+          }
+        </section>
+      </div>
+    }
+
+    <!-- ═══════════════════ ARCHIVES ═══════════════════ -->
+    @if (onglet() === 'archives') {
+      <section class="ky-card oa-archive">
+        <h2 class="oa-section-title">Pôles, cellules et services archivés</h2>
+        <p class="oa-hint">
+          Un élément archivé garde son historique. « Restaurer » le remet en service ; la suppression définitive
+          n’est possible que pour un élément qui n’a jamais servi.
+        </p>
+        <div class="table-wrapper">
+          <table class="prime-table">
+            <thead>
+              <tr>
+                <th>Niveau</th>
+                <th>Nom</th>
+                <th>Emplacement</th>
+                <th>Archivé le</th>
+                <th>Rattachés</th>
+                <th class="oa-col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (n of archives(); track n.id) {
+                <tr>
+                  <td><span class="oa-level">{{ levelLabel(n) }}</span></td>
+                  <td>{{ n.name }}</td>
+                  <td class="oa-muted">{{ n.activiteNom || '—' }}{{ n.level !== 'Pole' && n.parentName ? ' › ' + n.parentName : '' }}</td>
+                  <td>{{ formatDate(n.archivedAt) }}</td>
+                  <td>{{ n.collaborateurs }}</td>
+                  <td class="oa-col-actions">
+                    <button type="button" class="oa-link" (click)="restaurer(n)" [disabled]="busy()">Restaurer</button>
+                    <button type="button" class="oa-link oa-link--danger" (click)="supprimerDefinitivement(n)"
+                      [disabled]="busy() || !n.suppressionDefinitivePossible" [attr.title]="purgeTitle(n)">
+                      Supprimer définitivement
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6"><div class="empty-state">Aucun élément archivé.</div></td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="ky-card oa-archive">
+        <h2 class="oa-section-title">Contrats archivés</h2>
+        <ul class="oa-contrats">
+          @for (c of contratsArchives(); track c.id) {
+            <li class="oa-contrat">
+              <span>{{ c.name }} <span class="oa-muted">({{ c.code }})</span></span>
+              <button type="button" class="oa-link" (click)="reactiverContrat(c)" [disabled]="busy()">Réactiver</button>
+            </li>
+          } @empty {
+            <li class="oa-empty">Aucun contrat archivé.</li>
+          }
+        </ul>
+      </section>
+    }
+  }
+</div>
+
+<!-- Pôle, ses cellules et leurs services (onglet Structure). -->
+<ng-template #poleTpl let-p>
+  <li class="oa-pole">
+    <div class="oa-row">
+      <button type="button" class="oa-toggle" (click)="togglePole(p.id)" [attr.aria-expanded]="estOuvert(p.id)"
+        [attr.aria-label]="(estOuvert(p.id) ? 'Replier ' : 'Déplier ') + p.name">{{ estOuvert(p.id) ? '▾' : '▸' }}</button>
+      <span class="oa-name">{{ p.name }}</span>
+      <span class="oa-meta">{{ p.cellules.length }} cellule(s) · {{ effectifPole(p) }} personne(s)</span>
+      <div class="oa-actions">
+        <button type="button" class="oa-link" (click)="nouvelleCellule(p)" [disabled]="busy()">+ Cellule</button>
+        <button type="button" class="oa-link" (click)="renommer('pole', p.id, '', p.name)" [disabled]="busy()">Renommer</button>
+        <button type="button" class="oa-link oa-link--warn" (click)="archiverPole(p)" [disabled]="busy()">Archiver</button>
+      </div>
+    </div>
+
+    @if (estOuvert(p.id)) {
+      <ul class="oa-cellules">
+        @for (c of p.cellules; track c.id) {
+          <li class="oa-cellule">
+            <div class="oa-row">
+              <span class="oa-name">{{ c.name }}</span>
+              <span class="oa-meta">{{ effectifCellule(c) }} personne(s)</span>
+              <div class="oa-actions">
+                <button type="button" class="oa-link" (click)="nouveauService(c)" [disabled]="busy()">+ Service</button>
+                <button type="button" class="oa-link" (click)="renommer('cellule', c.id, p.id, c.name)" [disabled]="busy()">Renommer</button>
+                <button type="button" class="oa-link oa-link--warn" (click)="archiverCellule(p, c)" [disabled]="busy()">Archiver</button>
+              </div>
+            </div>
+            <ul class="oa-services">
+              @for (s of c.services; track s.id) {
+                <li class="oa-service">
+                  <span>{{ s.name }}</span>
+                  <button type="button" class="oa-icon" (click)="renommer('service', s.id, c.id, s.name)"
+                    [disabled]="busy()" [attr.aria-label]="'Renommer le service ' + s.name" title="Renommer">✎</button>
+                  <button type="button" class="oa-icon" (click)="archiverService(c, s)"
+                    [disabled]="busy()" [attr.aria-label]="'Archiver le service ' + s.name" title="Archiver">×</button>
+                </li>
+              } @empty {
+                <li class="oa-service oa-service--warn">Aucun service : ajoutez-en un pour y affecter des agents.</li>
+              }
+            </ul>
+          </li>
+        } @empty {
+          <li class="oa-empty">Aucune cellule. Ajoutez-en une avec « + Cellule ».</li>
+        }
+      </ul>
+    }
+  </li>
+</ng-template>

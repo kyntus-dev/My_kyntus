@@ -97,6 +97,7 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
             e.Property(x => x.Id).HasMaxLength(64);
             e.Property(x => x.Name).HasMaxLength(256);
             e.HasIndex(x => x.BusinessDepartmentId);
+            e.HasIndex(x => x.IsArchived);
             e.HasOne(x => x.BusinessDepartment).WithMany().HasForeignKey(x => x.BusinessDepartmentId);
         });
 
@@ -107,6 +108,7 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
             e.Property(x => x.Id).HasMaxLength(64);
             e.Property(x => x.PoleId).HasMaxLength(64);
             e.Property(x => x.Name).HasMaxLength(256);
+            e.HasIndex(x => x.IsArchived);
             e.HasOne(x => x.Pole).WithMany(x => x.Cellules).HasForeignKey(x => x.PoleId);
         });
 
@@ -117,6 +119,7 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
             e.Property(x => x.Id).HasMaxLength(64);
             e.Property(x => x.CelluleId).HasMaxLength(64);
             e.Property(x => x.Name).HasMaxLength(256);
+            e.HasIndex(x => x.IsArchived);
             e.HasOne(x => x.Cellule).WithMany(x => x.Services).HasForeignKey(x => x.CelluleId);
         });
 

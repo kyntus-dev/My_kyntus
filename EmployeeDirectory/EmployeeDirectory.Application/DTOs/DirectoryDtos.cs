@@ -97,6 +97,21 @@ public record OrgCelluleOverviewDto(
 
 public record OrgServiceOverviewDto(string Id, string Name);
 
+/// <summary>
+/// Nœud d'organisation archivé (v9) : conservé en base avec son historique,
+/// restaurable, et supprimable définitivement s'il n'a jamais servi.
+/// </summary>
+public record ArchivedOrgNodeDto(
+    string Id,
+    string Name,
+    string Level, // Pole | Cellule | Service
+    string? ParentId,
+    string? ParentName,
+    string? ActiviteNom,
+    DateTime? ArchivedAt,
+    int Collaborateurs,
+    bool SuppressionDefinitivePossible);
+
 public record CreatePoleRequest(string Name, Guid BusinessDepartmentId);
 public record AttachPoleToDepartmentRequest(Guid BusinessDepartmentId);
 

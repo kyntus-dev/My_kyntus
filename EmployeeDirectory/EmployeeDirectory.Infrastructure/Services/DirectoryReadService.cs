@@ -86,8 +86,11 @@ public sealed class DirectoryReadService(
 
     private async Task<OrgOverviewDto> LoadOrgOverviewAsync(CancellationToken ct)
     {
+        // v9 : les nœuds archivés restent en base mais sortent de l'organisation affichée.
         var poles = await db.OrgPoles.AsNoTracking()
-            .Include(p => p.Cellules).ThenInclude(c => c.Services)
+            .Where(p => !p.IsArchived)
+            .Include(p => p.Cellules.Where(c => !c.IsArchived))
+                .ThenInclude(c => c.Services.Where(s => !s.IsArchived))
             .OrderBy(p => p.Name)
             .ToListAsync(ct);
         var operationalDepts = await db.BusinessDepartments.AsNoTracking()
@@ -200,7 +203,7 @@ public sealed class DirectoryReadService(
             .OrderBy(d => d.Name)
             .ToListAsync(ct);
         var poleIdsByDept = await db.OrgPoles.AsNoTracking()
-            .Where(p => p.BusinessDepartmentId != null)
+            .Where(p => p.BusinessDepartmentId != null && !p.IsArchived)
             .GroupBy(p => p.BusinessDepartmentId!.Value)
             .ToDictionaryAsync(g => g.Key, g => g.Select(p => p.Id).ToList(), ct);
         return rows.Select(d =>
@@ -219,12 +222,77 @@ public sealed class DirectoryReadService(
             .FirstOrDefaultAsync(d => d.Id == id, ct);
         if (row is null) return null;
         var poleIds = await db.OrgPoles.AsNoTracking()
-            .Where(p => p.BusinessDepartmentId == id)
+            .Where(p => p.BusinessDepartmentId == id && !p.IsArchived)
             .Select(p => p.Id)
             .ToListAsync(ct);
         if (poleIds.Count == 0)
             poleIds = row.PoleAssignments.Select(p => p.PoleId).ToList();
         return MapBusinessDepartment(row, poleIds);
+    }
+
+    /// <summary>
+    /// v9 : nœuds archivés, avec de quoi décider en un coup d'œil — qui est encore rattaché
+    /// et si la suppression définitive est possible (nœud jamais utilisé).
+    /// </summary>
+    public async Task<IReadOnlyList<ArchivedOrgNodeDto>> GetArchivedOrgNodesAsync(CancellationToken ct = default)
+    {
+        var poles = await db.OrgPoles.AsNoTracking()
+            .Include(p => p.BusinessDepartment)
+            .Include(p => p.Cellules).ThenInclude(c => c.Services)
+            .ToListAsync(ct);
+
+        var rows = new List<(string Id, string Name, string Level, string? ParentId, string? ParentName, string? Activite, DateTime? At, bool HasChildren)>();
+        foreach (var pole in poles)
+        {
+            var activite = pole.BusinessDepartment?.Name;
+            if (pole.IsArchived)
+                rows.Add((pole.Id, pole.Name, "Pole", pole.BusinessDepartmentId?.ToString(), activite, activite, pole.ArchivedAt, pole.Cellules.Count > 0));
+            foreach (var cellule in pole.Cellules)
+            {
+                if (cellule.IsArchived)
+                    rows.Add((cellule.Id, cellule.Name, "Cellule", pole.Id, pole.Name, activite, cellule.ArchivedAt, cellule.Services.Count > 0));
+                foreach (var service in cellule.Services.Where(s => s.IsArchived))
+                    rows.Add((service.Id, service.Name, "Service", cellule.Id, cellule.Name, activite, service.ArchivedAt, false));
+            }
+        }
+
+        if (rows.Count == 0)
+            return [];
+
+        var ids = rows.Select(r => r.Id).ToList();
+        var effectifs = await db.Employees.AsNoTracking()
+            .Where(e => (e.PoleId != null && ids.Contains(e.PoleId))
+                || (e.CelluleId != null && ids.Contains(e.CelluleId))
+                || (e.ServiceId != null && ids.Contains(e.ServiceId)))
+            .Select(e => new { e.PoleId, e.CelluleId, e.ServiceId })
+            .ToListAsync(ct);
+        var utilises = (await db.OrgAssignments.AsNoTracking()
+                .Where(a => ids.Contains(a.NodeId)).Select(a => a.NodeId).Distinct().ToListAsync(ct))
+            .Concat(await db.OrgAssignmentHistories.AsNoTracking()
+                .Where(a => ids.Contains(a.NodeId)).Select(a => a.NodeId).Distinct().ToListAsync(ct))
+            .ToHashSet(StringComparer.Ordinal);
+
+        int Effectif(string id) => effectifs.Count(e => e.PoleId == id || e.CelluleId == id || e.ServiceId == id);
+
+        return rows
+            .Select(r =>
+            {
+                var effectif = Effectif(r.Id);
+                return new ArchivedOrgNodeDto(
+                    r.Id,
+                    r.Name,
+                    r.Level,
+                    r.ParentId,
+                    r.ParentName,
+                    r.Activite,
+                    r.At,
+                    effectif,
+                    !r.HasChildren && effectif == 0 && !utilises.Contains(r.Id));
+            })
+            .OrderBy(r => r.ActiviteNom ?? string.Empty, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(r => r.Level, StringComparer.Ordinal)
+            .ThenBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
     }
 
     public async Task<OrgAssignmentAsOfDto> GetAssignmentsAsOfAsync(DateTime asOf, CancellationToken ct = default)

@@ -281,6 +281,16 @@ export const routes: Routes = [
 
       // ─── ORGANISATION ────────────────────────────
       {
+        // Organisation administrative (Admin / RH) : contrats, pôles, cellules, affectation
+        // des agents et archives. « Supprimer » archive : rien n'est effacé.
+        path: 'organisation/administrative',
+        canActivate: [AuthGuard],
+        data: { roles: ROLE_SETS.adminRh },
+        loadComponent: () =>
+          import('./features/organisation-admin/organisation-admin.component')
+            .then((m) => m.OrganisationAdminComponent),
+      },
+      {
         path: 'organisation',
         canActivate: [AuthGuard],
         data: { roles: ROLE_SETS.adminRh },

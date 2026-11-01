@@ -175,6 +175,7 @@ export const MICROSERVICES: Microservice[] = [
     icon: ICONS.building,
     roles: ADMIN_RH,
     children: [
+      { label: 'Contrats, pôles et cellules', route: '/organisation/administrative', roles: ADMIN_RH, hat: 'team' },
       { label: 'Structure de production', route: '/organisation', roles: ADMIN_RH, hat: 'team' },
       { label: 'Structure support', route: '/departements-metier', roles: ADMIN_RH, hat: 'team' },
     ],

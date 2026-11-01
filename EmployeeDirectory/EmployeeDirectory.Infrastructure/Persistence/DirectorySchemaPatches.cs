@@ -20,6 +20,7 @@ public static class DirectorySchemaPatches
         await EnsureEmailPersonnelColumnAsync(db, ct);
         await EnsureEmployeeHtelColumnsAsync(db, ct);
         await EnsureOrgAssignmentNodeUniquenessAsync(db, ct);
+        await EnsureOrgNodeArchiveColumnsAsync(db, ct);
         await EnsurePerfIndexesAsync(db, ct);
     }
 
@@ -43,6 +44,7 @@ public static class DirectorySchemaPatches
         await RunPatchAsync(nameof(EnsureEmailPersonnelColumnAsync), () => EnsureEmailPersonnelColumnAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureEmployeeHtelColumnsAsync), () => EnsureEmployeeHtelColumnsAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureOrgAssignmentNodeUniquenessAsync), () => EnsureOrgAssignmentNodeUniquenessAsync(db, ct), log);
+        await RunPatchAsync(nameof(EnsureOrgNodeArchiveColumnsAsync), () => EnsureOrgNodeArchiveColumnsAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsurePerfIndexesAsync), () => EnsurePerfIndexesAsync(db, ct), log);
     }
 
@@ -194,6 +196,27 @@ public static class DirectorySchemaPatches
 
             ALTER TABLE employees ADD COLUMN IF NOT EXISTS "BusinessDepartmentId" uuid NULL;
             CREATE INDEX IF NOT EXISTS "IX_employees_BusinessDepartmentId" ON employees ("BusinessDepartmentId");
+            """,
+            ct);
+    }
+
+    /// <summary>
+    /// v9 : archivage des nœuds d'organisation (pôle, cellule, service). Un nœud archivé
+    /// reste en base avec son historique mais disparaît des listes et des choix.
+    /// </summary>
+    public static async Task EnsureOrgNodeArchiveColumnsAsync(DirectoryDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE org_poles ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            ALTER TABLE org_poles ADD COLUMN IF NOT EXISTS "ArchivedAt" timestamp with time zone NULL;
+            ALTER TABLE org_cellules ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            ALTER TABLE org_cellules ADD COLUMN IF NOT EXISTS "ArchivedAt" timestamp with time zone NULL;
+            ALTER TABLE org_services ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            ALTER TABLE org_services ADD COLUMN IF NOT EXISTS "ArchivedAt" timestamp with time zone NULL;
+            CREATE INDEX IF NOT EXISTS "IX_org_poles_IsArchived" ON org_poles ("IsArchived");
+            CREATE INDEX IF NOT EXISTS "IX_org_cellules_IsArchived" ON org_cellules ("IsArchived");
+            CREATE INDEX IF NOT EXISTS "IX_org_services_IsArchived" ON org_services ("IsArchived");
             """,
             ct);
     }

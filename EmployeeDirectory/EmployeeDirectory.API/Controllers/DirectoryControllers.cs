@@ -327,20 +327,81 @@ public class DirectoryOrgController(
     public async Task<IActionResult> RenameService(string celluleId, string nodeId, [FromBody] CreateNodeRequest body, CancellationToken ct) =>
         await mediator.Send(new RenameOrgNodeCommand(OrgNodeLevel.Service, nodeId, body.Name), ct) ? NoContent() : NotFound();
 
+    /// <summary>
+    /// v9 : archive le pôle et ses descendants. <c>?definitif=true</c> supprime
+    /// définitivement un nœud archivé qui n'a jamais servi.
+    /// </summary>
     [OrgWriteAccess]
     [HttpDelete("structure/poles/{nodeId}")]
-    public async Task<IActionResult> DeletePole(string nodeId, CancellationToken ct) =>
-        await mediator.Send(new DeleteOrgNodeCommand(OrgNodeLevel.Pole, nodeId), ct) ? NoContent() : NotFound();
+    public Task<IActionResult> DeletePole(string nodeId, [FromQuery] bool definitif, CancellationToken ct) =>
+        ArchiveOrPurgeAsync(OrgNodeLevel.Pole, nodeId, definitif, ct);
 
     [OrgWriteAccess]
     [HttpDelete("structure/poles/{poleId}/cellules/{nodeId}")]
-    public async Task<IActionResult> DeleteCellule(string poleId, string nodeId, CancellationToken ct) =>
-        await mediator.Send(new DeleteOrgNodeCommand(OrgNodeLevel.Cellule, nodeId), ct) ? NoContent() : NotFound();
+    public Task<IActionResult> DeleteCellule(string poleId, string nodeId, [FromQuery] bool definitif, CancellationToken ct) =>
+        ArchiveOrPurgeAsync(OrgNodeLevel.Cellule, nodeId, definitif, ct);
 
     [OrgWriteAccess]
     [HttpDelete("structure/cellules/{celluleId}/services/{nodeId}")]
-    public async Task<IActionResult> DeleteService(string celluleId, string nodeId, CancellationToken ct) =>
-        await mediator.Send(new DeleteOrgNodeCommand(OrgNodeLevel.Service, nodeId), ct) ? NoContent() : NotFound();
+    public Task<IActionResult> DeleteService(string celluleId, string nodeId, [FromQuery] bool definitif, CancellationToken ct) =>
+        ArchiveOrPurgeAsync(OrgNodeLevel.Service, nodeId, definitif, ct);
+
+    /// <summary>Remet en service un nœud archivé (et ses parents archivés).</summary>
+    [OrgWriteAccess]
+    [HttpPost("structure/{level}/{nodeId}/restore")]
+    public async Task<IActionResult> RestoreNode(string level, string nodeId, CancellationToken ct)
+    {
+        if (!TryParseNodeLevel(level, out var parsed))
+            return BadRequest(new { error = "Niveau attendu : pole, cellule ou service." });
+        return await mediator.Send(new RestoreOrgNodeCommand(parsed, nodeId), ct) ? NoContent() : NotFound();
+    }
+
+    /// <summary>Nœuds archivés, pour l'écran d'organisation (Admin / RH).</summary>
+    [Authorize(Roles = "Admin,RH")]
+    [HttpGet("structure/archived")]
+    public async Task<ActionResult<IReadOnlyList<ArchivedOrgNodeDto>>> ListArchived(CancellationToken ct) =>
+        Ok(await mediator.Send(new ListArchivedOrgNodesQuery(), ct));
+
+    private async Task<IActionResult> ArchiveOrPurgeAsync(
+        OrgNodeLevel level,
+        string nodeId,
+        bool definitif,
+        CancellationToken ct)
+    {
+        try
+        {
+            var ok = definitif
+                ? await mediator.Send(new PurgeOrgNodeCommand(level, nodeId), ct)
+                : await mediator.Send(new DeleteOrgNodeCommand(level, nodeId), ct);
+            return ok ? NoContent() : NotFound();
+        }
+        catch (InvalidOperationException e)
+        {
+            return Conflict(new { error = e.Message });
+        }
+    }
+
+    private static bool TryParseNodeLevel(string raw, out OrgNodeLevel level)
+    {
+        switch ((raw ?? string.Empty).Trim().ToLowerInvariant())
+        {
+            case "pole":
+            case "poles":
+                level = OrgNodeLevel.Pole;
+                return true;
+            case "cellule":
+            case "cellules":
+                level = OrgNodeLevel.Cellule;
+                return true;
+            case "service":
+            case "services":
+                level = OrgNodeLevel.Service;
+                return true;
+            default:
+                level = OrgNodeLevel.Pole;
+                return false;
+        }
+    }
 
     [OrgWriteAccess]
     [HttpPost("assignments/{kind}/{nodeId}")]
@@ -368,8 +429,8 @@ public class DirectoryOrgController(
                     kind, nodeId, employeeId, changedBy, body.Reason, revokeIds, forceOverride),
                 ct);
             // Réorganisation 2026 : toute affectation unitaire (page Organisation RH, import Excel)
-            // respecte les règles de périmètre — superviseur / chef de projet → activité,
-            // référent technique → cellule.
+            // respecte les règles de périmètre — référent technique → services de sa cellule ;
+            // superviseur et chef de projet gardent exactement le nœud choisi (règle v8).
             await PropagateScopeSafelyAsync(
                 () => scopes.ExpandAssignmentToScopeAsync(kind, employeeId, nodeId, changedBy, ct), nodeId);
             return Ok(result);
@@ -727,8 +788,18 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
 
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Admin,RH")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken ct) =>
-        await mediator.Send(new DeleteBusinessDepartmentCommand(id), ct) ? NoContent() : NotFound();
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        // v9 : archivage du contrat (IsActive = false) ; refusé s'il reste des pôles actifs.
+        try
+        {
+            return await mediator.Send(new DeleteBusinessDepartmentCommand(id), ct) ? NoContent() : NotFound();
+        }
+        catch (InvalidOperationException e)
+        {
+            return Conflict(new { error = e.Message });
+        }
+    }
 
     [HttpPost("{id:guid}/poles/{poleId}")]
     [Authorize(Roles = "Admin,RH")]

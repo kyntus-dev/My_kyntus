@@ -14,6 +14,8 @@ public interface IDirectoryReadService
     Task<EmployeeDto?> GetEmployeeByEmailAsync(string email, CancellationToken ct = default) =>
         Task.FromResult<EmployeeDto?>(null);
     Task<OrgOverviewDto> GetOrgOverviewAsync(CancellationToken ct = default);
+    /// <summary>v9 : nœuds archivés (pôles, cellules, services), pour l'écran d'organisation.</summary>
+    Task<IReadOnlyList<ArchivedOrgNodeDto>> GetArchivedOrgNodesAsync(CancellationToken ct = default);
     Task<OrgAssignmentAsOfDto> GetAssignmentsAsOfAsync(DateTime asOf, CancellationToken ct = default);
     Task<IReadOnlyList<AssignmentHistoryEntryDto>> GetAssignmentHistoryAsync(Guid employeeId, CancellationToken ct = default);
     Task<IReadOnlyList<Guid>> GetEmployeeIdsWithAssignmentsAfterAsync(
@@ -91,7 +93,15 @@ public interface IDirectoryWriteService
     Task<string> CreateCelluleAsync(string poleId, string name, CancellationToken ct = default);
     Task<string> CreateServiceAsync(string celluleId, string name, CancellationToken ct = default);
     Task<bool> RenameOrgNodeAsync(OrgNodeLevel level, string nodeId, string name, CancellationToken ct = default);
+    /// <summary>v9 : archive le nœud et ses descendants (conservés en base avec leur historique).</summary>
     Task<bool> DeleteOrgNodeAsync(OrgNodeLevel level, string nodeId, CancellationToken ct = default);
+    /// <summary>Remet un nœud archivé en service (ainsi que ses parents archivés).</summary>
+    Task<bool> RestoreOrgNodeAsync(OrgNodeLevel level, string nodeId, CancellationToken ct = default);
+    /// <summary>
+    /// Suppression définitive d'un nœud archivé, autorisée seulement s'il n'a jamais servi :
+    /// aucun descendant, aucun collaborateur rattaché, aucune affectation même clôturée.
+    /// </summary>
+    Task<bool> PurgeOrgNodeAsync(OrgNodeLevel level, string nodeId, CancellationToken ct = default);
     Task<bool> SetAuthSubjectIdAsync(Guid employeeId, Guid authSubjectId, CancellationToken ct = default);
     Task<BusinessDepartmentDto> CreateBusinessDepartmentAsync(CreateBusinessDepartmentRequest request, CancellationToken ct = default);
     Task<BusinessDepartmentDto?> UpdateBusinessDepartmentAsync(Guid id, UpdateBusinessDepartmentRequest request, CancellationToken ct = default);
