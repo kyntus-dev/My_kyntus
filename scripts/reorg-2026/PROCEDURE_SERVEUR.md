@@ -831,3 +831,145 @@ docker compose up -d --no-deps --no-build employee-directory-backend planning-fr
 ```
 
 Les périmètres posés en v8-E restent en base : pour revenir aux périmètres précédents, utilisez d'abord le retour arrière de l'étape 08 (journal ci-dessus). En dernier recours, la base complète se restaure depuis `employee_directory_db_v8_$STAMP.dump` (`pg_restore --clean`), service `employee-directory-backend` arrêté.
+
+---
+
+# Livraison v9 : congés (circuit superviseur, cellule, quotas) et organisation administrative
+
+À appliquer **après la v8**. Aucune donnée n'est supprimée.
+
+| Fichier | Contenu |
+|---|---|
+| `reorg-2026-code-v9.patch` | 55 fichiers : Congé (backend), Organisation RH (Directory) et Planning frontend. |
+
+**Ce qui change**
+
+1. **Circuit de validation des congés**
+   - La demande d'un agent part au **superviseur de sa cellule**, d'après l'organisation RH (fichier Périmètre). Sa décision est définitive : validée ou refusée tout de suite.
+   - **RH suit toutes les demandes sans les valider ni les refuser.** Écran « Valider les congés », côté RH : « Suivi des congés (RH) ».
+   - Exception : RH (ou Admin) décide du congé d'un superviseur, d'un chef de projet, d'un RH ou d'un Admin, ainsi que des demandes d'une cellule sans superviseur actif. Ces demandes apparaissent en « En attente RH ».
+   - Le circuit est stocké dans la base Congé. Un Admin peut rétablir l'étape RH depuis le même écran (« Rétablir l'étape RH »), sans redéploiement.
+2. **Bascule des demandes en cours.** Les demandes **déjà validées par un superviseur** et restées « En attente RH » deviennent **Validées** : solde débité, agent notifié. Cela se fait à la première ouverture de l'écran RH après la mise en service (décision du 30/10). La requête de l'étape v9-A les liste avant l'opération.
+3. **Congés de ma cellule** (menu Congés et absences), pour tout collaborateur :
+   - les absences de ses collègues de cellule, avec nom, dates et état uniquement (ni motif ni type) ;
+   - le quota de la cellule ;
+   - une frise du mois qui montre en rouge les jours complets.
+4. **Quotas par cellule**
+   - Le superviseur règle le quota de chacune de ses cellules dans « Quotas cellule / service », comme avant.
+   - **Nouveau : une demande en attente occupe sa place dans le quota**, comme un congé validé (« déjà posé ou obtenu »). Un refus ou une annulation la libère.
+   - Dans le calendrier de demande, les jours où le quota est atteint sont **grisés et non sélectionnables**. Chaque jour affiche « absents / quota ».
+5. **Organisation administrative** (Organisation RH › « Contrats, pôles et cellules », Admin et RH) :
+   - **Structure** : créer, renommer et **archiver** des contrats, pôles, cellules et services. Une nouvelle cellule reçoit automatiquement son service.
+   - **Affectation des agents** : choisir une cellule, cocher des agents, puis les **déplacer** vers une autre cellule ou les retirer de la cellule. L'affectation précédente est clôturée et l'historique conservé. Les responsables (superviseur, référent technique, chef de projet) se gèrent toujours depuis leur fiche.
+   - **Archives** : restaurer un élément. La suppression définitive n'est possible que pour un élément **jamais utilisé** (aucun collaborateur, aucune affectation même ancienne).
+   - « Supprimer » un pôle, une cellule ou un service **archive** désormais au lieu d'effacer. Avant la v9, l'API supprimait réellement le nœud et ses descendants.
+   - Un contrat ne s'archive plus tant qu'il contient des pôles actifs.
+   - Aucune nouvelle affectation n'est possible sur un élément archivé.
+
+**Services reconstruits** : `conge-backend`, `employee-directory-backend`, `planning-frontend`.
+
+## v9-0 : copie (depuis Windows)
+
+```powershell
+cd C:\Users\omar.elmahi\Downloads
+scp reorg-2026-code-v9.patch o@10.10.10.25:/tmp/
+```
+
+## v9-A : sauvegardes et état des demandes (ne modifie rien)
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(date +%Y%m%d_%H%M%S); echo "$STAMP" > ~/sauvegardes_reorg/STAMP_V9; echo "STAMP=$STAMP"
+: > ~/sauvegardes_reorg/images_avant_v9_$STAMP.txt
+for s in conge-backend employee-directory-backend planning-frontend; do
+  c=$(docker compose ps -q "$s"); img=$(docker inspect --format '{{.Config.Image}}' "$c"); id=$(docker inspect --format '{{.Image}}' "$c")
+  docker tag "$id" "reorg-avant-v9/$s:$STAMP" && echo "$s $img $id" | tee -a ~/sauvegardes_reorg/images_avant_v9_$STAMP.txt
+done
+grep '^+++ b/' /tmp/reorg-2026-code-v9.patch | cut -c7- | sed 's/\t.*$//' | sort -u > ~/sauvegardes_reorg/fichiers_v9_$STAMP.txt
+tar -czf ~/sauvegardes_reorg/code_avant_v9_$STAMP.tar.gz --ignore-failed-read -T ~/sauvegardes_reorg/fichiers_v9_$STAMP.txt \
+    FormationService/Conge.Infrastructure/Services/DirectoryLeaveWorkflowPolicy.cs 2>/dev/null
+for db in conge_db employee_directory_db; do
+  docker exec kyntus_db pg_dump -U postgres -Fc "$db" > ~/sauvegardes_reorg/${db}_v9_$STAMP.dump && echo "OK $db"
+done
+
+# Demandes qui seront validées automatiquement (déjà validées par un superviseur, en attente RH) :
+docker exec kyntus_db psql -U postgres -d conge_db -c "
+  SELECT e.\"Nom\", e.\"Prenom\", d.\"DateDebut\"::date AS debut, d.\"DateFin\"::date AS fin, d.\"NombreJours\" AS jours
+  FROM demandes_conge d LEFT JOIN employe_snapshots e ON e.\"EmployeId\" = d.\"EmployeId\"
+  WHERE d.\"Statut\" = 'EnAttenteRh' AND d.\"SuperviseurDecideurId\" IS NOT NULL
+  ORDER BY d.\"DateDebut\";" | tee ~/sauvegardes_reorg/conges_bascule_v9_$STAMP.txt
+```
+
+Relisez la liste. Si une de ces demandes ne doit pas être validée, refusez-la depuis l'écran RH **avant** l'étape v9-D.
+
+## v9-B : application protégée
+
+```bash
+cd /home/o/projets_mykyntus-
+if patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v9.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
+  echo "STOP : simulation non propre, rien n'a été modifié"; patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v9.patch | grep -iE "fail|already|assum|offset|fuzz"
+else
+  patch -p1 --batch < /tmp/reorg-2026-code-v9.patch > /dev/null && echo "PATCH V9 APPLIQUÉ PROPREMENT"
+fi
+```
+
+## v9-C : compilation et tests (conteneur jetable)
+
+```bash
+cd /home/o/projets_mykyntus-
+tar -cf - --exclude='bin' --exclude='obj' --exclude='node_modules' --exclude='TestResults' \
+    Directory.Build.props Directory.Packages.props Messaging.Contracts Shared.Kernel \
+    Kyntus.Caching Kyntus.Iam Kyntus.Identity.Jwt Kyntus.Messaging.Outbox tests EmployeeDirectory FormationService \
+| docker run --rm -i mcr.microsoft.com/dotnet/sdk:8.0 bash -c '
+  mkdir -p /work && cd /work && tar -xf -
+  for p in FormationService/Conge.API/Conge.API.csproj EmployeeDirectory/EmployeeDirectory.API/EmployeeDirectory.API.csproj; do
+    echo "== $p"; dotnet build "$p" -c Release 2>&1 | grep -E " error |Error\(s\)" | tail -3
+  done
+  echo "== tests Congé";     dotnet test FormationService/Conge.UnitTests/Conge.UnitTests.csproj -c Release 2>&1 | grep -E "Failed |Passed!|Failed!" | tail -6
+  echo "== tests Directory"; dotnet test EmployeeDirectory/EmployeeDirectory.UnitTests/EmployeeDirectory.UnitTests.csproj -c Release \
+      --filter "FullyQualifiedName~OrgNodeArchive|FullyQualifiedName~OrgScope" 2>&1 | grep -E "Failed |Passed!|Failed!" | tail -6'
+```
+
+Attendu : `0 Error(s)` pour les 2 projets, `Passed!` pour les tests Congé et Directory. **Tout échec : arrêtez-vous** (retour arrière v9).
+
+## v9-D : reconstruction et bascule
+
+```bash
+cd /home/o/projets_mykyntus-
+docker compose build conge-backend employee-directory-backend planning-frontend
+docker compose up -d --no-deps --no-build conge-backend employee-directory-backend planning-frontend
+sleep 60
+docker compose ps conge-backend employee-directory-backend planning-frontend
+docker exec kyntus_db psql -U postgres -d conge_db -c 'SELECT "EtapeRhRequise", "UpdatedAt" FROM conge_workflow_config;'
+docker exec kyntus_db psql -U postgres -d employee_directory_db -c 'SELECT count(*) FILTER (WHERE "IsArchived") AS archives, count(*) AS poles FROM org_poles;'
+```
+
+Attendu : `EtapeRhRequise = f` (superviseur seul). La table se crée à la première lecture : si elle est vide, ouvrez une fois l'écran « Valider les congés » avec un compte RH, puis relancez la requête. Pour les pôles, `archives = 0` : aucun pôle n'est archivé à la mise en service.
+
+**Recette** (Ctrl + F5) :
+
+- **Pilote** : Mes congés › Nouvelle demande. Le calendrier affiche « absents / quota » et les jours complets sont grisés. Après envoi, la demande est « En attente superviseur ».
+- **Superviseur de la cellule** : Valider les congés. Il valide, et la demande passe directement en **Validée** (le message indique « Congé validé »).
+- **RH** : l'écran s'appelle « Suivi des congés (RH) ». Le filtre « En attente superviseur » montre les demandes en cours, sans bouton de validation. Valider une demande d'agent par l'API renvoie 403 « Le service RH suit les demandes sans les valider ».
+- **Superviseur** (son propre congé) : la demande apparaît « En attente RH » ; RH la valide.
+- **Agent** : Congés et absences › « Congés de ma cellule » montre ses collègues (nom, dates, état) et la frise du mois.
+- **Admin / RH** : Organisation RH › « Contrats, pôles et cellules ».
+  - Créer une cellule de test dans un pôle, y déplacer un agent de test, puis le remettre dans sa cellule d'origine.
+  - Archiver la cellule de test : elle apparaît dans Archives avec « Supprimer définitivement » grisé, puisqu'elle a servi. La restaurer, ou la laisser archivée.
+
+## v9 : retour arrière (code seulement)
+
+Avant le retour arrière :
+
+- **restaurez les éléments archivés depuis la v9.** L'ancien code ignore l'archivage et les réafficherait tels quels ;
+- les congés déjà validés le restent.
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(cat ~/sauvegardes_reorg/STAMP_V9)
+patch -p1 -R --batch < /tmp/reorg-2026-code-v9.patch
+while read -r s img id; do docker tag "reorg-avant-v9/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_v9_$STAMP.txt
+docker compose up -d --no-deps --no-build conge-backend employee-directory-backend planning-frontend
+```
+
+L'ancien code relit le circuit dans la matrice des droits : l'étape RH revient comme avant la v9. Les colonnes et la table ajoutées restent en base, sans effet sur l'ancien code. En dernier recours, les bases se restaurent depuis `conge_db_v9_$STAMP.dump` et `employee_directory_db_v9_$STAMP.dump` (`pg_restore --clean`), service concerné arrêté.
