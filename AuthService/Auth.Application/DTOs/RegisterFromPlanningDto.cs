@@ -3,7 +3,11 @@ namespace Auth.Application.DTOs;
 public class RegisterFromPlanningDto
 {
     public string Email { get; set; } = string.Empty;
-    public string DefaultPassword { get; set; } = string.Empty;
+    /// <summary>
+    /// Mot de passe initial, seulement à la création du compte. Absent (null) pour une simple
+    /// mise à jour du rôle : le mot de passe d'un compte existant n'est alors jamais modifié.
+    /// </summary>
+    public string? DefaultPassword { get; set; }
     public int RoleId { get; set; }
     public string? RoleName { get; set; }
 

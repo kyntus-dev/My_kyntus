@@ -67,7 +67,7 @@ public class RegisterFromPlanningCommandHandler
             if (!string.IsNullOrWhiteSpace(dto.DefaultPassword)
                 && PasswordPolicy.TryValidate(dto.DefaultPassword, out _))
             {
-                existing.PasswordHash = _passwordHasher.HashPassword(dto.DefaultPassword.Trim());
+                existing.PasswordHash = _passwordHasher.HashPassword(dto.DefaultPassword!.Trim());
                 dirty = true;
             }
 
@@ -92,7 +92,7 @@ public class RegisterFromPlanningCommandHandler
             SubjectId = dto.EmployeeId != Guid.Empty
                 ? dto.EmployeeId
                 : _subjectIdResolver.ResolveForEmail(dto.Email),
-            PasswordHash = _passwordHasher.HashPassword(dto.DefaultPassword.Trim()),
+            PasswordHash = _passwordHasher.HashPassword(dto.DefaultPassword!.Trim()),
             RoleId = role.Id,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
