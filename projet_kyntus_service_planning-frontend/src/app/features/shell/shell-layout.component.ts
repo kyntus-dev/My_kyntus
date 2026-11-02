@@ -11,6 +11,7 @@ import { Bell, Briefcase, CircleHelp, Moon, Settings, Sun, UserRound } from 'luc
 
 import { Microservice, MenuItem } from '../../core/navigation/microservices.config';
 import { NavigationMenuService } from '../../core/navigation/navigation-menu.service';
+import { HeureSortieAccessService } from '../../core/services/heure-sortie-access.service';
 import { WorkspaceHatService } from '../../core/navigation/workspace-hat.service';
 import {
   landingForHat,
@@ -94,6 +95,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
 
   private readonly menuService = inject(NavigationMenuService);
+  private readonly heureSortieAccess = inject(HeureSortieAccessService);
 
   private readonly deptContext = inject(DepartmentContextService);
 
@@ -256,6 +258,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
     void this.deptContext.load().finally(() => this.refreshGroups());
     void this.platformAccess.ensureLoaded().finally(() => this.refreshGroups());
+    void this.heureSortieAccess.charger().then(() => this.refreshGroups());
 
     this.updateModuleClass(this.router.url);
 

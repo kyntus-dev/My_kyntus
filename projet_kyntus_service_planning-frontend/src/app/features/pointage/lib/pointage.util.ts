@@ -207,3 +207,55 @@ export function lignesExportJours(suivis: readonly PointageSuiviDto[]): (string 
     ]));
   return [head, ...rows];
 }
+
+// ── Frise de la journée (Mon suivi) ───────────────────────────────────────────
+
+export interface SegmentJour {
+  type: 'travail' | 'pause';
+  de: string;
+  a: string;
+  /** Position et largeur en % de la plage affichée. */
+  left: number;
+  width: number;
+}
+
+const minutesDe = (hhmm: string): number => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+};
+
+/**
+ * Frise d'une journée : travail entre arrivée et sortie en pause, pauses entre deux pointages
+ * intermédiaires, travail jusqu'au départ. Nombre impair : le dernier segment s'arrête au dernier pointage.
+ */
+export function segmentsJour(pointages: readonly string[], debutHeure = 6, finHeure = 22): SegmentJour[] {
+  const plage = (finHeure - debutHeure) * 60;
+  const pos = (hhmm: string) => Math.min(100, Math.max(0, ((minutesDe(hhmm) - debutHeure * 60) / plage) * 100));
+  const out: SegmentJour[] = [];
+  for (let i = 0; i + 1 < pointages.length; i++) {
+    const de = pointages[i].slice(0, 5);
+    const a = pointages[i + 1].slice(0, 5);
+    const left = pos(de);
+    out.push({ type: i % 2 === 0 ? 'travail' : 'pause', de, a, left, width: Math.max(0.4, pos(a) - left) });
+  }
+  return out;
+}
+
+/** Libellé d'un pointage selon sa place dans la journée. */
+export function libellePointage(index: number, total: number): 'Arrivée' | 'Départ' | 'Sortie pause' | 'Retour pause' | 'Pointage' {
+  if (index === 0) return 'Arrivée';
+  if (index === total - 1 && total % 2 === 0) return 'Départ';
+  if (total % 2 === 1 && index === total - 1) return 'Pointage';
+  return index % 2 === 1 ? 'Sortie pause' : 'Retour pause';
+}
+
+export type FiltreJours = 'tous' | 'anomalies' | 'retards' | 'manquants';
+
+export function filtrerJours(jours: readonly PointageJourDto[], filtre: FiltreJours): PointageJourDto[] {
+  switch (filtre) {
+    case 'anomalies': return jours.filter(estAnomalie);
+    case 'retards': return jours.filter((j) => j.retardTotalMinutes > 0);
+    case 'manquants': return jours.filter((j) => j.statut === 'PointageManquant');
+    default: return [...jours];
+  }
+}

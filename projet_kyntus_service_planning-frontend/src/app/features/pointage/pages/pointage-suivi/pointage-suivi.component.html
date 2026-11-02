@@ -11,7 +11,7 @@
     <div class="ku-hero-actions">
       @if (userId()) {
         <a routerLink="/pointage/equipe" class="ku-btn">Retour à l’équipe</a>
-      } @else {
+      } @else if (heureSortie.acces()) {
         <a routerLink="/pointage/heure-de-sortie" class="ku-btn">Heure de sortie</a>
       }
       <button type="button" class="ku-btn" (click)="exporter()" [disabled]="!data()">Exporter (Excel)</button>
@@ -100,72 +100,136 @@
       </div>
     }
 
-    <section class="ku-card">
+    <section class="ku-card pt-days">
       <div class="ku-card-head">
         <div>
           <h2 class="ku-card-title">Jour par jour</h2>
-          <p class="ku-card-sub">Dernière synchronisation : {{ formatDateTime(d.derniereSynchro) }}</p>
+          <p class="ku-card-sub">Cliquez sur une journée pour voir le détail de chaque pointage · synchronisé le {{ formatDateTime(d.derniereSynchro) }}</p>
         </div>
-        <button type="button" class="ku-btn ku-btn--sm" (click)="detailOuvert.set(!detailOuvert())" [attr.aria-expanded]="detailOuvert()">
-          {{ detailOuvert() ? 'Masquer' : 'Afficher' }}
-        </button>
+        <div class="ku-toolbar">
+          <div class="ku-seg" role="group" aria-label="Filtrer les journées">
+            <button type="button" [class.is-active]="filtre() === 'tous'" (click)="filtre.set('tous')">Toutes <b class="pt-count">{{ compte().tous }}</b></button>
+            <button type="button" [class.is-active]="filtre() === 'anomalies'" (click)="filtre.set('anomalies')">À vérifier <b class="pt-count pt-count--warn">{{ compte().anomalies }}</b></button>
+            <button type="button" [class.is-active]="filtre() === 'retards'" (click)="filtre.set('retards')">Retards <b class="pt-count pt-count--danger">{{ compte().retards }}</b></button>
+            <button type="button" [class.is-active]="filtre() === 'manquants'" (click)="filtre.set('manquants')">Manquants <b class="pt-count pt-count--warn">{{ compte().manquants }}</b></button>
+          </div>
+          <button type="button" class="ku-btn ku-btn--sm" (click)="toutDeplier()">{{ ouverts().size ? 'Tout replier' : 'Tout déplier' }}</button>
+        </div>
       </div>
-      @if (detailOuvert()) {
-        <div class="ku-table-wrap">
-          <table class="ku-table ku-table--stack">
-            <thead>
-              <tr>
-                <th>Jour</th>
-                <th>État</th>
-                <th>Prévu</th>
-                <th>Pointages</th>
-                <th class="is-num">Pause</th>
-                <th class="is-num">Retard</th>
-                <th class="is-num">Production</th>
-                <th class="is-num">Écart</th>
+
+      <div class="pt-legend" aria-hidden="true">
+        <span><i class="pt-lg pt-lg--travail"></i>Travail</span>
+        <span><i class="pt-lg pt-lg--pause"></i>Pause</span>
+        <span><i class="pt-lg pt-lg--prevu"></i>Arrivée prévue</span>
+        <span class="ku-muted">Frise de 06:00 à 22:00</span>
+      </div>
+
+      <div class="ku-table-wrap">
+        <table class="ku-table pt-table2">
+          <thead>
+            <tr>
+              <th class="pt-col-jour">Jour</th>
+              <th>État</th>
+              <th class="pt-col-frise">Journée</th>
+              <th class="is-num">Pause</th>
+              <th class="is-num">Retard</th>
+              <th class="is-num">Production · écart</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (j of jours(); track j.jour) {
+              <tr class="pt-row" [ngClass]="'pt-row--' + j.statut" [class.is-open]="ouverts().has(j.jour)" [class.is-today]="j.jour.slice(0, 10) === aujourdhui"
+                  [class.is-off]="j.statut === 'Repos'" tabindex="0" (click)="basculer(j.jour)" (keydown.enter)="basculer(j.jour)"
+                  [attr.aria-expanded]="ouverts().has(j.jour)">
+                <td class="pt-col-jour">
+                  <span class="pt-chevron" aria-hidden="true">›</span>
+                  <b>{{ jourLabel(j.jour) }}</b>
+                  @if (j.planning) {
+                    <small class="pt-plan">prévu {{ j.planning }}@if (j.productionPrevueMinutes) { · {{ formatHeuresMinutes(j.productionPrevueMinutes) }} }</small>
+                  }
+                </td>
+                <td><span class="pt-statut" [ngClass]="statutClass(j.statut)">{{ statutLabels[j.statut] }}</span></td>
+                <td class="pt-col-frise">
+                  @if (j.pointages.length) {
+                    <div class="pt-frise" [attr.aria-label]="'Pointages : ' + j.pointages.join(', ')">
+                      @for (s of segments(j); track $index) {
+                        <span class="pt-seg" [class.pt-seg--pause]="s.type === 'pause'" [style.left.%]="s.left" [style.width.%]="s.width"
+                              [title]="(s.type === 'pause' ? 'Pause ' : 'Travail ') + s.de + ' → ' + s.a"></span>
+                      }
+                      @if (j.planning) { <span class="pt-prevu" [style.left.%]="positionHeure(j.planning)" [title]="'Arrivée prévue ' + j.planning"></span> }
+                    </div>
+                    <div class="pt-frise-txt">
+                      <span>{{ j.pointages[0].slice(0, 5) }}</span>
+                      <span class="ku-muted">{{ j.pointages.length }} pointage{{ j.pointages.length > 1 ? 's' : '' }}</span>
+                      <span>{{ j.pointages.length > 1 ? j.pointages[j.pointages.length - 1].slice(0, 5) : '…' }}</span>
+                    </div>
+                  } @else {
+                    <span class="ku-muted">{{ j.statut === 'SansPointage' ? 'Aucun pointage ce jour' : '—' }}</span>
+                  }
+                </td>
+                <td class="is-num">
+                  @if (j.pointages.length > 2) {
+                    <span [class.ku-neg]="j.retardPauseMinutes > 0">{{ formatDuree(j.pauseMinutes) }}</span>
+                    @if (j.pauseAutoriseeMinutes) { <small class="ku-muted"> / {{ formatDuree(j.pauseAutoriseeMinutes) }}</small> }
+                  } @else if (pausesNonPointees(j)) { <small class="pt-warn">non pointée</small> } @else { — }
+                </td>
+                <td class="is-num">
+                  @if (j.statut === 'PointageManquant') {
+                    <span class="ku-chip ku-chip--warn">manquant</span>
+                  } @else if (j.retardTotalMinutes) {
+                    <span class="ku-chip ku-chip--danger ku-chip--plain">{{ formatDuree(j.retardTotalMinutes) }}</span>
+                  } @else { <span class="ku-muted">—</span> }
+                </td>
+                <td class="is-num">
+                  @if (j.productionMinutes != null) {
+                    <b class="pt-prod">{{ formatDuree(j.productionMinutes) }}</b>
+                    @if (j.productionPrevueMinutes) {
+                      <span class="pt-mini"><span [style.width.%]="pct(j.productionMinutes, j.productionPrevueMinutes)"
+                        [class.is-ok]="j.productionMinutes >= j.productionPrevueMinutes"></span></span>
+                    }
+                    @if (j.ecartProductionMinutes != null) {
+                      <small class="pt-ecart" [class.ku-pos]="j.ecartProductionMinutes >= 0" [class.ku-neg]="j.ecartProductionMinutes < 0">{{ formatEcart(j.ecartProductionMinutes) }}</small>
+                    }
+                  } @else { <span class="ku-muted">—</span> }
+                </td>
+
               </tr>
-            </thead>
-            <tbody>
-              @for (j of jours(); track j.jour) {
-                <tr [class.is-muted]="j.statut === 'Repos'">
-                  <td data-label="Jour" class="pt-nowrap"><b>{{ jourLabel(j.jour) }}</b></td>
-                  <td data-label="État"><span class="pt-statut" [ngClass]="statutClass(j.statut)">{{ statutLabels[j.statut] }}</span></td>
-                  <td data-label="Prévu">
-                    @if (j.planning) {
-                      <span class="pt-nowrap">{{ j.planning }}@if (j.productionPrevueMinutes) { · {{ formatHeuresMinutes(j.productionPrevueMinutes) }} }</span>
-                      <small class="ku-muted pt-src">{{ j.source === 'Regime' ? 'régime' : 'planning' }}</small>
-                    } @else { — }
-                  </td>
-                  <td data-label="Pointages" class="pt-punches-cell">
-                    @if (j.pointages.length) {
-                      <div class="ku-punches">
-                        @for (p of j.pointages; track $index) { <span class="ku-punch">{{ p.slice(0, 5) }}</span> }
+              @if (ouverts().has(j.jour)) {
+                <tr class="pt-detail">
+                  <td colspan="6">
+                    <div class="pt-detail-grid">
+                      <div>
+                        <span class="pt-detail-title">Pointages</span>
+                        @if (j.pointages.length) {
+                          <ol class="pt-timeline">
+                            @for (p of j.pointages; track $index) {
+                              @let lib = libellePointage($index, j.pointages.length);
+                              <li [attr.data-type]="lib"><b>{{ p }}</b><span>{{ lib }}</span></li>
+                            }
+                          </ol>
+                        } @else { <p class="ku-muted">Aucun pointage.</p> }
                       </div>
-                      @if (pausesNonPointees(j)) { <small class="pt-warn">pauses non pointées</small> }
-                    } @else { — }
-                  </td>
-                  <td data-label="Pause" class="is-num">{{ j.pointages.length ? pauseTexte(j) : '—' }}</td>
-                  <td data-label="Retard" class="is-num">
-                    @if (j.statut === 'PointageManquant') {
-                      <span class="pt-manquant">pointage manquant</span>
-                    } @else if (j.retardTotalMinutes) {
-                      <strong class="ku-neg" [title]="'Entrée ' + formatDuree(j.retardEntreeMinutes) + ' · pause ' + formatDuree(j.retardPauseMinutes)">{{ formatDuree(j.retardTotalMinutes) }}</strong>
-                    } @else { — }
-                  </td>
-                  <td data-label="Production" class="is-num">{{ j.productionMinutes != null ? formatDuree(j.productionMinutes) : '—' }}</td>
-                  <td data-label="Écart" class="is-num" [class.ku-neg]="(j.ecartProductionMinutes ?? 0) < 0" [class.ku-pos]="(j.ecartProductionMinutes ?? 0) > 0">
-                    {{ formatEcart(j.ecartProductionMinutes) }}
+                      <dl class="pt-detail-facts">
+                        <div><dt>Prévu</dt><dd>{{ j.planning ? j.planning + (j.source === 'Regime' ? ' (régime)' : ' (planning)') : 'Aucun planning' }}</dd></div>
+                        <div><dt>Arrivée / départ</dt><dd>{{ j.arrivee ?? '—' }} → {{ j.depart ?? '—' }}</dd></div>
+                        <div><dt>Retard d’entrée</dt><dd [class.ku-neg]="j.retardEntreeMinutes > 0">{{ formatDuree(j.retardEntreeMinutes) }}</dd></div>
+                        <div><dt>Retard pause</dt><dd [class.ku-neg]="j.retardPauseMinutes > 0">{{ formatDuree(j.retardPauseMinutes) }}</dd></div>
+                        <div><dt>Pauses prises</dt><dd>{{ formatDuree(j.pauseMinutes) }}@if (j.pauseAutoriseeMinutes) { sur {{ formatDuree(j.pauseAutoriseeMinutes) }} autorisées }</dd></div>
+                        <div><dt>Production</dt><dd>{{ j.productionMinutes != null ? formatDuree(j.productionMinutes) : 'non calculée' }}@if (j.productionPrevueMinutes) { / {{ formatDuree(j.productionPrevueMinutes) }} prévues }</dd></div>
+                      </dl>
+                    </div>
                   </td>
                 </tr>
               }
-            </tbody>
-          </table>
-        </div>
-      }
+            } @empty {
+              <tr><td colspan="6" class="ku-empty"><strong>Aucune journée</strong>Rien à afficher avec ce filtre.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
       <p class="ku-card-sub pt-note">
-        Les pointeuses n’enregistrent pas si c’est une entrée ou une sortie : le premier pointage de la journée est l’arrivée,
-        le dernier le départ, et les pointages intermédiaires vont par paires (sortie en pause, retour). Pause autorisée :
-        toutes pauses de la journée confondues ; au-delà, le dépassement compte en retard pause.
+        Les pointeuses n’enregistrent pas si c’est une entrée ou une sortie : le premier pointage est l’arrivée, le dernier le départ,
+        et les pointages intermédiaires vont par paires (sortie en pause, retour). Pause autorisée : toutes pauses de la journée confondues.
       </p>
     </section>
   }

@@ -4,6 +4,7 @@ import { AuthGuard } from './guard/guards/auth';
 import { NewsletterAdminComponent } from './features/Newsletter-admin/newsletter-admin.component';
 import { ShellLayoutComponent } from './features/shell/shell-layout.component';
 import { KyntusRoleNames, ROLE_SETS } from './core/org/kyntus-role-names';
+import { heureSortieGuard } from './core/services/heure-sortie-access.service';
 
 export const routes: Routes = [
 
@@ -413,7 +414,7 @@ export const routes: Routes = [
           {
             // Heure de sortie (Excel « Combien il me reste ») : accès accordé par l'Admin via le régime horaire.
             path: 'heure-de-sortie',
-            canActivate: [AuthGuard],
+            canActivate: [AuthGuard, heureSortieGuard],
             data: { roles: ROLE_SETS.planningSelfService },
             loadComponent: () =>
               import('./features/pointage/pages/pointage-heure-sortie/pointage-heure-sortie.component')

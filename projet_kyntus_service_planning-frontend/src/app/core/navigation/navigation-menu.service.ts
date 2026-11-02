@@ -21,6 +21,7 @@ import { WorkspaceHatService } from './workspace-hat.service';
 import { filterItemsByHat } from './workspace-hat.util';
 import { PlatformAccessService } from '../platform-access/platform-access.service';
 import { mapJwtRoleToParrainageRole } from '../session/kyntus-role-ui.config';
+import { HEURE_SORTIE_ROUTE, HeureSortieAccessService } from '../services/heure-sortie-access.service';
 
 @Injectable({ providedIn: 'root' })
 export class NavigationMenuService {
@@ -32,6 +33,7 @@ export class NavigationMenuService {
   private readonly workspace = inject(WorkspaceHatService);
   private readonly access = inject(PlatformAccessService);
   private readonly appGuides = inject(AppGuideService);
+  private readonly heureSortie = inject(HeureSortieAccessService);
 
   buildVisibleGroups(jwtRole: string): Microservice[] {
     void this.access.ensureLoaded();
@@ -62,6 +64,14 @@ export class NavigationMenuService {
         children: group.children
           .filter((c) => this.itemAllowed(c, jwtRole))
           .map((c) => (c.route === APP_GUIDE_ROUTE && pending > 0 ? { ...c, menuBadge: pending } : c)),
+      };
+    }
+    if (group.id === 'pointage') {
+      // « Heure de sortie » : visible seulement si l'Admin a donné l'accès (régime horaire).
+      return {
+        ...group,
+        children: group.children.filter((c) =>
+          this.itemAllowed(c, jwtRole) && (c.route !== HEURE_SORTIE_ROUTE || this.heureSortie.acces() === true)),
       };
     }
     return {

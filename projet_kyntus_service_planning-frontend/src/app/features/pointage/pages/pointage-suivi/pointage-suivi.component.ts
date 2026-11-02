@@ -9,13 +9,19 @@ import type { SoldeCongeDto } from '../../../../core/models/conge.models';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
 import { telechargerExcel } from '../../lib/excel-export';
 import { formatHeuresMinutes } from '../../lib/heure-sortie.util';
+import { HeureSortieAccessService } from '../../../../core/services/heure-sortie-access.service';
 import {
   STATUT_LABELS,
   barresRetard,
   formatDuree,
+  estAnomalie,
+  filtrerJours,
   formatEcart,
+  libellePointage,
   lignesExportJours,
   pausesNonPointees,
+  segmentsJour,
+  type FiltreJours,
   jourLabel,
   messagesSuivi,
   periode,
@@ -41,6 +47,7 @@ export class PointageSuiviComponent implements OnInit {
   private readonly svc = inject(PointageService);
   private readonly conges = inject(CongeService);
   private readonly toast = inject(KyntusToastService);
+  readonly heureSortie = inject(HeureSortieAccessService);
 
   readonly statutLabels = STATUT_LABELS;
   readonly statutClass = statutClass;
@@ -48,6 +55,11 @@ export class PointageSuiviComponent implements OnInit {
   readonly jourLabel = jourLabel;
   readonly formatEcart = formatEcart;
   readonly formatHeuresMinutes = formatHeuresMinutes;
+  readonly libellePointage = libellePointage;
+  readonly aujourdhui = new Date().toLocaleDateString('sv-SE');
+
+  readonly filtre = signal<FiltreJours>('tous');
+  readonly ouverts = signal<ReadonlySet<string>>(new Set());
   readonly pausesNonPointees = pausesNonPointees;
 
   readonly userId = signal<number | null>(null);
@@ -63,7 +75,17 @@ export class PointageSuiviComponent implements OnInit {
   readonly messages = computed(() => (this.data() ? messagesSuivi(this.data()!) : []));
   readonly barres = computed(() => barresRetard(this.data()?.jours ?? []));
   readonly barreMax = computed(() => Math.max(1, ...this.barres().map((b) => b.minutes)));
-  readonly jours = computed(() => (this.data()?.jours ?? []).filter((j) => j.statut !== 'AVenir'));
+  private readonly joursPasses = computed(() => (this.data()?.jours ?? []).filter((j) => j.statut !== 'AVenir'));
+  readonly jours = computed(() => filtrerJours(this.joursPasses(), this.filtre()));
+  readonly compte = computed(() => {
+    const j = this.joursPasses();
+    return {
+      tous: j.length,
+      anomalies: j.filter(estAnomalie).length,
+      retards: j.filter((x) => x.retardTotalMinutes > 0).length,
+      manquants: j.filter((x) => x.statut === 'PointageManquant').length,
+    };
+  });
   readonly titre = computed(() => (this.userId() ? `Suivi — ${this.data()?.collaborateur ?? ''}` : 'Mon suivi'));
   /** Production de la période : réalisée, prévue (mêmes journées) et avancement. */
   readonly production = computed(() => {
@@ -74,6 +96,7 @@ export class PointageSuiviComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    void this.heureSortie.charger();
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.userId.set(Number.isFinite(id) && id > 0 ? id : null);
     if (!this.userId()) {
@@ -115,6 +138,29 @@ export class PointageSuiviComponent implements OnInit {
           : err?.error?.message ?? 'Impossible de charger les pointages.');
       },
     });
+  }
+
+  basculer(jour: string): void {
+    const next = new Set(this.ouverts());
+    if (next.has(jour)) next.delete(jour); else next.add(jour);
+    this.ouverts.set(next);
+  }
+
+  toutDeplier(): void {
+    this.ouverts.set(this.ouverts().size ? new Set() : new Set(this.jours().filter((j) => j.pointages.length).map((j) => j.jour)));
+  }
+
+  segments(j: PointageJourDto) {
+    return segmentsJour(j.pointages);
+  }
+
+  positionHeure(hhmm: string): number {
+    const [h, m] = hhmm.split(':').map(Number);
+    return Math.min(100, Math.max(0, ((h * 60 + m - 360) / 960) * 100));
+  }
+
+  pct(valeur: number, total: number): number {
+    return total ? Math.min(100, Math.round((valeur / total) * 100)) : 0;
   }
 
   barreHauteur(minutes: number): number {

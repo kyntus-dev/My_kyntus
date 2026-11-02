@@ -15,6 +15,9 @@ import {
   lignesExportJours,
   pausesNonPointees,
   semaine,
+  segmentsJour,
+  libellePointage,
+  filtrerJours,
 } from './pointage.util';
 
 const suivi: PointageSuiviDto = {
@@ -114,5 +117,19 @@ describe('Pointage', () => {
     expect(rows[0][8]).toBe('Nb pointages');
     expect(rows[1].slice(0, 9)).toEqual(['EL MAHI Omar', 'IT', '2026-10-05', 'Retard', 'Régime horaire', '09:30', '09:36:00', '18:30:00', 2]);
     expect(rows[1].slice(15)).toEqual(['08:54', '08:40', '+00:14']);
+  });
+
+  it('frise de la journée et libellés des pointages', () => {
+    const s = segmentsJour(['08:00:00', '12:00:00', '13:00:00', '17:00:00'], 6, 22);
+    expect(s.map((x) => x.type)).toEqual(['travail', 'pause', 'travail']);
+    expect(s[0].left).toBeCloseTo(12.5);
+    expect(s[0].width).toBeCloseTo(25);
+    expect(s[1]).toMatchObject({ de: '12:00', a: '13:00' });
+    expect(segmentsJour(['08:00:00'])).toEqual([]);
+    expect(['08:00', '12:00', '13:00', '17:00'].map((_, i) => libellePointage(i, 4)))
+      .toEqual(['Arrivée', 'Sortie pause', 'Retour pause', 'Départ']);
+    expect(libellePointage(2, 3)).toBe('Pointage');
+    expect(filtrerJours(suivi.jours, 'retards').map((j) => j.jour)).toEqual(['2026-10-05']);
+    expect(filtrerJours(suivi.jours, 'tous')).toHaveLength(2);
   });
 });

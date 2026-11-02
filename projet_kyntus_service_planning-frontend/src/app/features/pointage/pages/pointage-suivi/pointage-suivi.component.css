@@ -65,3 +65,84 @@
 .ku-kpi .pt-bars { height: 36px; }
 .pt-punches-cell { min-width: 230px; }
 @media (max-width: 720px) { .pt-punches-cell { min-width: 0; } .pt-punches-cell .ku-punches { justify-content: flex-end; } }
+
+/* ── v11.1 : tableau jour par jour élargi, frise colorée, lignes dépliables ── */
+.ku-page.pt { max-width: 1640px; }
+.pt-days { padding: 20px 22px; }
+.pt-count { margin-left: 4px; padding: 0 6px; border-radius: var(--radius-pill); background: var(--bg-input, #eef2f7); font-size: 0.68rem; }
+.pt-count--warn { background: var(--warning-bg); color: var(--warning-text); }
+.pt-count--danger { background: var(--danger-bg); color: var(--danger-text); }
+.pt-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: -4px 0 12px; font-size: 0.74rem; color: var(--text-muted); }
+.pt-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pt-lg { display: inline-block; width: 18px; height: 8px; border-radius: 4px; }
+.pt-lg--travail { background: linear-gradient(90deg, #2563eb, #60a5fa); }
+.pt-lg--pause { background: repeating-linear-gradient(135deg, #f59e0b 0 4px, #fbbf24 4px 8px); }
+.pt-lg--prevu { width: 3px; height: 12px; background: var(--text-primary); }
+
+.pt-table2 { font-size: 0.84rem; }
+.pt-table2 td { padding: 12px 10px; }
+.pt-table2 th { padding: 10px 12px; }
+.pt-table2 .is-num { width: 1%; }
+.pt-col-jour { width: 1%; white-space: nowrap; }
+.pt-col-frise { min-width: 180px; }
+.pt-row { cursor: pointer; border-left: 0; }
+.pt-row td:first-child { position: relative; padding-left: 18px; }
+.pt-row td:first-child::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 4px; border-radius: 0 4px 4px 0; background: transparent; }
+.pt-row--AHeure td:first-child::before { background: var(--success); }
+.pt-row--Retard td:first-child::before { background: var(--danger); }
+.pt-row--PointageManquant td:first-child::before { background: var(--warning); }
+.pt-row--SansPointage td:first-child::before { background: var(--text-muted); }
+.pt-row--SansPlanning td:first-child::before { background: var(--info); }
+.pt-row--Conge td:first-child::before, .pt-row--Ferie td:first-child::before { background: #8b5cf6; }
+.pt-row.is-off { cursor: default; }
+.pt-row.is-off td { color: var(--text-muted); background: color-mix(in srgb, var(--bg-input, #f1f5f9) 45%, transparent); }
+.pt-row.is-today td { background: color-mix(in srgb, var(--ky-blue) 6%, transparent); }
+.pt-row.is-open td { background: color-mix(in srgb, var(--ky-blue) 8%, transparent); border-bottom-color: transparent; }
+.pt-row:focus-visible { outline: 2px solid var(--ky-blue-soft); outline-offset: -2px; }
+.pt-chevron { display: inline-block; width: 12px; margin-right: 4px; color: var(--text-muted); transition: transform var(--duration-fast); }
+.pt-row.is-open .pt-chevron { transform: rotate(90deg); color: var(--ky-blue); }
+.pt-row.is-off .pt-chevron { visibility: hidden; }
+.pt-plan { display: block; margin: 2px 0 0 16px; font-size: 0.7rem; color: var(--text-muted); }
+
+.pt-statut { padding: 3px 10px; }
+.pt-s-neutre { color: var(--text-muted); }
+.pt-row--SansPlanning .pt-statut { background: var(--info-bg); color: var(--info-text); }
+
+.pt-frise {
+  position: relative; height: 14px; border-radius: 7px; overflow: hidden;
+  background: repeating-linear-gradient(90deg, var(--bg-input, #eef2f7) 0 calc(12.5% - 1px), color-mix(in srgb, var(--border-color) 80%, transparent) calc(12.5% - 1px) 12.5%);
+}
+.pt-seg { position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, #2563eb, #60a5fa); border-radius: 3px; transition: filter var(--duration-fast); }
+.pt-seg--pause { background: repeating-linear-gradient(135deg, #f59e0b 0 4px, #fbbf24 4px 8px); }
+.pt-seg:hover { filter: brightness(1.15) saturate(1.2); }
+.pt-prevu { position: absolute; top: -2px; bottom: -2px; width: 3px; margin-left: -1px; background: var(--text-primary); border-radius: 2px; }
+.pt-row--Retard .pt-prevu { background: var(--danger); }
+.pt-frise-txt { display: flex; justify-content: space-between; margin-top: 4px; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+
+.pt-prod { font-variant-numeric: tabular-nums; }
+.pt-mini { display: block; width: 64px; height: 4px; margin: 4px 0 0 auto; border-radius: 2px; background: var(--bg-input, #eef2f7); overflow: hidden; }
+.pt-mini > span { display: block; height: 100%; background: var(--warning); }
+.pt-mini > span.is-ok { background: var(--success); }
+
+.pt-detail td { padding: 0 14px 16px 18px; background: color-mix(in srgb, var(--ky-blue) 4%, transparent); cursor: default; }
+.pt-detail-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--bg-card); border: 1px solid var(--border-color); }
+.pt-detail-title { display: block; margin-bottom: 10px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.pt-timeline { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pt-timeline li {
+  display: flex; flex-direction: column; gap: 2px; min-width: 92px; padding: 8px 10px; border-radius: var(--radius-md);
+  border: 1px solid var(--border-color); border-top: 3px solid var(--ky-blue); font-size: 0.72rem; color: var(--text-muted);
+}
+.pt-timeline li b { font-size: 0.95rem; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.pt-timeline li[data-type='Arrivée'] { border-top-color: var(--success); }
+.pt-timeline li[data-type='Départ'] { border-top-color: #6366f1; }
+.pt-timeline li[data-type='Sortie pause'], .pt-timeline li[data-type='Retour pause'] { border-top-color: var(--warning); }
+.pt-timeline li[data-type='Pointage'] { border-top-color: var(--danger); }
+.pt-detail-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 0; }
+.pt-detail-facts dt { font-size: 0.7rem; color: var(--text-muted); }
+.pt-detail-facts dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  .pt-detail-grid { grid-template-columns: 1fr; }
+  .pt-col-frise { min-width: 180px; }
+}
+.pt-ecart { display: block; margin-top: 3px; font-weight: 700; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
