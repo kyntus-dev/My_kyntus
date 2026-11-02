@@ -1,0 +1,96 @@
+<div class="ky-page-shell pt">
+  <app-kyntus-page-header
+    title="Correspondance pointeuses"
+    subtitle="Reliez chaque ID de pointeuse ZKBio Time à un collaborateur My-Kyntus.">
+    <div actions>
+      @if (isAdmin()) {
+        <button type="button" class="ky-btn-secondary" (click)="synchroniser()" [disabled]="busy()">Synchroniser maintenant</button>
+      }
+      <button type="button" class="ky-btn-secondary" (click)="load()" [disabled]="loading()">Actualiser</button>
+    </div>
+  </app-kyntus-page-header>
+
+  @if (etat(); as e) {
+    <div class="pt-banner" [class.pt-banner--warn]="!e.active || e.derniereErreur">
+      @if (!e.active) {
+        Synchronisation inactive : renseignez KYNTUS_BIOTIME_* dans la configuration du serveur.
+      } @else {
+        Synchronisation active ({{ e.baseUrl }}) — dernière : {{ formatDateTime(e.derniereSynchro) }},
+        {{ e.pointagesEnBase }} pointage(s) en base.
+      }
+      @if (e.derniereErreur) {
+        <br /><strong>Dernière erreur</strong> ({{ formatDateTime(e.derniereErreurAt) }}) : {{ e.derniereErreur }}
+      }
+    </div>
+  }
+
+  <div class="ky-card pc-toolbar">
+    <div class="pt-presets" role="group" aria-label="Statut">
+      <button type="button" class="pt-chip" [class.is-active]="filtre() === 'AValider'" (click)="filtre.set('AValider')">À traiter ({{ compte()['AValider'] }})</button>
+      <button type="button" class="pt-chip" [class.is-active]="filtre() === 'Auto'" (click)="filtre.set('Auto')">Proposés ({{ compte()['Auto'] }})</button>
+      <button type="button" class="pt-chip" [class.is-active]="filtre() === 'Valide'" (click)="filtre.set('Valide')">Validés ({{ compte()['Valide'] }})</button>
+      <button type="button" class="pt-chip" [class.is-active]="filtre() === 'Ignore'" (click)="filtre.set('Ignore')">Ignorés ({{ compte()['Ignore'] }})</button>
+      <button type="button" class="pt-chip" [class.is-active]="filtre() === ''" (click)="filtre.set('')">Tous</button>
+    </div>
+    <input class="ky-input pc-search" type="search" placeholder="ID, nom, département…" aria-label="Rechercher"
+      [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+    @if (compte()['Auto']) {
+      <button type="button" class="ky-btn-primary" (click)="validerTout()" [disabled]="busy()">Valider les {{ compte()['Auto'] }} propositions</button>
+    }
+  </div>
+
+  <section class="ky-card pt-table-card">
+    @if (loading()) {
+      <div class="pt-state">Chargement…</div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="pt-table">
+          <thead>
+            <tr>
+              <th>ID pointeuse</th>
+              <th>Nom dans ZKBio Time</th>
+              <th>Département</th>
+              <th>Dernier pointage</th>
+              <th>Collaborateur My-Kyntus</th>
+              <th>Statut</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (r of affichees(); track r.empCode) {
+              <tr>
+                <td><strong>{{ r.empCode }}</strong></td>
+                <td>{{ r.nomBioTime || '—' }}</td>
+                <td class="pe-muted">{{ r.departementBioTime || '—' }}</td>
+                <td class="pt-nowrap">{{ formatDateTime(r.dernierPointage) }}</td>
+                <td>
+                  <select class="ky-input pc-select" [attr.aria-label]="'Collaborateur pour l’ID ' + r.empCode"
+                    [ngModel]="valeur(r)" (ngModelChange)="choisir(r, $event)">
+                    <option value="">— Aucun —</option>
+                    @for (o of options(); track o.id) { <option [value]="o.id">{{ o.label }}</option> }
+                  </select>
+                </td>
+                <td><span class="pc-statut" [attr.data-statut]="r.statut">{{ statutsLabels[r.statut] }}</span></td>
+                <td class="pt-nowrap">
+                  <button type="button" class="pc-link" (click)="enregistrer(r)" [disabled]="busy()">
+                    {{ r.statut === 'Auto' && valeur(r) === (r.userId?.toString() ?? '') ? 'Valider' : 'Enregistrer' }}
+                  </button>
+                  @if (r.statut !== 'Ignore') {
+                    <button type="button" class="pc-link pc-link--muted" (click)="ignorer(r)" [disabled]="busy()"
+                      title="Badge de test, prestataire hors My-Kyntus…">Ignorer</button>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="pt-state">Rien à afficher pour ce filtre.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="pt-note">
+        Un collaborateur peut avoir plusieurs ID (changement de badge). Les pointages d’un ID « à traiter » ou « ignoré »
+        ne sont rattachés à personne. Les nouveaux ID apparaissent automatiquement à la synchronisation suivante.
+      </p>
+    }
+  </section>
+</div>

@@ -1,0 +1,135 @@
+<div class="ky-page-shell pt">
+  <app-kyntus-page-header
+    [title]="titre()"
+    [subtitle]="(data()?.collaborateur ?? '') + (data()?.cellule ? ' — ' + data()!.cellule : '')">
+    <div actions>
+      @if (userId()) {
+        <a routerLink="/pointage/equipe" class="ky-btn-secondary">Retour à l’équipe</a>
+      }
+      <button type="button" class="ky-btn-secondary" (click)="load()" [disabled]="loading()">Actualiser</button>
+    </div>
+  </app-kyntus-page-header>
+
+  <div class="ky-card pt-periode">
+    <div class="pt-presets" role="group" aria-label="Période">
+      <button type="button" class="pt-chip" [class.is-active]="preset() === 'mois'" (click)="choisirPreset('mois')">Mois en cours</button>
+      <button type="button" class="pt-chip" [class.is-active]="preset() === 'mois-precedent'" (click)="choisirPreset('mois-precedent')">Mois précédent</button>
+      <button type="button" class="pt-chip" [class.is-active]="preset() === 'semaine'" (click)="choisirPreset('semaine')">Cette semaine</button>
+    </div>
+    <div class="pt-dates">
+      <label>Du <input class="ky-input" type="date" [ngModel]="du()" (ngModelChange)="du.set($event)" /></label>
+      <label>au <input class="ky-input" type="date" [ngModel]="au()" (ngModelChange)="au.set($event)" /></label>
+      <button type="button" class="ky-btn-primary" (click)="appliquerPeriode()" [disabled]="loading()">Afficher</button>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="ky-card pt-state">Chargement des pointages…</div>
+  } @else if (error()) {
+    <div class="ky-card pt-state pt-state--error">{{ error() }}</div>
+  } @else if (data(); as d) {
+    @if (!d.idsPointeuse.length) {
+      <div class="pt-banner pt-banner--warn">
+        Aucun badge de pointeuse n’est encore relié à ce compte. Le service RH doit faire la correspondance
+        (Pointage › Correspondance pointeuses).
+      </div>
+    } @else if (!d.synchronisationActive) {
+      <div class="pt-banner">La synchronisation avec les pointeuses n’est pas encore activée : les données peuvent être incomplètes.</div>
+    }
+
+    <div class="pt-cards">
+      <section class="ky-card pt-card">
+        <span class="pt-card-label">Temps de retard</span>
+        <span class="pt-card-value pt-red">{{ formatDuree(d.totaux.retardTotalMinutes) }}</span>
+        <span class="pt-card-sub">sur {{ d.totaux.joursEnRetard }} journée(s) de {{ d.totaux.joursPointes }} calculée(s)</span>
+        <div class="pt-bars" aria-hidden="true">
+          @for (b of barres(); track b.jour) {
+            <span class="pt-bar" [style.height.px]="barreHauteur(b.minutes)" [title]="jourLabel(b.jour) + ' : ' + formatDuree(b.minutes)"></span>
+          }
+        </div>
+        <span class="pt-card-foot">Tolérance : {{ d.toleranceMinutes }} minutes</span>
+      </section>
+      <section class="ky-card pt-card">
+        <span class="pt-card-label">Manque de pointage</span>
+        <span class="pt-card-value">{{ d.totaux.joursPointageManquant.length }}</span>
+        <span class="pt-card-sub">journée(s) incomplète(s), donc non calculée(s)</span>
+        <span class="pt-card-foot">
+          @for (j of d.totaux.joursPointageManquant; track j; let last = $last) { {{ jourLabel(j) }}{{ last ? '' : ', ' }} }
+        </span>
+      </section>
+      <section class="ky-card pt-card">
+        <span class="pt-card-label">Journées à l’heure</span>
+        <span class="pt-card-value pt-green">{{ d.totaux.joursAHeure }}</span>
+        <span class="pt-card-sub">sur {{ d.totaux.joursPointes }} journée(s) calculée(s)</span>
+        <span class="pt-card-foot">Sans pointage : {{ d.totaux.joursSansPointage.length }} jour(s) planifié(s)</span>
+      </section>
+      @if (solde(); as s) {
+        <section class="ky-card pt-card">
+          <span class="pt-card-label">Solde de congés {{ s.annee }}</span>
+          <span class="pt-card-value">{{ s.soldeRestant }} j</span>
+          <span class="pt-card-sub">{{ s.soldeUtilise }} jour(s) pris sur {{ s.soldeInitial }}</span>
+          <a class="pt-card-foot pt-link" routerLink="/mes-conges">Mes congés</a>
+        </section>
+      }
+    </div>
+
+    @for (m of messages(); track m.titre) {
+      <div class="pt-message" [class.pt-message--alerte]="m.niveau === 'alerte'">
+        <strong>{{ m.titre }}</strong>
+        <p>{{ m.texte }}</p>
+      </div>
+    }
+
+    <section class="ky-card pt-table-card">
+      <button type="button" class="pt-detail-toggle" (click)="detailOuvert.set(!detailOuvert())" [attr.aria-expanded]="detailOuvert()">
+        {{ detailOuvert() ? '▾' : '▸' }} Le détail de mes pointages, jour par jour
+      </button>
+      @if (detailOuvert()) {
+        <div class="table-wrapper">
+          <table class="pt-table">
+            <thead>
+              <tr>
+                <th>Jour</th>
+                <th>État</th>
+                <th>Planning</th>
+                <th>Arrivée</th>
+                <th>Départ</th>
+                <th>Pause (prise / prévue)</th>
+                <th>Retard entrée</th>
+                <th>Retard pause</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (j of jours(); track j.jour) {
+                <tr [class.pt-row-off]="j.statut === 'Repos'">
+                  <td class="pt-nowrap">{{ jourLabel(j.jour) }}</td>
+                  <td><span class="pt-statut" [ngClass]="statutClass(j.statut)">{{ statutLabels[j.statut] }}</span></td>
+                  <td>{{ j.planning ?? '—' }}</td>
+                  <td [attr.title]="j.pointages.join(' · ')">{{ j.arrivee ?? '—' }}</td>
+                  <td>{{ j.depart ?? '—' }}</td>
+                  <td>{{ pauseTexte(j) }}</td>
+                  <td [class.pt-red]="j.retardEntreeMinutes > 0">{{ j.retardEntreeMinutes ? formatDuree(j.retardEntreeMinutes) : '—' }}</td>
+                  <td [class.pt-red]="j.retardPauseMinutes > 0">{{ j.retardPauseMinutes ? formatDuree(j.retardPauseMinutes) : '—' }}</td>
+                  <td>
+                    @if (j.statut === 'PointageManquant') {
+                      <span class="pt-manquant">pointage manquant</span>
+                    } @else if (j.retardTotalMinutes) {
+                      <strong class="pt-red">{{ formatDuree(j.retardTotalMinutes) }}</strong>
+                    } @else { — }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      <p class="pt-note">
+        Les pointeuses n’enregistrent pas si c’est une entrée ou une sortie : le premier pointage de la journée est
+        l’arrivée, le dernier le départ, et les pointages intermédiaires vont par paires (sortie en pause, retour).
+        Survolez l’heure d’arrivée pour voir tous les pointages du jour.
+        Dernière synchronisation : {{ formatDateTime(d.derniereSynchro) }}.
+      </p>
+    </section>
+  }
+</div>

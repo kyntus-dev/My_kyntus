@@ -375,6 +375,44 @@ export const routes: Routes = [
             .then(m => m.CongeManagerComponent),
       },
       {
+        // Pointages ZKBio Time (lecture seule) : suivi personnel, équipe, correspondances RH.
+        path: 'pointage',
+        children: [
+          {
+            path: 'mon-suivi',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.planningSelfService },
+            loadComponent: () =>
+              import('./features/pointage/pages/pointage-suivi/pointage-suivi.component')
+                .then(m => m.PointageSuiviComponent),
+          },
+          {
+            path: 'collaborateurs/:id',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.congesEquipe },
+            loadComponent: () =>
+              import('./features/pointage/pages/pointage-suivi/pointage-suivi.component')
+                .then(m => m.PointageSuiviComponent),
+          },
+          {
+            path: 'equipe',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.congesEquipe },
+            loadComponent: () =>
+              import('./features/pointage/pages/pointage-equipe/pointage-equipe.component')
+                .then(m => m.PointageEquipeComponent),
+          },
+          {
+            path: 'correspondances',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.adminRh },
+            loadComponent: () =>
+              import('./features/pointage/pages/pointage-correspondances/pointage-correspondances.component')
+                .then(m => m.PointageCorrespondancesComponent),
+          },
+        ],
+      },
+      {
         path: 'conges',
         children: [
           {

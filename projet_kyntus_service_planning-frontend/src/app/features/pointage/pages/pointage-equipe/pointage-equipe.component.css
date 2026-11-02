@@ -1,0 +1,9 @@
+.pe-filtres { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px; }
+.pe-search { flex: 1 1 220px; max-width: 320px; }
+.pe-check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text-primary); }
+.pe-total { margin-left: auto; font-size: 0.84rem; color: var(--text-muted); }
+.pe-muted { color: var(--text-muted); }
+.pe-badge {
+  margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 0.66rem; font-weight: 700;
+  background: color-mix(in srgb, var(--amber-600, #d97706) 16%, transparent); color: var(--amber-700, #b45309);
+}
