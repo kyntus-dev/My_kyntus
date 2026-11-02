@@ -123,7 +123,7 @@ class BioTime:
                 status, _ = self._call("GET", "/iclock/api/terminals/?page_size=1")
                 if status < 300:
                     return f"{prefix} ({path})"
-        raise SystemExit("Authentification refusée : vérifiez le compte, ou que l'API est disponible (/api/docs/).")
+        return None
 
     def pages(self, path: str, params: dict, limite: int = 200_000):
         """Parcourt toutes les pages ({count, next, data})."""
@@ -162,8 +162,18 @@ def main() -> int:
     out.mkdir(exist_ok=True)
     bt = BioTime(args.url, args.empreinte_attendue)
     user = os.environ.get("BIOTIME_USER") or input("Compte ZKBio Time (lecture seule) : ").strip()
-    password = os.environ.get("BIOTIME_PASSWORD") or getpass.getpass("Mot de passe : ")
-    mode = bt.login(user, password)
+    mode = None
+    for essai in range(3):
+        password = (os.environ.get("BIOTIME_PASSWORD") if essai == 0 else None) \
+            or getpass.getpass(f"Mot de passe ZKBio Time du compte « {user} » : ")
+        mode = bt.login(user, password)
+        if mode:
+            break
+        print("  ✘ refusé par ZKBio Time (compte ou mot de passe).")
+    if not mode:
+        print("Authentification refusée 3 fois : vérifiez le compte dans ZKBio Time (Système › Utilisateur),\n"
+              "ou que l'API est disponible (https://10.10.10.7/api/docs/).")
+        return 2
     print(f"✔ API joignable — authentification : {mode}")
 
     # 2. Pointeuses
@@ -192,6 +202,31 @@ def main() -> int:
             (datetime.fromisoformat(str(t["upload_time"])[:19]) - datetime.fromisoformat(str(t["punch_time"])[:19])).total_seconds()
             for t in retard)
         print(f"  Délai pointeuse → ZKBio Time : médiane {delais[len(delais) // 2]:.0f} s, max {delais[-1]:.0f} s")
+        tardifs = Counter(
+            str(t.get("terminal_alias") or t.get("terminal_sn")) for t in retard
+            if (datetime.fromisoformat(str(t["upload_time"])[:19]) - datetime.fromisoformat(str(t["punch_time"])[:19])).total_seconds() > 300)
+        if tardifs:
+            print("  Pointages arrivés avec plus de 5 min de retard (pointeuse momentanément hors ligne) : "
+                  + ", ".join(f"{k} {v}" for k, v in tardifs.most_common()))
+
+    if tx and all(str(t.get("punch_state")) == "255" for t in tx):
+        print("  ⚠ Les pointeuses n'enregistrent pas l'état (entrée / sortie / pause) : il sera déduit de l'ordre\n"
+              "    des pointages de la journée (1er = arrivée, dernier = départ, paires intermédiaires = pauses).")
+
+    par_jour: dict[tuple[str, str], list[datetime]] = defaultdict(list)
+    for t in tx:
+        moment = datetime.fromisoformat(str(t["punch_time"])[:19])
+        par_jour[(str(t.get("emp_code")), moment.strftime("%Y-%m-%d"))].append(moment)
+    if par_jour:
+        repartition = Counter(min(len(v), 6) for v in par_jour.values())
+        print("  Pointages par personne et par jour : "
+              + ", ".join(f"{'6+' if k == 6 else k} → {n}" for k, n in sorted(repartition.items())))
+        doubles = 0
+        for moments in par_jour.values():
+            moments.sort()
+            doubles += sum(1 for a, b in zip(moments, moments[1:]) if (b - a).total_seconds() < 120)
+        print(f"  Doubles badgeages (< 2 min d'écart, à fusionner) : {doubles}")
+
     champs = sorted({k for t in tx[:50] for k in t.keys()})
     print(f"  Champs disponibles : {', '.join(champs)}")
     (out / "echantillon_pointages.json").write_text(json.dumps(tx[:5], ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -210,8 +245,22 @@ def main() -> int:
     else:
         from kyntus_api import KyntusApi  # noqa: E402  (scripts/reorg-2026)
         api = KyntusApi()
-        api.login_if_needed()
-        kyntus = api.request("GET", "/api/directory/employees") or []
+        email = os.environ.get("KYNTUS_EMAIL") or input("Email My-Kyntus (Admin / RH) : ").strip()
+        for _ in range(3):
+            mdp = getpass.getpass(f"Mot de passe My-Kyntus de « {email} » : ")
+            try:
+                resp = api.request("POST", "/api/auth/login", {"email": email, "password": mdp}, auth=False)
+                api.token = (resp or {}).get("accessToken", "")
+            except RuntimeError as err:
+                print(f"  ✘ {err}")
+                continue
+            if api.token:
+                break
+        kyntus = []
+        if api.token:
+            kyntus = api.request("GET", "/api/directory/employees") or []
+        else:
+            print("  Connexion My-Kyntus impossible : rapport produit sans la correspondance (relancez plus tard).")
         par_idtech = {str(k.get("idTechnicien")): k for k in kyntus if k.get("idTechnicien") is not None}
         par_nom: dict[frozenset, list] = defaultdict(list)
         for k in kyntus:
@@ -222,7 +271,7 @@ def main() -> int:
             nom_bt = f"{e.get('last_name') or ''} {e.get('first_name') or ''}".strip()
             dept = e.get("department")
             dept = dept.get("dept_name") if isinstance(dept, dict) else dept
-            k, methode = None, "introuvable"
+            k, methode = None, ("introuvable" if kyntus else "non comparé")
             if code in par_idtech:
                 k, methode = par_idtech[code], "ID technicien HTEL"
             else:
@@ -236,12 +285,15 @@ def main() -> int:
                          "kyntus_nom": f"{(k or {}).get('lastName', '')} {(k or {}).get('firstName', '')}".strip(),
                          "methode": methode, "a_pointe": code in actifs})
 
-        stats = Counter(r["methode"] for r in rows)
-        print("Correspondance ID pointeuse → My-Kyntus :")
-        for m, n in stats.most_common():
-            print(f"  - {m:<20} {n}")
-        egal = sum(1 for r in rows if r["methode"] == "ID technicien HTEL")
-        print(f"  → l'ID pointeuse {'EST' if egal > len(rows) * 0.8 else 'n’est PAS'} (majoritairement) l'ID technicien HTEL.")
+        if kyntus:
+            stats = Counter(r["methode"] for r in rows)
+            print("Correspondance ID pointeuse → My-Kyntus :")
+            for m, n in stats.most_common():
+                print(f"  - {m:<20} {n}")
+            egal = sum(1 for r in rows if r["methode"] == "ID technicien HTEL")
+            print(f"  → l'ID pointeuse {'EST' if egal > len(rows) * 0.8 else 'n’est PAS'} (majoritairement) l'ID technicien HTEL.")
+            sans = [r for r in rows if r["a_pointe"] and r["methode"] in ("introuvable", "homonymes")]
+            print(f"  Personnes qui pointent sans correspondance My-Kyntus : {len(sans)}")
 
     with (out / "correspondance_pointeuse_kyntus.csv").open("w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()) if rows else ["emp_code"], delimiter=";")

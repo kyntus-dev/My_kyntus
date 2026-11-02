@@ -78,12 +78,12 @@ En cas de blocage :
 ## Étape 3 — intégration dans My-Kyntus (développement, après le diagnostic)
 
 1. **Synchronisation** : un service en tâche de fond, toutes les 60 secondes.
-   - Il lit `/iclock/api/transactions/` depuis le dernier pointage reçu, avec un chevauchement de 10 minutes pour rattraper les pointages arrivés en retard.
+   - Il lit `/iclock/api/transactions/` sur les 48 dernières heures, puis relit chaque nuit les 7 derniers jours. Le diagnostic a montré des pointages arrivés jusqu'à 7 h après coup, quand une pointeuse était momentanément hors ligne.
    - Il enregistre chaque pointage une seule fois (identifiant ZKBio Time unique) et reprend seul après une coupure.
    - Il complète l'historique sur la période choisie lors de la mise en service.
 2. **Correspondance** : un champ « ID pointeuse » sur la fiche collaborateur, rempli automatiquement d'après le diagnostic et modifiable par RH. Les pointages sans correspondance sont listés pour RH.
 3. **Calcul**, comparé au planning publié dans My-Kyntus :
-   - arrivée, départ et pauses (états 0 entrée, 1 sortie, 2 début de pause, 3 fin de pause) ;
+   - arrivée, départ et pauses. Le diagnostic du 02/11 montre que **les pointeuses n'enregistrent pas l'état** : les 729 pointages sont en état 255, « non défini ». Ils sont donc déduits de l'ordre des pointages de la journée : le premier est l'arrivée, le dernier le départ, et les paires intermédiaires sont les pauses. Les doubles badgeages à moins de 2 minutes d'écart sont fusionnés ;
    - retard d'entrée avec une tolérance de 5 minutes : au-delà, tout le retard compte (même règle que HTEL) ;
    - dépassement de pause et pointage manquant.
 4. **Écrans** :
