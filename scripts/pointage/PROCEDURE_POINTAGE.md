@@ -22,9 +22,18 @@ Dans ZKBio Time, ouvrez **Système › Utilisateur** et créez le compte `kyntus
 - accordez-lui uniquement la **consultation** des modules Personnel, Appareil et Présence, sans droit de modification si le choix est proposé ;
 - n'utilisez pas le compte administrateur.
 
-Vérifiez ensuite la version : menu du profil (en haut à droite) › **À propos**. L'API REST existe à partir de BioTime 8.
+Vérifiez ensuite la version : menu du profil (en haut à droite) › **À propos**. L'API REST existe à partir de BioTime 8. Relevé : **ZKBio Time 9.0.3**, licence permanente, documentation de l'API disponible sur https://10.10.10.7/api/docs/.
 
 ## Étape 2 — diagnostic depuis le serveur (lecture seule)
+
+Le diagnostic se lance **sur le serveur 10.10.10.25**, pas sur le poste Windows. Seul le serveur joint My-Kyntus (`localhost:8500`). Copiez d'abord l'archive depuis Windows :
+
+```powershell
+cd C:\Users\omar.elmahi\Downloads
+scp pointage-scripts.tar.gz o@10.10.10.25:/tmp/
+```
+
+Puis, sur le serveur :
 
 ```bash
 cd /home/o/projets_mykyntus-
@@ -36,12 +45,15 @@ PY="docker run --rm -it --network host -e BIOTIME_USER -e KYNTUS_GATEWAY -e KYNT
 $PY 01_diagnostic_biotime.py --empreinte
 ```
 
-Comparez l'empreinte affichée avec celle du navigateur. Ouvrez https://10.10.10.7, puis cliquez sur le cadenas « Non sécurisé » › Certificat › Empreinte SHA-256. Si les deux correspondent :
+Comparez l'empreinte affichée avec celle du navigateur. Relevé du 02/11/2026 : `EE:FF:6C:DD:82:F3:B8:3A:4A:A0:29:10:0A:BD:03:5E:F7:FD:5F:22:08:95:F8:FE:77:B0:52:53:F1:56:2B:BF`.
+
+Ce certificat, `*.kyntus.fr` émis par Let's Encrypt, **a expiré le 29/04/2026**, d'où l'avertissement « Non sécurisé ». Le diagnostic fonctionne quand même grâce à l'empreinte. En revanche, l'empreinte change à chaque renouvellement du certificat. Pour la mise en service, il faudra soit renouveler le certificat et faire appeler ZKBio Time par son nom (par exemple `pointage.kyntus.fr`), soit mettre à jour l'empreinte dans la configuration. Ouvrez https://10.10.10.7, puis cliquez sur le cadenas « Non sécurisé » › Certificat › Empreinte SHA-256. Si les deux correspondent :
 
 ```bash
 export BIOTIME_USER=kyntus-api KYNTUS_GATEWAY=http://localhost:8500
 read -p "Email Admin My-Kyntus : " KYNTUS_EMAIL; export KYNTUS_EMAIL
-$PY 01_diagnostic_biotime.py --empreinte-attendue 'AB:CD:…'   # le script demande les mots de passe
+$PY 01_diagnostic_biotime.py --empreinte-attendue 'EE:FF:6C:DD:82:F3:B8:3A:4A:A0:29:10:0A:BD:03:5E:F7:FD:5F:22:08:95:F8:FE:77:B0:52:53:F1:56:2B:BF'
+# le script demande le mot de passe du compte kyntus-api, puis celui du compte My-Kyntus
 ```
 
 Le script affiche :
