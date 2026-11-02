@@ -197,6 +197,12 @@ services:
       NotificationEmail__Enabled: ${KYNTUS_NOTIFICATION_EMAIL_ENABLED:-true}
       NotificationEmail__MaxPerMinute: ${KYNTUS_NOTIFICATION_EMAIL_MAX_PER_MINUTE:-25}
       NotificationEmail__PublicAppUrl: ${KYNTUS_PUBLIC_APP_URL:-}
+      # Pointages ZKBio Time (lecture seule) — inactif tant que KYNTUS_BIOTIME_ENABLED=true n'est pas posé
+      Pointage__Enabled: ${KYNTUS_BIOTIME_ENABLED:-false}
+      Pointage__BaseUrl: ${KYNTUS_BIOTIME_URL:-}
+      Pointage__Username: ${KYNTUS_BIOTIME_USER:-}
+      Pointage__Password: ${KYNTUS_BIOTIME_PASSWORD:-}
+      Pointage__CertificateSha256: ${KYNTUS_BIOTIME_CERT_SHA256:-}
       KYNTUS_PLANNING_DEMO_SEED: ${KYNTUS_PLANNING_DEMO_SEED:-false}
       KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
       <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]

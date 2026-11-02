@@ -15,6 +15,9 @@ using Planning.Infrastructure.Services.EmployeeImport;
 using Shared.Kernel.Push;
 using Planning.Application.NotificationEmail;
 using Planning.Infrastructure.Services.NotificationEmail;
+using Planning.Application.Pointage;
+using Planning.Infrastructure.Services.Pointage;
+using Microsoft.Extensions.Options;
 using PlanningServiceImpl = Planning.Infrastructure.Services.PlanningService;
 
 namespace Planning.Infrastructure;
@@ -65,6 +68,17 @@ public static class DependencyInjection
         services.AddScoped<INotificationEmailSettingsService, NotificationEmailSettingsService>();
         if (!isTesting)
             services.AddHostedService<NotificationEmailHostedService>();
+
+        // Pointages ZKBio Time (lecture seule) : désactivé tant que Pointage__Enabled n'est pas à true.
+        services.Configure<PointageOptions>(configuration.GetSection(PointageOptions.SectionName));
+        services.AddHttpClient(BioTimeClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(60))
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+                BioTimeClient.CreateHandler(sp.GetRequiredService<IOptions<PointageOptions>>().Value));
+        services.AddSingleton<BioTimeClient>();
+        services.AddScoped<IPointageSyncService, PointageSyncService>();
+        services.AddScoped<IPointageQueryService, PointageQueryService>();
+        if (!isTesting)
+            services.AddHostedService<PointageSyncHostedService>();
 
         services.AddScoped<IFloorService, FloorService>();
         services.AddScoped<IRoleService, RoleService>();

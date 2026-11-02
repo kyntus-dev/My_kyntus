@@ -57,6 +57,9 @@ public class AppDbContext : DbContext
     public DbSet<EmailOutboxMessage> EmailOutboxMessages { get; set; } = null!;
     public DbSet<NotificationEmailPreference> NotificationEmailPreferences { get; set; } = null!;
     public DbSet<NotificationEmailCursor> NotificationEmailCursors { get; set; } = null!;
+    public DbSet<PointageBrut> PointagesBruts { get; set; } = null!;
+    public DbSet<PointageCorrespondance> PointageCorrespondances { get; set; } = null!;
+    public DbSet<PointageSyncState> PointageSyncStates { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -584,6 +587,43 @@ public class AppDbContext : DbContext
         });
 
         // ── E-mails : file d'envoi, préférences, curseur des notifications ──
+        // Pointages ZKBio Time (lecture seule) : heures locales des pointeuses, sans fuseau.
+        modelBuilder.Entity<PointageBrut>(e =>
+        {
+            e.ToTable("PointagesBruts");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.EmpCode).HasMaxLength(32).IsRequired();
+            e.Property(x => x.PunchTime).HasColumnType("timestamp without time zone");
+            e.Property(x => x.UploadTime).HasColumnType("timestamp without time zone");
+            e.Property(x => x.TerminalSn).HasMaxLength(64);
+            e.Property(x => x.TerminalAlias).HasMaxLength(128);
+            e.Property(x => x.NomBioTime).HasMaxLength(200);
+            e.HasIndex(x => new { x.EmpCode, x.PunchTime });
+            e.HasIndex(x => x.PunchTime);
+        });
+
+        modelBuilder.Entity<PointageCorrespondance>(e =>
+        {
+            e.ToTable("PointageCorrespondances");
+            e.HasKey(x => x.EmpCode);
+            e.Property(x => x.EmpCode).HasMaxLength(32);
+            e.Property(x => x.Statut).HasMaxLength(16).IsRequired();
+            e.Property(x => x.NomBioTime).HasMaxLength(200);
+            e.Property(x => x.DepartementBioTime).HasMaxLength(200);
+            e.HasIndex(x => x.UserId);
+            e.HasIndex(x => x.Statut);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<PointageSyncState>(e =>
+        {
+            e.ToTable("PointageSyncStates");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasMaxLength(32);
+            e.Property(x => x.DerniereErreur).HasMaxLength(1000);
+        });
+
         modelBuilder.Entity<EmailOutboxMessage>(e =>
         {
             e.ToTable("EmailOutboxMessages");

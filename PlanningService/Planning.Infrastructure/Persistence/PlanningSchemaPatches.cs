@@ -798,6 +798,57 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>
+    /// Pointages ZKBio Time (lecture seule) : pointages bruts sans doublon, correspondances
+    /// ID pointeuse → collaborateur, état de la synchronisation.
+    /// </summary>
+    public static async Task EnsurePointageTablesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PointagesBruts" (
+                "Id" bigint PRIMARY KEY,
+                "EmpCode" character varying(32) NOT NULL,
+                "PunchTime" timestamp without time zone NOT NULL,
+                "UploadTime" timestamp without time zone NULL,
+                "TerminalSn" character varying(64) NULL,
+                "TerminalAlias" character varying(128) NULL,
+                "VerifyType" integer NULL,
+                "NomBioTime" character varying(200) NULL,
+                "ReceivedAt" timestamp with time zone NOT NULL DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS "IX_PointagesBruts_EmpCode_PunchTime"
+              ON "PointagesBruts" ("EmpCode", "PunchTime");
+            CREATE INDEX IF NOT EXISTS "IX_PointagesBruts_PunchTime"
+              ON "PointagesBruts" ("PunchTime");
+
+            CREATE TABLE IF NOT EXISTS "PointageCorrespondances" (
+                "EmpCode" character varying(32) PRIMARY KEY,
+                "UserId" integer NULL REFERENCES "Users" ("Id") ON DELETE SET NULL,
+                "Statut" character varying(16) NOT NULL DEFAULT 'AValider',
+                "NomBioTime" character varying(200) NULL,
+                "DepartementBioTime" character varying(200) NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" integer NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_PointageCorrespondances_UserId"
+              ON "PointageCorrespondances" ("UserId");
+            CREATE INDEX IF NOT EXISTS "IX_PointageCorrespondances_Statut"
+              ON "PointageCorrespondances" ("Statut");
+
+            CREATE TABLE IF NOT EXISTS "PointageSyncStates" (
+                "Id" character varying(32) PRIMARY KEY,
+                "DerniereSynchro" timestamp with time zone NULL,
+                "DerniereRelectureComplete" timestamp with time zone NULL,
+                "DerniereSynchroCollaborateurs" timestamp with time zone NULL,
+                "DerniersPointagesRecus" integer NOT NULL DEFAULT 0,
+                "DerniereErreur" character varying(1000) NULL,
+                "DerniereErreurAt" timestamp with time zone NULL
+            );
+            """,
+            ct);
+    }
+
     /// <summary>Index lecture fréquents (grille, demandes exceptionnelles, users actifs).</summary>
     public static async Task EnsurePerfIndexesAsync(AppDbContext db, CancellationToken ct = default)
     {
