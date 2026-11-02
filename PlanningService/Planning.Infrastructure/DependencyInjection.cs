@@ -71,7 +71,7 @@ public static class DependencyInjection
 
         // Pointages ZKBio Time (lecture seule) : désactivé tant que Pointage__Enabled n'est pas à true.
         services.Configure<PointageOptions>(configuration.GetSection(PointageOptions.SectionName));
-        services.AddHttpClient(BioTimeClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(60))
+        services.AddHttpClient(BioTimeClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(120))
             .ConfigurePrimaryHttpMessageHandler(sp =>
                 BioTimeClient.CreateHandler(sp.GetRequiredService<IOptions<PointageOptions>>().Value));
         services.AddSingleton<BioTimeClient>();

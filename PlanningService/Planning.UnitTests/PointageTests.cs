@@ -148,6 +148,18 @@ public class PointageTests
     }
 
     [Fact]
+    public void Reprise_d_historique_lue_jour_par_jour()
+    {
+        var debut = new DateTime(2026, 9, 1, 6, 0, 0);
+        var tranches = PointageSyncService.Tranches(debut, debut.AddHours(50), TimeSpan.FromHours(24)).ToList();
+
+        Assert.Equal(3, tranches.Count);
+        Assert.Equal(debut, tranches[0].Debut);
+        Assert.Equal(tranches[0].Fin, tranches[1].Debut);
+        Assert.Equal(debut.AddHours(50), tranches[2].Fin);
+    }
+
+    [Fact]
     public void Pointage_illisible_ignore()
     {
         using var doc = JsonDocument.Parse("""{"id": "x", "emp_code": "", "punch_time": "hier"}""");

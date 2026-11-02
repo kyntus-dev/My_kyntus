@@ -90,6 +90,8 @@ export interface PointageCorrespondanceDto {
 export interface PointageEtatDto {
   active: boolean;
   baseUrl: string | null;
+  /** Début du dernier essai (réussi ou non). */
+  dernierEssai: string | null;
   derniereSynchro: string | null;
   derniereRelectureComplete: string | null;
   derniersPointagesRecus: number;

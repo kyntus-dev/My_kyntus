@@ -53,6 +53,16 @@ export class PointageCorrespondancesComponent implements OnInit {
   readonly choix = signal<Record<string, string>>({});
 
   readonly isAdmin = computed(() => (this.auth.getRole() || '').toLowerCase() === 'admin');
+  /** Essai démarré, pas encore terminé (ni réussi ni en erreur depuis). */
+  readonly enCours = computed(() => {
+    const e = this.etat();
+    if (!e?.dernierEssai) return false;
+    const essai = new Date(e.dernierEssai).getTime();
+    const fini = Math.max(
+      e.derniereSynchro ? new Date(e.derniereSynchro).getTime() : 0,
+      e.derniereErreurAt ? new Date(e.derniereErreurAt).getTime() : 0);
+    return fini < essai;
+  });
   readonly compte = computed(() => {
     const c: Record<string, number> = { AValider: 0, Auto: 0, Valide: 0, Ignore: 0 };
     for (const r of this.rows()) c[r.statut] = (c[r.statut] ?? 0) + 1;

@@ -845,6 +845,7 @@ public static class PlanningSchemaPatches
                 "DerniereErreur" character varying(1000) NULL,
                 "DerniereErreurAt" timestamp with time zone NULL
             );
+            ALTER TABLE "PointageSyncStates" ADD COLUMN IF NOT EXISTS "DernierEssai" timestamp with time zone NULL;
             """,
             ct);
     }

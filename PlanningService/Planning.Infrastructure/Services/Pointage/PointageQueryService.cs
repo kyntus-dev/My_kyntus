@@ -264,6 +264,7 @@ public sealed class PointageQueryService(
         return new PointageEtatDto(
             O.Enabled,
             O.BaseUrl,
+            state?.DernierEssai,
             state?.DerniereSynchro,
             state?.DerniereRelectureComplete,
             state?.DerniersPointagesRecus ?? 0,

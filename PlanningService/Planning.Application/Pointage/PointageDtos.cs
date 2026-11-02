@@ -72,6 +72,7 @@ public sealed record PointageCorrespondanceUpdateRequest(int? UserId, bool Ignor
 public sealed record PointageEtatDto(
     bool Active,
     string? BaseUrl,
+    DateTime? DernierEssai,
     DateTime? DerniereSynchro,
     DateTime? DerniereRelectureComplete,
     int DerniersPointagesRecus,

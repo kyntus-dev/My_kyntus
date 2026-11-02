@@ -49,10 +49,15 @@ public sealed class PointageSyncHostedService(
             using var scope = scopeFactory.CreateScope();
             await scope.ServiceProvider.GetRequiredService<IPointageSyncService>().SynchroniserAsync(ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "Synchronisation des pointages ZKBio Time en échec — nouvel essai au prochain tour.");
-            await NoterErreurAsync(ex.Message, ct);
+            // Une expiration de délai HTTP lève TaskCanceledException : elle ne doit ni arrêter la boucle
+            // ni le service Planning. Toute erreur est notée et visible dans l'écran RH.
+            var message = ex is TaskCanceledException or OperationCanceledException
+                ? "ZKBio Time ne répond pas dans le délai (réseau, ou serveur ZKBio Time trop lent)."
+                : ex.Message;
+            logger.LogWarning(ex, "Synchronisation des pointages ZKBio Time en échec : {Message}", message);
+            await NoterErreurAsync(message, ct);
         }
     }
 
@@ -72,9 +77,9 @@ public sealed class PointageSyncHostedService(
             state.DerniereErreurAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            logger.LogDebug(ex, "État de synchronisation non enregistré.");
+            logger.LogWarning(ex, "État de synchronisation des pointages non enregistré.");
         }
     }
 }

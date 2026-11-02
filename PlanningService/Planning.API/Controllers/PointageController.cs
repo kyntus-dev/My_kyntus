@@ -87,6 +87,10 @@ public sealed class PointageController(
         {
             return Ok(new { ajoutes = await sync.SynchroniserAsync(ct) });
         }
+        catch (InvalidOperationException e)
+        {
+            return BadRequest(new { message = e.Message });
+        }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
             return StatusCode(StatusCodes.Status502BadGateway, new { message = $"ZKBio Time injoignable : {e.Message}" });

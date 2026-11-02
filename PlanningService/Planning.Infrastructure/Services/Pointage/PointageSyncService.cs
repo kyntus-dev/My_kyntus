@@ -27,8 +27,16 @@ public sealed class PointageSyncService(
     public async Task<int> SynchroniserAsync(CancellationToken ct = default)
     {
         var o = options.CurrentValue;
-        if (!o.Enabled || string.IsNullOrWhiteSpace(o.BaseUrl) || string.IsNullOrWhiteSpace(o.Username))
+        if (!o.Enabled)
             return 0;
+        var manquants = new[]
+        {
+            string.IsNullOrWhiteSpace(o.BaseUrl) ? "KYNTUS_BIOTIME_URL" : null,
+            string.IsNullOrWhiteSpace(o.Username) ? "KYNTUS_BIOTIME_USER" : null,
+            string.IsNullOrWhiteSpace(o.Password) ? "KYNTUS_BIOTIME_PASSWORD" : null,
+        }.Where(x => x is not null).ToList();
+        if (manquants.Count > 0)
+            throw new InvalidOperationException($"Configuration incomplète dans .env : {string.Join(", ", manquants)}.");
 
         var state = await db.PointageSyncStates.FirstOrDefaultAsync(s => s.Id == PointageSyncState.SingletonId, ct);
         if (state is null)
@@ -37,7 +45,11 @@ public sealed class PointageSyncService(
             db.PointageSyncStates.Add(state);
         }
 
+        // Essai visible tout de suite dans l'écran RH, même si la lecture dure plusieurs minutes.
         var nowUtc = DateTime.UtcNow;
+        state.DernierEssai = nowUtc;
+        await db.SaveChangesAsync(ct);
+
         // Heures ZKBio Time = heure locale de la pointeuse : marge de ±3 h autour de l'UTC.
         var fin = DateTime.SpecifyKind(nowUtc.AddHours(3), DateTimeKind.Unspecified);
         var heures = state.DerniereSynchro is null
@@ -45,8 +57,14 @@ public sealed class PointageSyncService(
             : NeedsNightlyReread(state, nowUtc) ? o.RelectureJours * 24 : o.FenetreHeures;
         var debut = DateTime.SpecifyKind(nowUtc.AddHours(-heures - 3), DateTimeKind.Unspecified);
 
-        var transactions = await client.GetTransactionsAsync(debut, fin, ct);
-        var ajoutes = await EnregistrerAsync(transactions, ct);
+        // Lecture jour par jour, enregistrée au fur et à mesure : une longue reprise d'historique
+        // interrompue n'est pas perdue (les jours déjà lus sont dédoublonnés au passage suivant).
+        var ajoutes = 0;
+        foreach (var (d, f) in Tranches(debut, fin, TimeSpan.FromHours(24)))
+        {
+            var transactions = await client.GetTransactionsAsync(d, f, ct);
+            ajoutes += await EnregistrerAsync(transactions, ct);
+        }
 
         if (state.DerniereSynchroCollaborateurs is null || nowUtc - state.DerniereSynchroCollaborateurs > TimeSpan.FromHours(1))
         {
@@ -66,6 +84,13 @@ public sealed class PointageSyncService(
         if (ajoutes > 0)
             logger.LogInformation("Pointage : {Count} nouveau(x) pointage(s) ZKBio Time.", ajoutes);
         return ajoutes;
+    }
+
+    /// <summary>Découpe [debut, fin] en tranches consécutives (la dernière peut être plus courte).</summary>
+    public static IEnumerable<(DateTime Debut, DateTime Fin)> Tranches(DateTime debut, DateTime fin, TimeSpan taille)
+    {
+        for (var d = debut; d < fin; d += taille)
+            yield return (d, d + taille < fin ? d + taille : fin);
     }
 
     /// <summary>Relecture longue une fois par jour, après 1 h du matin (UTC).</summary>

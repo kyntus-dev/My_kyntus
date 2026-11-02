@@ -14,8 +14,15 @@
     <div class="pt-banner" [class.pt-banner--warn]="!e.active || e.derniereErreur">
       @if (!e.active) {
         Synchronisation inactive : renseignez KYNTUS_BIOTIME_* dans la configuration du serveur.
+      } @else if (enCours()) {
+        Synchronisation en cours depuis {{ formatDateTime(e.dernierEssai) }}
+        @if (!e.derniereSynchro) { (première reprise de l’historique : quelques minutes) }
+        — {{ e.pointagesEnBase }} pointage(s) déjà en base. Actualisez dans un instant.
+      } @else if (!e.dernierEssai) {
+        Synchronisation active ({{ e.baseUrl }}) mais aucun essai pour l’instant : le premier démarre environ
+        une minute après le redémarrage du service Planning.
       } @else {
-        Synchronisation active ({{ e.baseUrl }}) — dernière : {{ formatDateTime(e.derniereSynchro) }},
+        Synchronisation active ({{ e.baseUrl }}) — dernière réussie : {{ formatDateTime(e.derniereSynchro) }},
         {{ e.pointagesEnBase }} pointage(s) en base.
       }
       @if (e.derniereErreur) {

@@ -53,6 +53,8 @@ public class PointageSyncState
     public const string SingletonId = "biotime";
 
     public string Id { get; set; } = SingletonId;
+    /// <summary>Début du dernier essai de synchronisation (réussi ou non).</summary>
+    public DateTime? DernierEssai { get; set; }
     public DateTime? DerniereSynchro { get; set; }
     public DateTime? DerniereRelectureComplete { get; set; }
     public DateTime? DerniereSynchroCollaborateurs { get; set; }
