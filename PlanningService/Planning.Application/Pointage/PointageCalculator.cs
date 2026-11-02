@@ -23,8 +23,25 @@ public static class PointageJourStatuts
     public const string AVenir = "AVenir";
 }
 
-/// <summary>Planning publié d'une journée pour un collaborateur.</summary>
-public sealed record PlanningJour(TimeOnly? Debut, int PauseMinutes, bool Conge, bool Ferie, string? Libelle);
+/// <summary>
+/// Planning d'une journée pour un collaborateur : planning publié, ou à défaut son régime horaire.
+/// <paramref name="ProductionPrevueMinutes"/> : production attendue, pauses exclues (null si inconnue).
+/// </summary>
+public sealed record PlanningJour(
+    TimeOnly? Debut,
+    int PauseMinutes,
+    bool Conge,
+    bool Ferie,
+    string? Libelle,
+    int? ProductionPrevueMinutes = null,
+    string? Source = null);
+
+/// <summary>Origine du planning d'une journée.</summary>
+public static class PlanningSources
+{
+    public const string Publie = "Planning";
+    public const string Regime = "Regime";
+}
 
 public sealed record PointageJourResult(
     DateOnly Jour,
@@ -36,9 +53,15 @@ public sealed record PointageJourResult(
     IReadOnlyList<TimeOnly> Pointages,
     int PauseMinutes,
     int RetardEntreeMinutes,
-    int RetardPauseMinutes)
+    int RetardPauseMinutes,
+    int? ProductionMinutes = null,
+    int? ProductionPrevueMinutes = null)
 {
     public int RetardTotalMinutes => RetardEntreeMinutes + RetardPauseMinutes;
+
+    /// <summary>Production réalisée moins production prévue (null si l'une manque).</summary>
+    public int? EcartProductionMinutes =>
+        ProductionMinutes is int p && ProductionPrevueMinutes is int prevue ? p - prevue : null;
 }
 
 public sealed record PointageTotaux(
@@ -47,7 +70,10 @@ public sealed record PointageTotaux(
     int JoursAHeure,
     int JoursPointes,
     IReadOnlyList<DateOnly> JoursPointageManquant,
-    IReadOnlyList<DateOnly> JoursSansPointage);
+    IReadOnlyList<DateOnly> JoursSansPointage,
+    int ProductionMinutes = 0,
+    int ProductionPrevueMinutes = 0,
+    int JoursProductionCalculee = 0);
 
 /// <summary>
 /// Calcul d'une journée à partir des pointages bruts, comparés au planning publié.
@@ -58,7 +84,8 @@ public sealed record PointageTotaux(
 /// - arrivée dans les <c>tolérance</c> minutes qui suivent l'heure de planning : pas de retard ;
 ///   au-delà, tout le retard compte (9 h 06 pour 9 h = 6 minutes) ;
 /// - retard pause = cumul des pauses de la journée au-delà de la pause prévue au planning ;
-/// - nombre impair de pointages sur une journée passée = pointage manquant, journée non calculée.
+/// - nombre impair de pointages sur une journée passée = pointage manquant, journée non calculée ;
+/// - production = départ − arrivée − pauses (08:00 → 17:00 avec 1 h de pause = 8 h).
 /// </summary>
 public static class PointageCalculator
 {
@@ -90,8 +117,10 @@ public static class PointageCalculator
         TimeOnly? arrivee = heures.Count > 0 ? heures[0] : null;
         TimeOnly? depart = heures.Count >= 2 ? heures[^1] : null;
 
-        PointageJourResult Result(string statut, int pause = 0, int retardEntree = 0, int retardPause = 0) =>
-            new(jour, statut, debut, pauseAutorisee, arrivee, depart, heures, pause, retardEntree, retardPause);
+        var prevue = planning is { Conge: false, Ferie: false } ? planning.ProductionPrevueMinutes : null;
+
+        PointageJourResult Result(string statut, int pause = 0, int retardEntree = 0, int retardPause = 0, int? production = null) =>
+            new(jour, statut, debut, pauseAutorisee, arrivee, depart, heures, pause, retardEntree, retardPause, production, prevue);
 
         if (planning?.Ferie == true)
             return Result(PointageJourStatuts.Ferie);
@@ -112,9 +141,10 @@ public static class PointageCalculator
         for (var i = 1; i + 1 < pointages.Count - 1; i += 2)
             pause += (pointages[i + 1] - pointages[i]).TotalMinutes;
         var pauseMinutes = (int)Math.Floor(pause);
+        var production = (int)Math.Floor((pointages[^1] - pointages[0]).TotalMinutes - pause);
 
         if (debut is null)
-            return Result(PointageJourStatuts.SansPlanning, pauseMinutes);
+            return Result(PointageJourStatuts.SansPlanning, pauseMinutes, production: production);
 
         var retardEntree = (int)Math.Floor((pointages[0] - jour.ToDateTime(debut.Value)).TotalMinutes);
         if (retardEntree <= toleranceMinutes)
@@ -125,7 +155,8 @@ public static class PointageCalculator
             retardEntree + retardPause > 0 ? PointageJourStatuts.Retard : PointageJourStatuts.AHeure,
             pauseMinutes,
             retardEntree,
-            retardPause);
+            retardPause,
+            production);
     }
 
     public static PointageTotaux Totaliser(IEnumerable<PointageJourResult> jours)
@@ -137,7 +168,10 @@ public static class PointageCalculator
             list.Count(j => j.Statut == PointageJourStatuts.AHeure),
             list.Count(j => j.Statut is PointageJourStatuts.Retard or PointageJourStatuts.AHeure),
             list.Where(j => j.Statut == PointageJourStatuts.PointageManquant).Select(j => j.Jour).ToList(),
-            list.Where(j => j.Statut == PointageJourStatuts.SansPointage).Select(j => j.Jour).ToList());
+            list.Where(j => j.Statut == PointageJourStatuts.SansPointage).Select(j => j.Jour).ToList(),
+            list.Sum(j => j.ProductionMinutes ?? 0),
+            list.Where(j => j.ProductionMinutes is not null).Sum(j => j.ProductionPrevueMinutes ?? 0),
+            list.Count(j => j.ProductionMinutes is not null));
     }
 }
 

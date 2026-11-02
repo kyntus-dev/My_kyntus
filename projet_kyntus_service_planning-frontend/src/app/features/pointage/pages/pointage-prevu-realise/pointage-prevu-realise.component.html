@@ -1,0 +1,113 @@
+<div class="ku-page pr">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Pointage · {{ data()?.perimetre ?? 'Équipe' }}</p>
+      <h1 class="ku-hero-title">Planning prévu / réalisé</h1>
+      <p class="ku-hero-sub">Arrivée et production prévues (planning publié, ou régime horaire) face aux pointages réels, jour par jour.</p>
+    </div>
+    <div class="ku-hero-actions">
+      <button type="button" class="ku-btn" (click)="changerSemaine(-1)" aria-label="Semaine précédente">‹</button>
+      <button type="button" class="ku-btn" (click)="changerSemaine(0)" [disabled]="decalage() === 0">Cette semaine</button>
+      <button type="button" class="ku-btn" (click)="changerSemaine(1)" aria-label="Semaine suivante">›</button>
+      <button type="button" class="ku-btn ku-btn--primary" (click)="exporter()" [disabled]="!lignes().length">Exporter (Excel)</button>
+    </div>
+  </header>
+
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Semaine</span>
+      <span class="ku-kpi-value pr-kpi-small">{{ jourLabel(periode().du) }} → {{ jourLabel(periode().au) }}</span>
+      <span class="ku-kpi-sub">{{ synthese().collaborateurs }} collaborateur(s)</span></div>
+    <div class="ku-kpi" [class.ku-kpi--ok]="synthese().realisee >= synthese().prevue" [class.ku-kpi--warn]="synthese().realisee < synthese().prevue">
+      <span class="ku-kpi-label">Production réalisée</span>
+      <span class="ku-kpi-value">{{ formatDuree(synthese().realisee) }}</span>
+      <span class="ku-kpi-sub">prévue {{ formatDuree(synthese().prevue) }} · écart {{ formatEcart(synthese().realisee - synthese().prevue) }}</span></div>
+    <div class="ku-kpi ku-kpi--danger"><span class="ku-kpi-label">Retards cumulés</span>
+      <span class="ku-kpi-value">{{ formatDuree(synthese().retards) }}</span>
+      <span class="ku-kpi-sub">{{ synthese().anomalies }} journée(s) à signaler</span></div>
+    <div class="ku-kpi ku-kpi--warn"><span class="ku-kpi-label">Sans planning</span>
+      <span class="ku-kpi-value">{{ synthese().sansPlanning }}</span>
+      <span class="ku-kpi-sub">ni planning publié ni régime cette semaine</span></div>
+  </div>
+
+  <section class="ku-card">
+    <div class="ku-card-head">
+      <div class="ku-toolbar">
+        <input class="ku-input pr-search" type="search" placeholder="Rechercher un collaborateur…" [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+        <select class="ku-input pr-select" [ngModel]="cellule()" (ngModelChange)="cellule.set($event)">
+          <option value="">Toutes les cellules</option>
+          @for (c of cellules(); track c) { <option [value]="c">{{ c }}</option> }
+        </select>
+        <label class="ku-check"><input type="checkbox" [ngModel]="seulementAnomalies()" (ngModelChange)="seulementAnomalies.set($event)" /> Seulement les anomalies</label>
+      </div>
+      <div class="pr-legend">
+        <span class="ku-chip ku-chip--ok">À l’heure</span>
+        <span class="ku-chip ku-chip--danger">Retard</span>
+        <span class="ku-chip ku-chip--warn">Pointage manquant</span>
+        <span class="ku-chip">Sans pointage</span>
+      </div>
+    </div>
+
+    @if (loading()) {
+      <div class="ku-skeleton"></div>
+    } @else if (error()) {
+      <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
+    } @else if (!lignes().length) {
+      <div class="ku-empty"><strong>Aucun collaborateur</strong>Modifiez les filtres ou la semaine.</div>
+    } @else {
+      <div class="ku-table-wrap pr-wrap">
+        <table class="ku-table pr-table">
+          <thead>
+            <tr>
+              <th class="pr-sticky">Collaborateur</th>
+              @for (d of jours(); track d) { <th>{{ jourLabel(d) }}</th> }
+              <th class="is-num">Production</th>
+              <th class="is-num">Écart</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of lignes(); track c.userId) {
+              <tr>
+                <td class="pr-sticky">
+                  <a [routerLink]="['/pointage/collaborateurs', c.userId]">{{ c.collaborateur }}</a>
+                  <small class="ku-muted pr-sub">{{ c.cellule ?? '—' }}@if (c.regime) { · {{ c.regime }} }</small>
+                </td>
+                @for (d of jours(); track d) {
+                  @let j = jourDe(c, d);
+                  <td class="pr-cell" [attr.title]="j ? infobulle(j) : null">
+                    @if (j && (j.planning || j.pointages.length || j.statut === 'Conge' || j.statut === 'Ferie')) {
+                      <div class="pr-day" [ngClass]="statutClass(j.statut)" [class.is-anomalie]="estAnomalie(j)">
+                        <span class="pr-prevu">
+                          @if (j.planning) { {{ j.planning }}@if (j.productionPrevueMinutes) { · {{ formatHeuresMinutes(j.productionPrevueMinutes) }} } }
+                          @else { {{ statutLabels[j.statut] }} }
+                        </span>
+                        <span class="pr-reel">
+                          @if (j.arrivee) {
+                            {{ j.arrivee.slice(0, 5) }}@if (j.productionMinutes != null) { · <b>{{ formatHeuresMinutes(j.productionMinutes) }}</b> }
+                          } @else if (j.statut === 'SansPointage') { absent }
+                          @else if (j.statut === 'AVenir') { à venir }
+                          @else { — }
+                        </span>
+                        @if (j.retardTotalMinutes) { <span class="pr-flag">+{{ formatDuree(j.retardTotalMinutes) }}</span> }
+                        @if (j.statut === 'PointageManquant') { <span class="pr-flag">manquant</span> }
+                      </div>
+                    } @else {
+                      <span class="ku-muted pr-off">·</span>
+                    }
+                  </td>
+                }
+                @let t = totaux(c);
+                <td class="is-num"><b>{{ formatDuree(t.realisee) }}</b><small class="ku-muted pr-sub">/ {{ formatDuree(t.prevue) }}</small></td>
+                <td class="is-num" [class.ku-neg]="t.ecart < 0" [class.ku-pos]="t.ecart > 0">{{ t.jours ? formatEcart(t.ecart) : '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="ku-card-sub pr-note">
+        Ligne du haut : prévu (heure d’arrivée · production). Ligne du bas : réalisé (premier pointage · production = départ − arrivée − pauses).
+        Le samedi et le dimanche ne s’affichent que si quelqu’un y est planifié ou a pointé.
+        La production prévue ne compte que les journées dont la production est calculée. Survolez une case pour voir tous les pointages.
+      </p>
+    }
+  </section>
+</div>

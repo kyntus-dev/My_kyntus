@@ -1,122 +1,160 @@
-<div class="ky-page-shell pt">
-  <app-kyntus-page-header
-    [title]="titre()"
-    [subtitle]="(data()?.collaborateur ?? '') + (data()?.cellule ? ' — ' + data()!.cellule : '')">
-    <div actions>
+<div class="ku-page pt">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Pointage{{ data()?.regime ? ' · Régime « ' + data()!.regime + ' »' : '' }}</p>
+      <h1 class="ku-hero-title">{{ titre() }}</h1>
+      <p class="ku-hero-sub">
+        {{ data()?.collaborateur ?? '' }}{{ data()?.cellule ? ' — ' + data()!.cellule : '' }}
+        @if (data(); as d) { · badge(s) {{ d.idsPointeuse.length ? d.idsPointeuse.join(', ') : 'non relié' }} }
+      </p>
+    </div>
+    <div class="ku-hero-actions">
       @if (userId()) {
-        <a routerLink="/pointage/equipe" class="ky-btn-secondary">Retour à l’équipe</a>
+        <a routerLink="/pointage/equipe" class="ku-btn">Retour à l’équipe</a>
+      } @else {
+        <a routerLink="/pointage/heure-de-sortie" class="ku-btn">Heure de sortie</a>
       }
-      <button type="button" class="ky-btn-secondary" (click)="load()" [disabled]="loading()">Actualiser</button>
+      <button type="button" class="ku-btn" (click)="exporter()" [disabled]="!data()">Exporter (Excel)</button>
+      <button type="button" class="ku-btn ku-btn--primary" (click)="load()" [disabled]="loading()">Actualiser</button>
     </div>
-  </app-kyntus-page-header>
+  </header>
 
-  <div class="ky-card pt-periode">
-    <div class="pt-presets" role="group" aria-label="Période">
-      <button type="button" class="pt-chip" [class.is-active]="preset() === 'mois'" (click)="choisirPreset('mois')">Mois en cours</button>
-      <button type="button" class="pt-chip" [class.is-active]="preset() === 'mois-precedent'" (click)="choisirPreset('mois-precedent')">Mois précédent</button>
-      <button type="button" class="pt-chip" [class.is-active]="preset() === 'semaine'" (click)="choisirPreset('semaine')">Cette semaine</button>
+  <section class="ku-card pt-periode">
+    <div class="ku-seg" role="group" aria-label="Période">
+      <button type="button" [class.is-active]="preset() === 'semaine'" (click)="choisirPreset('semaine')">Cette semaine</button>
+      <button type="button" [class.is-active]="preset() === 'mois'" (click)="choisirPreset('mois')">Mois en cours</button>
+      <button type="button" [class.is-active]="preset() === 'mois-precedent'" (click)="choisirPreset('mois-precedent')">Mois précédent</button>
     </div>
-    <div class="pt-dates">
-      <label>Du <input class="ky-input" type="date" [ngModel]="du()" (ngModelChange)="du.set($event)" /></label>
-      <label>au <input class="ky-input" type="date" [ngModel]="au()" (ngModelChange)="au.set($event)" /></label>
-      <button type="button" class="ky-btn-primary" (click)="appliquerPeriode()" [disabled]="loading()">Afficher</button>
+    <div class="ku-toolbar">
+      <label class="ku-field"><span>Du</span><input class="ku-input" type="date" [ngModel]="du()" (ngModelChange)="du.set($event)" /></label>
+      <label class="ku-field"><span>Au</span><input class="ku-input" type="date" [ngModel]="au()" (ngModelChange)="au.set($event)" /></label>
+      <button type="button" class="ku-btn ku-btn--primary" (click)="appliquerPeriode()" [disabled]="loading()">Afficher</button>
     </div>
-  </div>
+  </section>
 
-  @if (loading()) {
-    <div class="ky-card pt-state">Chargement des pointages…</div>
+  @if (loading() && !data()) {
+    <div class="ku-kpis"><div class="ku-skeleton"></div><div class="ku-skeleton"></div><div class="ku-skeleton"></div></div>
   } @else if (error()) {
-    <div class="ky-card pt-state pt-state--error">{{ error() }}</div>
+    <div class="ku-alert ku-alert--danger"><div><strong>Pointages indisponibles</strong><p>{{ error() }}</p></div></div>
   } @else if (data(); as d) {
     @if (!d.idsPointeuse.length) {
-      <div class="pt-banner pt-banner--warn">
-        Aucun badge de pointeuse n’est encore relié à ce compte. Le service RH doit faire la correspondance
-        (Pointage › Correspondance pointeuses).
-      </div>
+      <div class="ku-alert ku-alert--warn"><div>
+        <strong>Aucun badge relié</strong>
+        <p>Le service RH doit relier le badge de la pointeuse à ce compte (Pointage › Correspondance pointeuses).</p>
+      </div></div>
     } @else if (!d.synchronisationActive) {
-      <div class="pt-banner">La synchronisation avec les pointeuses n’est pas encore activée : les données peuvent être incomplètes.</div>
+      <div class="ku-alert"><div><p>La synchronisation avec les pointeuses n’est pas encore activée : les données peuvent être incomplètes.</p></div></div>
     }
 
-    <div class="pt-cards">
-      <section class="ky-card pt-card">
-        <span class="pt-card-label">Temps de retard</span>
-        <span class="pt-card-value pt-red">{{ formatDuree(d.totaux.retardTotalMinutes) }}</span>
-        <span class="pt-card-sub">sur {{ d.totaux.joursEnRetard }} journée(s) de {{ d.totaux.joursPointes }} calculée(s)</span>
+    <div class="ku-kpis">
+      <section class="ku-kpi" [class.ku-kpi--ok]="production().ecart >= 0" [class.ku-kpi--warn]="production().ecart < 0">
+        <span class="ku-kpi-label">Production</span>
+        <span class="ku-kpi-value">{{ formatDuree(production().realisee) }}</span>
+        <span class="ku-kpi-sub">
+          @if (production().prevue) { sur {{ formatDuree(production().prevue) }} prévues · écart {{ formatEcart(production().ecart) }} }
+          @else { {{ production().jours }} journée(s) calculée(s) }
+        </span>
+        @if (production().prevue) {
+          <div class="ku-bar" [class.ku-bar--ok]="production().ecart >= 0"><span [style.width.%]="production().pct"></span></div>
+        }
+        <span class="ku-kpi-foot">Départ − arrivée − pauses pointées</span>
+      </section>
+      <section class="ku-kpi ku-kpi--danger">
+        <span class="ku-kpi-label">Temps de retard</span>
+        <span class="ku-kpi-value">{{ formatDuree(d.totaux.retardTotalMinutes) }}</span>
+        <span class="ku-kpi-sub">sur {{ d.totaux.joursEnRetard }} journée(s) de {{ d.totaux.joursPointes }} calculée(s)</span>
         <div class="pt-bars" aria-hidden="true">
           @for (b of barres(); track b.jour) {
             <span class="pt-bar" [style.height.px]="barreHauteur(b.minutes)" [title]="jourLabel(b.jour) + ' : ' + formatDuree(b.minutes)"></span>
           }
         </div>
-        <span class="pt-card-foot">Tolérance : {{ d.toleranceMinutes }} minutes</span>
+        <span class="ku-kpi-foot">Tolérance : {{ d.toleranceMinutes }} minutes</span>
       </section>
-      <section class="ky-card pt-card">
-        <span class="pt-card-label">Manque de pointage</span>
-        <span class="pt-card-value">{{ d.totaux.joursPointageManquant.length }}</span>
-        <span class="pt-card-sub">journée(s) incomplète(s), donc non calculée(s)</span>
-        <span class="pt-card-foot">
-          @for (j of d.totaux.joursPointageManquant; track j; let last = $last) { {{ jourLabel(j) }}{{ last ? '' : ', ' }} }
+      <section class="ku-kpi ku-kpi--warn">
+        <span class="ku-kpi-label">Manque de pointage</span>
+        <span class="ku-kpi-value">{{ d.totaux.joursPointageManquant.length }}</span>
+        <span class="ku-kpi-sub">journée(s) incomplète(s), non calculée(s)</span>
+        <span class="ku-kpi-foot">
+          @for (j of d.totaux.joursPointageManquant; track j; let last = $last) { {{ jourLabel(j) }}{{ last ? '' : ', ' }} } @empty { Aucune }
         </span>
       </section>
-      <section class="ky-card pt-card">
-        <span class="pt-card-label">Journées à l’heure</span>
-        <span class="pt-card-value pt-green">{{ d.totaux.joursAHeure }}</span>
-        <span class="pt-card-sub">sur {{ d.totaux.joursPointes }} journée(s) calculée(s)</span>
-        <span class="pt-card-foot">Sans pointage : {{ d.totaux.joursSansPointage.length }} jour(s) planifié(s)</span>
+      <section class="ku-kpi ku-kpi--ok">
+        <span class="ku-kpi-label">Journées à l’heure</span>
+        <span class="ku-kpi-value">{{ d.totaux.joursAHeure }}</span>
+        <span class="ku-kpi-sub">sur {{ d.totaux.joursPointes }} journée(s) calculée(s)</span>
+        <span class="ku-kpi-foot">Sans pointage : {{ d.totaux.joursSansPointage.length }} jour(s) planifié(s)</span>
       </section>
       @if (solde(); as s) {
-        <section class="ky-card pt-card">
-          <span class="pt-card-label">Solde de congés {{ s.annee }}</span>
-          <span class="pt-card-value">{{ s.soldeRestant }} j</span>
-          <span class="pt-card-sub">{{ s.soldeUtilise }} jour(s) pris sur {{ s.soldeInitial }}</span>
-          <a class="pt-card-foot pt-link" routerLink="/mes-conges">Mes congés</a>
+        <section class="ku-kpi">
+          <span class="ku-kpi-label">Solde de congés {{ s.annee }}</span>
+          <span class="ku-kpi-value">{{ s.soldeRestant }} j</span>
+          <span class="ku-kpi-sub">{{ s.soldeUtilise }} jour(s) pris sur {{ s.soldeInitial }}</span>
+          <a class="ku-kpi-foot pt-link" routerLink="/mes-conges">Mes congés</a>
         </section>
       }
     </div>
 
     @for (m of messages(); track m.titre) {
-      <div class="pt-message" [class.pt-message--alerte]="m.niveau === 'alerte'">
-        <strong>{{ m.titre }}</strong>
-        <p>{{ m.texte }}</p>
+      <div class="ku-alert" [class.ku-alert--warn]="m.niveau === 'alerte'">
+        <div><strong>{{ m.titre }}</strong><p>{{ m.texte }}</p></div>
       </div>
     }
 
-    <section class="ky-card pt-table-card">
-      <button type="button" class="pt-detail-toggle" (click)="detailOuvert.set(!detailOuvert())" [attr.aria-expanded]="detailOuvert()">
-        {{ detailOuvert() ? '▾' : '▸' }} Le détail de mes pointages, jour par jour
-      </button>
+    <section class="ku-card">
+      <div class="ku-card-head">
+        <div>
+          <h2 class="ku-card-title">Jour par jour</h2>
+          <p class="ku-card-sub">Dernière synchronisation : {{ formatDateTime(d.derniereSynchro) }}</p>
+        </div>
+        <button type="button" class="ku-btn ku-btn--sm" (click)="detailOuvert.set(!detailOuvert())" [attr.aria-expanded]="detailOuvert()">
+          {{ detailOuvert() ? 'Masquer' : 'Afficher' }}
+        </button>
+      </div>
       @if (detailOuvert()) {
-        <div class="table-wrapper">
-          <table class="pt-table">
+        <div class="ku-table-wrap">
+          <table class="ku-table ku-table--stack">
             <thead>
               <tr>
                 <th>Jour</th>
                 <th>État</th>
-                <th>Planning</th>
-                <th>Arrivée</th>
-                <th>Départ</th>
-                <th>Pause (prise / prévue)</th>
-                <th>Retard entrée</th>
-                <th>Retard pause</th>
-                <th>Total</th>
+                <th>Prévu</th>
+                <th>Pointages</th>
+                <th class="is-num">Pause</th>
+                <th class="is-num">Retard</th>
+                <th class="is-num">Production</th>
+                <th class="is-num">Écart</th>
               </tr>
             </thead>
             <tbody>
               @for (j of jours(); track j.jour) {
-                <tr [class.pt-row-off]="j.statut === 'Repos'">
-                  <td class="pt-nowrap">{{ jourLabel(j.jour) }}</td>
-                  <td><span class="pt-statut" [ngClass]="statutClass(j.statut)">{{ statutLabels[j.statut] }}</span></td>
-                  <td>{{ j.planning ?? '—' }}</td>
-                  <td [attr.title]="j.pointages.join(' · ')">{{ j.arrivee ?? '—' }}</td>
-                  <td>{{ j.depart ?? '—' }}</td>
-                  <td>{{ pauseTexte(j) }}</td>
-                  <td [class.pt-red]="j.retardEntreeMinutes > 0">{{ j.retardEntreeMinutes ? formatDuree(j.retardEntreeMinutes) : '—' }}</td>
-                  <td [class.pt-red]="j.retardPauseMinutes > 0">{{ j.retardPauseMinutes ? formatDuree(j.retardPauseMinutes) : '—' }}</td>
-                  <td>
+                <tr [class.is-muted]="j.statut === 'Repos'">
+                  <td data-label="Jour" class="pt-nowrap"><b>{{ jourLabel(j.jour) }}</b></td>
+                  <td data-label="État"><span class="pt-statut" [ngClass]="statutClass(j.statut)">{{ statutLabels[j.statut] }}</span></td>
+                  <td data-label="Prévu">
+                    @if (j.planning) {
+                      <span class="pt-nowrap">{{ j.planning }}@if (j.productionPrevueMinutes) { · {{ formatHeuresMinutes(j.productionPrevueMinutes) }} }</span>
+                      <small class="ku-muted pt-src">{{ j.source === 'Regime' ? 'régime' : 'planning' }}</small>
+                    } @else { — }
+                  </td>
+                  <td data-label="Pointages" class="pt-punches-cell">
+                    @if (j.pointages.length) {
+                      <div class="ku-punches">
+                        @for (p of j.pointages; track $index) { <span class="ku-punch">{{ p.slice(0, 5) }}</span> }
+                      </div>
+                      @if (pausesNonPointees(j)) { <small class="pt-warn">pauses non pointées</small> }
+                    } @else { — }
+                  </td>
+                  <td data-label="Pause" class="is-num">{{ j.pointages.length ? pauseTexte(j) : '—' }}</td>
+                  <td data-label="Retard" class="is-num">
                     @if (j.statut === 'PointageManquant') {
                       <span class="pt-manquant">pointage manquant</span>
                     } @else if (j.retardTotalMinutes) {
-                      <strong class="pt-red">{{ formatDuree(j.retardTotalMinutes) }}</strong>
+                      <strong class="ku-neg" [title]="'Entrée ' + formatDuree(j.retardEntreeMinutes) + ' · pause ' + formatDuree(j.retardPauseMinutes)">{{ formatDuree(j.retardTotalMinutes) }}</strong>
                     } @else { — }
+                  </td>
+                  <td data-label="Production" class="is-num">{{ j.productionMinutes != null ? formatDuree(j.productionMinutes) : '—' }}</td>
+                  <td data-label="Écart" class="is-num" [class.ku-neg]="(j.ecartProductionMinutes ?? 0) < 0" [class.ku-pos]="(j.ecartProductionMinutes ?? 0) > 0">
+                    {{ formatEcart(j.ecartProductionMinutes) }}
                   </td>
                 </tr>
               }
@@ -124,11 +162,10 @@
           </table>
         </div>
       }
-      <p class="pt-note">
-        Les pointeuses n’enregistrent pas si c’est une entrée ou une sortie : le premier pointage de la journée est
-        l’arrivée, le dernier le départ, et les pointages intermédiaires vont par paires (sortie en pause, retour).
-        Survolez l’heure d’arrivée pour voir tous les pointages du jour.
-        Dernière synchronisation : {{ formatDateTime(d.derniereSynchro) }}.
+      <p class="ku-card-sub pt-note">
+        Les pointeuses n’enregistrent pas si c’est une entrée ou une sortie : le premier pointage de la journée est l’arrivée,
+        le dernier le départ, et les pointages intermédiaires vont par paires (sortie en pause, retour). Pause autorisée :
+        toutes pauses de la journée confondues ; au-delà, le dépassement compte en retard pause.
       </p>
     </section>
   }

@@ -1,0 +1,182 @@
+<div class="ku-page rh">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Pointage · Administration</p>
+      <h1 class="ku-hero-title">Régimes horaires</h1>
+      <p class="ku-hero-sub">
+        Heures fixes par jour (ex. 8 h 40 du lundi au jeudi, 7 h 40 le vendredi), pause autorisée et accès à
+        « Heure de sortie ». Ils servent de planning les jours où aucun planning n’est publié pour la personne.
+      </p>
+    </div>
+    <div class="ku-hero-actions">
+      <button type="button" class="ku-btn" (click)="load()" [disabled]="loading()">Actualiser</button>
+      @if (estAdmin()) {
+        <button type="button" class="ku-btn ku-btn--primary" (click)="nouveau()">Nouveau régime</button>
+      }
+    </div>
+  </header>
+
+  @if (!estAdmin()) {
+    <div class="ku-alert"><div><strong>Consultation</strong><p>Seul l’administrateur peut créer ou affecter des régimes.</p></div></div>
+  }
+
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Régimes</span><span class="ku-kpi-value">{{ regimes().length }}</span></div>
+    <div class="ku-kpi ku-kpi--ok"><span class="ku-kpi-label">Affectations</span><span class="ku-kpi-value">{{ totalAffectations() }}</span>
+      <span class="ku-kpi-sub">pôles, cellules, services ou collaborateurs</span></div>
+    <div class="ku-kpi ku-kpi--warn"><span class="ku-kpi-label">Priorité</span>
+      <span class="ku-kpi-sub rh-prio">Collaborateur › Service › Cellule › Pôle : l’affectation la plus précise l’emporte.</span></div>
+  </div>
+
+  @if (form(); as f) {
+    <section class="ku-card rh-form" aria-label="Régime horaire">
+      <div class="ku-card-head">
+        <h2 class="ku-card-title">{{ f.id ? 'Modifier le régime' : 'Nouveau régime' }}</h2>
+        <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="form.set(null)">Fermer</button>
+      </div>
+      <div class="rh-form-top">
+        <label class="ku-field rh-nom"><span>Nom</span>
+          <input class="ku-input" maxlength="100" [ngModel]="f.nom" (ngModelChange)="majForm({ nom: $event })" placeholder="Ex. Pilotes 6e étage" />
+        </label>
+        <label class="ku-field"><span>Pause autorisée (hh:mm)</span>
+          <input class="ku-input ku-mono" [ngModel]="f.pause" (ngModelChange)="majForm({ pause: $event })" placeholder="01:20" />
+          <small>Toutes pauses de la journée ; au-delà = retard pause.</small>
+        </label>
+        <label class="ku-check rh-acces">
+          <input type="checkbox" [ngModel]="f.accesCalculSortie" (ngModelChange)="majForm({ accesCalculSortie: $event })" />
+          Accès à « Heure de sortie »
+        </label>
+      </div>
+
+      <div class="rh-week">
+        @for (j of f.jours; track j.iso) {
+          <div class="rh-day" [class.is-off]="!j.travaille">
+            <label class="ku-check"><input type="checkbox" [ngModel]="j.travaille" (ngModelChange)="majJour(j.iso, { travaille: $event })" />
+              {{ jours[j.iso - 1].long }}</label>
+            @if (j.travaille) {
+              <label class="ku-field"><span>Arrivée</span>
+                <input class="ku-input" type="time" [ngModel]="j.arrivee" (ngModelChange)="majJour(j.iso, { arrivee: $event })" />
+              </label>
+              <label class="ku-field"><span>Production</span>
+                <input class="ku-input ku-mono" [ngModel]="j.production" (ngModelChange)="majJour(j.iso, { production: $event })" placeholder="08:40" />
+              </label>
+            } @else {
+              <span class="ku-muted rh-repos">Non travaillé</span>
+            }
+          </div>
+        }
+      </div>
+
+      @if (formErreur()) {
+        <div class="ku-alert ku-alert--danger"><div><p>{{ formErreur() }}</p></div></div>
+      }
+      <div class="rh-form-actions">
+        <button type="button" class="ku-btn" (click)="form.set(null)">Annuler</button>
+        <button type="button" class="ku-btn ku-btn--primary" (click)="enregistrer()" [disabled]="saving()">
+          {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+        </button>
+      </div>
+    </section>
+  }
+
+  @if (loading() && !regimes().length) {
+    <div class="ku-skeleton"></div>
+  } @else if (error()) {
+    <div class="ku-alert ku-alert--danger"><div><strong>Erreur</strong><p>{{ error() }}</p></div></div>
+  } @else if (!regimes().length) {
+    <section class="ku-card ku-empty"><strong>Aucun régime</strong>Créez le premier régime horaire.</section>
+  }
+
+  <div class="rh-list">
+    @for (r of regimes(); track r.id) {
+      <article class="ku-card rh-card">
+        <div class="ku-card-head">
+          <div>
+            <h2 class="ku-card-title">{{ r.nom }}</h2>
+            <p class="ku-card-sub">{{ resumeSemaine(r.jours) }} · pause {{ minutesVersDuree(r.pauseAutoriseeMinutes) }}
+              · {{ minutesVersDuree(productionHebdo(r.jours)) }} / semaine</p>
+          </div>
+          <div class="rh-card-tags">
+            <span class="ku-chip" [class.ku-chip--ok]="r.accesCalculSortie">{{ r.accesCalculSortie ? 'Heure de sortie : oui' : 'Heure de sortie : non' }}</span>
+          </div>
+        </div>
+
+        <div class="rh-grid" role="table" aria-label="Semaine">
+          @for (d of jours; track d.iso) {
+            <div class="rh-cell" role="cell" [class.is-off]="!jourDe(r, d.iso)">
+              <span class="rh-cell-day">{{ d.court }}</span>
+              @if (jourDe(r, d.iso); as j) {
+                <b class="ku-mono">{{ minutesVersDuree(j.productionMinutes) }}</b>
+                <span class="ku-muted">dès {{ j.arrivee }}</span>
+              } @else {
+                <span class="ku-muted">—</span>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="rh-aff">
+          <span class="ku-card-sub">Appliqué à</span>
+          <div class="rh-aff-list">
+            @for (a of r.affectations; track a.id) {
+              <span class="rh-aff-chip">
+                <small>{{ cibleLabels[a.cible] }}</small> {{ a.libelle }}
+                @if (estAdmin()) {
+                  <button type="button" (click)="retirer(a.id, a.libelle)" [attr.aria-label]="'Retirer ' + a.libelle">×</button>
+                }
+              </span>
+            } @empty {
+              <span class="ku-muted">Personne pour l’instant.</span>
+            }
+          </div>
+        </div>
+
+        @if (estAdmin()) {
+          <div class="rh-card-actions">
+            <button type="button" class="ku-btn ku-btn--primary ku-btn--sm" (click)="ouvrirAffectation(r)">Affecter…</button>
+            <button type="button" class="ku-btn ku-btn--sm" (click)="modifier(r)">Modifier</button>
+            <button type="button" class="ku-btn ku-btn--danger ku-btn--sm" (click)="supprimer(r)" [disabled]="r.affectations.length > 0"
+              [title]="r.affectations.length ? 'Retirez d’abord les affectations' : 'Supprimer ce régime'">Supprimer</button>
+          </div>
+        }
+
+        @if (affectationRegime()?.id === r.id) {
+          <div class="rh-picker">
+            <div class="ku-toolbar">
+              <div class="ku-seg" role="group" aria-label="Type">
+                @for (t of cibleTypes; track t) {
+                  <button type="button" [class.is-active]="cibleType() === t" (click)="chargerCibles(t)">{{ cibleLabels[t] }}</button>
+                }
+              </div>
+              <input class="ku-input rh-search" type="search" placeholder="Rechercher…" [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+              <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="affectationRegime.set(null)">Fermer</button>
+            </div>
+            @if (ciblesLoading()) {
+              <p class="ku-muted">Chargement…</p>
+            } @else {
+              <ul class="rh-picker-list">
+                @for (c of ciblesFiltrees(); track c.id) {
+                  <li>
+                    <div>
+                      <b>{{ c.libelle }}</b>
+                      @if (c.detail) { <small class="ku-muted"> · {{ c.detail }}</small> }
+                      @if (c.regimeId !== null) {
+                        <span class="ku-chip ku-chip--plain" [class.ku-chip--ok]="c.regimeId === r.id">{{ nomRegime(c.regimeId) }}</span>
+                      }
+                    </div>
+                    <button type="button" class="ku-btn ku-btn--sm" [disabled]="c.regimeId === r.id" (click)="affecter(c)">
+                      {{ c.regimeId === r.id ? 'Affecté' : c.regimeId !== null ? 'Remplacer' : 'Affecter' }}
+                    </button>
+                  </li>
+                } @empty {
+                  <li class="ku-muted">Aucun résultat.</li>
+                }
+              </ul>
+              <p class="ku-card-sub">{{ ciblesFiltrees().length }} affiché(s) sur {{ cibles().length }} — affinez la recherche pour en voir d’autres.</p>
+            }
+          </div>
+        }
+      </article>
+    }
+  </div>
+</div>

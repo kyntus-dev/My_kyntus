@@ -27,6 +27,13 @@ export interface PointageJourDto {
   retardEntreeMinutes: number;
   retardPauseMinutes: number;
   retardTotalMinutes: number;
+  /** Départ − arrivée − pauses (null si la journée n'est pas calculable). */
+  productionMinutes?: number | null;
+  /** Production attendue (régime horaire ou heures du shift). */
+  productionPrevueMinutes?: number | null;
+  ecartProductionMinutes?: number | null;
+  /** Origine du planning : planning publié ou régime horaire. */
+  source?: 'Planning' | 'Regime' | null;
 }
 
 export interface PointageTotauxDto {
@@ -36,6 +43,9 @@ export interface PointageTotauxDto {
   joursPointes: number;
   joursPointageManquant: string[];
   joursSansPointage: string[];
+  productionMinutes?: number;
+  productionPrevueMinutes?: number;
+  joursProductionCalculee?: number;
 }
 
 export interface PointageSuiviDto {
@@ -50,6 +60,8 @@ export interface PointageSuiviDto {
   derniereSynchro: string | null;
   totaux: PointageTotauxDto;
   jours: PointageJourDto[];
+  /** Régime horaire appliqué (null : aucun). */
+  regime?: string | null;
 }
 
 export interface PointageEquipeLigneDto {
@@ -63,6 +75,9 @@ export interface PointageEquipeLigneDto {
   joursPointes: number;
   joursPointageManquant: number;
   joursSansPointage: number;
+  productionMinutes?: number;
+  productionPrevueMinutes?: number;
+  regime?: string | null;
 }
 
 export interface PointageEquipeDto {
@@ -72,6 +87,34 @@ export interface PointageEquipeDto {
   toleranceMinutes: number;
   derniereSynchro: string | null;
   lignes: PointageEquipeLigneDto[];
+}
+
+/** Planning prévu / réalisé : journées de chaque collaborateur du périmètre. */
+export interface PointageEquipeDetailDto {
+  perimetre: string;
+  du: string;
+  au: string;
+  derniereSynchro: string | null;
+  collaborateurs: PointageSuiviDto[];
+}
+
+/** Journée en cours du collaborateur connecté (heure de sortie, tableau de bord). */
+export interface PointageAujourdhuiDto {
+  jour: string;
+  userId: number;
+  collaborateur: string;
+  accesCalculSortie: boolean;
+  regime: string | null;
+  regimeCible: string | null;
+  /** Planning / Regime / null (valeurs de l'Excel). */
+  source: 'Planning' | 'Regime' | null;
+  arriveePrevue: string | null;
+  productionPrevueMinutes: number;
+  pauseAutoriseeMinutes: number;
+  jourTravaille: boolean;
+  pointages: string[];
+  statut: PointageJourStatut;
+  derniereSynchro: string | null;
 }
 
 export type PointageCorrespondanceStatut = 'AValider' | 'Auto' | 'Valide' | 'Ignore';

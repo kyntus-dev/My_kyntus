@@ -3,10 +3,10 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { PointageService } from '../../../../core/services/pointage.service';
-import type { PointageEquipeDto } from '../../../../core/models/pointage.models';
-import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
+import type { PointageEquipeDto, PointageEquipeLigneDto } from '../../../../core/models/pointage.models';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
-import { filtrerEquipe, formatDuree, lignesExport, periode, type PeriodePreset } from '../../lib/pointage.util';
+import { telechargerExcel } from '../../lib/excel-export';
+import { filtrerEquipe, formatDuree, formatEcart, lignesExport, periode, type PeriodePreset } from '../../lib/pointage.util';
 
 /**
  * Pointages de l'équipe : superviseur / référent technique / chef de projet (son périmètre),
@@ -15,7 +15,7 @@ import { filtrerEquipe, formatDuree, lignesExport, periode, type PeriodePreset }
 @Component({
   selector: 'app-pointage-equipe',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, KyntusPageHeaderComponent],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './pointage-equipe.component.html',
   styleUrls: ['../pointage-suivi/pointage-suivi.component.css', './pointage-equipe.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -25,6 +25,7 @@ export class PointageEquipeComponent implements OnInit {
   private readonly toast = inject(KyntusToastService);
 
   readonly formatDuree = formatDuree;
+  readonly formatEcart = formatEcart;
   readonly preset = signal<PeriodePreset | 'perso'>('mois');
   readonly du = signal(periode('mois').du);
   readonly au = signal(periode('mois').au);
@@ -42,6 +43,17 @@ export class PointageEquipeComponent implements OnInit {
     filtrerEquipe(this.data()?.lignes ?? [], this.recherche(), this.cellule(), this.seulementRetards()));
   readonly totalRetard = computed(() => this.lignes().reduce((n, l) => n + l.retardTotalMinutes, 0));
   readonly nonRelies = computed(() => (this.data()?.lignes ?? []).filter((l) => !l.relie).length);
+  readonly joursRetard = computed(() => this.lignes().reduce((n, l) => n + l.joursEnRetard, 0));
+  readonly joursManquants = computed(() => this.lignes().reduce((n, l) => n + l.joursPointageManquant, 0));
+  readonly totalProduction = computed(() => {
+    const realisee = this.lignes().reduce((n, l) => n + (l.productionMinutes ?? 0), 0);
+    const prevue = this.lignes().reduce((n, l) => n + (l.productionPrevueMinutes ?? 0), 0);
+    return { realisee, prevue, ecart: realisee - prevue };
+  });
+
+  ecart(l: PointageEquipeLigneDto): number {
+    return (l.productionMinutes ?? 0) - (l.productionPrevueMinutes ?? 0);
+  }
 
   ngOnInit(): void {
     this.load();
@@ -78,27 +90,10 @@ export class PointageEquipeComponent implements OnInit {
   }
 
   async exporter(): Promise<void> {
-    const rows = lignesExport(this.lignes());
     try {
-      const mod = await import('exceljs');
-      const ExcelJS = ((mod as unknown) as { default?: typeof import('exceljs') }).default ?? mod;
-      const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet('Pointages');
-      ws.addRow([`Pointages du ${this.du()} au ${this.au()} — ${this.data()?.perimetre ?? ''}`]);
-      ws.addRow([]);
-      rows.forEach((r, i) => {
-        const row = ws.addRow(r);
-        if (i === 0) row.font = { bold: true };
-      });
-      ws.columns.forEach((c) => { c.width = 18; });
-      ws.getColumn(1).width = 32;
-      const buffer = await wb.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `pointages-${this.du()}-${this.au()}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      await telechargerExcel(`pointages-${this.du()}-${this.au()}.xlsx`, [
+        { nom: 'Pointages', titre: `Pointages du ${this.du()} au ${this.au()} — ${this.data()?.perimetre ?? ''}`, lignes: lignesExport(this.lignes()) },
+      ]);
     } catch {
       this.toast.error('Export Excel impossible.');
     }

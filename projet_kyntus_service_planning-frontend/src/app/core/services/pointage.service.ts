@@ -2,7 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import type {
+  PointageAujourdhuiDto,
   PointageCorrespondanceDto,
+  PointageEquipeDetailDto,
   PointageEquipeDto,
   PointageEtatDto,
   PointageSuiviDto,
@@ -24,6 +26,16 @@ export class PointageService {
 
   equipe(du: string, au: string): Observable<PointageEquipeDto> {
     return this.http.get<PointageEquipeDto>(`${this.base}/equipe`, { params: { du, au } });
+  }
+
+  /** Planning prévu / réalisé (31 jours au plus). */
+  equipeDetail(du: string, au: string): Observable<PointageEquipeDetailDto> {
+    return this.http.get<PointageEquipeDetailDto>(`${this.base}/equipe/detail`, { params: { du, au } });
+  }
+
+  /** Journée en cours du collaborateur connecté. */
+  aujourdhui(): Observable<PointageAujourdhuiDto> {
+    return this.http.get<PointageAujourdhuiDto>(`${this.base}/aujourdhui`);
   }
 
   correspondances(statut?: string): Observable<PointageCorrespondanceDto[]> {

@@ -17,6 +17,12 @@ public interface IPointageQueryService
 
     Task<PointageEquipeDto?> GetEquipeAsync(PointageViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default);
 
+    /// <summary>Planning prévu / réalisé : journées de chaque collaborateur du périmètre.</summary>
+    Task<PointageEquipeDetailDto?> GetEquipeDetailAsync(PointageViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default);
+
+    /// <summary>Journée en cours du collaborateur connecté (page « Heure de sortie », tableau de bord).</summary>
+    Task<PointageAujourdhuiDto?> GetAujourdhuiAsync(PointageViewer viewer, CancellationToken ct = default);
+
     Task<IReadOnlyList<PointageCorrespondanceDto>> GetCorrespondancesAsync(string? statut, CancellationToken ct = default);
 
     Task<PointageCorrespondanceDto?> UpdateCorrespondanceAsync(string empCode, PointageCorrespondanceUpdateRequest request, PointageViewer viewer, CancellationToken ct = default);
@@ -25,4 +31,20 @@ public interface IPointageQueryService
     Task<int> ValiderCorrespondancesAutoAsync(PointageViewer viewer, CancellationToken ct = default);
 
     Task<PointageEtatDto> GetEtatAsync(CancellationToken ct = default);
+}
+
+/// <summary>Régimes horaires : gestion par l'Admin et résolution par collaborateur.</summary>
+public interface IRegimeHoraireService
+{
+    Task<IReadOnlyList<RegimeHoraireDto>> GetAllAsync(CancellationToken ct = default);
+    Task<RegimeHoraireDto> CreateAsync(RegimeHoraireRequest request, int? by, CancellationToken ct = default);
+    Task<RegimeHoraireDto?> UpdateAsync(int id, RegimeHoraireRequest request, int? by, CancellationToken ct = default);
+    /// <summary>Supprime un régime sans affectation ; refusé (InvalidOperationException) sinon.</summary>
+    Task<bool> DeleteAsync(int id, CancellationToken ct = default);
+    /// <summary>Affecte (ou réaffecte) une cible à un régime.</summary>
+    Task<RegimeHoraireDto?> AffecterAsync(int regimeId, RegimeAffectationRequest request, int? by, CancellationToken ct = default);
+    Task<bool> RetirerAffectationAsync(int affectationId, CancellationToken ct = default);
+    Task<IReadOnlyList<RegimeCibleDto>> GetCiblesAsync(string cible, CancellationToken ct = default);
+    /// <summary>Régime effectif de chaque collaborateur demandé (absent : aucun régime).</summary>
+    Task<IReadOnlyDictionary<int, RegimeEffectif>> ResoudreAsync(IReadOnlyCollection<int> userIds, CancellationToken ct = default);
 }

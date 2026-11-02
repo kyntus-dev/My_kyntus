@@ -42,8 +42,24 @@ public sealed class PointageOptions
     /// <summary>Deux badgeages plus proches que ce délai sont fusionnés (double passage du doigt).</summary>
     public int DoubleBadgeSecondes { get; set; } = 120;
 
-    /// <summary>Durée de pause retenue quand le planning du jour n'en précise pas.</summary>
+    /// <summary>Durée de pause retenue quand le planning du jour n'en précise pas (si <see cref="PauseSelonShift"/>).</summary>
     public int PauseParDefautMinutes { get; set; } = 60;
+
+    /// <summary>
+    /// Pauses autorisées sur la journée (toutes pauses confondues), au-delà desquelles le dépassement
+    /// compte en retard pause : 80 min, comme l'Excel « Combien il me reste » (01:20). Un régime
+    /// horaire peut fixer sa propre valeur.
+    /// </summary>
+    public int PauseAutoriseeMinutes { get; set; } = 80;
+
+    /// <summary>
+    /// true : les jours de planning publié reprennent la pause du shift (comportement v10, 60 min) ;
+    /// false (défaut) : <see cref="PauseAutoriseeMinutes"/> s'applique à tous.
+    /// </summary>
+    public bool PauseSelonShift { get; set; }
+
+    /// <summary>Période maximale du planning prévu / réalisé d'une équipe (jours).</summary>
+    public int PeriodeEquipeDetailMaxJours { get; set; } = 31;
 
     /// <summary>Fuseau des pointeuses, pour savoir quelle journée est « aujourd'hui ».</summary>
     public string FuseauHoraire { get; set; } = "Africa/Casablanca";

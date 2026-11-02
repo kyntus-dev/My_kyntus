@@ -18,6 +18,7 @@ import type { GlobalActionItem, ModuleHealthStatus } from '../../../../core/dash
 import { KyntusNotificationHubService } from '../../../../core/notifications/kyntus-notification-hub.service';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import { UserService } from '../../../users/services/user.service';
+import { PointageJourWidgetComponent } from '../../../pointage/components/pointage-jour-widget.component';
 
 @Component({
   selector: 'app-unified-dashboard',
@@ -30,6 +31,7 @@ import { UserService } from '../../../users/services/user.service';
     KyntusDashboardRecentListComponent,
     KyntusActionInboxComponent,
     KyntusModuleHealthPanelComponent,
+    PointageJourWidgetComponent,
   ],
   template: `
     <div class="ud-root ky-page-enter">
@@ -44,6 +46,8 @@ import { UserService } from '../../../users/services/user.service';
         [kpiColumns]="kpiColumns()"
         [quickActions]="quickActions()"
       >
+        <app-pointage-jour-widget dashboard-alerts />
+
         @if (!loadingKpis() && alerts().length > 0) {
           <app-kyntus-dashboard-alerts dashboard-alerts [alerts]="alerts()" />
         }

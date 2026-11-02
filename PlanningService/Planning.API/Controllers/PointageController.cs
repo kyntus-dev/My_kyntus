@@ -47,6 +47,27 @@ public sealed class PointageController(
         return result is null ? NotFound(new { message = "Compte introuvable dans le Planning." }) : Ok(result);
     }
 
+    /// <summary>Planning prévu / réalisé de l'équipe, jour par jour (31 jours au plus).</summary>
+    [HttpGet("equipe/detail")]
+    public async Task<ActionResult<PointageEquipeDetailDto>> EquipeDetail([FromQuery] DateOnly? du, [FromQuery] DateOnly? au, CancellationToken ct)
+    {
+        var role = User.GetAuthRole();
+        if (!PointageRoles.PeutVoirEquipe(role))
+            return Forbid();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var debutSemaine = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+        var result = await query.GetEquipeDetailAsync(Viewer(), du ?? debutSemaine, au ?? debutSemaine.AddDays(6), ct);
+        return result is null ? NotFound(new { message = "Compte introuvable dans le Planning." }) : Ok(result);
+    }
+
+    /// <summary>Journée en cours du collaborateur connecté (heure de sortie, tableau de bord).</summary>
+    [HttpGet("aujourdhui")]
+    public async Task<ActionResult<PointageAujourdhuiDto>> Aujourdhui(CancellationToken ct)
+    {
+        var result = await query.GetAujourdhuiAsync(Viewer(), ct);
+        return result is null ? NotFound(new { message = "Compte introuvable dans le Planning." }) : Ok(result);
+    }
+
     [HttpGet("correspondances")]
     [Authorize(Roles = "Admin,RH")]
     public async Task<ActionResult<IReadOnlyList<PointageCorrespondanceDto>>> Correspondances([FromQuery] string? statut, CancellationToken ct) =>

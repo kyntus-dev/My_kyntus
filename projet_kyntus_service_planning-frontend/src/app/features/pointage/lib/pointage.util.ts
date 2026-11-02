@@ -88,6 +88,17 @@ export function messagesSuivi(s: PointageSuiviDto): { niveau: 'info' | 'alerte';
         + 'au-delà, c’est le retard entier qui est retenu.',
     });
   }
+  if (t.joursProductionCalculee) {
+    const ecart = (t.productionMinutes ?? 0) - (t.productionPrevueMinutes ?? 0);
+    out.push({
+      niveau: ecart < 0 ? 'alerte' : 'info',
+      titre: `Production : ${formatDuree(t.productionMinutes ?? 0)} sur ${t.joursProductionCalculee} journée(s) calculée(s)`,
+      texte: t.productionPrevueMinutes
+        ? `Production prévue sur ces journées : ${formatDuree(t.productionPrevueMinutes)} (écart ${formatEcart(ecart)}). `
+          + 'Production = départ − arrivée − pauses pointées.'
+        : 'Production = départ − arrivée − pauses pointées. Aucune production prévue (ni régime horaire ni heures de shift).',
+    });
+  }
   if (t.joursPointes) {
     out.push({
       niveau: 'info',
@@ -107,10 +118,13 @@ export function barresRetard(jours: readonly PointageJourDto[]): { jour: string;
 export function lignesExport(lignes: readonly PointageEquipeLigneDto[]): (string | number)[][] {
   return [
     ['Collaborateur', 'Cellule', 'Relié à la pointeuse', 'Retard total (h:mm)', 'Retard (minutes)',
-      'Jours en retard', 'Jours à l’heure', 'Jours calculés', 'Pointages manquants', 'Jours sans pointage'],
+      'Jours en retard', 'Jours à l’heure', 'Jours calculés', 'Pointages manquants', 'Jours sans pointage',
+      'Production (h:mm)', 'Production prévue (h:mm)', 'Écart production', 'Régime horaire'],
     ...lignes.map((l) => [
       l.collaborateur, l.cellule ?? '', l.relie ? 'Oui' : 'Non', formatDuree(l.retardTotalMinutes), l.retardTotalMinutes,
       l.joursEnRetard, l.joursAHeure, l.joursPointes, l.joursPointageManquant, l.joursSansPointage,
+      formatDuree(l.productionMinutes ?? 0), formatDuree(l.productionPrevueMinutes ?? 0),
+      formatEcart((l.productionMinutes ?? 0) - (l.productionPrevueMinutes ?? 0)), l.regime ?? '',
     ]),
   ];
 }
@@ -127,4 +141,69 @@ export function filtrerEquipe(
     (!q || l.collaborateur.toLowerCase().includes(q))
     && (!cellule || (l.cellule ?? '') === cellule)
     && (!seulementRetards || l.retardTotalMinutes > 0 || l.joursPointageManquant > 0));
+}
+
+// ── v11 : production, planning prévu / réalisé, audit ─────────────────────────
+
+/** Écart signé en minutes → « +00:20 » / « −00:20 » / « 00:00 ». */
+export function formatEcart(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined) return '—';
+  if (minutes === 0) return '00:00';
+  return `${minutes > 0 ? '+' : '−'}${formatDuree(Math.abs(minutes))}`;
+}
+
+/** Semaine (lundi → dimanche) décalée de `decalage` semaines par rapport à `now`. */
+export function semaine(decalage = 0, now = new Date()): { du: string; au: string } {
+  const lundi = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7) + 7 * decalage);
+  const dimanche = new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate() + 6);
+  return { du: ymd(lundi), au: ymd(dimanche) };
+}
+
+/** Jours de la période, au format yyyy-MM-dd. */
+export function joursEntre(du: string, au: string): string[] {
+  const [y1, m1, d1] = du.split('-').map(Number);
+  const [y2, m2, d2] = au.split('-').map(Number);
+  const out: string[] = [];
+  for (let d = new Date(y1, m1 - 1, d1); d <= new Date(y2, m2 - 1, d2); d.setDate(d.getDate() + 1)) out.push(ymd(d));
+  return out;
+}
+
+/** Journée à signaler dans la vue prévu / réalisé (retard, pointage manquant, absence, production insuffisante). */
+export function estAnomalie(j: PointageJourDto): boolean {
+  return j.statut === 'Retard'
+    || j.statut === 'PointageManquant'
+    || j.statut === 'SansPointage'
+    || (j.ecartProductionMinutes ?? 0) < 0;
+}
+
+/** Deux pointages seulement sur une journée planifiée : les pauses n'ont pas été badgées. */
+export function pausesNonPointees(j: PointageJourDto): boolean {
+  return j.pointages.length === 2 && !!j.planning;
+}
+
+/** Totaux de production d'un collaborateur sur la période. */
+export function totauxProduction(s: PointageSuiviDto): { realisee: number; prevue: number; ecart: number; jours: number } {
+  const realisee = s.totaux.productionMinutes ?? 0;
+  const prevue = s.totaux.productionPrevueMinutes ?? 0;
+  return { realisee, prevue, ecart: realisee - prevue, jours: s.totaux.joursProductionCalculee ?? 0 };
+}
+
+/** Lignes d'export détaillé (une ligne par jour) pour l'audit HTEL / My-Kyntus. */
+export function lignesExportJours(suivis: readonly PointageSuiviDto[]): (string | number)[][] {
+  const head = ['Collaborateur', 'Cellule', 'Jour', 'État', 'Source du planning', 'Arrivée prévue', 'Arrivée', 'Départ',
+    'Nb pointages', 'Pointages', 'Pause prise', 'Pause autorisée', 'Retard entrée', 'Retard pause', 'Retard total',
+    'Production', 'Production prévue', 'Écart production'];
+  const rows = suivis.flatMap((s) => s.jours
+    .filter((j) => j.statut !== 'AVenir' && j.statut !== 'Repos')
+    .map((j) => [
+      s.collaborateur, s.cellule ?? '', j.jour, STATUT_LABELS[j.statut],
+      j.source === 'Regime' ? 'Régime horaire' : j.source === 'Planning' ? 'Planning publié' : '',
+      j.planning ?? '', j.arrivee ?? '', j.depart ?? '', j.pointages.length, j.pointages.join(' '),
+      formatDuree(j.pauseMinutes), formatDuree(j.pauseAutoriseeMinutes),
+      formatDuree(j.retardEntreeMinutes), formatDuree(j.retardPauseMinutes), formatDuree(j.retardTotalMinutes),
+      j.productionMinutes == null ? '' : formatDuree(j.productionMinutes),
+      j.productionPrevueMinutes == null ? '' : formatDuree(j.productionPrevueMinutes),
+      formatEcart(j.ecartProductionMinutes),
+    ]));
+  return [head, ...rows];
 }

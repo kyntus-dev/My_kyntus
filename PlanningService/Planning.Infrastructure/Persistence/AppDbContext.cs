@@ -60,6 +60,9 @@ public class AppDbContext : DbContext
     public DbSet<PointageBrut> PointagesBruts { get; set; } = null!;
     public DbSet<PointageCorrespondance> PointageCorrespondances { get; set; } = null!;
     public DbSet<PointageSyncState> PointageSyncStates { get; set; } = null!;
+    public DbSet<RegimeHoraire> RegimesHoraires { get; set; } = null!;
+    public DbSet<RegimeHoraireJour> RegimeHoraireJours { get; set; } = null!;
+    public DbSet<RegimeHoraireAffectation> RegimeHoraireAffectations { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -622,6 +625,33 @@ public class AppDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasMaxLength(32);
             e.Property(x => x.DerniereErreur).HasMaxLength(1000);
+        });
+
+        // Régimes horaires (planning fixe par jour de semaine, défini par l'Admin).
+        modelBuilder.Entity<RegimeHoraire>(e =>
+        {
+            e.ToTable("RegimesHoraires");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Nom).HasMaxLength(100).IsRequired();
+            e.HasIndex(x => x.Nom).IsUnique();
+            e.HasMany(x => x.Jours).WithOne(x => x.RegimeHoraire).HasForeignKey(x => x.RegimeHoraireId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Affectations).WithOne(x => x.RegimeHoraire).HasForeignKey(x => x.RegimeHoraireId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RegimeHoraireJour>(e =>
+        {
+            e.ToTable("RegimeHoraireJours");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.RegimeHoraireId, x.JourSemaine }).IsUnique();
+        });
+
+        modelBuilder.Entity<RegimeHoraireAffectation>(e =>
+        {
+            e.ToTable("RegimeHoraireAffectations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Cible).HasMaxLength(16).IsRequired();
+            e.HasIndex(x => new { x.Cible, x.CibleId }).IsUnique();
+            e.HasIndex(x => x.RegimeHoraireId);
         });
 
         modelBuilder.Entity<EmailOutboxMessage>(e =>

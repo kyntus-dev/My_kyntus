@@ -203,6 +203,9 @@ services:
       Pointage__Username: ${KYNTUS_BIOTIME_USER:-}
       Pointage__Password: ${KYNTUS_BIOTIME_PASSWORD:-}
       Pointage__CertificateSha256: ${KYNTUS_BIOTIME_CERT_SHA256:-}
+      # Pause autorisée (toutes pauses de la journée) : 80 min comme l'Excel ; PAUSE_SELON_SHIFT=true = règle v10
+      Pointage__PauseAutoriseeMinutes: ${KYNTUS_POINTAGE_PAUSE_MINUTES:-80}
+      Pointage__PauseSelonShift: ${KYNTUS_POINTAGE_PAUSE_SELON_SHIFT:-false}
       KYNTUS_PLANNING_DEMO_SEED: ${KYNTUS_PLANNING_DEMO_SEED:-false}
       KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
       <<: [*kyntus-jwt, *kyntus-rabbitmq, *kyntus-redis]

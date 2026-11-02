@@ -410,6 +410,31 @@ export const routes: Routes = [
               import('./features/pointage/pages/pointage-correspondances/pointage-correspondances.component')
                 .then(m => m.PointageCorrespondancesComponent),
           },
+          {
+            // Heure de sortie (Excel « Combien il me reste ») : accès accordé par l'Admin via le régime horaire.
+            path: 'heure-de-sortie',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.planningSelfService },
+            loadComponent: () =>
+              import('./features/pointage/pages/pointage-heure-sortie/pointage-heure-sortie.component')
+                .then(m => m.PointageHeureSortieComponent),
+          },
+          {
+            path: 'prevu-realise',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.congesEquipe },
+            loadComponent: () =>
+              import('./features/pointage/pages/pointage-prevu-realise/pointage-prevu-realise.component')
+                .then(m => m.PointagePrevuRealiseComponent),
+          },
+          {
+            path: 'regimes',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.adminRh },
+            loadComponent: () =>
+              import('./features/pointage/pages/regimes-horaires/regimes-horaires.component')
+                .then(m => m.RegimesHorairesComponent),
+          },
         ],
       },
       {

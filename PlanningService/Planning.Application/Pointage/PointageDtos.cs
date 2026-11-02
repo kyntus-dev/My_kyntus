@@ -12,7 +12,11 @@ public sealed record PointageJourDto(
     int PauseMinutes,
     int RetardEntreeMinutes,
     int RetardPauseMinutes,
-    int RetardTotalMinutes);
+    int RetardTotalMinutes,
+    int? ProductionMinutes = null,
+    int? ProductionPrevueMinutes = null,
+    int? EcartProductionMinutes = null,
+    string? Source = null);
 
 public sealed record PointageTotauxDto(
     int RetardTotalMinutes,
@@ -20,7 +24,10 @@ public sealed record PointageTotauxDto(
     int JoursAHeure,
     int JoursPointes,
     IReadOnlyList<DateOnly> JoursPointageManquant,
-    IReadOnlyList<DateOnly> JoursSansPointage);
+    IReadOnlyList<DateOnly> JoursSansPointage,
+    int ProductionMinutes = 0,
+    int ProductionPrevueMinutes = 0,
+    int JoursProductionCalculee = 0);
 
 /// <summary>« Mon suivi » : pointages d'un collaborateur sur une période.</summary>
 public sealed record PointageSuiviDto(
@@ -34,7 +41,8 @@ public sealed record PointageSuiviDto(
     bool SynchronisationActive,
     DateTime? DerniereSynchro,
     PointageTotauxDto Totaux,
-    IReadOnlyList<PointageJourDto> Jours);
+    IReadOnlyList<PointageJourDto> Jours,
+    string? Regime = null);
 
 /// <summary>Ligne de la vue équipe / RH : un collaborateur et ses totaux sur la période.</summary>
 public sealed record PointageEquipeLigneDto(
@@ -47,7 +55,10 @@ public sealed record PointageEquipeLigneDto(
     int JoursAHeure,
     int JoursPointes,
     int JoursPointageManquant,
-    int JoursSansPointage);
+    int JoursSansPointage,
+    int ProductionMinutes = 0,
+    int ProductionPrevueMinutes = 0,
+    string? Regime = null);
 
 public sealed record PointageEquipeDto(
     string Perimetre,
@@ -56,6 +67,14 @@ public sealed record PointageEquipeDto(
     int ToleranceMinutes,
     DateTime? DerniereSynchro,
     IReadOnlyList<PointageEquipeLigneDto> Lignes);
+
+/// <summary>Planning prévu / réalisé d'une équipe : le détail jour par jour de chaque collaborateur.</summary>
+public sealed record PointageEquipeDetailDto(
+    string Perimetre,
+    DateOnly Du,
+    DateOnly Au,
+    DateTime? DerniereSynchro,
+    IReadOnlyList<PointageSuiviDto> Collaborateurs);
 
 public sealed record PointageCorrespondanceDto(
     string EmpCode,

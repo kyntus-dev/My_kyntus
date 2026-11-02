@@ -77,6 +77,7 @@ public static class DependencyInjection
         services.AddSingleton<BioTimeClient>();
         services.AddScoped<IPointageSyncService, PointageSyncService>();
         services.AddScoped<IPointageQueryService, PointageQueryService>();
+        services.AddScoped<IRegimeHoraireService, RegimeHoraireService>();
         if (!isTesting)
             services.AddHostedService<PointageSyncHostedService>();
 

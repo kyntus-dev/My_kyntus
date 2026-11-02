@@ -932,3 +932,48 @@ body.theme-dark .ks-content {
     display: block;
   }
 }
+
+/* ── Charte v11 : menu plus lisible (tuiles d'icône, groupe ouvert marqué, fil de sous-menu) ── */
+.ks-ic {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md, 0.5rem);
+  background: color-mix(in srgb, var(--electric-blue) 12%, transparent);
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.ks-group-head.open {
+  background: color-mix(in srgb, var(--electric-blue) 7%, transparent);
+  font-weight: 600;
+}
+.ks-group-head.open .ks-ic,
+.ks-home.active .ks-ic {
+  background: color-mix(in srgb, var(--electric-blue) 24%, transparent);
+  opacity: 1;
+}
+.ks-sub {
+  margin-left: 13px;
+  padding-left: 12px;
+  border-left: 1px solid color-mix(in srgb, var(--electric-blue) 22%, transparent);
+}
+.ks-sub-item::before { left: -13px; }
+.kyntus-shell.sidebar-collapsed .ks-ic { width: 32px; height: 32px; }
+@media (prefers-reduced-motion: reduce) {
+  .ks-ic, .ks-sub-item, .ks-group-head, .ks-home { transition: none; }
+}
+
+/* ── Charte v11 : barre du haut sans débordement sur téléphone ── */
+@media (max-width: 720px) {
+  .ks-topbar { padding: 0 12px; gap: 8px; }
+  .ks-topbar-title { min-width: 0; }
+  .ks-topbar-title strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+  .ks-topbar-title span { display: none; }
+  .ks-topbar-right { gap: 6px; min-width: 0; }
+}
+@media (max-width: 600px) {
+  .ks-topbar-right app-global-search { display: none; }
+}
+@media (max-width: 440px) {
+  .ks-topbar-title { display: none; }
+  .ks-topbar-right .ks-pill { padding: 0 8px; font-size: 0; gap: 0; }
+  .ks-topbar-right .ks-pill .ks-dot-pulse { margin: 0; }
+}

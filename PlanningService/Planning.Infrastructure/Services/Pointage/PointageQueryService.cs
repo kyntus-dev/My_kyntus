@@ -10,11 +10,14 @@ namespace Planning.Infrastructure.Services.Pointage;
 
 /// <summary>
 /// Pointages calculés (« Mon suivi », équipe, RH) et correspondances ID pointeuse → collaborateur.
-/// Référence des retards : planning <b>publié</b> dans My-Kyntus (heure de début et pause du shift).
+/// Référence des retards : planning <b>publié</b> dans My-Kyntus ; les jours sans planning publié,
+/// le régime horaire du collaborateur (heures fixes définies par l'Admin) s'il en a un.
+/// Pause autorisée : 80 min (Excel « Combien il me reste »), ou celle du régime.
 /// </summary>
 public sealed class PointageQueryService(
     AppDbContext db,
     IPlanningPerimeterResolver perimeter,
+    IRegimeHoraireService regimes,
     IOptionsMonitor<PointageOptions> options) : IPointageQueryService
 {
     private PointageOptions O => options.CurrentValue;
@@ -48,35 +51,97 @@ public sealed class PointageQueryService(
         if (me is null)
             return null;
 
-        List<User> membres;
-        string libelle;
-        if (IsAdminOrRh(viewer.Role))
-        {
-            membres = await db.Users.AsNoTracking().Include(u => u.SubService)
-                .Where(u => u.IsActive).ToListAsync(ct);
-            libelle = "Toute l'entreprise";
-        }
-        else
-        {
-            var scope = await perimeter.GetManagedSubServiceIdsAsync(me.Id, ct);
-            if (scope.Count == 0)
-                return new PointageEquipeDto("Aucune équipe rattachée", du, au, O.ToleranceMinutes, await DerniereSynchroAsync(ct), []);
-            membres = await db.Users.AsNoTracking().Include(u => u.SubService)
-                .Where(u => u.IsActive && u.Id != me.Id && u.SubServiceId != null && scope.Contains(u.SubServiceId.Value))
-                .ToListAsync(ct);
-            libelle = $"Votre équipe ({membres.Count} collaborateur(s))";
-        }
+        var (membres, libelle) = await MembresAsync(me, viewer, ct);
+        if (membres.Count == 0 && libelle is null)
+            return new PointageEquipeDto("Aucune équipe rattachée", du, au, O.ToleranceMinutes, await DerniereSynchroAsync(ct), []);
 
         var suivis = await CalculerAsync(membres, du, au, ct);
         var lignes = suivis
             .Select(s => new PointageEquipeLigneDto(
                 s.UserId, s.Collaborateur, s.Cellule, s.IdsPointeuse.Count > 0,
                 s.Totaux.RetardTotalMinutes, s.Totaux.JoursEnRetard, s.Totaux.JoursAHeure, s.Totaux.JoursPointes,
-                s.Totaux.JoursPointageManquant.Count, s.Totaux.JoursSansPointage.Count))
+                s.Totaux.JoursPointageManquant.Count, s.Totaux.JoursSansPointage.Count,
+                s.Totaux.ProductionMinutes, s.Totaux.ProductionPrevueMinutes, s.Regime))
             .OrderByDescending(l => l.RetardTotalMinutes)
             .ThenBy(l => l.Collaborateur, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
-        return new PointageEquipeDto(libelle, du, au, O.ToleranceMinutes, await DerniereSynchroAsync(ct), lignes);
+        return new PointageEquipeDto(libelle!, du, au, O.ToleranceMinutes, await DerniereSynchroAsync(ct), lignes);
+    }
+
+    public async Task<PointageEquipeDetailDto?> GetEquipeDetailAsync(PointageViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default)
+    {
+        var me = await FindViewerAsync(viewer, ct);
+        if (me is null)
+            return null;
+        if (au < du) (du, au) = (au, du);
+        var max = Math.Clamp(O.PeriodeEquipeDetailMaxJours, 1, O.PeriodeMaxJours);
+        if (au.DayNumber - du.DayNumber >= max)
+            du = au.AddDays(-(max - 1));
+
+        var (membres, libelle) = await MembresAsync(me, viewer, ct);
+        if (membres.Count == 0 && libelle is null)
+            return new PointageEquipeDetailDto("Aucune équipe rattachée", du, au, await DerniereSynchroAsync(ct), []);
+
+        var suivis = (await CalculerAsync(membres, du, au, ct))
+            .OrderBy(s => s.Cellule ?? "", StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(s => s.Collaborateur, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        return new PointageEquipeDetailDto(libelle!, du, au, await DerniereSynchroAsync(ct), suivis);
+    }
+
+    public async Task<PointageAujourdhuiDto?> GetAujourdhuiAsync(PointageViewer viewer, CancellationToken ct = default)
+    {
+        var me = await FindViewerAsync(viewer, ct);
+        if (me is null)
+            return null;
+        var today = Aujourdhui();
+        var suivi = (await CalculerAsync([me], today, today, ct)).Single();
+        var jour = suivi.Jours.Single();
+        var regime = (await regimes.ResoudreAsync([me.Id], ct)).GetValueOrDefault(me.Id);
+
+        // Production et pause du jour : planning (publié ou régime) ; sinon valeurs de l'Excel.
+        var production = jour.ProductionPrevueMinutes ?? RegimeResolver.ProductionExcelMinutes(today);
+        var pause = jour.Source is null ? regime?.PauseAutoriseeMinutes ?? RegimeResolver.PauseExcelMinutes : jour.PauseAutoriseeMinutes;
+        var travaille = jour.Statut is not (PointageJourStatuts.Repos or PointageJourStatuts.Conge or PointageJourStatuts.Ferie)
+                        || jour.Pointages.Count > 0;
+
+        return new PointageAujourdhuiDto(
+            today,
+            me.Id,
+            suivi.Collaborateur,
+            regime?.AccesCalculSortie == true || string.Equals(viewer.Role, "Admin", StringComparison.OrdinalIgnoreCase),
+            regime?.Nom,
+            regime?.Cible,
+            jour.Source,
+            jour.Planning,
+            production,
+            pause,
+            travaille,
+            jour.Pointages,
+            jour.Statut,
+            suivi.DerniereSynchro);
+    }
+
+    /// <summary>
+    /// Collaborateurs visibles : tous (RH / Admin) ou le périmètre du responsable.
+    /// Libellé null : responsable sans équipe rattachée.
+    /// </summary>
+    private async Task<(List<User> Membres, string? Libelle)> MembresAsync(User me, PointageViewer viewer, CancellationToken ct)
+    {
+        if (IsAdminOrRh(viewer.Role))
+        {
+            var tous = await db.Users.AsNoTracking().Include(u => u.SubService)
+                .Where(u => u.IsActive).ToListAsync(ct);
+            return (tous, "Toute l'entreprise");
+        }
+
+        var scope = await perimeter.GetManagedSubServiceIdsAsync(me.Id, ct);
+        if (scope.Count == 0)
+            return ([], null);
+        var membres = await db.Users.AsNoTracking().Include(u => u.SubService)
+            .Where(u => u.IsActive && u.Id != me.Id && u.SubServiceId != null && scope.Contains(u.SubServiceId.Value))
+            .ToListAsync(ct);
+        return (membres, $"Votre équipe ({membres.Count} collaborateur(s))");
     }
 
     /// <summary>Calcule les journées de plusieurs collaborateurs en trois requêtes (pointages, plannings, congés).</summary>
@@ -112,9 +177,12 @@ public sealed class PointageQueryService(
                         && a.AssignedDate >= du && a.AssignedDate <= au
                         && a.WeeklyPlanning.Status == PlanningStatus.Published)
             .ToListAsync(ct);
+        var regimeParUser = await regimes.ResoudreAsync(userIds, ct);
         var planningParJour = affectations
             .GroupBy(a => (a.UserId, a.AssignedDate))
-            .ToDictionary(g => g.Key, g => ToPlanningJour(g.OrderBy(a => a.IsOnLeave).ThenBy(a => a.Id).First()));
+            .ToDictionary(
+                g => g.Key,
+                g => ToPlanningJour(g.OrderBy(a => a.IsOnLeave).ThenBy(a => a.Id).First(), regimeParUser.GetValueOrDefault(g.Key.UserId)));
 
         var conges = await db.Conges.AsNoTracking()
             .Where(c => userIds.Contains(c.UserId) && c.Status == CongeStatus.Approved && c.StartDate <= au && c.EndDate >= du)
@@ -126,16 +194,20 @@ public sealed class PointageQueryService(
         var result = new List<PointageSuiviDto>(users.Count);
         foreach (var user in users)
         {
+            var regime = regimeParUser.GetValueOrDefault(user.Id);
             var jours = new List<PointageJourDto>();
             for (var jour = du; jour <= au; jour = jour.AddDays(1))
             {
-                planningParJour.TryGetValue((user.Id, jour), out var planning);
+                // Planning publié en priorité ; à défaut, le régime horaire du collaborateur.
+                if (!planningParJour.TryGetValue((user.Id, jour), out var planning) && regime is not null)
+                    planning = RegimeResolver.PlanningDuJour(regime, jour);
                 if (conges.Any(c => c.UserId == user.Id && c.StartDate <= jour && c.EndDate >= jour))
                     planning = (planning ?? new PlanningJour(null, 0, false, false, null)) with { Conge = true };
                 pointagesParJour.TryGetValue((user.Id, jour), out var bruts);
                 var r = PointageCalculator.CalculerJour(
-                    jour, bruts ?? [], planning, today, O.ToleranceMinutes, O.DoubleBadgeSecondes, O.PauseParDefautMinutes);
-                jours.Add(ToDto(r, planning?.Libelle));
+                    jour, bruts ?? [], planning, today, O.ToleranceMinutes, O.DoubleBadgeSecondes,
+                    O.PauseSelonShift ? O.PauseParDefautMinutes : O.PauseAutoriseeMinutes);
+                jours.Add(ToDto(r, planning?.Libelle, planning?.Source));
             }
 
             var totaux = PointageCalculator.Totaliser(jours.Select(FromDto));
@@ -150,21 +222,32 @@ public sealed class PointageQueryService(
                 O.Enabled,
                 derniereSynchro,
                 new PointageTotauxDto(totaux.RetardTotalMinutes, totaux.JoursEnRetard, totaux.JoursAHeure,
-                    totaux.JoursPointes, totaux.JoursPointageManquant, totaux.JoursSansPointage),
-                jours));
+                    totaux.JoursPointes, totaux.JoursPointageManquant, totaux.JoursSansPointage,
+                    totaux.ProductionMinutes, totaux.ProductionPrevueMinutes, totaux.JoursProductionCalculee),
+                jours,
+                regime?.Nom));
         }
         return result;
     }
 
-    private PlanningJour ToPlanningJour(ShiftAssignment a) =>
+    /// <summary>
+    /// Planning publié d'un jour. Pause autorisée : celle du régime du collaborateur, sinon 80 min
+    /// (ou la pause du shift si <c>Pointage__PauseSelonShift=true</c>, comportement v10).
+    /// Production prévue : heures de travail du shift (WorkHours).
+    /// </summary>
+    private PlanningJour ToPlanningJour(ShiftAssignment a, RegimeEffectif? regime) =>
         new(
             a.IsOnLeave || a.IsHoliday ? null : a.SubServiceShiftConfig?.StartTime ?? a.Shift?.StartTime,
-            a.SubServiceShiftConfig?.BreakDurationMinutes ?? O.PauseParDefautMinutes,
+            O.PauseSelonShift
+                ? a.SubServiceShiftConfig?.BreakDurationMinutes ?? O.PauseParDefautMinutes
+                : regime?.PauseAutoriseeMinutes ?? O.PauseAutoriseeMinutes,
             a.IsOnLeave,
             a.IsHoliday,
-            a.SubServiceShiftConfig?.Label ?? a.Shift?.Label);
+            a.SubServiceShiftConfig?.Label ?? a.Shift?.Label,
+            a.SubServiceShiftConfig is { WorkHours: > 0 } c ? c.WorkHours * 60 : null,
+            PlanningSources.Publie);
 
-    private static PointageJourDto ToDto(PointageJourResult r, string? libelle) =>
+    private static PointageJourDto ToDto(PointageJourResult r, string? libelle, string? source) =>
         new(
             r.Jour,
             r.Statut,
@@ -177,10 +260,15 @@ public sealed class PointageQueryService(
             r.PauseMinutes,
             r.RetardEntreeMinutes,
             r.RetardPauseMinutes,
-            r.RetardTotalMinutes);
+            r.RetardTotalMinutes,
+            r.ProductionMinutes,
+            r.ProductionPrevueMinutes,
+            r.EcartProductionMinutes,
+            source);
 
     private static PointageJourResult FromDto(PointageJourDto d) =>
-        new(d.Jour, d.Statut, null, d.PauseAutoriseeMinutes, null, null, [], d.PauseMinutes, d.RetardEntreeMinutes, d.RetardPauseMinutes);
+        new(d.Jour, d.Statut, null, d.PauseAutoriseeMinutes, null, null, [], d.PauseMinutes, d.RetardEntreeMinutes, d.RetardPauseMinutes,
+            d.ProductionMinutes, d.ProductionPrevueMinutes);
 
     // ── Correspondances ─────────────────────────────────────────────────────────
 

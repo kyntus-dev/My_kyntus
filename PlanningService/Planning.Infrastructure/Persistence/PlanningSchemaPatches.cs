@@ -850,6 +850,63 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>
+    /// Régimes horaires (v11) : trois tables nouvelles, aucune donnée existante touchée.
+    /// Le régime « 8 h 40 / 7 h 40 » de l'Excel est créé sans affectation : l'Admin choisit
+    /// ensuite les pôles, cellules ou collaborateurs concernés.
+    /// </summary>
+    public static async Task EnsureRegimesHorairesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "RegimesHoraires" (
+                "Id" serial PRIMARY KEY,
+                "Nom" character varying(100) NOT NULL,
+                "PauseAutoriseeMinutes" integer NOT NULL DEFAULT 80,
+                "AccesCalculSortie" boolean NOT NULL DEFAULT true,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" integer NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_RegimesHoraires_Nom" ON "RegimesHoraires" ("Nom");
+
+            CREATE TABLE IF NOT EXISTS "RegimeHoraireJours" (
+                "Id" serial PRIMARY KEY,
+                "RegimeHoraireId" integer NOT NULL REFERENCES "RegimesHoraires" ("Id") ON DELETE CASCADE,
+                "JourSemaine" integer NOT NULL CHECK ("JourSemaine" BETWEEN 1 AND 7),
+                "Arrivee" time without time zone NOT NULL,
+                "ProductionMinutes" integer NOT NULL CHECK ("ProductionMinutes" > 0)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_RegimeHoraireJours_RegimeHoraireId_JourSemaine"
+              ON "RegimeHoraireJours" ("RegimeHoraireId", "JourSemaine");
+
+            CREATE TABLE IF NOT EXISTS "RegimeHoraireAffectations" (
+                "Id" serial PRIMARY KEY,
+                "RegimeHoraireId" integer NOT NULL REFERENCES "RegimesHoraires" ("Id") ON DELETE RESTRICT,
+                "Cible" character varying(16) NOT NULL,
+                "CibleId" integer NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_RegimeHoraireAffectations_Cible_CibleId"
+              ON "RegimeHoraireAffectations" ("Cible", "CibleId");
+            CREATE INDEX IF NOT EXISTS "IX_RegimeHoraireAffectations_RegimeHoraireId"
+              ON "RegimeHoraireAffectations" ("RegimeHoraireId");
+
+            INSERT INTO "RegimesHoraires" ("Nom", "PauseAutoriseeMinutes", "AccesCalculSortie")
+            SELECT 'Standard 8h40 / vendredi 7h40', 80, true
+            WHERE NOT EXISTS (SELECT 1 FROM "RegimesHoraires");
+
+            INSERT INTO "RegimeHoraireJours" ("RegimeHoraireId", "JourSemaine", "Arrivee", "ProductionMinutes")
+            SELECT r."Id", j.jour, time '08:00', CASE WHEN j.jour = 5 THEN 460 ELSE 520 END
+            FROM "RegimesHoraires" r
+            CROSS JOIN (VALUES (1), (2), (3), (4), (5)) AS j(jour)
+            WHERE r."Nom" = 'Standard 8h40 / vendredi 7h40'
+              AND NOT EXISTS (SELECT 1 FROM "RegimeHoraireJours" x WHERE x."RegimeHoraireId" = r."Id");
+            """,
+            ct);
+    }
+
     /// <summary>Index lecture fréquents (grille, demandes exceptionnelles, users actifs).</summary>
     public static async Task EnsurePerfIndexesAsync(AppDbContext db, CancellationToken ct = default)
     {

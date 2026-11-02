@@ -1,0 +1,174 @@
+<div class="ku-page hs">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Pointage · {{ now() | date: 'EEEE d MMMM' }}</p>
+      <h1 class="ku-hero-title">Heure de sortie</h1>
+      <p class="ku-hero-sub">Combien il me reste : votre heure de sortie et votre production, recalculées chaque seconde.</p>
+    </div>
+    <div class="ku-hero-actions">
+      <span class="hs-clock" aria-live="off">{{ now() | date: 'HH:mm:ss' }}</span>
+      <button type="button" class="ku-btn" (click)="load()" [disabled]="loading()">Actualiser mes pointages</button>
+    </div>
+  </header>
+
+  @if (loading() && !jour()) {
+    <div class="hs-grid"><div class="ku-skeleton"></div><div class="ku-skeleton"></div></div>
+  } @else if (error()) {
+    <div class="ku-alert ku-alert--danger"><div><strong>Journée indisponible</strong><p>{{ error() }}</p></div></div>
+  } @else if (jour(); as j) {
+    @if (!j.accesCalculSortie) {
+      <section class="ku-card ku-empty">
+        <strong>Cette page n’est pas activée pour vous</strong>
+        L’administrateur choisit les pôles, cellules ou collaborateurs qui y ont accès (Pointage › Régimes horaires).
+      </section>
+    } @else {
+      @if (!j.jourTravaille) {
+        <div class="ku-alert ku-alert--warn">
+          <div><strong>Jour non travaillé</strong><p>Votre régime ne prévoit pas de production aujourd’hui ; le calcul reste disponible.</p></div>
+        </div>
+      }
+
+      <div class="hs-grid">
+        <!-- Saisie -->
+        <section class="ku-card hs-form" aria-label="Saisie">
+          <div class="ku-card-head">
+            <div>
+              <h2 class="ku-card-title">Ma journée</h2>
+              <p class="ku-card-sub">{{ sourceTexte() }}</p>
+            </div>
+          </div>
+
+          <label class="ku-field">
+            <span>Heure d’arrivée</span>
+            <input class="ku-input ku-input--lg" type="time" step="1" [ngModel]="entree()" (ngModelChange)="entree.set($event ?? '')" />
+            @if (premierPointage(); as p) {
+              <small>Premier pointage du jour : <b>{{ p }}</b>
+                @if (p !== entree()) { — <button type="button" class="hs-link" (click)="reprendrePremierPointage()">le reprendre</button> }
+              </small>
+            } @else {
+              <small>Aucun pointage reçu aujourd’hui : saisissez votre heure d’arrivée.</small>
+            }
+          </label>
+
+          <div class="hs-fixed">
+            <div>
+              <span>Production du jour</span>
+              <b>{{ formatHeuresMinutes(productionMinutes()) }}</b>
+            </div>
+            <div>
+              <span>Pauses forfaitaires</span>
+              <b>{{ formatHeuresMinutes(pauseForfaitMinutes()) }}</b>
+            </div>
+          </div>
+
+          <fieldset class="hs-pause">
+            <legend>Pause déjeuner <small>(facultative, ajoutée aux pauses forfaitaires)</small></legend>
+            <label class="ku-field"><span>Début</span>
+              <input class="ku-input" type="time" [ngModel]="debutPause()" (ngModelChange)="debutPause.set($event ?? '')" />
+            </label>
+            <label class="ku-field"><span>Fin</span>
+              <input class="ku-input" type="time" [ngModel]="finPause()" (ngModelChange)="finPause.set($event ?? '')" />
+            </label>
+            @if (debutPause() || finPause()) {
+              <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="effacerPause()">Effacer</button>
+            }
+          </fieldset>
+
+          <label class="ku-field">
+            <span>Heure de sortie souhaitée <small>(facultative)</small></span>
+            <input class="ku-input" type="time" [ngModel]="sortieSouhaitee()" (ngModelChange)="sortieSouhaitee.set($event ?? '')" />
+          </label>
+
+          @if (j.pointages.length) {
+            <div class="hs-punches">
+              <span class="ku-card-sub">Pointages reçus aujourd’hui</span>
+              <div class="ku-punches">
+                @for (p of j.pointages; track $index) {
+                  <span class="ku-punch"><b>{{ libellePointage($index, j.pointages.length) }}</b>{{ p }}</span>
+                }
+              </div>
+            </div>
+          }
+        </section>
+
+        <!-- Résultat -->
+        <section class="ku-card hs-result" aria-live="polite">
+          @if (resultat(); as r) {
+            <div class="hs-exit">
+              <span class="hs-exit-label">Je peux sortir à</span>
+              <span class="hs-exit-time">{{ formatHeure(r.sortieSecondes, true) }}</span>
+              <span class="ku-chip" [class.ku-chip--ok]="r.termine" [class.ku-chip--info]="!r.termine">
+                {{ r.termine ? 'Done ✅' : 'LOADING…' }}
+              </span>
+            </div>
+
+            <div class="hs-body">
+              <div class="ku-ring" [class.ku-ring--done]="r.termine" [style.--p]="pourcent()">
+                <div>
+                  <span class="ku-ring-value">{{ pourcent() | number: '1.0-0' }} %</span>
+                  <span class="ku-ring-label">de la production</span>
+                </div>
+              </div>
+
+              <dl class="hs-stats">
+                <div>
+                  <dt>Il me reste</dt>
+                  <dd class="hs-big" [class.ku-pos]="r.resteSecondes <= 0">
+                    {{ r.resteSecondes > 0 ? formatHms(r.resteSecondes) : 'Terminé' }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Production réalisée</dt>
+                  <dd>{{ formatHms(r.productionRealiseeSecondes > 0 ? r.productionRealiseeSecondes : 0) }}</dd>
+                </div>
+                <div>
+                  <dt>Production restante</dt>
+                  <dd>{{ formatHms(r.productionRestanteSecondes > 0 ? r.productionRestanteSecondes : 0) }}</dd>
+                </div>
+                <div>
+                  <dt>Temps de pause (non compté)</dt>
+                  <dd>{{ formatHms(r.pauseTotaleSecondes) }}
+                    @if (r.pauseDejSecondes) { <small class="ku-muted">dont déjeuner {{ formatHms(r.pauseDejSecondes) }}</small> }
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            @if (r.souhaitee; as s) {
+              <div class="ku-alert" [class.ku-alert--ok]="s.ecartSecondes >= 0" [class.ku-alert--warn]="s.ecartSecondes < 0">
+                <div>
+                  <strong>Sortie à {{ formatHeure(s.sortieSecondes) }}</strong>
+                  <p>
+                    Production à cette heure : {{ formatHms(s.productionSecondes > 0 ? s.productionSecondes : 0) }} —
+                    @if (s.ecartSecondes < 0) {
+                      il manquera <b>{{ formatHms(-s.ecartSecondes) }}</b>.
+                    } @else if (s.ecartSecondes > 0) {
+                      <b>{{ formatHms(s.ecartSecondes) }}</b> au-delà de la production du jour.
+                    } @else {
+                      exactement la production du jour.
+                    }
+                  </p>
+                </div>
+              </div>
+            }
+          } @else {
+            <div class="ku-empty"><strong>Indiquez votre heure d’arrivée</strong>Le calcul démarre aussitôt.</div>
+          }
+        </section>
+      </div>
+
+      <details class="ku-card hs-formules">
+        <summary>Comment c’est calculé (formules de l’Excel « Combien il me reste »)</summary>
+        <ul>
+          <li><b>Sortie</b> = arrivée + production du jour + pauses.</li>
+          <li><b>Pauses</b> = pauses forfaitaires ({{ formatHeuresMinutes(pauseForfaitMinutes()) }}) + pause déjeuner saisie.</li>
+          <li><b>Il me reste</b> = sortie − heure actuelle.</li>
+          <li><b>Production réalisée</b> = (heure actuelle − arrivée) − pauses ; l’avancement est la production réalisée divisée par la production du jour.</li>
+          <li><b>Production du jour</b> : fixée par l’administrateur dans votre régime horaire ; sans régime, la règle de l’Excel s’applique (07:40 le vendredi et le samedi, 08:40 sinon).</li>
+        </ul>
+        <p class="ku-muted">Les heures de prière de l’Excel viennent d’un autre classeur qui n’a pas été transmis : elles ne sont pas reprises.</p>
+        <a routerLink="/pointage/mon-suivi" class="ku-btn ku-btn--sm">Voir mon suivi de pointage</a>
+      </details>
+    }
+  }
+</div>

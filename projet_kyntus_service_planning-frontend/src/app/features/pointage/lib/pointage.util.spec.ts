@@ -9,6 +9,12 @@ import {
   messagesSuivi,
   periode,
   statutClass,
+  estAnomalie,
+  formatEcart,
+  joursEntre,
+  lignesExportJours,
+  pausesNonPointees,
+  semaine,
 } from './pointage.util';
 
 const suivi: PointageSuiviDto = {
@@ -83,5 +89,30 @@ describe('Pointage', () => {
     const rows = lignesExport(lignes);
     expect(rows).toHaveLength(4);
     expect(rows[1].slice(0, 5)).toEqual(['GHAZI A', 'ATS', 'Oui', '00:12', 12]);
+  });
+
+  it('v11 : écarts, semaines et anomalies', () => {
+    expect(formatEcart(20)).toBe('+00:20');
+    expect(formatEcart(-40)).toBe('−00:40');
+    expect(formatEcart(0)).toBe('00:00');
+    expect(formatEcart(null)).toBe('—');
+    const now = new Date(2026, 10, 4);
+    expect(semaine(0, now)).toEqual({ du: '2026-11-02', au: '2026-11-08' });
+    expect(semaine(-1, now)).toEqual({ du: '2026-10-26', au: '2026-11-01' });
+    expect(joursEntre('2026-10-30', '2026-11-02')).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
+    const ok = { ...suivi.jours[1], productionMinutes: 520, productionPrevueMinutes: 520, ecartProductionMinutes: 0 };
+    expect(estAnomalie(ok)).toBe(false);
+    expect(estAnomalie({ ...ok, ecartProductionMinutes: -10 })).toBe(true);
+    expect(estAnomalie(suivi.jours[0])).toBe(true);
+    expect(pausesNonPointees({ ...ok, pointages: ['08:00:00', '17:00:00'] })).toBe(true);
+    expect(pausesNonPointees({ ...ok, pointages: ['08:00:00', '12:00:00', '13:00:00', '17:00:00'] })).toBe(false);
+  });
+
+  it('v11 : export détaillé jour par jour pour l’audit', () => {
+    const rows = lignesExportJours([{ ...suivi, jours: [{ ...suivi.jours[0], pointages: ['09:36:00', '18:30:00'], productionMinutes: 534, productionPrevueMinutes: 520, ecartProductionMinutes: 14, source: 'Regime' }] }]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0][8]).toBe('Nb pointages');
+    expect(rows[1].slice(0, 9)).toEqual(['EL MAHI Omar', 'IT', '2026-10-05', 'Retard', 'Régime horaire', '09:30', '09:36:00', '18:30:00', 2]);
+    expect(rows[1].slice(15)).toEqual(['08:54', '08:40', '+00:14']);
   });
 });

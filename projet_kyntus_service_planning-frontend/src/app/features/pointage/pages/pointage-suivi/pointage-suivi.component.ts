@@ -6,11 +6,16 @@ import { PointageService } from '../../../../core/services/pointage.service';
 import { CongeService } from '../../../../core/services/conge.service';
 import type { PointageJourDto, PointageSuiviDto } from '../../../../core/models/pointage.models';
 import type { SoldeCongeDto } from '../../../../core/models/conge.models';
-import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
+import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
+import { telechargerExcel } from '../../lib/excel-export';
+import { formatHeuresMinutes } from '../../lib/heure-sortie.util';
 import {
   STATUT_LABELS,
   barresRetard,
   formatDuree,
+  formatEcart,
+  lignesExportJours,
+  pausesNonPointees,
   jourLabel,
   messagesSuivi,
   periode,
@@ -26,7 +31,7 @@ import {
 @Component({
   selector: 'app-pointage-suivi',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, KyntusPageHeaderComponent],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './pointage-suivi.component.html',
   styleUrls: ['./pointage-suivi.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,11 +40,15 @@ export class PointageSuiviComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly svc = inject(PointageService);
   private readonly conges = inject(CongeService);
+  private readonly toast = inject(KyntusToastService);
 
   readonly statutLabels = STATUT_LABELS;
   readonly statutClass = statutClass;
   readonly formatDuree = formatDuree;
   readonly jourLabel = jourLabel;
+  readonly formatEcart = formatEcart;
+  readonly formatHeuresMinutes = formatHeuresMinutes;
+  readonly pausesNonPointees = pausesNonPointees;
 
   readonly userId = signal<number | null>(null);
   readonly preset = signal<PeriodePreset | 'perso'>('mois');
@@ -56,6 +65,13 @@ export class PointageSuiviComponent implements OnInit {
   readonly barreMax = computed(() => Math.max(1, ...this.barres().map((b) => b.minutes)));
   readonly jours = computed(() => (this.data()?.jours ?? []).filter((j) => j.statut !== 'AVenir'));
   readonly titre = computed(() => (this.userId() ? `Suivi — ${this.data()?.collaborateur ?? ''}` : 'Mon suivi'));
+  /** Production de la période : réalisée, prévue (mêmes journées) et avancement. */
+  readonly production = computed(() => {
+    const t = this.data()?.totaux;
+    const realisee = t?.productionMinutes ?? 0;
+    const prevue = t?.productionPrevueMinutes ?? 0;
+    return { realisee, prevue, ecart: realisee - prevue, jours: t?.joursProductionCalculee ?? 0, pct: prevue ? Math.min(100, (realisee / prevue) * 100) : 0 };
+  });
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
@@ -108,6 +124,18 @@ export class PointageSuiviComponent implements OnInit {
   pauseTexte(j: PointageJourDto): string {
     if (!j.pauseMinutes) return '—';
     return `${formatDuree(j.pauseMinutes)} / ${formatDuree(j.pauseAutoriseeMinutes)}`;
+  }
+
+  async exporter(): Promise<void> {
+    const d = this.data();
+    if (!d) return;
+    try {
+      await telechargerExcel(`pointages-${d.collaborateur.replace(/\s+/g, '-')}-${d.du}-${d.au}.xlsx`, [
+        { nom: 'Jour par jour', titre: `Pointages de ${d.collaborateur} du ${d.du} au ${d.au}`, lignes: lignesExportJours([d]) },
+      ]);
+    } catch {
+      this.toast.error('Export Excel impossible.');
+    }
   }
 
   formatDateTime(value: string | null): string {
