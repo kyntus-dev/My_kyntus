@@ -149,3 +149,75 @@ export function formatHeuresMinutes(minutes: number): string {
   const m = Math.abs(Math.round(minutes));
   return `${signe}${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
 }
+
+// ── Calcul d'après les pointages du jour ──────────────────────────────────────
+
+export interface HeureSortiePointages extends HeureSortieResultat {
+  /** Nombre pair de pointages : la personne est sortie (pause en cours, ou départ). */
+  enPause: boolean;
+  /** Durée de la pause en cours (0 si au travail). */
+  pauseEnCoursSecondes: number;
+  /** Pauses terminées (paires sortie → retour). */
+  pausesTermineesSecondes: number;
+  dernierPointageSecondes: number;
+}
+
+/**
+ * Même tableau de bord que l'Excel, mais à partir des pointages réels du jour :
+ * - entrée = premier pointage ;
+ * - pauses = paires « sortie → retour » déjà pointées, plus la pause en cours si le dernier
+ *   pointage est une sortie (nombre pair de pointages) ;
+ * - production réalisée = (maintenant − entrée) − pauses, soit le temps passé au travail ;
+ * - sortie = entrée + production du jour + pauses (une pause en cours repousse la sortie).
+ */
+export function calculerDepuisPointages(
+  pointages: readonly string[],
+  productionMinutes: number,
+  now: Date,
+  sortieSouhaitee?: string | null,
+): HeureSortiePointages | null {
+  const p = pointages.map(parseHeure).filter((x): x is number => x !== null).sort((a, b) => a - b);
+  if (!p.length) return null;
+
+  const maintenant = Math.max(secondesDuJour(now), p[p.length - 1]);
+  const entree = p[0];
+  let terminees = 0;
+  for (let i = 1; i + 1 < p.length; i += 2) terminees += p[i + 1] - p[i];
+  const enPause = p.length % 2 === 0;
+  const enCours = enPause ? maintenant - p[p.length - 1] : 0;
+  const pauses = terminees + enCours;
+
+  const production = Math.max(0, Math.round(productionMinutes || 0)) * 60;
+  const realisee = maintenant - entree - pauses;
+  const avancement = production > 0 ? realisee / production : 0;
+  const sortie = entree + production + pauses;
+  const souhaitee = parseHeure(sortieSouhaitee);
+
+  return {
+    entreeSecondes: entree,
+    productionSecondes: production,
+    pauseDejSecondes: 0,
+    pauseTotaleSecondes: pauses,
+    sortieSecondes: sortie,
+    resteSecondes: sortie - maintenant,
+    productionRealiseeSecondes: realisee,
+    productionRestanteSecondes: production - realisee,
+    avancement,
+    resteAvancement: 1 - avancement,
+    termine: !(1 > avancement),
+    souhaitee: souhaitee === null
+      ? null
+      : {
+          sortieSecondes: souhaitee,
+          productionSecondes: souhaitee - entree - pauses,
+          ecartSecondes: souhaitee - entree - pauses - production,
+        },
+    enPause,
+    pauseEnCoursSecondes: enCours,
+    pausesTermineesSecondes: terminees,
+    dernierPointageSecondes: p[p.length - 1],
+  };
+}
+
+/** Productions proposées dans la liste (08:40 et 07:40, comme l'Excel). */
+export const PRODUCTIONS_PROPOSEES = [520, 460];

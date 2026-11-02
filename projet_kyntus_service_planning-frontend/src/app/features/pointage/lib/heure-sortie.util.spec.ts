@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PAUSE_FORFAIT_EXCEL,
+  calculerDepuisPointages,
   calculerHeureSortie,
   formatHeure,
   formatHeuresMinutes,
@@ -89,5 +90,37 @@ describe('heure-sortie.util — formules de Combien_il_me_reste.xlsx', () => {
     expect(parseHeure('8:05')).toBe(8 * 3600 + 5 * 60);
     expect(formatHeuresMinutes(520)).toBe('8 h 40');
     expect(formatHeuresMinutes(-30)).toBe('−0 h 30');
+  });
+});
+
+describe('heure-sortie.util — calcul d’après les pointages', () => {
+  const l = (h: number, m = 0, s = 0) => new Date(2026, 10, 2, h, m, s);
+
+  it('cas de la capture : arrivée 09:09:25, pause 15:27:25 → 15:44:21, au travail à 16:12:18', () => {
+    const r = calculerDepuisPointages(['09:09:25', '15:27:25', '15:44:21'], 520, l(16, 12, 18))!;
+    expect(r.enPause).toBe(false);
+    expect(formatHms(r.pauseTotaleSecondes)).toBe('00:16:56');
+    // (16:12:18 − 09:09:25) − 00:16:56
+    expect(formatHms(r.productionRealiseeSecondes)).toBe('06:45:57');
+    // 09:09:25 + 08:40 + 00:16:56
+    expect(formatHeure(r.sortieSecondes, true)).toBe('18:06:21');
+    expect(formatHms(r.resteSecondes)).toBe('01:54:03');
+  });
+
+  it('pause en cours : la sortie recule tant que la pause dure', () => {
+    const a = calculerDepuisPointages(['08:00:00', '12:00:00'], 460, l(12, 30))!;
+    expect(a.enPause).toBe(true);
+    expect(a.pauseEnCoursSecondes).toBe(1800);
+    expect(formatHeure(a.sortieSecondes)).toBe('16:10');
+    expect(formatHms(a.productionRealiseeSecondes)).toBe('04:00:00');
+    const b = calculerDepuisPointages(['08:00:00', '12:00:00'], 460, l(13))!;
+    expect(formatHeure(b.sortieSecondes)).toBe('16:40');
+  });
+
+  it('production atteinte : « Done »', () => {
+    const r = calculerDepuisPointages(['08:00:00', '12:00:00', '13:00:00'], 460, l(16, 40))!;
+    expect(r.termine).toBe(true);
+    expect(r.resteSecondes).toBe(0);
+    expect(calculerDepuisPointages([], 520, l(9))).toBeNull();
   });
 });

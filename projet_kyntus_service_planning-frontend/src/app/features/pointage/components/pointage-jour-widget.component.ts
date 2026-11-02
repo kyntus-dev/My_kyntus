@@ -5,7 +5,7 @@ import { PointageService } from '../../../core/services/pointage.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ROLE_SETS } from '../../../core/org/kyntus-role-names';
 import type { PointageAujourdhuiDto } from '../../../core/models/pointage.models';
-import { calculerHeureSortie, formatHeure, formatHeuresMinutes, formatHms } from '../lib/heure-sortie.util';
+import { calculerDepuisPointages, formatHeure, formatHeuresMinutes, formatHms } from '../lib/heure-sortie.util';
 import { STATUT_LABELS } from '../lib/pointage.util';
 
 /**
@@ -95,10 +95,8 @@ export class PointageJourWidgetComponent implements OnInit {
     const j = this.jour();
     // Production et heure de sortie : seulement pour les personnes choisies par l'Admin (régime horaire).
     if (!j?.pointages.length || !j.accesCalculSortie) return null;
-    return calculerHeureSortie(
-      { entree: j.pointages[0], productionMinutes: j.productionPrevueMinutes, pauseForfaitMinutes: j.pauseAutoriseeMinutes },
-      this.now(),
-    );
+    // Même calcul que la page « Heure de sortie » : d'après les pointages du jour.
+    return calculerDepuisPointages(j.pointages, j.productionPrevueMinutes, this.now());
   });
   readonly pourcent = computed(() => Math.min(100, Math.max(0, (this.resultat()?.avancement ?? 0) * 100)));
   readonly statut = computed(() => {

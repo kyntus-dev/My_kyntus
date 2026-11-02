@@ -38,41 +38,65 @@
             </div>
           </div>
 
-          <label class="ku-field">
-            <span>Heure d’arrivée</span>
-            <input class="ku-input ku-input--lg" type="time" step="1" [ngModel]="entree()" (ngModelChange)="entree.set($event ?? '')" />
-            @if (premierPointage(); as p) {
-              <small>Premier pointage du jour : <b>{{ p }}</b>
-                @if (p !== entree()) { — <button type="button" class="hs-link" (click)="reprendrePremierPointage()">le reprendre</button> }
-              </small>
-            } @else {
-              <small>Aucun pointage reçu aujourd’hui : saisissez votre heure d’arrivée.</small>
-            }
-          </label>
-
-          <div class="hs-fixed">
-            <div>
-              <span>Production du jour</span>
-              <b>{{ formatHeuresMinutes(productionMinutes()) }}</b>
-            </div>
-            <div>
-              <span>Pauses forfaitaires</span>
-              <b>{{ formatHeuresMinutes(pauseForfaitMinutes()) }}</b>
-            </div>
+          <div class="ku-seg hs-mode" role="group" aria-label="Mode de calcul">
+            <button type="button" [class.is-active]="mode() === 'pointages'" (click)="mode.set('pointages')" [disabled]="!j.pointages.length">D’après mes pointages</button>
+            <button type="button" [class.is-active]="mode() === 'manuel'" (click)="mode.set('manuel')">Saisie manuelle</button>
           </div>
 
-          <fieldset class="hs-pause">
-            <legend>Pause déjeuner <small>(facultative, ajoutée aux pauses forfaitaires)</small></legend>
-            <label class="ku-field"><span>Début</span>
-              <input class="ku-input" type="time" [ngModel]="debutPause()" (ngModelChange)="debutPause.set($event ?? '')" />
+          <label class="ku-field">
+            <span>Production du jour</span>
+            <select class="ku-input ku-input--lg" [ngModel]="productionMinutes()" (ngModelChange)="choisirProduction($event)">
+              @for (pm of productionsProposees(); track pm) {
+                <option [ngValue]="pm">{{ formatHeuresMinutes(pm) }}@if (pm === productionDefaut()) { (par défaut) }</option>
+              }
+            </select>
+          </label>
+
+          @if (mode() === 'pointages' && resultatPointages(); as rp) {
+            <div class="hs-auto">
+              <div><span>Entrée (1er pointage)</span><b>{{ formatHeure(rp.entreeSecondes, true) }}</b></div>
+              <div><span>Pauses pointées</span><b>{{ formatHms(rp.pauseTotaleSecondes) }}</b>
+                @if (rp.enPause) { <small class="hs-live">dont {{ formatHms(rp.pauseEnCoursSecondes) }} en cours</small> }</div>
+              <div><span>Statut</span>
+                <b [class.hs-pause-on]="rp.enPause" [class.hs-work-on]="!rp.enPause">{{ rp.enPause ? 'En pause / sorti' : 'Au travail' }}</b>
+                <small class="ku-muted">depuis {{ formatHeure(rp.dernierPointageSecondes) }}</small></div>
+              <div><span>Pause autorisée restante</span><b>{{ formatHeuresMinutes(pauseRestanteMinutes()) }}</b>
+                <small class="ku-muted">sur {{ formatHeuresMinutes(pauseForfaitMinutes()) }}, non ajoutée</small></div>
+            </div>
+            <p class="ku-card-sub">Sortie = entrée + production + pauses pointées. Une nouvelle pause, une fois pointée, repousse la sortie d’autant.</p>
+          } @else {
+            <label class="ku-field">
+              <span>Heure d’arrivée</span>
+              <input class="ku-input ku-input--lg" type="time" step="1" [ngModel]="entree()" (ngModelChange)="entree.set($event ?? '')" />
+              @if (premierPointage(); as p) {
+                <small>Premier pointage du jour : <b>{{ p }}</b>
+                  @if (p !== entree()) { — <button type="button" class="hs-link" (click)="reprendrePremierPointage()">le reprendre</button> }
+                </small>
+              } @else {
+                <small>Aucun pointage reçu aujourd’hui : saisissez votre heure d’arrivée.</small>
+              }
             </label>
-            <label class="ku-field"><span>Fin</span>
-              <input class="ku-input" type="time" [ngModel]="finPause()" (ngModelChange)="finPause.set($event ?? '')" />
-            </label>
-            @if (debutPause() || finPause()) {
-              <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="effacerPause()">Effacer</button>
-            }
-          </fieldset>
+
+            <div class="hs-fixed">
+              <div>
+                <span>Pauses forfaitaires</span>
+                <b>{{ formatHeuresMinutes(pauseForfaitMinutes()) }}</b>
+              </div>
+            </div>
+
+            <fieldset class="hs-pause">
+              <legend>Pause déjeuner <small>(facultative, ajoutée aux pauses forfaitaires)</small></legend>
+              <label class="ku-field"><span>Début</span>
+                <input class="ku-input" type="time" [ngModel]="debutPause()" (ngModelChange)="debutPause.set($event ?? '')" />
+              </label>
+              <label class="ku-field"><span>Fin</span>
+                <input class="ku-input" type="time" [ngModel]="finPause()" (ngModelChange)="finPause.set($event ?? '')" />
+              </label>
+              @if (debutPause() || finPause()) {
+                <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="effacerPause()">Effacer</button>
+              }
+            </fieldset>
+          }
 
           <label class="ku-field">
             <span>Heure de sortie souhaitée <small>(facultative)</small></span>
@@ -161,10 +185,11 @@
         <summary>Comment c’est calculé (formules de l’Excel « Combien il me reste »)</summary>
         <ul>
           <li><b>Sortie</b> = arrivée + production du jour + pauses.</li>
-          <li><b>Pauses</b> = pauses forfaitaires ({{ formatHeuresMinutes(pauseForfaitMinutes()) }}) + pause déjeuner saisie.</li>
+          <li><b>D’après mes pointages</b> : arrivée = premier pointage ; pauses = chaque paire « sortie → retour » pointée, plus la pause en cours.</li>
+          <li><b>Saisie manuelle</b> (Excel) : pauses = pauses forfaitaires ({{ formatHeuresMinutes(pauseForfaitMinutes()) }}) + pause déjeuner saisie.</li>
           <li><b>Il me reste</b> = sortie − heure actuelle.</li>
           <li><b>Production réalisée</b> = (heure actuelle − arrivée) − pauses ; l’avancement est la production réalisée divisée par la production du jour.</li>
-          <li><b>Production du jour</b> : fixée par l’administrateur dans votre régime horaire ; sans régime, la règle de l’Excel s’applique (07:40 le vendredi et le samedi, 08:40 sinon).</li>
+          <li><b>Production du jour</b> : 8 h 40 ou 7 h 40, au choix dans la liste ; par défaut, celle de votre régime horaire, sinon la règle de l’Excel (07:40 le vendredi et le samedi, 08:40 sinon).</li>
         </ul>
         <p class="ku-muted">Les heures de prière de l’Excel viennent d’un autre classeur qui n’a pas été transmis : elles ne sont pas reprises.</p>
         <a routerLink="/pointage/mon-suivi" class="ku-btn ku-btn--sm">Voir mon suivi de pointage</a>

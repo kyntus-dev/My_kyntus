@@ -6,6 +6,8 @@ import { PointageService } from '../../../../core/services/pointage.service';
 import type { PointageAujourdhuiDto } from '../../../../core/models/pointage.models';
 import {
   PAUSE_FORFAIT_EXCEL,
+  PRODUCTIONS_PROPOSEES,
+  calculerDepuisPointages,
   calculerHeureSortie,
   formatHeure,
   formatHeuresMinutes,
@@ -45,8 +47,16 @@ export class PointageHeureSortieComponent implements OnInit {
   readonly finPause = signal('');
   readonly sortieSouhaitee = signal('');
 
+  /** Calcul d'après les pointages du jour (par défaut) ou saisie manuelle comme l'Excel. */
+  readonly mode = signal<'pointages' | 'manuel'>('pointages');
+  /** Production choisie dans la liste (null : celle du régime, sinon de l'Excel). */
+  readonly productionChoisie = signal<number | null>(null);
+
   /** B3 : production du jour. */
-  readonly productionMinutes = computed(() => this.jour()?.productionPrevueMinutes ?? productionExcel(this.now()));
+  readonly productionDefaut = computed(() => this.jour()?.productionPrevueMinutes ?? productionExcel(this.now()));
+  readonly productionMinutes = computed(() => this.productionChoisie() ?? this.productionDefaut());
+  readonly productionsProposees = computed(() =>
+    [...new Set([...PRODUCTIONS_PROPOSEES, this.productionDefaut()])].sort((a, b) => b - a));
   /** I4 : pauses forfaitaires. */
   readonly pauseForfaitMinutes = computed(() => this.jour()?.pauseAutoriseeMinutes ?? PAUSE_FORFAIT_EXCEL);
   readonly premierPointage = computed(() => this.jour()?.pointages?.[0] ?? null);
@@ -58,7 +68,10 @@ export class PointageHeureSortieComponent implements OnInit {
     return 'Valeurs de l’Excel (aucun régime horaire)';
   });
 
-  readonly resultat = computed(() =>
+  readonly resultatPointages = computed(() =>
+    calculerDepuisPointages(this.jour()?.pointages ?? [], this.productionMinutes(), this.now(), this.sortieSouhaitee()));
+
+  readonly resultatManuel = computed(() =>
     calculerHeureSortie(
       {
         entree: this.entree(),
@@ -70,6 +83,14 @@ export class PointageHeureSortieComponent implements OnInit {
       },
       this.now(),
     ));
+
+  readonly resultat = computed(() => (this.mode() === 'pointages' ? this.resultatPointages() : this.resultatManuel()));
+
+  /** Pause autorisée qu'il reste à prendre (information, non ajoutée à la sortie). */
+  readonly pauseRestanteMinutes = computed(() => {
+    const r = this.resultatPointages();
+    return r ? Math.max(0, this.pauseForfaitMinutes() - Math.floor(r.pauseTotaleSecondes / 60)) : 0;
+  });
 
   /** Avancement affiché dans l'anneau (borné à 0–100 %). */
   readonly pourcent = computed(() => {
@@ -90,6 +111,7 @@ export class PointageHeureSortieComponent implements OnInit {
       next: (j) => {
         this.jour.set(j);
         if (!this.entree() && j.pointages.length) this.entree.set(j.pointages[0]);
+        if (!j.pointages.length) this.mode.set('manuel');
         this.loading.set(false);
       },
       error: (err) => {
@@ -97,6 +119,11 @@ export class PointageHeureSortieComponent implements OnInit {
         this.error.set(err?.error?.message ?? 'Impossible de charger votre journée.');
       },
     });
+  }
+
+  choisirProduction(value: string | number): void {
+    const v = Number(value);
+    this.productionChoisie.set(v === this.productionDefaut() ? null : v);
   }
 
   reprendrePremierPointage(): void {

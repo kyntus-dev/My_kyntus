@@ -47,3 +47,14 @@
   .hs-pause { grid-template-columns: 1fr 1fr; }
   .ku-ring { width: 140px; }
 }
+.hs-mode { width: 100%; }
+.hs-mode button { flex: 1; }
+.hs-mode button:disabled { opacity: 0.5; cursor: not-allowed; }
+.hs-auto { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hs-auto > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--bg-input, var(--bg-primary)); }
+.hs-auto span { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); }
+.hs-auto b { font: 700 1.05rem var(--font-display); font-variant-numeric: tabular-nums; }
+.hs-auto small { font-size: 0.68rem; }
+.hs-live { color: var(--warning-text); font-weight: 600; }
+.hs-pause-on { color: var(--warning-text); }
+.hs-work-on { color: var(--success-text); }
