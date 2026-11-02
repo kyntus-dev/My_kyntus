@@ -277,8 +277,11 @@ docker exec kyntus_db psql -U postgres -d kyntus_db -c 'SELECT * FROM "PointageS
 ```bash
 cd /home/o/projets_mykyntus-
 STAMP=$(date +%Y%m%d_%H%M%S); echo "$STAMP" > ~/sauvegardes_reorg/STAMP_V10_1
-c=$(docker compose ps -q planning-backend); docker tag "$(docker inspect --format '{{.Image}}' "$c")" "reorg-avant-v10-1/planning-backend:$STAMP"
-c=$(docker compose ps -q planning-frontend); docker tag "$(docker inspect --format '{{.Image}}' "$c")" "reorg-avant-v10-1/planning-frontend:$STAMP"
+: > ~/sauvegardes_reorg/images_avant_v10_1_$STAMP.txt
+for s in planning-backend planning-frontend; do
+  c=$(docker compose ps -q "$s"); img=$(docker inspect --format '{{.Config.Image}}' "$c"); id=$(docker inspect --format '{{.Image}}' "$c")
+  docker tag "$id" "reorg-avant-v10-1/$s:$STAMP" && echo "$s $img $id" >> ~/sauvegardes_reorg/images_avant_v10_1_$STAMP.txt
+done
 if patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v10-1.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
   echo "STOP : le correctif ne s'applique pas proprement"; else patch -p1 --batch < /tmp/reorg-2026-code-v10-1.patch >/dev/null && echo "CORRECTIF V10.1 APPLIQUÉ"; fi
 docker compose build planning-backend planning-frontend
@@ -290,4 +293,12 @@ docker exec kyntus_db psql -U postgres -d kyntus_db -c 'SELECT "DernierEssai", "
 
 Puis ouvrez Pointage › Correspondance pointeuses. Le bandeau indique « en cours », la dernière réussite ou l'erreur exacte ; actualisez après quelques minutes.
 
-Retour arrière : `patch -p1 -R --batch < /tmp/reorg-2026-code-v10-1.patch`, puis remettez les images `reorg-avant-v10-1/…` et faites `docker compose up -d --no-deps --no-build planning-backend planning-frontend`.
+Retour arrière :
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(cat ~/sauvegardes_reorg/STAMP_V10_1)
+patch -p1 -R --batch < /tmp/reorg-2026-code-v10-1.patch
+while read -r s img id; do docker tag "reorg-avant-v10-1/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_v10_1_$STAMP.txt
+docker compose up -d --no-deps --no-build planning-backend planning-frontend
+```
