@@ -13,6 +13,8 @@ import {
   formatHeuresMinutes,
   formatHms,
   productionExcel,
+  soldeHeures,
+  type SoldeHeures,
 } from '../../lib/heure-sortie.util';
 
 /**
@@ -86,6 +88,16 @@ export class PointageHeureSortieComponent implements OnInit {
 
   readonly resultat = computed(() => (this.mode() === 'pointages' ? this.resultatPointages() : this.resultatManuel()));
 
+  /** Solde des jours précédents du mois (heures en plus − heures manquantes). */
+  readonly solde = signal<SoldeHeures | null>(null);
+  /** Écart du jour en secondes : négatif tant que la production n'est pas atteinte. */
+  readonly ecartJour = computed(() => {
+    const r = this.resultat();
+    return r ? r.productionRealiseeSecondes - r.productionSecondes : 0;
+  });
+  /** Solde du mois si la personne sort maintenant. */
+  readonly soldeApres = computed(() => (this.solde()?.soldeMinutes ?? 0) * 60 + this.ecartJour());
+
   /** Pause autorisée qu'il reste à prendre (information, non ajoutée à la sortie). */
   readonly pauseRestanteMinutes = computed(() => {
     const r = this.resultatPointages();
@@ -107,6 +119,13 @@ export class PointageHeureSortieComponent implements OnInit {
   load(): void {
     this.loading.set(true);
     this.error.set(null);
+    const now = new Date();
+    const du = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('sv-SE');
+    const au = now.toLocaleDateString('sv-SE');
+    this.svc.monSuivi(du, au).subscribe({
+      next: (s) => this.solde.set(soldeHeures(s.jours, au)),
+      error: () => this.solde.set(null),
+    });
     this.svc.aujourdhui().subscribe({
       next: (j) => {
         this.jour.set(j);
@@ -119,6 +138,10 @@ export class PointageHeureSortieComponent implements OnInit {
         this.error.set(err?.error?.message ?? 'Impossible de charger votre journée.');
       },
     });
+  }
+
+  abs(v: number): number {
+    return Math.abs(v);
   }
 
   choisirProduction(value: string | number): void {

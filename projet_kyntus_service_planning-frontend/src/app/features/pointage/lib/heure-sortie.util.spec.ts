@@ -8,6 +8,7 @@ import {
   formatHms,
   parseHeure,
   productionExcel,
+  soldeHeures,
 } from './heure-sortie.util';
 
 const lundi = (h: number, m = 0, s = 0) => new Date(2026, 9, 26, h, m, s);
@@ -122,5 +123,24 @@ describe('heure-sortie.util — calcul d’après les pointages', () => {
     expect(r.termine).toBe(true);
     expect(r.resteSecondes).toBe(0);
     expect(calculerDepuisPointages([], 520, l(9))).toBeNull();
+  });
+});
+
+describe('heure-sortie.util — heures supplémentaires', () => {
+  it('le solde additionne les heures en plus et compense les heures manquantes', () => {
+    const jours = [
+      { jour: '2026-10-26', productionMinutes: 540, productionPrevueMinutes: 520 }, // +20
+      { jour: '2026-10-27', productionMinutes: 510, productionPrevueMinutes: null }, // mardi : 520 → −10
+      { jour: '2026-10-30', productionMinutes: 470, productionPrevueMinutes: null }, // vendredi : 460 → +10
+      { jour: '2026-10-28', productionMinutes: null, productionPrevueMinutes: 520 }, // non calculé
+      { jour: '2026-11-02', productionMinutes: 600, productionPrevueMinutes: 520 }, // aujourd'hui : exclu
+    ];
+    expect(soldeHeures(jours, '2026-11-02')).toEqual({ soldeMinutes: 20, plusMinutes: 30, moinsMinutes: 10, jours: 3 });
+  });
+
+  it('dépassement du jour : production réalisée au-delà de la production prévue', () => {
+    const r = calculerDepuisPointages(['09:09:25', '15:27:25', '15:44:21'], 520, new Date(2026, 10, 2, 18, 20, 0))!;
+    expect(r.termine).toBe(true);
+    expect(formatHms(r.productionRealiseeSecondes - r.productionSecondes)).toBe('00:13:39');
   });
 });

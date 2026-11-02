@@ -58,3 +58,12 @@
 .hs-live { color: var(--warning-text); font-weight: 600; }
 .hs-pause-on { color: var(--warning-text); }
 .hs-work-on { color: var(--success-text); }
+.hs-sup { background: var(--success-bg); border-color: var(--success-border) !important; }
+.hs-sup dd { color: var(--success-text); }
+.hs-solde { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.hs-solde > div { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); }
+.hs-solde span { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); }
+.hs-solde b { font: 700 1.2rem var(--font-display); font-variant-numeric: tabular-nums; }
+.hs-solde small { font-size: 0.68rem; }
+.hs-solde-total { background: color-mix(in srgb, var(--ky-blue) 7%, var(--bg-card)); border-color: color-mix(in srgb, var(--ky-blue) 30%, var(--border-color)) !important; }
+@media (max-width: 640px) { .hs-solde { grid-template-columns: 1fr; } }

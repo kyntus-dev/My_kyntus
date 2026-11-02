@@ -135,12 +135,17 @@
               </div>
 
               <dl class="hs-stats">
-                <div>
-                  <dt>Il me reste</dt>
-                  <dd class="hs-big" [class.ku-pos]="r.resteSecondes <= 0">
-                    {{ r.resteSecondes > 0 ? formatHms(r.resteSecondes) : 'Terminé' }}
-                  </dd>
-                </div>
+                @if (r.termine) {
+                  <div class="hs-sup">
+                    <dt>Heures sup. aujourd’hui</dt>
+                    <dd class="hs-big">+{{ formatHms(ecartJour()) }}</dd>
+                  </div>
+                } @else {
+                  <div>
+                    <dt>Il me reste</dt>
+                    <dd class="hs-big">{{ formatHms(r.resteSecondes) }}</dd>
+                  </div>
+                }
                 <div>
                   <dt>Production réalisée</dt>
                   <dd>{{ formatHms(r.productionRealiseeSecondes > 0 ? r.productionRealiseeSecondes : 0) }}</dd>
@@ -157,6 +162,26 @@
                 </div>
               </dl>
             </div>
+
+            @if (solde(); as so) {
+              <div class="hs-solde">
+                <div>
+                  <span>Solde du mois (jours précédents)</span>
+                  <b [class.ku-pos]="so.soldeMinutes > 0" [class.ku-neg]="so.soldeMinutes < 0">{{ so.soldeMinutes >= 0 ? '+' : '−' }}{{ formatHms(abs(so.soldeMinutes * 60)) }}</b>
+                  <small class="ku-muted">+{{ formatHms(so.plusMinutes * 60) }} en plus · −{{ formatHms(so.moinsMinutes * 60) }} manquantes · {{ so.jours }} jour(s)</small>
+                </div>
+                <div>
+                  <span>Aujourd’hui</span>
+                  <b [class.ku-pos]="ecartJour() > 0" [class.ku-neg]="ecartJour() < 0">{{ ecartJour() >= 0 ? '+' : '−' }}{{ formatHms(abs(ecartJour())) }}</b>
+                  <small class="ku-muted">{{ r.termine ? 'heures en plus' : 'manquant si vous sortez maintenant' }}</small>
+                </div>
+                <div class="hs-solde-total">
+                  <span>Solde en sortant maintenant</span>
+                  <b [class.ku-pos]="soldeApres() > 0" [class.ku-neg]="soldeApres() < 0">{{ soldeApres() >= 0 ? '+' : '−' }}{{ formatHms(abs(soldeApres())) }}</b>
+                  <small class="ku-muted">{{ soldeApres() >= 0 ? 'heures en plus' : 'à récupérer' }}</small>
+                </div>
+              </div>
+            }
 
             @if (r.souhaitee; as s) {
               <div class="ku-alert" [class.ku-alert--ok]="s.ecartSecondes >= 0" [class.ku-alert--warn]="s.ecartSecondes < 0">
@@ -189,6 +214,7 @@
           <li><b>Saisie manuelle</b> (Excel) : pauses = pauses forfaitaires ({{ formatHeuresMinutes(pauseForfaitMinutes()) }}) + pause déjeuner saisie.</li>
           <li><b>Il me reste</b> = sortie − heure actuelle.</li>
           <li><b>Production réalisée</b> = (heure actuelle − arrivée) − pauses ; l’avancement est la production réalisée divisée par la production du jour.</li>
+          <li><b>Heures supplémentaires</b> : production réalisée au-delà de la production du jour. Le solde du mois additionne les heures en plus et compense les heures manquantes des journées précédentes (production prévue du planning ou du régime, sinon la règle de l’Excel).</li>
           <li><b>Production du jour</b> : 8 h 40 ou 7 h 40, au choix dans la liste ; par défaut, celle de votre régime horaire, sinon la règle de l’Excel (07:40 le vendredi et le samedi, 08:40 sinon).</li>
         </ul>
         <p class="ku-muted">Les heures de prière de l’Excel viennent d’un autre classeur qui n’a pas été transmis : elles ne sont pas reprises.</p>

@@ -221,3 +221,37 @@ export function calculerDepuisPointages(
 
 /** Productions proposées dans la liste (08:40 et 07:40, comme l'Excel). */
 export const PRODUCTIONS_PROPOSEES = [520, 460];
+
+// ── Heures supplémentaires et solde ───────────────────────────────────────────
+
+export interface SoldeHeures {
+  /** Solde des jours précédents (minutes) : heures en plus moins heures manquantes. */
+  soldeMinutes: number;
+  plusMinutes: number;
+  moinsMinutes: number;
+  jours: number;
+}
+
+/**
+ * Solde des jours terminés avant `aujourdhui` : pour chaque journée calculée,
+ * production réalisée − production prévue (celle du planning ou du régime, sinon la règle de
+ * l'Excel). Les heures en plus s'ajoutent, les heures manquantes se compensent.
+ */
+export function soldeHeures(
+  jours: readonly { jour: string; productionMinutes?: number | null; productionPrevueMinutes?: number | null }[],
+  aujourdhui: string,
+): SoldeHeures {
+  let plus = 0;
+  let moins = 0;
+  let n = 0;
+  for (const j of jours) {
+    const date = j.jour.slice(0, 10);
+    if (date >= aujourdhui || j.productionMinutes == null) continue;
+    const [y, m, d] = date.split('-').map(Number);
+    const prevue = j.productionPrevueMinutes ?? productionExcel(new Date(y, m - 1, d));
+    const ecart = j.productionMinutes - prevue;
+    if (ecart > 0) plus += ecart; else moins -= ecart;
+    n++;
+  }
+  return { soldeMinutes: plus - moins, plusMinutes: plus, moinsMinutes: moins, jours: n };
+}
