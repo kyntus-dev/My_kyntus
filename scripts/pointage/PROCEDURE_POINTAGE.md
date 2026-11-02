@@ -243,3 +243,51 @@ docker compose up -d --no-deps --no-build planning-backend planning-frontend
 ```
 
 Les tables `PointagesBruts`, `PointageCorrespondances` et `PointageSyncStates` restent en base, sans effet sur l'ancien code. Les variables `KYNTUS_BIOTIME_*` de `.env` sont ignorées par l'ancien code.
+
+---
+
+# Correctif v10.1 : synchronisation robuste et état visible
+
+Constat après la mise en service : l'écran affichait « Synchronisation active — dernière : —, 0 pointage(s) », sans erreur visible.
+
+| Fichier | Contenu |
+|---|---|
+| `reorg-2026-code-v10-1.patch` | 13 fichiers : Planning (synchronisation, état) et frontend (bandeau d'état). |
+
+Ce que corrige la v10.1 :
+
+- **Délais dépassés :** une expiration de délai avec ZKBio Time pouvait arrêter la boucle de synchronisation, voire redémarrer le service Planning. Elle est désormais notée comme erreur, et la boucle reprend au tour suivant.
+- **Reprise de l'historique :** les 62 jours sont lus jour par jour et enregistrés au fur et à mesure.
+- **Configuration incomplète :** un mot de passe ou un compte absent de `.env` est signalé, au lieu d'être ignoré en silence.
+- **Bandeau d'état :** l'écran Correspondance pointeuses affiche « en cours », la dernière réussite ou l'erreur exacte.
+
+## Diagnostic (lecture seule) — à lancer avant le correctif
+
+```bash
+cd /home/o/projets_mykyntus-
+docker compose ps planning-backend
+docker compose logs --since 3h planning-backend | grep -iE "pointage|zkbio|unhandled|stopping|exception" | tail -30
+docker compose exec planning-backend printenv | grep '^Pointage__' | sed 's/^\(Pointage__Password=\).\+/\1(renseigné)/'
+docker compose exec planning-backend bash -c 'timeout 5 bash -c "</dev/tcp/10.10.10.7/443" && echo "Port 443 joignable" || echo "Port 443 NON joignable depuis le conteneur"'
+docker exec kyntus_db psql -U postgres -d kyntus_db -c 'SELECT * FROM "PointageSyncStates";'
+```
+
+## Application du correctif
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(date +%Y%m%d_%H%M%S); echo "$STAMP" > ~/sauvegardes_reorg/STAMP_V10_1
+c=$(docker compose ps -q planning-backend); docker tag "$(docker inspect --format '{{.Image}}' "$c")" "reorg-avant-v10-1/planning-backend:$STAMP"
+c=$(docker compose ps -q planning-frontend); docker tag "$(docker inspect --format '{{.Image}}' "$c")" "reorg-avant-v10-1/planning-frontend:$STAMP"
+if patch -p1 --batch --dry-run < /tmp/reorg-2026-code-v10-1.patch | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
+  echo "STOP : le correctif ne s'applique pas proprement"; else patch -p1 --batch < /tmp/reorg-2026-code-v10-1.patch >/dev/null && echo "CORRECTIF V10.1 APPLIQUÉ"; fi
+docker compose build planning-backend planning-frontend
+docker compose up -d --no-deps --no-build planning-backend planning-frontend
+sleep 150
+docker compose logs --since 3m planning-backend | grep -iE "pointage|zkbio" | tail -10
+docker exec kyntus_db psql -U postgres -d kyntus_db -c 'SELECT "DernierEssai", "DerniereSynchro", "DerniersPointagesRecus", "DerniereErreur" FROM "PointageSyncStates";'
+```
+
+Puis ouvrez Pointage › Correspondance pointeuses. Le bandeau indique « en cours », la dernière réussite ou l'erreur exacte ; actualisez après quelques minutes.
+
+Retour arrière : `patch -p1 -R --batch < /tmp/reorg-2026-code-v10-1.patch`, puis remettez les images `reorg-avant-v10-1/…` et faites `docker compose up -d --no-deps --no-build planning-backend planning-frontend`.
