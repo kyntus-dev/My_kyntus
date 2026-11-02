@@ -28,6 +28,12 @@ type CalendarCell = {
   inRange: boolean;
   absents: number;
   dejaDemande: boolean;
+  /** Pourquoi le jour n'est pas sélectionnable (couleur et légende distinctes). */
+  raison: 'avant' | 'interdit' | 'sature' | 'passe' | null;
+  weekend: boolean;
+  today: boolean;
+  /** 0 = libre, 1 = occupé sous le quota, 2 = quota atteint. */
+  niveau: 0 | 1 | 2;
 };
 
 @Component({
@@ -270,6 +276,9 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
     this.disponibiliteMotif = null;
     this.selectingEnd = false;
     this.calendarMonth = new Date();
+    // Ouvre directement sur le premier mois où le congé annuel est possible.
+    const premier = this.moisEligibilite;
+    if (premier) this.calendarMonth = premier;
     this.showModal = true;
     this.loadMonthBlockedDays();
     this.touchDraft();
@@ -301,22 +310,63 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
       cells.push({
         date: null, day: null, blocked: false, selected: false,
         inRange: false, absents: 0, dejaDemande: false,
+        raison: null, weekend: false, today: false, niveau: 0,
       });
     }
     for (let day = 1; day <= daysInMonth; day++) {
       const date = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const info = this.joursInfo.get(date);
+      const absents = info?.absents ?? 0;
+      const dow = new Date(y, m, day).getDay();
       cells.push({
         date,
         day,
         blocked: this.isDayBlocked(date),
         selected: date === this.form.dateDebut || date === this.form.dateFin,
         inRange: this.isDateInSelectedRange(date),
-        absents: info?.absents ?? 0,
+        absents,
         dejaDemande: info?.dejaDemande ?? false,
+        raison: this.raisonBlocage(date),
+        weekend: dow === 0 || dow === 6,
+        today: date === this.todayYmd(),
+        niveau: info?.sature ? 2 : absents > 0 ? 1 : 0,
       });
     }
     return cells;
+  }
+
+
+  /** Motif d'indisponibilité d'un jour (null : sélectionnable). */
+  raisonBlocage(date: string): CalendarCell['raison'] {
+    if (this.moisInterdits.includes(Number(date.slice(5, 7)))) return 'interdit';
+    if (this.form.typeConge === TypeConge.Annuel && this.dateEligibiliteYmd && date < this.dateEligibiliteYmd) return 'avant';
+    if (this.joursInfo.get(date)?.sature || this.blockedDays.has(date)) return 'sature';
+    return null;
+  }
+
+  /** Premier mois où le congé annuel est possible, s'il est après le mois affiché. */
+  get moisEligibilite(): Date | null {
+    if (this.form.typeConge !== TypeConge.Annuel || !this.dateEligibiliteYmd) return null;
+    const [y, m] = this.dateEligibiliteYmd.split('-').map(Number);
+    const cible = new Date(y, m - 1, 1);
+    const affiche = new Date(this.calendarMonth.getFullYear(), this.calendarMonth.getMonth(), 1);
+    return cible > affiche ? cible : null;
+  }
+
+  allerAuMoisEligible(): void {
+    const cible = this.moisEligibilite;
+    if (!cible) return;
+    this.calendarMonth = cible;
+    this.loadMonthBlockedDays();
+  }
+
+  /** « Du lun. 03 mai au ven. 07 mai 2027 · 5 jour(s) calendaires ». */
+  get resumeSelection(): string | null {
+    if (!this.form.dateDebut) return null;
+    const fin = this.form.dateFin || this.form.dateDebut;
+    const f = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'long' });
+    const jours = Math.round((new Date(`${fin}T00:00:00`).getTime() - new Date(`${this.form.dateDebut}T00:00:00`).getTime()) / 86400000) + 1;
+    return fin === this.form.dateDebut ? `Le ${f(fin)}` : `Du ${f(this.form.dateDebut)} au ${f(fin)} · ${jours} jour(s) calendaires`;
   }
 
   isDayBlocked(date: string): boolean {

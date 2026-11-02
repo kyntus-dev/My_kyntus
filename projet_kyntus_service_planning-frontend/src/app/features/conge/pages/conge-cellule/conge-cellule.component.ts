@@ -9,11 +9,15 @@ import {
   StatutDemandeLabels,
   type CelluleCongesDto,
 } from '../../../../core/models/conge.models';
-import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
 import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
 import {
   DEFAULT_CELLULE_PERIODE,
+  MOIS_NOMS,
+  absentsLe,
   filterAbsences,
+  friseDuMois,
+  grilleDuMois,
+  initiales,
   indicateursCellule,
   occupationDuMois,
   type CelluleCongePeriode,
@@ -28,7 +32,7 @@ import {
 @Component({
   selector: 'app-conge-cellule',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, KyntusPageHeaderComponent, LucideIconComponent],
+  imports: [CommonModule, FormsModule, RouterLink, LucideIconComponent],
   templateUrl: './conge-cellule.component.html',
   styleUrls: ['../conge-historique/conge-historique.component.css', './conge-cellule.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -48,8 +52,22 @@ export class CongeCelluleComponent implements OnInit {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
+  readonly initiales = initiales;
+  readonly moisNoms = MOIS_NOMS;
+  readonly todayYmd = new Date().toLocaleDateString('sv-SE');
+  /** Jour cliqué dans le calendrier : la liste ne montre que ses absents. */
+  readonly jourChoisi = signal<string | null>(null);
+
   readonly absences = computed(() => this.data()?.absences ?? []);
-  readonly affichees = computed(() => filterAbsences(this.absences(), this.periode()));
+  readonly affichees = computed(() => {
+    const j = this.jourChoisi();
+    return j ? absentsLe(this.absences(), j) : filterAbsences(this.absences(), this.periode());
+  });
+  readonly grille = computed(() =>
+    grilleDuMois(this.absences(), this.annee(), this.moisAffiche(), this.data()?.quotaMaxAbsents ?? null));
+  readonly frise = computed(() => friseDuMois(this.absences(), this.annee(), this.moisAffiche()));
+  readonly joursDuMois = computed(() => new Date(this.annee(), this.moisAffiche(), 0).getDate());
+  readonly joursSatures = computed(() => this.grille().filter((c) => c.niveau === 2).length);
   readonly kpi = computed(() => indicateursCellule(this.absences()));
   readonly occupation = computed(() =>
     occupationDuMois(this.absences(), this.annee(), this.moisAffiche(), this.data()?.quotaMaxAbsents ?? null));
@@ -87,6 +105,32 @@ export class CongeCelluleComponent implements OnInit {
 
   changeMois(value: string | number): void {
     this.moisAffiche.set(Number(value));
+    this.jourChoisi.set(null);
+  }
+
+  /** Mois précédent / suivant, en changeant d'année si besoin. */
+  decalerMois(delta: number): void {
+    let m = this.moisAffiche() + delta;
+    let y = this.annee();
+    if (m < 1) { m = 12; y--; }
+    if (m > 12) { m = 1; y++; }
+    this.moisAffiche.set(m);
+    this.jourChoisi.set(null);
+    if (y !== this.annee()) this.changeAnnee(y);
+  }
+
+  choisirJour(jour: string | null): void {
+    if (!jour) return;
+    this.jourChoisi.set(this.jourChoisi() === jour ? null : jour);
+  }
+
+  plage(a: { dateDebut: string; dateFin: string }): string {
+    const f = (v: string) => new Date(v).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+    return a.dateDebut.slice(0, 10) === a.dateFin.slice(0, 10) ? f(a.dateDebut) : `${f(a.dateDebut)} → ${f(a.dateFin)}`;
+  }
+
+  enCours(a: { dateDebut: string; dateFin: string }): boolean {
+    return a.dateDebut.slice(0, 10) <= this.todayYmd && a.dateFin.slice(0, 10) >= this.todayYmd;
   }
 
   statutClass(s: StatutDemande): string {

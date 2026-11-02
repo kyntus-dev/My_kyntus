@@ -1,121 +1,152 @@
-<div class="ky-page-shell">
-  <app-kyntus-page-header
-    title="Congés de ma cellule"
-    [subtitle]="(data()?.celluleNom ?? 'Votre cellule') + ' — ' + affichees().length + ' absence(s) affichée(s)'">
-    <div actions>
-      <a routerLink="/conges" class="ky-btn-secondary">Mes congés</a>
-      <button type="button" class="ky-btn-secondary btn-refresh" (click)="load()" [disabled]="loading()">
-        <app-lucide-icon [icon]="icons.refresh" className="w-4 h-4" />
-        Actualiser
+<div class="ku-page cc">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Congés · {{ data()?.celluleNom ?? 'Votre cellule' }}</p>
+      <h1 class="ku-hero-title">Congés de ma cellule</h1>
+      <p class="ku-hero-sub">Qui est absent, et quand : choisissez vos dates en évitant les jours complets.</p>
+    </div>
+    <div class="ku-hero-actions">
+      <a routerLink="/conges" class="ku-btn ku-btn--primary">Mes congés</a>
+      <button type="button" class="ku-btn" (click)="load()" [disabled]="loading()">
+        <app-lucide-icon [icon]="icons.refresh" className="w-4 h-4" /> Actualiser
       </button>
     </div>
-  </app-kyntus-page-header>
+  </header>
 
-  <div class="kpi-row">
-    <div class="kpi-card ky-card kc-blue">
-      <span class="kpi-label">Effectif de la cellule</span>
-      <span class="kpi-value">{{ data()?.effectif ?? 0 }}</span>
-    </div>
-    <div class="kpi-card ky-card kc-rose">
-      <span class="kpi-label">Absents aujourd'hui</span>
-      <span class="kpi-value">{{ kpi().absentsAujourdhui }}</span>
-    </div>
-    <div class="kpi-card ky-card kc-amber">
-      <span class="kpi-label">Absents dans les 7 jours</span>
-      <span class="kpi-value">{{ kpi().absents7Jours }}</span>
-    </div>
-    <div class="kpi-card ky-card kc-green">
-      <span class="kpi-label">Demandes en cours</span>
-      <span class="kpi-value">{{ kpi().enAttente }}</span>
-    </div>
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Effectif de la cellule</span><span class="ku-kpi-value">{{ data()?.effectif ?? 0 }}</span>
+      <span class="ku-kpi-sub">{{ quotaLabel() }}</span></div>
+    <div class="ku-kpi ku-kpi--danger"><span class="ku-kpi-label">Absents aujourd’hui</span><span class="ku-kpi-value">{{ kpi().absentsAujourdhui }}</span></div>
+    <div class="ku-kpi ku-kpi--warn"><span class="ku-kpi-label">Absents dans les 7 jours</span><span class="ku-kpi-value">{{ kpi().absents7Jours }}</span></div>
+    <div class="ku-kpi ku-kpi--ok"><span class="ku-kpi-label">Demandes en cours</span><span class="ku-kpi-value">{{ kpi().enAttente }}</span>
+      <span class="ku-kpi-sub">en attente de décision du superviseur</span></div>
   </div>
 
-  <div class="filters-panel ky-card">
-    <div class="filters-toolbar">
-      <select class="filter-ctl ky-input filter-ctl--year" aria-label="Année"
-        [ngModel]="annee()" (ngModelChange)="changeAnnee($event)">
-        @for (y of yearOptions; track y) {
-          <option [ngValue]="y">{{ y }}</option>
-        }
-      </select>
-
-      <select class="filter-ctl ky-input" aria-label="Période"
-        [ngModel]="periode()" (ngModelChange)="periode.set($event)">
-        <option value="a-venir">En cours et à venir</option>
-        <option value="mois">Mois en cours</option>
-        <option value="annee">Toute l'année</option>
-      </select>
-
-      <span class="cc-quota">{{ quotaLabel() }}</span>
-    </div>
-  </div>
-
-  <div class="table-card ky-card">
-    @if (loading()) {
-      <div class="state-loading">
-        <div class="spinner"></div>
-        <span>Chargement des congés de votre cellule…</span>
-      </div>
-    } @else if (error()) {
-      <div class="state-error">{{ error() }}</div>
-    } @else {
-      <div class="cc-strip">
-        <div class="cc-strip-head">
-          <span class="cc-strip-title">Occupation du mois</span>
-          <select class="filter-ctl ky-input cc-strip-mois" aria-label="Mois"
-            [ngModel]="moisAffiche()" (ngModelChange)="changeMois($event)">
-            @for (m of [1,2,3,4,5,6,7,8,9,10,11,12]; track m) {
-              <option [ngValue]="m">{{ m }}</option>
-            }
-          </select>
+  @if (loading() && !data()) {
+    <div class="ku-skeleton cc-sk"></div>
+  } @else if (error()) {
+    <div class="ku-alert ku-alert--danger"><div><strong>Congés indisponibles</strong><p>{{ error() }}</p></div></div>
+  } @else {
+    <div class="cc-grid">
+      <!-- Calendrier du mois -->
+      <section class="ku-card cc-cal">
+        <div class="cc-cal-head">
+          <button type="button" class="ku-btn ku-btn--sm" (click)="decalerMois(-1)" aria-label="Mois précédent">‹</button>
+          <h2 class="ku-card-title cc-cal-title">{{ moisNoms[moisAffiche() - 1] }} {{ annee() }}</h2>
+          <button type="button" class="ku-btn ku-btn--sm" (click)="decalerMois(1)" aria-label="Mois suivant">›</button>
         </div>
-        <div class="cc-strip-days">
-          @for (j of occupation(); track j.jour) {
-            <span class="cc-day" [class.is-sature]="j.sature" [class.is-libre]="j.absents === 0"
-              [attr.title]="jourTitle(j)">
-              <span class="cc-day-num">{{ j.numero }}</span>
-              <span class="cc-day-abs">{{ j.absents }}</span>
-            </span>
+        <div class="cc-weekdays"><span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span></div>
+        <div class="cc-days">
+          @for (c of grille(); track $index) {
+            @if (c.jour) {
+              <button type="button" class="cc-day" [ngClass]="'n-' + c.niveau" [class.is-we]="c.weekend"
+                [class.is-today]="c.jour === todayYmd" [class.is-picked]="c.jour === jourChoisi()"
+                [attr.title]="jourTitle({ jour: c.jour, absents: c.absents.length, sature: c.niveau === 2 })"
+                (click)="choisirJour(c.jour)">
+                <span class="cc-day-num">{{ c.numero }}</span>
+                @if (c.absents.length) {
+                  <span class="cc-avatars">
+                    @for (a of c.absents.slice(0, 3); track a.employeId) {
+                      <i class="cc-av" [class.is-me]="a.estMoi" [class.is-pending]="a.statut !== StatutDemande.Validee">{{ initiales(a.collaborateur) }}</i>
+                    }
+                    @if (c.absents.length > 3) { <i class="cc-av cc-av--more">+{{ c.absents.length - 3 }}</i> }
+                  </span>
+                }
+              </button>
+            } @else {
+              <span class="cc-day is-empty"></span>
+            }
           }
         </div>
-        <p class="cc-legend">
-          Jours en rouge : quota de la cellule atteint — ces dates ne sont plus sélectionnables dans une nouvelle demande.
-        </p>
+        <div class="cc-legend">
+          <span><i class="lg lg-libre"></i>Libre</span>
+          <span><i class="lg lg-occupe"></i>Absences</span>
+          <span><i class="lg lg-sature"></i>Quota atteint ({{ joursSatures() }} j)</span>
+          <span><i class="cc-av cc-av--legend is-pending">AB</i>Demande en cours</span>
+        </div>
+        <p class="ku-card-sub">Cliquez sur un jour pour voir qui est absent. Les jours rouges ne sont plus sélectionnables dans une nouvelle demande.</p>
+      </section>
+
+      <!-- Frise du mois -->
+      <section class="ku-card cc-frise">
+        <div class="ku-card-head">
+          <div>
+            <h2 class="ku-card-title">Frise de {{ moisNoms[moisAffiche() - 1] }}</h2>
+            <p class="ku-card-sub">{{ frise().length }} collaborateur(s) absent(s) ce mois-ci</p>
+          </div>
+        </div>
+        @if (frise().length) {
+          <div class="cc-frise-scale" aria-hidden="true">
+            <span>1</span><span>{{ (joursDuMois() / 2) | number: '1.0-0' }}</span><span>{{ joursDuMois() }}</span>
+          </div>
+          <ul class="cc-frise-list">
+            @for (l of frise(); track l.collaborateur) {
+              <li [class.is-me]="l.estMoi">
+                <span class="cc-frise-name"><i class="cc-av" [class.is-me]="l.estMoi">{{ initiales(l.collaborateur) }}</i>{{ l.collaborateur }}</span>
+                <span class="cc-frise-track">
+                  @for (b of l.barres; track $index) {
+                    <span class="cc-bar" [class.is-pending]="b.statut !== StatutDemande.Validee" [style.left.%]="b.left" [style.width.%]="b.width" [title]="b.titre"></span>
+                  }
+                </span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="ku-empty"><strong>Personne n’est absent ce mois-ci</strong>Toute la cellule est disponible.</div>
+        }
+      </section>
+    </div>
+
+    <!-- Liste -->
+    <section class="ku-card">
+      <div class="ku-card-head">
+        <div>
+          <h2 class="ku-card-title">
+            @if (jourChoisi(); as j) { Absents le {{ formatDate(j) }} } @else { Absences }
+          </h2>
+          <p class="ku-card-sub">{{ affichees().length }} absence(s)</p>
+        </div>
+        <div class="ku-toolbar">
+          @if (jourChoisi()) {
+            <button type="button" class="ku-btn ku-btn--sm" (click)="jourChoisi.set(null)">× Voir toutes les absences</button>
+          } @else {
+            <div class="ku-seg" role="group" aria-label="Période">
+              <button type="button" [class.is-active]="periode() === 'a-venir'" (click)="periode.set('a-venir')">En cours et à venir</button>
+              <button type="button" [class.is-active]="periode() === 'mois'" (click)="periode.set('mois')">Mois en cours</button>
+              <button type="button" [class.is-active]="periode() === 'annee'" (click)="periode.set('annee')">Toute l’année</button>
+            </div>
+          }
+          <select class="ku-input cc-year" aria-label="Année" [ngModel]="annee()" (ngModelChange)="changeAnnee($event)">
+            @for (y of yearOptions; track y) { <option [ngValue]="y">{{ y }}</option> }
+          </select>
+        </div>
       </div>
 
-      <div class="table-wrapper">
-        <table class="prime-table">
+      <div class="ku-table-wrap">
+        <table class="ku-table ku-table--stack">
           <thead>
-            <tr>
-              <th>Collaborateur</th>
-              <th>Du</th>
-              <th>Au</th>
-              <th>Jours</th>
-              <th>État</th>
-            </tr>
+            <tr><th>Collaborateur</th><th>Période</th><th class="is-num">Jours</th><th>État</th></tr>
           </thead>
           <tbody>
             @for (a of affichees(); track a.employeId + a.dateDebut) {
-              <tr [class.is-me]="a.estMoi">
-                <td class="td-user">
-                  <span class="user-name">{{ a.collaborateur }}</span>
-                  @if (a.estMoi) { <span class="cc-me">moi</span> }
+              <tr [class.cc-row-me]="a.estMoi">
+                <td data-label="Collaborateur">
+                  <span class="cc-who"><i class="cc-av" [class.is-me]="a.estMoi">{{ initiales(a.collaborateur) }}</i>
+                    <b>{{ a.collaborateur }}</b>
+                    @if (a.estMoi) { <span class="ku-chip ku-chip--info ku-chip--plain">moi</span> }
+                    @if (enCours(a)) { <span class="ku-chip ku-chip--danger">absent aujourd’hui</span> }
+                  </span>
                 </td>
-                <td class="td-dates">{{ formatDate(a.dateDebut) }}</td>
-                <td class="td-dates">{{ formatDate(a.dateFin) }}</td>
-                <td class="td-days">{{ a.nombreJours }}j</td>
-                <td><span class="statut-badge" [ngClass]="statutClass(a.statut)">{{ statutLabels[a.statut] }}</span></td>
+                <td data-label="Période">{{ plage(a) }} <small class="ku-muted">{{ a.dateDebut.slice(0, 4) }}</small></td>
+                <td data-label="Jours" class="is-num"><span class="cc-days-pill">{{ a.nombreJours }} j</span></td>
+                <td data-label="État"><span class="statut-badge" [ngClass]="statutClass(a.statut)">{{ statutLabels[a.statut] }}</span></td>
               </tr>
             } @empty {
-              <tr>
-                <td colspan="5">
-                  <div class="empty-state">Aucune absence sur cette période dans votre cellule.</div>
-                </td>
-              </tr>
+              <tr><td colspan="4" class="ku-empty"><strong>Aucune absence</strong>Rien sur cette période dans votre cellule.</td></tr>
             }
           </tbody>
         </table>
       </div>
-    }
-  </div>
+    </section>
+  }
 </div>

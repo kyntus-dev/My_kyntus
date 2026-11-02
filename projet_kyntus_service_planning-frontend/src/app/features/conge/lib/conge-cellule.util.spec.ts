@@ -6,6 +6,9 @@ import {
   filterAbsences,
   indicateursCellule,
   occupationDuMois,
+  friseDuMois,
+  grilleDuMois,
+  initiales,
 } from './conge-cellule.util';
 
 const abs = (
@@ -55,5 +58,23 @@ describe('Congés de ma cellule', () => {
     expect(jours).toHaveLength(30);
     expect(jours[3]).toEqual({ jour: '2026-11-04', numero: 4, absents: 2, sature: true });
     expect(jours[0]).toEqual({ jour: '2026-11-01', numero: 1, absents: 0, sature: false });
+  });
+
+  it('grille du mois, frise et initiales', () => {
+    const g = grilleDuMois(absences, 2026, 11, 2);
+    // novembre 2026 commence un dimanche : 6 cases vides avant le 1er.
+    expect(g.slice(0, 6).every((c) => c.jour === null)).toBe(true);
+    expect(g[6]).toMatchObject({ numero: 1, weekend: true, niveau: 0 });
+    const le4 = g.find((c) => c.numero === 4)!;
+    expect(le4.niveau).toBe(2);
+    expect(le4.absents.map((a) => a.employeId)).toEqual(['e1', 'e2']);
+    expect(g.find((c) => c.numero === 2)!.niveau).toBe(1);
+
+    const f = friseDuMois(absences, 2026, 11);
+    expect(f.map((l) => l.collaborateur)).toEqual(['ALAMI B', 'GHAZI A']);
+    expect(f[1].barres[0].left).toBeCloseTo(100 / 30);
+    expect(f[1].barres[0].width).toBeCloseTo(500 / 30);
+    expect(initiales('EL MAHI Omar')).toBe('EO');
+    expect(initiales('')).toBe('?');
   });
 });

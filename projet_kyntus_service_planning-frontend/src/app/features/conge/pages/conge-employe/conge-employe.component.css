@@ -184,3 +184,49 @@
   .ce-modal-layout { grid-template-columns: 1fr; }
   .ce-modal { width: min(100%, calc(100vw - 24px)); max-width: min(100%, calc(100vw - 24px)); }
 }
+
+/* ── v11.2 : calendrier de demande lisible (motifs distincts, occupation, sélection) ── */
+.ce-calendar { background: var(--bg-card); padding: 16px; }
+.ce-cal-title { font-size: 1rem; font-family: var(--font-display); }
+.ce-cal-nav:hover { border-color: var(--ky-blue); color: var(--ky-blue); }
+.ce-cal-weekdays .is-we { color: color-mix(in srgb, var(--text-muted) 70%, transparent); }
+.ce-cal-grid { gap: 5px; }
+.ce-cal-day {
+  position: relative; border: 1px solid var(--border-color); border-radius: 10px;
+  transition: transform var(--duration-fast), box-shadow var(--duration-fast), background var(--duration-fast);
+}
+.ce-cal-day.is-empty { border-color: transparent; }
+.ce-cal-day.n-0 { background: color-mix(in srgb, var(--success) 7%, var(--bg-card)); }
+.ce-cal-day.n-1 { background: color-mix(in srgb, var(--warning) 14%, var(--bg-card)); border-color: var(--warning-border); }
+.ce-cal-day.n-1 .ce-cal-occ { color: var(--warning-text); }
+.ce-cal-day.is-we:not(.is-blocked):not(.is-selected) { background: color-mix(in srgb, var(--text-muted) 6%, var(--bg-card)); }
+.ce-cal-day:not(.is-blocked):not(.is-empty):hover { outline: none; transform: translateY(-1px); box-shadow: 0 4px 12px rgb(30 79 216 / 0.18); border-color: var(--ky-blue); }
+.ce-cal-day.is-today::after { content: ''; position: absolute; bottom: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--ky-blue); }
+/* Jours non sélectionnables : un style par motif, sans texte barré. */
+.ce-cal-day.is-blocked { text-decoration: none; opacity: 1; color: var(--text-muted); }
+.ce-cal-day.r-avant { background: repeating-linear-gradient(135deg, var(--bg-input, #f1f5f9) 0 6px, var(--bg-card) 6px 12px); border-style: dashed; }
+.ce-cal-day.r-interdit { background: repeating-linear-gradient(135deg, color-mix(in srgb, #8b5cf6 14%, var(--bg-card)) 0 6px, var(--bg-card) 6px 12px); border-color: color-mix(in srgb, #8b5cf6 35%, var(--border-color)); color: #7c3aed; }
+.ce-cal-day.r-sature { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+.ce-cal-day.is-range { background: color-mix(in srgb, var(--ky-blue) 16%, var(--bg-card)); border-color: color-mix(in srgb, var(--ky-blue) 40%, transparent); }
+.ce-cal-day.is-selected { background: var(--ky-blue); border-color: var(--ky-blue); color: #fff; box-shadow: 0 4px 14px rgb(30 79 216 / 0.35); }
+.ce-cal-day.is-mine:not(.is-selected) { outline: 2px dashed var(--ky-blue); outline-offset: -3px; }
+.ce-cal-jump {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px;
+  margin-bottom: 10px; padding: 8px 10px; border-radius: 8px;
+  background: var(--info-bg); border: 1px solid var(--info-border); font-size: 0.74rem; color: var(--text-primary);
+}
+.ce-cal-jump button { border: 0; background: none; color: var(--ky-blue); font-weight: 700; font-size: 0.74rem; cursor: pointer; padding: 0; }
+.ce-cal-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; font-size: 0.68rem; color: var(--text-muted); }
+.ce-cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.lg { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border-color); }
+.lg-libre { background: color-mix(in srgb, var(--success) 12%, var(--bg-card)); }
+.lg-occupe { background: color-mix(in srgb, var(--warning) 22%, var(--bg-card)); border-color: var(--warning-border); }
+.lg-sature { background: var(--danger-bg); border-color: var(--danger-border); }
+.lg-interdit { background: repeating-linear-gradient(135deg, color-mix(in srgb, #8b5cf6 30%, var(--bg-card)) 0 3px, var(--bg-card) 3px 6px); }
+.lg-avant { background: repeating-linear-gradient(135deg, var(--bg-input, #e2e8f0) 0 3px, var(--bg-card) 3px 6px); border-style: dashed; }
+.lg-sel { background: var(--ky-blue); border-color: var(--ky-blue); }
+.ce-cal-selection {
+  margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700;
+  background: color-mix(in srgb, var(--ky-blue) 10%, var(--bg-card)); color: var(--ky-blue); text-transform: none;
+}
+body.theme-dark .ce-cal-selection { color: var(--ky-blue-soft); }

@@ -79,3 +79,78 @@ export function occupationDuMois(
   }
   return jours;
 }
+
+// ── v11.2 : calendrier du mois et frise par collaborateur ─────────────────────
+
+export const MOIS_NOMS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
+/** « EL MAHI Omar » → « EO ». */
+export function initiales(nom: string): string {
+  const mots = (nom ?? '').trim().split(/\s+/).filter(Boolean);
+  if (!mots.length) return '?';
+  return ((mots[0][0] ?? '') + (mots.length > 1 ? mots[mots.length - 1][0] : '')).toUpperCase();
+}
+
+export interface CaseCalendrier {
+  jour: string | null;
+  numero: number | null;
+  absents: CelluleAbsenceDto[];
+  /** 0 libre, 1 occupé, 2 quota atteint. */
+  niveau: 0 | 1 | 2;
+  weekend: boolean;
+}
+
+/** Grille lundi → dimanche du mois, avec les absents de chaque jour. */
+export function grilleDuMois(
+  absences: readonly CelluleAbsenceDto[],
+  annee: number,
+  mois: number,
+  quota: number | null,
+): CaseCalendrier[] {
+  const debut = (new Date(annee, mois - 1, 1).getDay() + 6) % 7;
+  const cases: CaseCalendrier[] = Array.from({ length: debut }, () => ({ jour: null, numero: null, absents: [], niveau: 0, weekend: false }));
+  const dernier = new Date(annee, mois, 0).getDate();
+  for (let n = 1; n <= dernier; n++) {
+    const date = `${annee}-${String(mois).padStart(2, '0')}-${String(n).padStart(2, '0')}`;
+    const abs = absentsLe(absences, date);
+    const dow = new Date(annee, mois - 1, n).getDay();
+    cases.push({
+      jour: date,
+      numero: n,
+      absents: abs,
+      niveau: quota !== null && abs.length >= quota ? 2 : abs.length > 0 ? 1 : 0,
+      weekend: dow === 0 || dow === 6,
+    });
+  }
+  return cases;
+}
+
+export interface LigneFrise {
+  collaborateur: string;
+  estMoi: boolean;
+  barres: { left: number; width: number; statut: CelluleAbsenceDto['statut']; titre: string }[];
+}
+
+/** Frise du mois : une ligne par collaborateur absent, une barre par congé (positions en %). */
+export function friseDuMois(absences: readonly CelluleAbsenceDto[], annee: number, mois: number): LigneFrise[] {
+  const dernier = new Date(annee, mois, 0).getDate();
+  const debutMois = `${annee}-${String(mois).padStart(2, '0')}-01`;
+  const finMois = `${annee}-${String(mois).padStart(2, '0')}-${String(dernier).padStart(2, '0')}`;
+  const lignes = new Map<string, LigneFrise>();
+  for (const a of absences) {
+    const d = jour(a.dateDebut);
+    const f = jour(a.dateFin);
+    if (f < debutMois || d > finMois) continue;
+    const de = d < debutMois ? 1 : Number(d.slice(8, 10));
+    const a2 = f > finMois ? dernier : Number(f.slice(8, 10));
+    const ligne = lignes.get(a.employeId) ?? { collaborateur: a.collaborateur, estMoi: !!a.estMoi, barres: [] };
+    ligne.barres.push({
+      left: ((de - 1) / dernier) * 100,
+      width: ((a2 - de + 1) / dernier) * 100,
+      statut: a.statut,
+      titre: `${a.collaborateur} : ${d.split('-').reverse().join('/')} → ${f.split('-').reverse().join('/')}`,
+    });
+    lignes.set(a.employeId, ligne);
+  }
+  return [...lignes.values()].sort((x, y) => Number(y.estMoi) - Number(x.estMoi) || x.collaborateur.localeCompare(y.collaborateur, 'fr'));
+}
