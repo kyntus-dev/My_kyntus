@@ -302,3 +302,145 @@ patch -p1 -R --batch < /tmp/reorg-2026-code-v10-1.patch
 while read -r s img id; do docker tag "reorg-avant-v10-1/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_v10_1_$STAMP.txt
 docker compose up -d --no-deps --no-build planning-backend planning-frontend
 ```
+
+---
+
+# Livraison v11 (lot 1) : régimes horaires, production, heure de sortie, prévu / réalisé, nouvelle charte
+
+À appliquer **après la v10.1**. Aucune donnée existante n'est modifiée ni supprimée : trois tables nouvelles, et un régime modèle créé **sans affectation** (il ne s'applique à personne tant que l'Admin ne l'a pas affecté).
+
+| Fichier | Contenu |
+|---|---|
+| `reorg-2026-code-v11.patch` | 49 fichiers : Planning (régimes, production, API) et Planning frontend (écrans, charte). |
+| `reorg-2026-compose-v11.patch` | 2 variables `Pointage__Pause*` du service `planning-backend` dans `docker-compose.yml`. |
+
+**Ce qui arrive**
+
+1. **Régimes horaires** (Pointage › Régimes horaires ; Admin, et RH en lecture)
+   - Heures fixes par jour de semaine : heure d'arrivée et production (ex. 8 h 40 du lundi au jeudi, 7 h 40 le vendredi, samedi non travaillé), pause autorisée, accès à « Heure de sortie ».
+   - Affectation à un pôle, une cellule, un service ou un collaborateur. L'affectation la plus précise l'emporte : collaborateur, puis service, puis cellule, puis pôle.
+   - Les jours **sans planning publié**, le régime sert de planning (retard d'entrée, production prévue). Un planning publié reste prioritaire.
+2. **Pause autorisée : 80 minutes (01:20, comme l'Excel)**, toutes pauses de la journée confondues, pour tout le monde (ou la valeur du régime). En v10, c'était la pause du shift (60 min) : **les retards pause baissent d'environ 20 minutes par jour** pour les personnes qui prennent 1 h 20. Pour revenir à la règle v10 sans rien recompiler, voir « Retour arrière » plus bas.
+3. **Production** = départ − arrivée − pauses pointées (08:00 → 17:00 avec 1 h de pause = 8 h). Production prévue : celle du régime, ou les heures de travail du shift publié. L'écart et les totaux apparaissent dans « Mon suivi », « Pointages de l'équipe » (individuel et collectif) et à l'export.
+4. **Heure de sortie** (Pointage › Heure de sortie) : les formules de `Combien_il_me_reste.xlsx`, recalculées chaque seconde. L'heure d'arrivée est pré-remplie avec le premier pointage du jour, et la production et la pause viennent du régime. La page n'est ouverte qu'aux personnes dont le régime coche « Accès à Heure de sortie » (et à l'Admin).
+5. **Planning prévu / réalisé** (responsables, RH, Admin) : la semaine de chaque collaborateur, prévu face au réalisé, avec un export Excel détaillé jour par jour (nombre et heures des pointages) pour l'audit face à HTEL.
+6. **Nouvelle charte** sur les écrans de pointage, la carte « Ma journée » sur l'accueil, des icônes de menu plus lisibles, et une barre du haut qui ne déborde plus sur téléphone.
+
+**Services reconstruits** : `planning-backend`, `planning-frontend`.
+
+## v11-0 : copie (depuis Windows)
+
+```powershell
+cd C:\Users\omar.elmahi\Downloads
+scp reorg-2026-code-v11.patch reorg-2026-compose-v11.patch o@10.10.10.25:/tmp/
+```
+
+## v11-A : sauvegardes (ne modifie rien)
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(date +%Y%m%d_%H%M%S); echo "$STAMP" > ~/sauvegardes_reorg/STAMP_V11; echo "STAMP=$STAMP"
+: > ~/sauvegardes_reorg/images_avant_v11_$STAMP.txt
+for s in planning-backend planning-frontend; do
+  c=$(docker compose ps -q "$s"); img=$(docker inspect --format '{{.Config.Image}}' "$c"); id=$(docker inspect --format '{{.Image}}' "$c")
+  docker tag "$id" "reorg-avant-v11/$s:$STAMP" && echo "$s $img $id" | tee -a ~/sauvegardes_reorg/images_avant_v11_$STAMP.txt
+done
+cp docker-compose.yml ~/sauvegardes_reorg/docker-compose_avant_v11_$STAMP.yml
+cp .env ~/sauvegardes_reorg/env_avant_v11_$STAMP && chmod 600 ~/sauvegardes_reorg/env_avant_v11_$STAMP
+docker exec kyntus_db pg_dump -U postgres -Fc kyntus_db > ~/sauvegardes_reorg/kyntus_db_v11_$STAMP.dump && echo "OK kyntus_db"
+ls -lh ~/sauvegardes_reorg/kyntus_db_v11_$STAMP.dump
+```
+
+Attendu : deux lignes d'image, `OK kyntus_db`, et un fichier de sauvegarde de taille normale (comparable à celui de la v10).
+
+## v11-B : application protégée
+
+```bash
+cd /home/o/projets_mykyntus-
+for p in /tmp/reorg-2026-code-v11.patch /tmp/reorg-2026-compose-v11.patch; do
+  if patch -p1 --batch --dry-run < "$p" | grep -qiE "fail|reject|already|assum|reversed|ignor|offset|fuzz"; then
+    echo "STOP : $p ne s'applique pas proprement — rien n'a été modifié"; patch -p1 --batch --dry-run < "$p" | grep -iE "fail|already|offset|fuzz"; break
+  fi
+  patch -p1 --batch < "$p" > /dev/null && echo "OK $(basename "$p")"
+done
+```
+
+Attendu : `OK reorg-2026-code-v11.patch` puis `OK reorg-2026-compose-v11.patch`. Un `STOP` sur le premier fichier ne modifie rien. Un `STOP` sur le second laisse le code appliqué mais `docker-compose.yml` intact : arrêtez-vous et envoyez-moi le message.
+
+## v11-C : compilation et tests (conteneur jetable)
+
+```bash
+cd /home/o/projets_mykyntus-
+tar -cf - --exclude='bin' --exclude='obj' --exclude='node_modules' --exclude='TestResults' \
+    Directory.Build.props Directory.Packages.props Messaging.Contracts Shared.Kernel \
+    Kyntus.Caching Kyntus.Iam Kyntus.Identity.Jwt Kyntus.Messaging.Outbox tests PlanningService \
+| docker run --rm -i mcr.microsoft.com/dotnet/sdk:8.0 bash -c '
+  mkdir -p /work && cd /work && tar -xf -
+  dotnet build PlanningService/Planning.API/Planning.API.csproj -c Release 2>&1 | grep -E " error |Error\(s\)" | tail -3
+  dotnet test PlanningService/Planning.UnitTests/Planning.UnitTests.csproj -c Release \
+    --filter "FullyQualifiedName~Pointage|FullyQualifiedName~RegimeHoraire" 2>&1 | grep -E "Failed |Passed!|Failed!" | tail -6'
+```
+
+Attendu : `0 Error(s)` et `Passed!` (18 tests : 11 de pointage et 7 de régimes et de production). **Tout échec : arrêtez-vous** et passez au retour arrière v11.
+
+## v11-D : mise en service
+
+```bash
+cd /home/o/projets_mykyntus-
+docker compose build planning-backend planning-frontend
+docker compose up -d --no-deps --no-build planning-backend planning-frontend
+sleep 90
+docker compose logs --since 3m planning-backend | grep -iE "regimes-horaires|patch|pointage" | tail -10
+docker exec kyntus_db psql -U postgres -d kyntus_db -c 'SELECT r."Id", r."Nom", r."PauseAutoriseeMinutes", count(j.*) AS jours FROM "RegimesHoraires" r LEFT JOIN "RegimeHoraireJours" j ON j."RegimeHoraireId" = r."Id" GROUP BY 1,2,3;'
+docker exec kyntus_db psql -U postgres -d kyntus_db -c 'SELECT count(*) AS affectations FROM "RegimeHoraireAffectations";'
+docker compose exec planning-backend printenv | grep '^Pointage__Pause'
+```
+
+Attendu :
+
+- `Patches schéma Planning appliqués` dans les journaux, sans erreur `regimes-horaires` ;
+- un régime `Standard 8h40 / vendredi 7h40` avec 5 jours, et `0` affectation ;
+- `Pointage__PauseAutoriseeMinutes=80` et `Pointage__PauseSelonShift=false`.
+
+## v11-E : configuration (Admin, dans l'interface)
+
+Dans Pointage › **Régimes horaires** :
+
+1. **Modifier** le régime modèle. L'heure d'arrivée est préremplie à 08:00 pour chaque jour : **mettez l'heure réelle de chaque équipe**, car elle sert de référence pour le retard d'entrée. Si les équipes n'arrivent pas à la même heure, créez un régime par horaire.
+2. **Affecter…** : choisissez Pôle, Cellule, Service ou Collaborateur, recherchez, puis cliquez sur « Affecter ». Une personne qui a déjà un autre régime au même niveau affiche « Remplacer ».
+3. Pour les personnes qui n'ont pas droit à l'heure de sortie, créez un régime avec la case « Accès à Heure de sortie » décochée.
+
+Rien ne change pour une personne tant qu'aucun régime ne la concerne, sauf la pause autorisée de 80 minutes (voir plus haut).
+
+## Recette (Ctrl + F5)
+
+- **Agent avec un régime « accès oui » :** l'accueil affiche la carte « Ma journée », avec l'arrivée, la production en cours, la sortie prévue et le temps restant. Pointage › Heure de sortie donne les mêmes chiffres que l'Excel pour la même heure d'arrivée. Exemple : arrivée 08:00 un lundi, sortie 18:00 ; à 12:00, production réalisée 02:40 et reste 06:00.
+- **Agent sans régime :** la page Heure de sortie indique « Cette page n'est pas activée pour vous ».
+- **Mon suivi d'EL MAHI Omar, octobre**, après lui avoir affecté un régime : les jours « Sans planning » deviennent calculés (retard, production). Comparez avec HTEL. Pour le 08/10, l'export Excel (« Exporter ») donne le nombre et les heures exactes des pointages du jour. Envoyez-moi cette ligne : elle montrera si HTEL exige les pointages de pause.
+- **Superviseur, Pointage › Planning prévu / réalisé :** seule son équipe apparaît. Une case rouge signale un retard, une case orange un pointage manquant. Au survol, une case affiche tous les pointages.
+- **Téléphone :** ouvrez Mon suivi et Heure de sortie. La page ne doit pas défiler horizontalement.
+
+## v11 : retour arrière
+
+**Revenir seulement à la pause du shift (règle v10)**, sans recompiler :
+
+```bash
+cd /home/o/projets_mykyntus-
+echo "KYNTUS_POINTAGE_PAUSE_SELON_SHIFT=true" >> .env
+docker compose up -d --no-deps planning-backend
+```
+
+**Retirer un régime à quelqu'un** : dans Régimes horaires, cliquez sur × à côté de son nom. Son suivi redevient « Sans planning » les jours sans planning publié.
+
+**Revenir au code d'avant :**
+
+```bash
+cd /home/o/projets_mykyntus-
+STAMP=$(cat ~/sauvegardes_reorg/STAMP_V11)
+patch -p1 -R --batch < /tmp/reorg-2026-compose-v11.patch
+patch -p1 -R --batch < /tmp/reorg-2026-code-v11.patch
+while read -r s img id; do docker tag "reorg-avant-v11/$s:$STAMP" "$img"; done < ~/sauvegardes_reorg/images_avant_v11_$STAMP.txt
+docker compose up -d --no-deps --no-build planning-backend planning-frontend
+```
+
+Les tables `RegimesHoraires`, `RegimeHoraireJours` et `RegimeHoraireAffectations` restent en base, sans effet sur l'ancien code. Elles ne seront supprimées que sur votre demande explicite.
