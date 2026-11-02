@@ -907,6 +907,20 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>Accès « Heure de sortie » compte par compte (v11.4) : table nouvelle, vide au départ.</summary>
+    public static async Task EnsureHeureSortieAccesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "HeureSortieAcces" (
+                "UserId" integer PRIMARY KEY REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "GrantedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "GrantedBy" integer NULL
+            );
+            """,
+            ct);
+    }
+
     /// <summary>Index lecture fréquents (grille, demandes exceptionnelles, users actifs).</summary>
     public static async Task EnsurePerfIndexesAsync(AppDbContext db, CancellationToken ct = default)
     {

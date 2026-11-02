@@ -242,6 +242,7 @@ export const MICROSERVICES: Microservice[] = [
       { label: 'Pointages de l’équipe', route: '/pointage/equipe', roles: ROLE_SETS.congesEquipe, hat: 'team' },
       { label: 'Planning prévu / réalisé', route: '/pointage/prevu-realise', roles: ROLE_SETS.congesEquipe, hat: 'team' },
       { label: 'Régimes horaires', route: '/pointage/regimes', roles: ADMIN_RH, hat: 'team' },
+      { label: 'Accès Heure de sortie', route: '/pointage/acces-heure-sortie', roles: [KyntusRoleNames.Admin], hat: 'team' },
       { label: 'Correspondance pointeuses', route: '/pointage/correspondances', roles: ADMIN_RH, hat: 'team' },
     ],
   },

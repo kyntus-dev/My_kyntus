@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import type {
+  HeureSortieAccesDto,
   RegimeCible,
   RegimeCibleDto,
   RegimeHoraireDto,
@@ -40,5 +41,13 @@ export class RegimeHoraireService {
 
   retirer(affectationId: number): Observable<void> {
     return this.http.delete<void>(`${this.base}/affectations/${affectationId}`);
+  }
+
+  accesHeureSortie(): Observable<HeureSortieAccesDto[]> {
+    return this.http.get<HeureSortieAccesDto[]>(`${this.base}/acces-heure-sortie`);
+  }
+
+  setAccesHeureSortie(userIds: number[], acces: boolean): Observable<{ modifies: number }> {
+    return this.http.put<{ modifies: number }>(`${this.base}/acces-heure-sortie`, { userIds, acces });
   }
 }

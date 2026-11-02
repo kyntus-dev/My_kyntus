@@ -1188,6 +1188,38 @@ public class UserService : IUserService
         }
     }
 
+    /// <summary>
+    /// Compte Planning sans lien Auth (AuthUserId vide) dont le rôle change : le compte Auth est
+    /// retrouvé par e-mail et son rôle aligné, <b>sans mot de passe</b> (Auth ne le modifie pas et
+    /// ne crée aucun compte dans ce cas). Le lien AuthUserId est enregistré au passage.
+    /// </summary>
+    private async Task SyncRoleToAuthByEmailAsync(User user)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                "api/auth/register-from-planning",
+                new { Email = user.Email, DefaultPassword = (string?)null, RoleName = user.Role?.Name, EmployeeId = user.Guid });
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Auth : rôle {Role} non appliqué à {Email} ({Status}) : {Body}",
+                    user.Role?.Name, user.Email, (int)response.StatusCode, await response.Content.ReadAsStringAsync());
+                return;
+            }
+            var result = await response.Content.ReadFromJsonAsync<AuthRegisterResult>();
+            if (result is { Id: > 0 })
+            {
+                user.AuthUserId = result.Id;
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Auth : rôle {Role} appliqué à {Email} (AuthUserId={Id}).", user.Role?.Name, user.Email, result.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Auth : synchronisation du rôle impossible pour {Email}.", user.Email);
+        }
+    }
+
     private async Task SyncToAuthServiceAsync(User user, string? defaultPassword = null)
     {
         var maxRetries = 3;
@@ -1370,6 +1402,7 @@ public class UserService : IUserService
         if (dto.NiveauExpertiseMetier.HasValue && !IsHrOrAdminRole(callerRole))
             throw new UnauthorizedAccessException("Seuls RH et Admin peuvent modifier l'expertise métier.");
 
+        var roleChanged = user.RoleId != dto.RoleId;
         user.RoleId = dto.RoleId;
         user.SubServiceId = dto.SubServiceId;
         user.FirstName = dto.FirstName;
@@ -1391,6 +1424,8 @@ public class UserService : IUserService
 
         if (user.AuthUserId.HasValue)
             await SyncToAuthServiceAsync(user);
+        else if (roleChanged)
+            await SyncRoleToAuthByEmailAsync(user);
         if (activeChanged)
             await SyncAuthActiveAsync(user);
 

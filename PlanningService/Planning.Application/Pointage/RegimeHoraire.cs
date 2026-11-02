@@ -122,3 +122,8 @@ public static class RegimeResolver
         return null;
     }
 }
+
+/// <summary>Compte et son accès à « Heure de sortie ».</summary>
+public sealed record HeureSortieAccesDto(int UserId, string Collaborateur, string? Email, string? Role, string? Cellule, bool Acces);
+
+public sealed record HeureSortieAccesRequest(IReadOnlyList<int> UserIds, bool Acces);

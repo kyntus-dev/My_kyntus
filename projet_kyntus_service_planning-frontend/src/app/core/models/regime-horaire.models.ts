@@ -43,3 +43,13 @@ export interface RegimeCibleDto {
   /** Régime déjà affecté à cet élément (null : aucun). */
   regimeId: number | null;
 }
+
+/** Compte et son accès à « Heure de sortie » (accordé par l'Admin, compte par compte). */
+export interface HeureSortieAccesDto {
+  userId: number;
+  collaborateur: string;
+  email: string | null;
+  role: string | null;
+  cellule: string | null;
+  acces: boolean;
+}

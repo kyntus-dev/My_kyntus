@@ -169,6 +169,34 @@ public class CongeReglesQuotaTests
             regles.AssertQuotaServiceDisponibleAsync(serviceId, debut, fin));
     }
 
+    /// <summary>v11.4 : sans quota configuré, un jour déjà pris par un collègue n'est plus disponible.</summary>
+    [Fact]
+    public async Task Sans_quota_un_jour_pris_est_bloque_pour_les_autres()
+    {
+        var serviceId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var empRepo = new FakeEmployeRepo();
+        var demandeRepo = new FakeDemandeRepo();
+        var quotaRepo = new FakeQuotaRepo();
+
+        var e1 = EmployeSnapshot.Creer(Guid.NewGuid(), "A", "A", "a@t.com", managerId, serviceId, "S", DateTime.UtcNow.AddYears(-2));
+        var e2 = EmployeSnapshot.Creer(Guid.NewGuid(), "B", "B", "b@t.com", managerId, serviceId, "S", DateTime.UtcNow.AddYears(-2));
+        empRepo.Employees.AddRange([e1, e2]);
+
+        var debut = new DateTime(An, 11, 23);
+        var fin = new DateTime(An, 11, 25);
+        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, An);
+        demandeRepo.Occupying.Add(DemandeConge.CreerCongeAnnuel(e1.EmployeId, managerId, debut, fin, solde, e1));
+
+        var regles = new CongeReglesService(new FakePeriodeRepo(), quotaRepo, demandeRepo, empRepo);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => regles.AssertQuotaForEmployeAsync(e2, debut, fin));
+
+        var mois = await regles.EvaluerMoisAsync(e2.EmployeId, An, 11);
+        Assert.Equal(CongeReglesService.QuotaParDefaut, mois.Quota);
+        Assert.True(mois.Jours.Single(j => j.Jour.Day == 24).Sature);
+        Assert.False(mois.Jours.Single(j => j.Jour.Day == 20).Sature);
+    }
+
     /// <summary>v9 : « déjà posé ou obtenu » — une demande en attente occupe sa place.</summary>
     [Fact]
     public async Task EnAttente_compte_dans_quota()

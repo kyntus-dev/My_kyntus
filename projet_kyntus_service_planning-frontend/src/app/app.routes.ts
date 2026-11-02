@@ -429,6 +429,15 @@ export const routes: Routes = [
                 .then(m => m.PointagePrevuRealiseComponent),
           },
           {
+            // Accès « Heure de sortie » compte par compte (Admin).
+            path: 'acces-heure-sortie',
+            canActivate: [AuthGuard],
+            data: { roles: [KyntusRoleNames.Admin] },
+            loadComponent: () =>
+              import('./features/pointage/pages/heure-sortie-acces/heure-sortie-acces.component')
+                .then(m => m.HeureSortieAccesComponent),
+          },
+          {
             path: 'regimes',
             canActivate: [AuthGuard],
             data: { roles: ROLE_SETS.adminRh },

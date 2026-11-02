@@ -4,8 +4,8 @@
       <p class="ku-hero-eyebrow">Pointage · Administration</p>
       <h1 class="ku-hero-title">Régimes horaires</h1>
       <p class="ku-hero-sub">
-        Heures fixes par jour (ex. 8 h 40 du lundi au jeudi, 7 h 40 le vendredi), pause autorisée et accès à
-        « Heure de sortie ». Ils servent de planning les jours où aucun planning n’est publié pour la personne.
+        Heures fixes par jour (ex. 8 h 40 du lundi au jeudi, 7 h 40 le vendredi) et pause autorisée.
+        Ils servent de planning les jours où aucun planning n’est publié pour la personne.
       </p>
     </div>
     <div class="ku-hero-actions">
@@ -42,10 +42,7 @@
           <input class="ku-input ku-mono" [ngModel]="f.pause" (ngModelChange)="majForm({ pause: $event })" placeholder="01:20" />
           <small>Toutes pauses de la journée ; au-delà = retard pause.</small>
         </label>
-        <label class="ku-check rh-acces">
-          <input type="checkbox" [ngModel]="f.accesCalculSortie" (ngModelChange)="majForm({ accesCalculSortie: $event })" />
-          Accès à « Heure de sortie »
-        </label>
+        <p class="ku-card-sub rh-acces">L’accès à « Heure de sortie » se donne compte par compte : Pointage › Accès Heure de sortie.</p>
       </div>
 
       <div class="rh-week">
@@ -96,9 +93,7 @@
             <p class="ku-card-sub">{{ resumeSemaine(r.jours) }} · pause {{ minutesVersDuree(r.pauseAutoriseeMinutes) }}
               · {{ minutesVersDuree(productionHebdo(r.jours)) }} / semaine</p>
           </div>
-          <div class="rh-card-tags">
-            <span class="ku-chip" [class.ku-chip--ok]="r.accesCalculSortie">{{ r.accesCalculSortie ? 'Heure de sortie : oui' : 'Heure de sortie : non' }}</span>
-          </div>
+
         </div>
 
         <div class="rh-grid" role="table" aria-label="Semaine">

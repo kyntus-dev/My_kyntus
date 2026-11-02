@@ -109,7 +109,8 @@ public sealed class PointageQueryService(
             today,
             me.Id,
             suivi.Collaborateur,
-            regime?.AccesCalculSortie == true || string.Equals(viewer.Role, "Admin", StringComparison.OrdinalIgnoreCase),
+            // Accès donné par l'Admin compte par compte (l'Admin y a toujours accès).
+            string.Equals(viewer.Role, "Admin", StringComparison.OrdinalIgnoreCase) || await regimes.ADroitHeureSortieAsync(me.Id, ct),
             regime?.Nom,
             regime?.Cible,
             jour.Source,

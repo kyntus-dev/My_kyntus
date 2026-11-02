@@ -66,3 +66,11 @@ public class RegimeHoraireAffectation
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int? CreatedBy { get; set; }
 }
+
+/// <summary>Compte autorisé à utiliser « Heure de sortie » (accordé par l'Admin, compte par compte).</summary>
+public class HeureSortieAcces
+{
+    public int UserId { get; set; }
+    public DateTime GrantedAt { get; set; } = DateTime.UtcNow;
+    public int? GrantedBy { get; set; }
+}

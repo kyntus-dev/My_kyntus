@@ -95,6 +95,17 @@ public class CongeReglesService
         if (quota is null)
             return;
 
+        await AssertQuotaAsync(nodeId, quota, debut, fin, excludeDemandeId, ct);
+    }
+
+    private async Task AssertQuotaAsync(
+        string nodeId,
+        QuotaCongeService quota,
+        DateTime debut,
+        DateTime fin,
+        Guid? excludeDemandeId,
+        CancellationToken ct)
+    {
         var employes = await _employeRepo.GetByOrgNodeIdAsync(nodeId, ct);
         var employeIds = employes.Select(e => e.EmployeId).ToList();
         if (employeIds.Count == 0)
@@ -127,8 +138,8 @@ public class CongeReglesService
         if (resolved is null)
             return;
 
-        await AssertQuotaServiceDisponibleAsync(
-            resolved.Value.NodeId, debut, fin, excludeDemandeId, ct);
+        // Quota résolu (configuré, ou 1 par défaut) appliqué tel quel.
+        await AssertQuotaAsync(resolved.Value.NodeId, resolved.Value.Quota, debut, fin, excludeDemandeId, ct);
     }
 
     public async Task<CongeDisponibiliteResult> EvaluerDisponibiliteAsync(
@@ -278,15 +289,21 @@ public class CongeReglesService
         if (serviceId is null && employe.ServiceId != Guid.Empty)
             serviceId = employe.ServiceId.ToString();
 
-        if (serviceId is null)
-            return null;
+        var serviceQuota = serviceId is null ? null : await _quotaRepo.GetByServiceIdAsync(serviceId, ct);
+        if (serviceQuota is not null)
+            return (serviceId!, serviceQuota, QuotaScopeKinds.Normalize(serviceQuota.ScopeKind));
 
-        var serviceQuota = await _quotaRepo.GetByServiceIdAsync(serviceId, ct);
-        if (serviceQuota is null)
+        // 3) Aucun quota configuré : un jour déjà pris par un collègue de la cellule (ou du
+        //    service) n'est plus disponible pour les autres (quota par défaut = 1).
+        var nodeId = celluleId ?? serviceId;
+        if (nodeId is null)
             return null;
-
-        return (serviceId, serviceQuota, QuotaScopeKinds.Normalize(serviceQuota.ScopeKind));
+        var kind = celluleId is not null ? QuotaScopeKinds.Cellule : QuotaScopeKinds.Service;
+        return (nodeId, QuotaCongeService.Creer(nodeId, QuotaParDefaut, null, kind), kind);
     }
+
+    /// <summary>Absents simultanés autorisés quand le superviseur n'a défini aucun quota.</summary>
+    public const int QuotaParDefaut = 1;
 
     private static List<DateTime> FindSaturatedDays(
         DateTime debut,

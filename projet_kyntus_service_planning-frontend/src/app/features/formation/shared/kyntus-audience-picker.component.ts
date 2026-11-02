@@ -477,6 +477,60 @@ export class KyntusAudiencePickerComponent implements OnInit, OnChanges {
     );
   }
 
+  /** Collaborateurs regroupés par rôle, avec le nombre de personnes pas encore ajoutées. */
+  groupesParRole(): { role: string; total: number; restants: number }[] {
+    const deja = this.mode === 'audience' ? this.selectedUserIdSet() : this.beneficiaryGuidSet();
+    const groupes = new Map<string, { role: string; total: number; restants: number }>();
+    for (const row of this.effectiveRows()) {
+      const g = resolveUserGuid(row.user);
+      if (!g) continue;
+      const role = (row.user.roleName ?? '').trim() || 'Sans rôle';
+      const e = groupes.get(role) ?? { role, total: 0, restants: 0 };
+      e.total++;
+      if (!deja.has(g) && !this.isGuidLocked(g)) e.restants++;
+      groupes.set(role, e);
+    }
+    return [...groupes.values()].sort((a, b) => b.total - a.total || a.role.localeCompare(b.role, 'fr'));
+  }
+
+  /** Nombre total de personnes pas encore ajoutées (bouton « Tout sélectionner »). */
+  restantsTotal(): number {
+    return this.groupesParRole().reduce((n, g) => n + g.restants, 0);
+  }
+
+  /** Ajoute d'un coup tout un rôle (ou tout le monde si role est null). */
+  ajouterParRole(role: string | null): void {
+    const rows = this.effectiveRows().filter((row) =>
+      role === null || ((row.user.roleName ?? '').trim() || 'Sans rôle') === role);
+    this.ajouterRows(rows);
+  }
+
+  private ajouterRows(rows: EmployeePickerRow[]): void {
+    if (this.mode === 'audience') {
+      const existing = new Set(this.selectedUserIds());
+      const next = [...this.selectedUserIds()];
+      for (const row of rows) {
+        const g = resolveUserGuid(row.user);
+        if (!g || existing.has(g) || this.isGuidLocked(g)) continue;
+        existing.add(g);
+        next.push(g);
+      }
+      this.selectedUserIds.set(next);
+    } else {
+      const existing = new Set(this.beneficiaryGuidSet());
+      const merged = [...this.beneficiaryList()];
+      for (const row of rows) {
+        const g = resolveUserGuid(row.user);
+        if (!g || existing.has(g) || this.isGuidLocked(g)) continue;
+        if (this.capacity != null && merged.length >= this.capacity) break;
+        existing.add(g);
+        merged.push(row);
+      }
+      this.beneficiaryList.set(merged);
+    }
+    this.emitSelection();
+  }
+
   addCheckedToSelection(): void {
     const toAdd = this.checkedInPerimeter().map((c) => c.row);
     if (toAdd.length === 0) return;

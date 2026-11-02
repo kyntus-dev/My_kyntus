@@ -50,6 +50,17 @@ public sealed class RegimesHorairesController(IRegimeHoraireService service, App
     public Task<IActionResult> Retirer(int affectationId, CancellationToken ct) =>
         Run(async () => await service.RetirerAffectationAsync(affectationId, ct) ? NoContent() : NotFound());
 
+    /// <summary>Comptes et accès « Heure de sortie » (Admin).</summary>
+    [HttpGet("acces-heure-sortie")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<IReadOnlyList<HeureSortieAccesDto>>> GetAcces(CancellationToken ct) =>
+        Ok(await service.GetAccesHeureSortieAsync(ct));
+
+    [HttpPut("acces-heure-sortie")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SetAcces([FromBody] HeureSortieAccesRequest body, CancellationToken ct) =>
+        Ok(new { modifies = await service.SetAccesHeureSortieAsync(body, await MeAsync(ct), ct) });
+
     private async Task<IActionResult> Run(Func<Task<IActionResult>> action)
     {
         try

@@ -183,6 +183,56 @@ public sealed class RegimeHoraireService(AppDbContext db) : IRegimeHoraireServic
         return result;
     }
 
+    // ── Accès « Heure de sortie » (compte par compte) ───────────────────────────
+
+    public async Task<IReadOnlyList<HeureSortieAccesDto>> GetAccesHeureSortieAsync(CancellationToken ct = default)
+    {
+        var acces = (await db.HeureSortieAcces.AsNoTracking().Select(a => a.UserId).ToListAsync(ct)).ToHashSet();
+        var users = await db.Users.AsNoTracking()
+            .Where(u => u.IsActive)
+            .Select(u => new
+            {
+                u.Id, u.LastName, u.FirstName, u.Email,
+                Role = u.Role != null ? u.Role.Name : null,
+                Cellule = u.SubService != null ? u.SubService.Name : null,
+            })
+            .ToListAsync(ct);
+        return users
+            .Select(u => new HeureSortieAccesDto(u.Id, $"{u.LastName} {u.FirstName}".Trim(), u.Email, u.Role, u.Cellule, acces.Contains(u.Id)))
+            .OrderBy(u => u.Role ?? "", StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(u => u.Collaborateur, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
+    public async Task<int> SetAccesHeureSortieAsync(HeureSortieAccesRequest request, int? by, CancellationToken ct = default)
+    {
+        var ids = (request.UserIds ?? []).Distinct().ToList();
+        if (ids.Count == 0)
+            return 0;
+        var existants = (await db.HeureSortieAcces.Where(a => ids.Contains(a.UserId)).ToListAsync(ct));
+        var modifies = 0;
+        if (request.Acces)
+        {
+            var actifs = await db.Users.AsNoTracking().Where(u => ids.Contains(u.Id) && u.IsActive).Select(u => u.Id).ToListAsync(ct);
+            var deja = existants.Select(a => a.UserId).ToHashSet();
+            foreach (var id in actifs.Where(id => !deja.Contains(id)))
+            {
+                db.HeureSortieAcces.Add(new HeureSortieAcces { UserId = id, GrantedBy = by });
+                modifies++;
+            }
+        }
+        else
+        {
+            db.HeureSortieAcces.RemoveRange(existants);
+            modifies = existants.Count;
+        }
+        await db.SaveChangesAsync(ct);
+        return modifies;
+    }
+
+    public Task<bool> ADroitHeureSortieAsync(int userId, CancellationToken ct = default) =>
+        db.HeureSortieAcces.AnyAsync(a => a.UserId == userId, ct);
+
     // ── Utilitaires ─────────────────────────────────────────────────────────────
 
     private static void Controler(RegimeHoraireRequest request)

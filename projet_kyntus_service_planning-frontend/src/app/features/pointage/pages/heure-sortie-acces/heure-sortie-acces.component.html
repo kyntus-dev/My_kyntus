@@ -1,0 +1,80 @@
+<div class="ku-page hsa">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Pointage · Administration</p>
+      <h1 class="ku-hero-title">Accès « Heure de sortie »</h1>
+      <p class="ku-hero-sub">Cochez les comptes qui peuvent utiliser la page Heure de sortie. Les autres ne la voient pas, ni dans le menu ni sur l’accueil.</p>
+    </div>
+    <div class="ku-hero-actions">
+      <button type="button" class="ku-btn" (click)="load()" [disabled]="loading()">Actualiser</button>
+    </div>
+  </header>
+
+  <div class="ku-kpis">
+    <div class="ku-kpi ku-kpi--ok"><span class="ku-kpi-label">Comptes avec accès</span><span class="ku-kpi-value">{{ totalAcces() }}</span>
+      <span class="ku-kpi-sub">sur {{ comptes().length }} comptes actifs</span></div>
+    <div class="ku-kpi"><span class="ku-kpi-label">Rôles</span><span class="ku-kpi-value">{{ groupes().length }}</span>
+      <span class="ku-kpi-sub">groupes affichés</span></div>
+    <div class="ku-kpi" [class.ku-kpi--warn]="nbChangements() > 0"><span class="ku-kpi-label">Modifications en cours</span>
+      <span class="ku-kpi-value">{{ nbChangements() }}</span>
+      <span class="ku-kpi-sub">{{ changements().ajouter.length }} ajout(s) · {{ changements().retirer.length }} retrait(s)</span></div>
+  </div>
+
+  <section class="ku-card">
+    <div class="ku-card-head">
+      <div class="ku-toolbar">
+        <input class="ku-input hsa-search" type="search" placeholder="Rechercher un nom, un e-mail, une cellule…" [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+        <label class="ku-check"><input type="checkbox" [ngModel]="seulementAvecAcces()" (ngModelChange)="seulementAvecAcces.set($event)" /> Seulement les comptes avec accès</label>
+      </div>
+      <button type="button" class="ku-btn ku-btn--sm" (click)="basculerTout()" [disabled]="!visibles().length">
+        {{ tousVisiblesCoches() ? 'Tout décocher' : 'Tout sélectionner' }} ({{ visibles().length }})
+      </button>
+    </div>
+
+    @if (loading() && !comptes().length) {
+      <div class="ku-skeleton"></div>
+    } @else if (error()) {
+      <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
+    } @else {
+      <div class="hsa-groups">
+        @for (g of groupes(); track g.role) {
+          <div class="hsa-group" [class.is-open]="estOuvert(g)">
+            <div class="hsa-group-head">
+              <button type="button" class="hsa-toggle" (click)="ouvrir(g.role)" [attr.aria-expanded]="estOuvert(g)">
+                <span class="hsa-chevron">›</span> <b>{{ g.role }}</b>
+                <span class="ku-chip ku-chip--plain" [class.ku-chip--ok]="g.coches > 0">{{ g.coches }} / {{ g.comptes.length }}</span>
+              </button>
+              <div class="ku-bar hsa-bar" [class.ku-bar--ok]="g.coches === g.comptes.length"><span [style.width.%]="(g.coches / g.comptes.length) * 100"></span></div>
+              <button type="button" class="ku-btn ku-btn--sm" (click)="basculerGroupe(g)">
+                {{ g.coches < g.comptes.length ? 'Tout le rôle' : 'Retirer le rôle' }}
+              </button>
+            </div>
+            @if (estOuvert(g)) {
+              <ul class="hsa-list">
+                @for (c of g.comptes; track c.userId) {
+                  <li [class.is-on]="etat(c)" [class.is-changed]="etat(c) !== c.acces">
+                    <label>
+                      <input type="checkbox" [checked]="etat(c)" (change)="basculer(c, $any($event.target).checked)" />
+                      <span class="hsa-who"><b>{{ c.collaborateur }}</b><small class="ku-muted">{{ c.email }}{{ c.cellule ? ' · ' + c.cellule : '' }}</small></span>
+                    </label>
+                    @if (etat(c) !== c.acces) { <span class="ku-chip ku-chip--warn ku-chip--plain">{{ etat(c) ? 'à ajouter' : 'à retirer' }}</span> }
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        } @empty {
+          <div class="ku-empty"><strong>Aucun compte</strong>Modifiez la recherche.</div>
+        }
+      </div>
+    }
+  </section>
+
+  @if (nbChangements() > 0) {
+    <div class="hsa-savebar" role="region" aria-label="Enregistrer">
+      <span><b>{{ nbChangements() }}</b> modification(s) non enregistrée(s)</span>
+      <button type="button" class="ku-btn" (click)="annuler()">Annuler</button>
+      <button type="button" class="ku-btn ku-btn--primary" (click)="enregistrer()" [disabled]="saving()">{{ saving() ? 'Enregistrement…' : 'Enregistrer' }}</button>
+    </div>
+  }
+</div>

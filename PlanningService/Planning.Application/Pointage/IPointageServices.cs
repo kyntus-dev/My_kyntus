@@ -45,6 +45,11 @@ public interface IRegimeHoraireService
     Task<RegimeHoraireDto?> AffecterAsync(int regimeId, RegimeAffectationRequest request, int? by, CancellationToken ct = default);
     Task<bool> RetirerAffectationAsync(int affectationId, CancellationToken ct = default);
     Task<IReadOnlyList<RegimeCibleDto>> GetCiblesAsync(string cible, CancellationToken ct = default);
+    /// <summary>Comptes actifs et leur accès à « Heure de sortie ».</summary>
+    Task<IReadOnlyList<HeureSortieAccesDto>> GetAccesHeureSortieAsync(CancellationToken ct = default);
+    /// <summary>Donne ou retire l'accès à une liste de comptes ; retourne le nombre de comptes modifiés.</summary>
+    Task<int> SetAccesHeureSortieAsync(HeureSortieAccesRequest request, int? by, CancellationToken ct = default);
+    Task<bool> ADroitHeureSortieAsync(int userId, CancellationToken ct = default);
     /// <summary>Régime effectif de chaque collaborateur demandé (absent : aucun régime).</summary>
     Task<IReadOnlyDictionary<int, RegimeEffectif>> ResoudreAsync(IReadOnlyCollection<int> userIds, CancellationToken ct = default);
 }

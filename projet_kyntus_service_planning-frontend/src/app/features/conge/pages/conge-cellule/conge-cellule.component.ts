@@ -64,20 +64,20 @@ export class CongeCelluleComponent implements OnInit {
     return j ? absentsLe(this.absences(), j) : filterAbsences(this.absences(), this.periode());
   });
   readonly grille = computed(() =>
-    grilleDuMois(this.absences(), this.annee(), this.moisAffiche(), this.data()?.quotaMaxAbsents ?? null));
+    grilleDuMois(this.absences(), this.annee(), this.moisAffiche(), this.quota()));
   readonly frise = computed(() => friseDuMois(this.absences(), this.annee(), this.moisAffiche()));
   readonly joursDuMois = computed(() => new Date(this.annee(), this.moisAffiche(), 0).getDate());
   readonly joursSatures = computed(() => this.grille().filter((c) => c.niveau === 2).length);
   readonly kpi = computed(() => indicateursCellule(this.absences()));
   readonly occupation = computed(() =>
-    occupationDuMois(this.absences(), this.annee(), this.moisAffiche(), this.data()?.quotaMaxAbsents ?? null));
+    occupationDuMois(this.absences(), this.annee(), this.moisAffiche(), this.quota()));
 
-  readonly quotaLabel = computed(() => {
-    const q = this.data()?.quotaMaxAbsents ?? null;
-    return q === null
-      ? 'Aucun quota défini pour la cellule'
-      : `Quota : ${q} absent(s) simultané(s)`;
-  });
+  /** Quota de la cellule ; sans quota défini, un seul absent à la fois (même règle que le serveur). */
+  readonly quota = computed(() => this.data()?.quotaMaxAbsents ?? 1);
+  readonly quotaLabel = computed(() =>
+    this.data()?.quotaMaxAbsents == null
+      ? 'Quota par défaut : 1 absent à la fois'
+      : `Quota : ${this.quota()} absent(s) simultané(s)`);
 
   ngOnInit(): void {
     this.load();
@@ -149,7 +149,7 @@ export class CongeCelluleComponent implements OnInit {
   }
 
   jourTitle(j: { jour: string; absents: number; sature: boolean }): string {
-    const q = this.data()?.quotaMaxAbsents ?? null;
+    const q = this.quota();
     const base = q === null ? `${j.absents} absent(s)` : `${j.absents}/${q} absent(s)`;
     return `${this.formatDate(j.jour)} — ${base}${j.sature ? ' — complet' : ''}`;
   }

@@ -63,6 +63,7 @@ public class AppDbContext : DbContext
     public DbSet<RegimeHoraire> RegimesHoraires { get; set; } = null!;
     public DbSet<RegimeHoraireJour> RegimeHoraireJours { get; set; } = null!;
     public DbSet<RegimeHoraireAffectation> RegimeHoraireAffectations { get; set; } = null!;
+    public DbSet<HeureSortieAcces> HeureSortieAcces { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -652,6 +653,13 @@ public class AppDbContext : DbContext
             e.Property(x => x.Cible).HasMaxLength(16).IsRequired();
             e.HasIndex(x => new { x.Cible, x.CibleId }).IsUnique();
             e.HasIndex(x => x.RegimeHoraireId);
+        });
+
+        modelBuilder.Entity<HeureSortieAcces>(e =>
+        {
+            e.ToTable("HeureSortieAcces");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.UserId).ValueGeneratedNever();
         });
 
         modelBuilder.Entity<EmailOutboxMessage>(e =>
