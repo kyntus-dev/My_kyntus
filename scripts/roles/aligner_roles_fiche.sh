@@ -34,7 +34,7 @@ psql_db -d kyntus_db -Atc "COPY (
   SELECT lower(trim(u.\"Email\")), min(r.\"Name\"), count(DISTINCT r.\"Name\")
   FROM \"Users\" u JOIN \"Roles\" r ON r.\"Id\" = u.\"RoleId\"
   WHERE u.\"IsActive\" AND coalesce(trim(u.\"Email\"), '') <> ''
-  GROUP BY 1) TO STDOUT WITH CSV" > "$TMP/fiche.csv"
+  GROUP BY 1) TO STDOUT WITH CSV" < /dev/null > "$TMP/fiche.csv"
 
 # Même correspondance que PlanningRoleToAuthRoleMapper (Auth).
 ENTETE=$(cat <<'SQL'

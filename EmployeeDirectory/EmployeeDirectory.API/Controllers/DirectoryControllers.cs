@@ -10,7 +10,6 @@ using EmployeeDirectory.Application.Queries.Health;
 using EmployeeDirectory.Application.Rebac;
 using EmployeeDirectory.Application.Reconcile;
 using EmployeeDirectory.Domain.Enums;
-using Kyntus.Messaging.Contracts;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -423,9 +422,10 @@ public class DirectoryOrgController(
         // Règle des 6 mois : un changement fait par un Admin ou un Ingénieur passe toujours
         // (tracé comme dérogation dans l'historique) ; les autres rôles y restent soumis.
         var roleAuteur = User.GetAuthRole();
-        var auteurExempte = User.IsInRole("Admin") || User.IsInRole(KyntusRoleNames.Ingenieur)
+        var ingenieur = Kyntus.Messaging.Contracts.KyntusRoleNames.Ingenieur; // nom complet : évite le conflit OrgNodeLevel
+        var auteurExempte = User.IsInRole("Admin") || User.IsInRole(ingenieur)
                             || string.Equals(roleAuteur, "Admin", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(roleAuteur, KyntusRoleNames.Ingenieur, StringComparison.OrdinalIgnoreCase);
+                            || string.Equals(roleAuteur, ingenieur, StringComparison.OrdinalIgnoreCase);
         var forceOverride = auteurExempte || (body.ForceTenureOverride == true && User.IsInRole("Admin"));
         var motif = auteurExempte && string.IsNullOrWhiteSpace(body.Reason)
             ? $"Changement par {roleAuteur ?? "Admin"}"

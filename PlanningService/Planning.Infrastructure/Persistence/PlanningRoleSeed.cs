@@ -32,11 +32,11 @@ internal static class PlanningRoleSeed
     /// depuis l'interface, car le code et les autres services s'appuient sur leur nom.
     /// </summary>
     internal static readonly HashSet<string> NomsSysteme = new(
-        Catalog.Select(c => c.Name).Concat(
-        [
+        Catalog.Select(c => c.Name).Concat(new[]
+        {
             KyntusRoleNames.Employee, KyntusRoleNames.Coach, KyntusRoleNames.Rp, KyntusRoleNames.Manager,
             "Formateur", "Equipe_Formation", "Comptable", "Employé",
-        ]),
+        }),
         StringComparer.OrdinalIgnoreCase);
 
     internal static async Task EnsureCatalogAsync(AppDbContext context, CancellationToken ct = default)

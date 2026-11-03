@@ -14,7 +14,8 @@ ICI=$(cd "$(dirname "$0")" && pwd)
 if [ "$ENV" = "test" ]; then C=kyntustest_db; DIR=~/kyntus-test; DC=(docker compose -p kyntus-test)
 else C=kyntus_db; DIR=/home/o/projets_mykyntus-; DC=(docker compose); fi
 cd "$DIR" || { echo "Dossier $DIR introuvable"; exit 1; }
-q() { docker exec -i "$C" psql -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
+# Sans entrée : sinon « docker exec -i » avalerait la réponse OUI tapée ensuite.
+q() { docker exec -i "$C" psql -U postgres -v ON_ERROR_STOP=1 -q "$@" < /dev/null; }
 SAUV=~/sauvegardes_reorg; mkdir -p "$SAUV"
 
 echo "================ 1. Code installé et réellement en service ================"
