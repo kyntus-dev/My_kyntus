@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installe d'un coup toutes les versions manquantes jusqu’à la v14 (rôles), dans l'ordre :
-#   v11.5 → v11.6 → v12 (serveur) → v12 (application) → v12.1 → v12.2 → v13 → v14
+#   v11.5 → v11.6 → v12 (serveur) → v12 (application) → v12.1 → v12.2 → v13 → v14 → v14.1
 #
 #   bash installer_v14.sh test     environnement de test (~/kyntus-test)
 #   bash installer_v14.sh prod     production (/home/o/projets_mykyntus-)
@@ -32,6 +32,7 @@ VERSIONS=(
   "v12.2|reorg-2026-code-v12-2.patch|AuthService/Auth.API/Controllers/AuthController.cs|me/role"
   "v13|reorg-2026-code-v13.patch|EmployeeDirectory/EmployeeDirectory.Infrastructure/Services/DirectoryIamAdminService.cs|FusionnerAliasAsync"
   "v14|reorg-2026-code-v14.patch|EmployeeDirectory/EmployeeDirectory.Infrastructure/Services/PilotRotationTenureService.cs|EstExempte"
+  "v14.1|reorg-2026-code-v14-1.patch|EmployeeDirectory/EmployeeDirectory.API/Controllers/DirectoryControllers.cs|évite le conflit OrgNodeLevel"
 )
 
 echo "=== 1. Versions ($ENV) ==="
