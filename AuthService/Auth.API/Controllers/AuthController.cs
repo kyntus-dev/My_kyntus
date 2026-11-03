@@ -12,6 +12,7 @@ using Auth.Application.Queries.AccessAudit;
 using Auth.Application.Queries.CheckEmail;
 using Auth.Application.Queries.CheckUsername;
 using Auth.API.Filters;
+using Auth.Domain.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -115,6 +116,36 @@ public class AuthController : ControllerBase
             Role = role,
             TenantId = "atlas-tech-demo",
         });
+    }
+
+    /// <summary>
+    /// Rôle actuel en base (et non celui du jeton). L'application le consulte régulièrement :
+    /// quand un Admin change le rôle d'un compte, la session se met à jour sans reconnexion.
+    /// </summary>
+    [HttpGet("me/role")]
+    [Authorize]
+    public async Task<IActionResult> RoleActuel([FromServices] IUserRepository users, CancellationToken ct)
+    {
+        var sub = User.FindFirstValue("sub")
+                  ?? User.FindAll(ClaimTypes.NameIdentifier)
+                      .Select(c => c.Value)
+                      .FirstOrDefault(v => v.Contains('-', StringComparison.Ordinal));
+        var user = Guid.TryParse(sub, out var subjectId) && subjectId != Guid.Empty
+            ? await users.GetBySubjectIdAsync(subjectId, ct)
+            : null;
+        if (user is null)
+        {
+            var authUserId = User.FindAll(ClaimTypes.NameIdentifier)
+                                 .Select(c => c.Value)
+                                 .FirstOrDefault(v => int.TryParse(v, out _))
+                             ?? User.FindFirstValue("nameid");
+            if (int.TryParse(authUserId, out var id))
+                user = await users.GetByIdAsync(id, ct);
+        }
+        if (user is null)
+            return NotFound(new { message = "Compte introuvable." });
+
+        return Ok(new { role = user.Role?.Name ?? "User", isActive = user.IsActive });
     }
 
     [HttpGet("audit/access")]

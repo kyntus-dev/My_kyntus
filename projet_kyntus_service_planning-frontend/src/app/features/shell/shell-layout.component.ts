@@ -1,4 +1,5 @@
-import { Component, OnDestroy, OnInit, ViewEncapsulation, inject, ElementRef, ViewChild, HostListener, effect, signal } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, OnInit, ViewEncapsulation, inject, ElementRef, ViewChild, HostListener, effect, signal } from '@angular/core';
+import { KyntusRoleWatchService } from '../../core/session/kyntus-role-watch.service';
 
 import { CommonModule } from '@angular/common';
 
@@ -108,6 +109,8 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   private readonly primeSection = inject(PrimeSectionService);
 
   private readonly session = inject(KyntusSessionService);
+  private readonly roleWatch = inject(KyntusRoleWatchService);
+  private readonly destroyRef = inject(DestroyRef);
 
   private readonly parrainageNav = inject(ParrainageNavService);
 
@@ -237,6 +240,8 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
     }
 
     this.session.syncStoredUserFromAccessToken();
+    // Rôle changé par un Admin : session et menus mis à jour sans reconnexion.
+    this.roleWatch.demarrer(this.destroyRef);
     this.parrainageRole.syncFromSession();
 
     this.users.getCurrentUser().subscribe({
