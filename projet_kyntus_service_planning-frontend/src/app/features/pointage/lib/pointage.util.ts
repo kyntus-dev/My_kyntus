@@ -197,7 +197,7 @@ export function lignesExportJours(suivis: readonly PointageSuiviDto[]): (string 
     .filter((j) => j.statut !== 'AVenir' && j.statut !== 'Repos')
     .map((j) => [
       s.collaborateur, s.cellule ?? '', j.jour, STATUT_LABELS[j.statut],
-      j.source === 'Regime' ? 'Régime horaire' : j.source === 'Planning' ? 'Planning publié' : '',
+      j.source === 'Regime' ? 'Régime horaire' : j.source === 'Planning' ? 'Planning publié' : j.source === 'PlanningIT' ? 'Planning IT' : '',
       j.planning ?? '', j.arrivee ?? '', j.depart ?? '', j.pointages.length, j.pointages.join(' '),
       formatDuree(j.pauseMinutes), formatDuree(j.pauseAutoriseeMinutes),
       formatDuree(j.retardEntreeMinutes), formatDuree(j.retardPauseMinutes), formatDuree(j.retardTotalMinutes),

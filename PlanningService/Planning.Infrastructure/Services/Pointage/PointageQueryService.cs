@@ -179,6 +179,12 @@ public sealed class PointageQueryService(
                         && a.WeeklyPlanning.Status == PlanningStatus.Published)
             .ToListAsync(ct);
         var regimeParUser = await regimes.ResoudreAsync(userIds, ct);
+        // Planning IT : horaires saisis par les membres IT, référence prioritaire.
+        var horairesIt = await db.PlanningItHoraires.AsNoTracking()
+            .Where(h => userIds.Contains(h.UserId) && h.Jour >= du && h.Jour <= au)
+            .Select(h => new { h.UserId, h.Jour, h.Statut, h.Arrivee })
+            .ToListAsync(ct);
+        var itParJour = horairesIt.ToDictionary(h => (h.UserId, h.Jour), h => (h.Statut, h.Arrivee));
         var planningParJour = affectations
             .GroupBy(a => (a.UserId, a.AssignedDate))
             .ToDictionary(
@@ -199,8 +205,13 @@ public sealed class PointageQueryService(
             var jours = new List<PointageJourDto>();
             for (var jour = du; jour <= au; jour = jour.AddDays(1))
             {
-                // Planning publié en priorité ; à défaut, le régime horaire du collaborateur.
-                if (!planningParJour.TryGetValue((user.Id, jour), out var planning) && regime is not null)
+                // Ordre de référence : planning IT (saisi par le membre), puis planning publié,
+                // puis régime horaire du collaborateur.
+                PlanningJour? planning;
+                if (itParJour.TryGetValue((user.Id, jour), out var it))
+                    planning = RegimeResolver.PlanningDuJourIt(it.Statut, it.Arrivee, regime, jour,
+                        O.PauseSelonShift ? O.PauseParDefautMinutes : O.PauseAutoriseeMinutes);
+                else if (!planningParJour.TryGetValue((user.Id, jour), out planning) && regime is not null)
                     planning = RegimeResolver.PlanningDuJour(regime, jour);
                 if (conges.Any(c => c.UserId == user.Id && c.StartDate <= jour && c.EndDate >= jour))
                     planning = (planning ?? new PlanningJour(null, 0, false, false, null)) with { Conge = true };

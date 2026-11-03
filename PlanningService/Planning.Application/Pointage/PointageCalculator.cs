@@ -41,6 +41,8 @@ public static class PlanningSources
 {
     public const string Publie = "Planning";
     public const string Regime = "Regime";
+    /// <summary>Horaire saisi dans le planning IT (référence prioritaire pour les membres IT).</summary>
+    public const string PlanningIt = "PlanningIT";
 }
 
 public sealed record PointageJourResult(

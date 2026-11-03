@@ -64,6 +64,8 @@ public class AppDbContext : DbContext
     public DbSet<RegimeHoraireJour> RegimeHoraireJours { get; set; } = null!;
     public DbSet<RegimeHoraireAffectation> RegimeHoraireAffectations { get; set; } = null!;
     public DbSet<HeureSortieAcces> HeureSortieAcces { get; set; } = null!;
+    public DbSet<PlanningItHoraire> PlanningItHoraires { get; set; } = null!;
+    public DbSet<PlanningItCommentaire> PlanningItCommentaires { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -660,6 +662,24 @@ public class AppDbContext : DbContext
             e.ToTable("HeureSortieAcces");
             e.HasKey(x => x.UserId);
             e.Property(x => x.UserId).ValueGeneratedNever();
+        });
+
+        // Planning IT : horaires saisis par les membres de la cellule IT.
+        modelBuilder.Entity<PlanningItHoraire>(e =>
+        {
+            e.ToTable("PlanningItHoraires");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Statut).HasMaxLength(16).IsRequired();
+            e.HasIndex(x => new { x.UserId, x.Jour }).IsUnique();
+            e.HasIndex(x => x.Jour);
+        });
+
+        modelBuilder.Entity<PlanningItCommentaire>(e =>
+        {
+            e.ToTable("PlanningItCommentaires");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Texte).HasMaxLength(500).IsRequired();
+            e.HasIndex(x => new { x.UserId, x.Semaine }).IsUnique();
         });
 
         modelBuilder.Entity<EmailOutboxMessage>(e =>

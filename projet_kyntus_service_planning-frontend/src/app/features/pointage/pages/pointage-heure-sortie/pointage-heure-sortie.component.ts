@@ -66,6 +66,7 @@ export class PointageHeureSortieComponent implements OnInit {
     const j = this.jour();
     if (!j) return '';
     if (j.source === 'Planning') return 'Planning publié du jour';
+    if (j.source === 'PlanningIT') return 'Planning IT du jour';
     if (j.source === 'Regime' || j.regime) return `Régime « ${j.regime} »`;
     return 'Valeurs de l’Excel (aucun régime horaire)';
   });

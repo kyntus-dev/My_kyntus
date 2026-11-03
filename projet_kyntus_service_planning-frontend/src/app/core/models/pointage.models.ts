@@ -33,7 +33,7 @@ export interface PointageJourDto {
   productionPrevueMinutes?: number | null;
   ecartProductionMinutes?: number | null;
   /** Origine du planning : planning publié ou régime horaire. */
-  source?: 'Planning' | 'Regime' | null;
+  source?: 'Planning' | 'Regime' | 'PlanningIT' | null;
 }
 
 export interface PointageTotauxDto {
@@ -107,7 +107,7 @@ export interface PointageAujourdhuiDto {
   regime: string | null;
   regimeCible: string | null;
   /** Planning / Regime / null (valeurs de l'Excel). */
-  source: 'Planning' | 'Regime' | null;
+  source: 'Planning' | 'Regime' | 'PlanningIT' | null;
   arriveePrevue: string | null;
   productionPrevueMinutes: number;
   pauseAutoriseeMinutes: number;

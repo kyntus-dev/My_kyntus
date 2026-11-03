@@ -23,6 +23,8 @@ internal static class PlanningRoleSeed
         ("EquipeFormation", "Équipe formation"),
         (KyntusRoleNames.Qualiticien, "Qualiticien — formation continue"),
         ("Comptabilité", "Comptabilité — synthèse globale / paiement"),
+        (KyntusRoleNames.Ingenieur, "Ingénieur — cellule IT"),
+        (KyntusRoleNames.SupportIt, "Support IT — cellule IT"),
     ];
 
     internal static async Task EnsureCatalogAsync(AppDbContext context, CancellationToken ct = default)

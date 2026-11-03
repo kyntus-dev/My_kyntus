@@ -210,7 +210,7 @@
                         } @else { <p class="ku-muted">Aucun pointage.</p> }
                       </div>
                       <dl class="pt-detail-facts">
-                        <div><dt>Prévu</dt><dd>{{ j.planning ? j.planning + (j.source === 'Regime' ? ' (régime)' : ' (planning)') : 'Aucun planning' }}</dd></div>
+                        <div><dt>Prévu</dt><dd>{{ j.planning ? j.planning + (j.source === 'Regime' ? ' (régime)' : j.source === 'PlanningIT' ? ' (planning IT)' : ' (planning)') : 'Aucun planning' }}</dd></div>
                         <div><dt>Arrivée / départ</dt><dd>{{ j.arrivee ?? '—' }} → {{ j.depart ?? '—' }}</dd></div>
                         <div><dt>Retard d’entrée</dt><dd [class.ku-neg]="j.retardEntreeMinutes > 0">{{ formatDuree(j.retardEntreeMinutes) }}</dd></div>
                         <div><dt>Retard pause</dt><dd [class.ku-neg]="j.retardPauseMinutes > 0">{{ formatDuree(j.retardPauseMinutes) }}</dd></div>

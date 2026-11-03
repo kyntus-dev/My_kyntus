@@ -19,6 +19,8 @@ export const KyntusRoleNames = {
   EquipeFormation: 'Equipe_Formation',
   Formateur: 'Formateur',
   Comptabilite: 'Comptabilité',
+  Ingenieur: 'Ingénieur',
+  SupportIt: 'Support IT',
 } as const;
 
 export type KyntusRoleName = (typeof KyntusRoleNames)[keyof typeof KyntusRoleNames];
@@ -34,6 +36,9 @@ const FORMATION_TEAM_ALIASES = [
 ] as const;
 
 const COMPTABILITE_ALIASES = [KyntusRoleNames.Comptabilite, 'Comptable'] as const;
+
+/** Cellule IT : mêmes accès qu'un collaborateur, plus le planning IT. */
+export const IT_ROLES = [KyntusRoleNames.Ingenieur, KyntusRoleNames.SupportIt] as const;
 
 /** Tous les rôles authentifiés sauf Pilote / Employee (espace salarié uniquement). */
 const DUAL_HAT_ROLES = [
@@ -61,6 +66,7 @@ export const ROLE_SETS = {
     ...REFERENT_ALIASES,
     ...CHEF_ALIASES,
     ...PILOTE_ALIASES,
+    ...IT_ROLES,
     KyntusRoleNames.Audit,
     ...FORMATION_TEAM_ALIASES,
     KyntusRoleNames.Superviseur,
@@ -70,6 +76,7 @@ export const ROLE_SETS = {
 
   planningSelfService: [
     ...PILOTE_ALIASES,
+    ...IT_ROLES,
     ...REFERENT_ALIASES,
     KyntusRoleNames.Superviseur,
     KyntusRoleNames.Manager,
@@ -88,6 +95,7 @@ export const ROLE_SETS = {
     ...REFERENT_ALIASES,
     ...CHEF_ALIASES,
     ...PILOTE_ALIASES,
+    ...IT_ROLES,
     KyntusRoleNames.Audit,
     KyntusRoleNames.EquipeFormation,
     KyntusRoleNames.Superviseur,
@@ -95,6 +103,7 @@ export const ROLE_SETS = {
 
   mesConges: [
     ...PILOTE_ALIASES,
+    ...IT_ROLES,
     KyntusRoleNames.Manager,
     ...REFERENT_ALIASES,
     ...CHEF_ALIASES,
@@ -110,6 +119,8 @@ export const ROLE_SETS = {
 
   /** Config période interdite — RH / Admin. */
   congesRhConfig: [KyntusRoleNames.Admin, KyntusRoleNames.RH] as string[],
+  /** Planning IT : membres de la cellule IT et Admin (affinable dans « Accès par rôle »). */
+  planningIt: [KyntusRoleNames.Admin, ...IT_ROLES] as string[],
   /** Congés de l'équipe : responsables d'équipe (périmètre organisation RH), RH et Admin. */
   congesEquipe: [
     KyntusRoleNames.Admin,
@@ -146,6 +157,7 @@ export const ROLE_SETS = {
 
   mesSessions: [
     ...PILOTE_ALIASES,
+    ...IT_ROLES,
     KyntusRoleNames.Manager,
     ...REFERENT_ALIASES,
     ...CHEF_ALIASES,
@@ -159,6 +171,7 @@ export const ROLE_SETS = {
 
   mesFormations: [
     ...PILOTE_ALIASES,
+    ...IT_ROLES,
     KyntusRoleNames.Manager,
     ...REFERENT_ALIASES,
     ...CHEF_ALIASES,
@@ -172,6 +185,7 @@ export const ROLE_SETS = {
 
   reclamationsEmployee: [
     ...PILOTE_ALIASES,
+    ...IT_ROLES,
     KyntusRoleNames.RH,
     KyntusRoleNames.Manager,
     ...REFERENT_ALIASES,
@@ -214,6 +228,7 @@ export const ROLE_SETS = {
     KyntusRoleNames.Admin,
     KyntusRoleNames.RH,
     ...PILOTE_ALIASES,
+    ...IT_ROLES,
     KyntusRoleNames.Manager,
     ...REFERENT_ALIASES,
     ...CHEF_ALIASES,
@@ -231,6 +246,7 @@ export const ROLE_SETS = {
     ...REFERENT_ALIASES,
     ...CHEF_ALIASES,
     ...PILOTE_ALIASES,
+    ...IT_ROLES,
     KyntusRoleNames.Audit,
     KyntusRoleNames.Superviseur,
     ...COMPTABILITE_ALIASES,
@@ -241,6 +257,7 @@ export const ROLE_SETS = {
     KyntusRoleNames.RH,
     KyntusRoleNames.Manager,
     ...PILOTE_ALIASES,
+    ...IT_ROLES,
     KyntusRoleNames.Audit,
     ...REFERENT_ALIASES,
     ...CHEF_ALIASES,

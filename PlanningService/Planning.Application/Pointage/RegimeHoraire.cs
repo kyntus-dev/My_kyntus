@@ -87,6 +87,28 @@ public static class RegimeResolver
     }
 
     /// <summary>
+    /// Planning d'un jour d'après le planning IT : « Travail » = arrivée saisie, production du régime
+    /// (sinon règle de l'Excel), pause du régime (sinon pause par défaut) ; « Conge » = congé ;
+    /// « Repos » = jour non travaillé (null). Le planning IT prime sur le planning publié et le régime.
+    /// </summary>
+    public static PlanningJour? PlanningDuJourIt(string statut, TimeOnly? arrivee, RegimeEffectif? regime, DateOnly jour, int pauseParDefaut)
+    {
+        if (statut == Domain.Entities.PlanningItStatuts.Repos)
+            return null;
+        if (statut == Domain.Entities.PlanningItStatuts.Conge)
+            return new PlanningJour(null, 0, true, false, "Planning IT", null, PlanningSources.PlanningIt);
+        var production = regime is null ? null : PlanningDuJour(regime, jour)?.ProductionPrevueMinutes;
+        return new PlanningJour(
+            arrivee,
+            regime?.PauseAutoriseeMinutes ?? pauseParDefaut,
+            false,
+            false,
+            "Planning IT",
+            production ?? ProductionExcelMinutes(jour),
+            PlanningSources.PlanningIt);
+    }
+
+    /// <summary>
     /// Production de l'Excel « Combien il me reste » (cellule B3) quand aucun régime ne s'applique :
     /// 07:40 le vendredi et le samedi, 08:40 les autres jours.
     /// </summary>

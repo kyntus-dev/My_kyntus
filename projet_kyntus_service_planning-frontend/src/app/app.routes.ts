@@ -39,6 +39,16 @@ export const routes: Routes = [
             .then(m => m.UnifiedDashboardComponent),
       },
 
+      // Planning IT partagé (cellule IT : Ingénieur, Support IT) — droits dans « Accès par rôle ».
+      {
+        path: 'planning-it',
+        canActivate: [AuthGuard],
+        data: { capability: 'planning-it' },
+        loadComponent: () =>
+          import('./features/planning-it/planning-it.component')
+            .then(m => m.PlanningItComponent),
+      },
+
       // Notifications et paramètres — centre unifié plateforme
       {
         path: 'notifications',

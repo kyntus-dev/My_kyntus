@@ -127,7 +127,7 @@ export class PointagePrevuRealiseComponent implements OnInit {
   infobulle(j: PointageJourDto): string {
     const parts = [
       STATUT_LABELS[j.statut],
-      j.planning ? `Prévu ${j.planning}${j.source === 'Regime' ? ' (régime)' : ''}` : 'Sans planning',
+      j.planning ? `Prévu ${j.planning}${j.source === 'Regime' ? ' (régime)' : j.source === 'PlanningIT' ? ' (planning IT)' : ''}` : 'Sans planning',
       j.pointages.length ? `Pointages : ${j.pointages.join(' · ')}` : 'Aucun pointage',
       j.pauseMinutes ? `Pause ${formatDuree(j.pauseMinutes)} / ${formatDuree(j.pauseAutoriseeMinutes)}` : '',
       j.retardTotalMinutes ? `Retard ${formatDuree(j.retardTotalMinutes)}` : '',

@@ -9,8 +9,11 @@ public static class PlatformAccessCatalog
     [
         "Admin", "RH", "Audit", "Manager", "Superviseur", "Coach", "Référent technique",
         "RP", "Chef de projet", "Pilote", "Employee", "Formateur", "Equipe_Formation",
-        "Qualiticien", "Comptabilité"
+        "Qualiticien", "Comptabilité", "Ingénieur", "Support IT"
     ];
+
+    /// <summary>Cellule IT : planning IT partagé.</summary>
+    private static readonly string[] EquipeIt = ["Ingénieur", "Support IT"];
 
     private static readonly string[] Admin = ["Admin"];
     private static readonly string[] AdminRh = ["Admin", "RH"];
@@ -22,7 +25,7 @@ public static class PlatformAccessCatalog
     private static readonly string[] PlanningGenerate =
     [
         "Admin", "RH", "Manager", "Coach", "Référent technique", "RP", "Chef de projet",
-        "Pilote", "Employee", "Audit", "Equipe_Formation", "Superviseur"
+        "Pilote", "Employee", "Audit", "Equipe_Formation", "Superviseur", "Ingénieur", "Support IT"
     ];
     private static readonly string[] PlanningValidation =
     [
@@ -36,7 +39,7 @@ public static class PlatformAccessCatalog
     [
         "Admin", "RH", "Manager", "Coach", "Référent technique", "RP", "Chef de projet",
         "Pilote", "Employee", "Audit", "Formateur", "Equipe_Formation", "Superviseur",
-        "Qualiticien", "Comptabilité"
+        "Qualiticien", "Comptabilité", "Ingénieur", "Support IT"
     ];
 
     public static IReadOnlyList<PlatformScreenDef> Screens { get; } =
@@ -64,6 +67,16 @@ public static class PlatformAccessCatalog
         S("planning.shift-config", "Configuration des horaires", "Planification", View: PlanningShiftConfig, Configure: PlanningShiftConfig),
         S("planning.validation", "Valider les plannings", "Planification", View: PlanningValidation, Validate: AdminRh),
         S("planning.publish", "Publier un planning (2e validation)", "Planification", View: AdminRh, Validate: AdminRh),
+
+        // Planning IT : chaque membre IT saisit ses horaires (Agir) et voit ceux des collègues ;
+        // « Configurer » = corriger les horaires de n'importe quel membre.
+        S("planning-it", "Planning IT", "Planification", View: ["Admin", .. EquipeIt], Act: EquipeIt, Configure: Admin),
+
+        S("pointage.self", "Mon suivi de pointage", "Pointage", View: Self),
+        S("pointage.equipe", "Pointages de l'équipe / prévu-réalisé", "Pointage", View: TeamLead),
+        S("pointage.regimes", "Régimes horaires", "Pointage", View: AdminRh, Configure: Admin),
+        S("pointage.correspondances", "Correspondance pointeuses", "Pointage", View: AdminRh, Act: AdminRh),
+        S("pointage.acces-sortie", "Accès Heure de sortie (compte par compte)", "Pointage", View: Admin, Configure: Admin),
 
         S("conges.self", "Mes congés", "Congés", View: Self),
         S("conges.validation", "Valider les congés", "Congés", View: ["Admin", "RH", "Manager", "Superviseur"], Validate: ["Admin", "RH", "Manager", "Superviseur"]),

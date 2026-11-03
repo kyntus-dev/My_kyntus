@@ -14,6 +14,18 @@ public static class KyntusRoleNames
     public const string Superviseur = "Superviseur";
     public const string Manager = "Manager";
     public const string Qualiticien = "Qualiticien";
+    /// <summary>Cellule IT : saisit ses horaires dans le planning IT.</summary>
+    public const string Ingenieur = "Ingénieur";
+    /// <summary>Cellule IT : saisit ses horaires dans le planning IT.</summary>
+    public const string SupportIt = "Support IT";
+
+    /// <summary>Rôles de la cellule IT (planning IT partagé).</summary>
+    public static bool IsEquipeIt(string? role) =>
+        string.Equals(role, Ingenieur, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, "Ingenieur", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, SupportIt, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, "SupportIT", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, "Support_IT", StringComparison.OrdinalIgnoreCase);
 
     public static bool IsSupportManager(string? role) =>
         string.Equals(role, Manager, StringComparison.OrdinalIgnoreCase);
@@ -44,6 +56,8 @@ public static class KyntusRoleNames
         if (IsChefDeProjet(role)) return ChefDeProjet;
         if (IsSupportManager(role)) return Manager;
         if (IsSuperviseur(role)) return Superviseur;
+        if (string.Equals(role, Ingenieur, StringComparison.OrdinalIgnoreCase) || string.Equals(role, "Ingenieur", StringComparison.OrdinalIgnoreCase)) return Ingenieur;
+        if (IsEquipeIt(role)) return SupportIt;
         return role;
     }
 }

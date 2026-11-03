@@ -921,6 +921,36 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>Planning IT (v12) : deux tables nouvelles, vides au départ.</summary>
+    public static async Task EnsurePlanningItAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PlanningItHoraires" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Jour" date NOT NULL,
+                "Statut" character varying(16) NOT NULL DEFAULT 'Travail',
+                "Arrivee" time without time zone NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" integer NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_PlanningItHoraires_UserId_Jour" ON "PlanningItHoraires" ("UserId", "Jour");
+            CREATE INDEX IF NOT EXISTS "IX_PlanningItHoraires_Jour" ON "PlanningItHoraires" ("Jour");
+
+            CREATE TABLE IF NOT EXISTS "PlanningItCommentaires" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Semaine" date NOT NULL,
+                "Texte" character varying(500) NOT NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" integer NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_PlanningItCommentaires_UserId_Semaine" ON "PlanningItCommentaires" ("UserId", "Semaine");
+            """,
+            ct);
+    }
+
     /// <summary>Index lecture fréquents (grille, demandes exceptionnelles, users actifs).</summary>
     public static async Task EnsurePerfIndexesAsync(AppDbContext db, CancellationToken ct = default)
     {
