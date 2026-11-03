@@ -81,6 +81,16 @@ export class PlatformAccessService {
     return this.can(capability, 'View');
   }
 
+  /**
+   * Écran ouvert à ce rôle par « Accès par rôle » (hors joker Admin) : sert à ouvrir aux rôles IT
+   * et aux rôles créés par l'Admin les pages encore réservées par défaut à une liste de rôles.
+   */
+  accordeExplicitement(capabilities: string | readonly string[] | null | undefined): boolean {
+    if (!capabilities || !this.seeded() || this.keys().includes('*:Global')) return false;
+    const liste = typeof capabilities === 'string' ? [capabilities] : capabilities;
+    return liste.some((c) => this.can(c, 'View'));
+  }
+
   canAct(capability: string): boolean {
     if (!this.seeded()) return this.fallbackAdminRh();
     return this.can(capability, 'Act') || this.can(capability, 'Validate') || this.can(capability, 'Configure');

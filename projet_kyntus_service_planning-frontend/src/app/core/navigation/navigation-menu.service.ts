@@ -44,7 +44,10 @@ export class NavigationMenuService {
         ...g,
         children: filterItemsByHat(g.children, hat, dualHat),
       }))
-      .filter((g) => this.jwtRoleAllowed(g.roles, jwtRole) && g.children.length > 0);
+      .filter((g) => g.children.length > 0
+        && (this.jwtRoleAllowed(g.roles, jwtRole)
+          || (this.access.hasCatalog() && g.children.some((c) =>
+            (!!c.capability && this.access.canView(c.capability)) || this.access.accordeExplicitement(c.ouvertureIam)))));
   }
 
   private resolveGroup(group: Microservice, jwtRole: string): Microservice {
@@ -151,6 +154,8 @@ export class NavigationMenuService {
     if (item.capability && this.access.hasCatalog()) {
       return this.access.canView(item.capability);
     }
+    // Entrée réservée par défaut à des rôles, mais ouverte à ce rôle dans « Accès par rôle ».
+    if (this.access.accordeExplicitement(item.ouvertureIam)) return true;
     return this.jwtRoleAllowed(item.roles, jwtRole);
   }
 

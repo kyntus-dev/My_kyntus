@@ -47,6 +47,8 @@ export class AuthGuard implements CanActivate {
 
     const allowedRoles = route.data?.['roles'] as string[] | undefined;
     const capability = route.data?.['capability'] as string | undefined;
+    // Plusieurs écrans derrière une même page (Administration, Audit) : l'accès à l'un suffit.
+    const capabilities = (route.data?.['capabilities'] as string[] | undefined) ?? (capability ? [capability] : []);
     if (token && !isJwtExpired(token)) {
       try {
         await this.access.ensureLoaded();
@@ -54,13 +56,18 @@ export class AuthGuard implements CanActivate {
         // Catalogue IAM optionnel — ne pas bloquer le login.
       }
     }
-    if (capability && this.access.hasCatalog()) {
-      if (!this.access.canView(capability)) {
+    // « Accès par rôle » fait foi : un rôle à qui l'Admin a ouvert l'écran y entre, même s'il ne
+    // figure pas dans la liste de rôles par défaut (rôles IT, rôles créés par l'Admin…).
+    if (capabilities.length && this.access.hasCatalog()) {
+      if (!capabilities.some((c) => this.access.canView(c))) {
         this.router.navigate(['/unauthorized']);
         return false;
       }
-      if (!allowedRoles?.length) return true;
+      return true;
     }
+    // Page réservée par défaut à une liste de rôles, mais ouverte à ce rôle dans « Accès par rôle ».
+    const ouverture = route.data?.['ouvertureIam'] as string | string[] | undefined;
+    if (ouverture && this.access.accordeExplicitement(ouverture)) return true;
     if (allowedRoles?.length) {
       if (!token || isJwtExpired(token)) {
         this.router.navigate(['/unauthorized']);

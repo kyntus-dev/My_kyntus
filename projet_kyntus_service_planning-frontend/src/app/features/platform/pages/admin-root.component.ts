@@ -34,7 +34,7 @@ import { AdminRolesComponent } from '../roles/admin-roles.component';
           <button
             type="button"
             class="plat-tab"
-            [class.active]="platform.adminSection() === tab.id"
+            [class.active]="section() === tab.id"
             (click)="platform.goAdmin(tab.id)"
           >
             {{ tab.label }}
@@ -42,7 +42,7 @@ import { AdminRolesComponent } from '../roles/admin-roles.component';
         }
       </nav>
 
-      @switch (platform.adminSection()) {
+      @switch (section()) {
         @case ('overview') { <app-admin-overview /> }
         @case ('access') { <app-admin-access-matrix /> }
         @case ('roles') { <app-admin-roles /> }
@@ -96,5 +96,12 @@ export class AdminRootComponent {
 
   visibleTabs() {
     return this.tabs.filter((t) => this.access.canView(t.capability));
+  }
+
+  /** Section affichée : celle demandée si elle est ouverte au rôle, sinon le premier onglet autorisé. */
+  section() {
+    const visibles = this.visibleTabs();
+    const demandee = this.platform.adminSection();
+    return visibles.some((t) => t.id === demandee) ? demandee : visibles[0]?.id ?? demandee;
   }
 }

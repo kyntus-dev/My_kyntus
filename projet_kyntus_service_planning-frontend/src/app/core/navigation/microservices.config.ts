@@ -51,6 +51,8 @@ export interface MenuItem {
   organisationTab?: OrganisationMenuEntry;
   /** Console Admin / Audit globale. */
   platformAdminSection?: AdminSectionId;
+  /** Écran IAM qui ouvre aussi l'entrée aux rôles hors liste (rôles IT, rôles créés). */
+  ouvertureIam?: string;
   platformAuditSection?: PlatformAuditSectionId;
   /** Clé IAM (catalogue d’interfaces). */
   capability?: string;
@@ -178,7 +180,7 @@ export const MICROSERVICES: Microservice[] = [
     roles: ADMIN_RH,
     children: [
       { label: 'Contrats, pôles et cellules', route: '/organisation/administrative', roles: ADMIN_RH, hat: 'team' },
-      { label: 'Structure de production', route: '/organisation', roles: ADMIN_RH, hat: 'team' },
+      { label: 'Structure de production', route: '/organisation', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.organisation' },
       { label: 'Structure support', route: '/departements-metier', roles: ADMIN_RH, hat: 'team' },
     ],
   },
@@ -187,7 +189,7 @@ export const MICROSERVICES: Microservice[] = [
     label: 'Ressources humaines',
     icon: ICONS.users,
     children: [
-      { label: 'Employés', route: '/users', roles: ADMIN_RH, hat: 'team' },
+      { label: 'Employés', route: '/users', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.users' },
       { label: 'Nouvel employé', route: '/users/create', roles: ADMIN_RH, hat: 'team' },
       { label: 'Import employés', route: '/import', roles: ADMIN_RH, hat: 'team' },
       { label: 'Contrats', route: '/contracts', roles: MANAGER_ROLES, hat: 'team' },
@@ -204,16 +206,16 @@ export const MICROSERVICES: Microservice[] = [
     icon: ICONS.calendar,
     roles: ALL_ROLES,
     children: [
-      { label: 'Mes plannings', route: '/mes-plannings', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
-      { label: 'Mes changements d’horaire', route: '/mes-demandes-changement', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
-      { label: 'Mes demandes exceptionnelles', route: '/mes-demandes-exceptionnelles', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
-      { label: 'Mes renforts samedi', route: '/mes-renforts', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
+      { label: 'Mes plannings', route: '/mes-plannings', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self', ouvertureIam: 'planning.self' },
+      { label: 'Mes changements d’horaire', route: '/mes-demandes-changement', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self', ouvertureIam: 'planning.self' },
+      { label: 'Mes demandes exceptionnelles', route: '/mes-demandes-exceptionnelles', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self', ouvertureIam: 'planning.self' },
+      { label: 'Mes renforts samedi', route: '/mes-renforts', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self', ouvertureIam: 'planning.self' },
       { label: 'Planning IT', route: '/planning-it', roles: ROLE_SETS.planningIt, hat: 'both', capability: 'planning-it' },
-      { label: 'Membres de mon équipe', route: '/mon-equipe', roles: ROLE_SETS.congesEquipe.filter((r) => r !== 'Admin' && r !== 'RH'), hat: 'team' },
-      { label: 'Planning de l’équipe', route: '/planning/equipe', roles: ['Manager', 'Coach', 'Référent technique', 'Superviseur'], hat: 'team' },
-      { label: 'Traiter les changements', route: '/planning/change-requests', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team' },
-      { label: 'Traiter les demandes exceptionnelles', route: '/planning/exceptional-requests', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team' },
-      { label: 'Traiter les renforts samedi', route: '/planning/demandes-renfort', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team' },
+      { label: 'Membres de mon équipe', route: '/mon-equipe', roles: ROLE_SETS.congesEquipe.filter((r) => r !== 'Admin' && r !== 'RH'), hat: 'team', ouvertureIam: 'planning.equipe' },
+      { label: 'Planning de l’équipe', route: '/planning/equipe', roles: ['Manager', 'Coach', 'Référent technique', 'Superviseur'], hat: 'team', ouvertureIam: 'planning.equipe' },
+      { label: 'Traiter les changements', route: '/planning/change-requests', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team', ouvertureIam: 'planning.change-requests' },
+      { label: 'Traiter les demandes exceptionnelles', route: '/planning/exceptional-requests', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team', ouvertureIam: 'planning.exceptional-requests' },
+      { label: 'Traiter les renforts samedi', route: '/planning/demandes-renfort', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team', ouvertureIam: 'planning.reinforcement' },
       { label: 'Valider les plannings', route: '/planning/validation', roles: [...ADMIN_RH, KyntusRoleNames.Superviseur], hat: 'team', capability: 'planning.validation' },
       { label: 'Configuration des horaires', route: '/planning/shift-config', roles: [...ADMIN_RH, KyntusRoleNames.Superviseur], hat: 'team', capability: 'planning.shift-config' },
     ],
@@ -240,7 +242,7 @@ export const MICROSERVICES: Microservice[] = [
     icon: ICONS.clock,
     children: [
       { label: 'Mon suivi', route: '/pointage/mon-suivi', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'pointage.self' },
-      { label: 'Heure de sortie', route: '/pointage/heure-de-sortie', roles: EMPLOYEE_ROLES, hat: 'self' },
+      { label: 'Heure de sortie', route: '/pointage/heure-de-sortie', roles: EMPLOYEE_ROLES, hat: 'self', ouvertureIam: 'pointage.self' },
       { label: 'Pointages de l’équipe', route: '/pointage/equipe', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'pointage.equipe' },
       { label: 'Planning prévu / réalisé', route: '/pointage/prevu-realise', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'pointage.equipe' },
       { label: 'Régimes horaires', route: '/pointage/regimes', roles: ADMIN_RH, hat: 'team', capability: 'pointage.regimes' },

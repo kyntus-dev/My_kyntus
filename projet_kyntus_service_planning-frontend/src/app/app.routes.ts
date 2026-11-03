@@ -65,7 +65,10 @@ export const routes: Routes = [
       {
         path: 'admin',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh, capability: 'admin.overview' },
+        data: {
+          roles: ROLE_SETS.adminRh,
+          capabilities: ['admin.overview', 'admin.access', 'admin.users', 'admin.organisation', 'admin.sync', 'admin.modules', 'admin.anomalies'],
+        },
         loadComponent: () =>
           import('./features/platform/pages/admin-root.component')
             .then(m => m.AdminRootComponent),
@@ -73,7 +76,10 @@ export const routes: Routes = [
       {
         path: 'audit',
         canActivate: [AuthGuard],
-        data: { roles: [KyntusRoleNames.Admin, KyntusRoleNames.Audit], capability: 'audit.dashboard' },
+        data: {
+          roles: [KyntusRoleNames.Admin, KyntusRoleNames.Audit],
+          capabilities: ['audit.dashboard', 'audit.journal', 'audit.access-history', 'audit.anomalies', 'audit.reporting'],
+        },
         loadComponent: () =>
           import('./features/platform/pages/audit-root.component')
             .then(m => m.AuditRootComponent),
@@ -304,7 +310,7 @@ export const routes: Routes = [
       {
         path: 'organisation',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh },
+        data: { ouvertureIam: 'admin.organisation', roles: ROLE_SETS.adminRh },
         loadComponent: () =>
           import('./features/prime/pages/organisation-management.component')
             .then((m) => m.OrganisationManagementComponent),
@@ -345,7 +351,7 @@ export const routes: Routes = [
       {
         path: 'users',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh },
+        data: { ouvertureIam: 'admin.users', roles: ROLE_SETS.adminRh },
         loadChildren: () =>
           import('./features/users/users-routing-module')
             .then(m => m.UsersRoutingModule),
@@ -392,7 +398,7 @@ export const routes: Routes = [
           {
             path: 'mon-suivi',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.planningSelfService },
+            data: { ouvertureIam: 'pointage.self', roles: ROLE_SETS.planningSelfService },
             loadComponent: () =>
               import('./features/pointage/pages/pointage-suivi/pointage-suivi.component')
                 .then(m => m.PointageSuiviComponent),
@@ -400,7 +406,7 @@ export const routes: Routes = [
           {
             path: 'collaborateurs/:id',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.congesEquipe },
+            data: { ouvertureIam: 'pointage.equipe', roles: ROLE_SETS.congesEquipe },
             loadComponent: () =>
               import('./features/pointage/pages/pointage-suivi/pointage-suivi.component')
                 .then(m => m.PointageSuiviComponent),
@@ -408,7 +414,7 @@ export const routes: Routes = [
           {
             path: 'equipe',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.congesEquipe },
+            data: { ouvertureIam: 'pointage.equipe', roles: ROLE_SETS.congesEquipe },
             loadComponent: () =>
               import('./features/pointage/pages/pointage-equipe/pointage-equipe.component')
                 .then(m => m.PointageEquipeComponent),
@@ -416,7 +422,7 @@ export const routes: Routes = [
           {
             path: 'correspondances',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.adminRh },
+            data: { ouvertureIam: 'pointage.correspondances', roles: ROLE_SETS.adminRh },
             loadComponent: () =>
               import('./features/pointage/pages/pointage-correspondances/pointage-correspondances.component')
                 .then(m => m.PointageCorrespondancesComponent),
@@ -425,7 +431,7 @@ export const routes: Routes = [
             // Heure de sortie (Excel « Combien il me reste ») : accès accordé par l'Admin via le régime horaire.
             path: 'heure-de-sortie',
             canActivate: [AuthGuard, heureSortieGuard],
-            data: { roles: ROLE_SETS.planningSelfService },
+            data: { ouvertureIam: 'pointage.self', roles: ROLE_SETS.planningSelfService },
             loadComponent: () =>
               import('./features/pointage/pages/pointage-heure-sortie/pointage-heure-sortie.component')
                 .then(m => m.PointageHeureSortieComponent),
@@ -433,7 +439,7 @@ export const routes: Routes = [
           {
             path: 'prevu-realise',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.congesEquipe },
+            data: { ouvertureIam: 'pointage.equipe', roles: ROLE_SETS.congesEquipe },
             loadComponent: () =>
               import('./features/pointage/pages/pointage-prevu-realise/pointage-prevu-realise.component')
                 .then(m => m.PointagePrevuRealiseComponent),
@@ -442,7 +448,7 @@ export const routes: Routes = [
             // Accès « Heure de sortie » compte par compte (Admin).
             path: 'acces-heure-sortie',
             canActivate: [AuthGuard],
-            data: { roles: [KyntusRoleNames.Admin] },
+            data: { ouvertureIam: 'pointage.acces-sortie', roles: [KyntusRoleNames.Admin] },
             loadComponent: () =>
               import('./features/pointage/pages/heure-sortie-acces/heure-sortie-acces.component')
                 .then(m => m.HeureSortieAccesComponent),
@@ -450,7 +456,7 @@ export const routes: Routes = [
           {
             path: 'regimes',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.adminRh },
+            data: { ouvertureIam: 'pointage.regimes', roles: ROLE_SETS.adminRh },
             loadComponent: () =>
               import('./features/pointage/pages/regimes-horaires/regimes-horaires.component')
                 .then(m => m.RegimesHorairesComponent),
@@ -516,7 +522,7 @@ export const routes: Routes = [
         // Membres de l'équipe d'un responsable (périmètre du fichier Périmètre, contrôlé côté serveur).
         path: 'mon-equipe',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.congesEquipe },
+        data: { ouvertureIam: 'planning.equipe', roles: ROLE_SETS.congesEquipe },
         loadComponent: () =>
           import('./features/users/pages/my-team/my-team.component')
             .then(m => m.MyTeamComponent),
@@ -534,7 +540,7 @@ export const routes: Routes = [
       {
         path: 'mes-plannings',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.planningSelfService },
+        data: { ouvertureIam: 'planning.self', roles: ROLE_SETS.planningSelfService },
         loadComponent: () =>
           import('./features/planning/pages/mes-plannings/mes-plannings.component')
             .then(m => m.MesPlanningsComponent),
@@ -542,7 +548,7 @@ export const routes: Routes = [
       {
         path: 'mes-demandes-changement',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.planningSelfService },
+        data: { ouvertureIam: 'planning.self', roles: ROLE_SETS.planningSelfService },
         loadComponent: () =>
           import('./features/planning/pages/mes-demandes-changement/mes-demandes-changement.component')
             .then(m => m.MesDemandesChangementComponent),
@@ -550,7 +556,7 @@ export const routes: Routes = [
       {
         path: 'mes-demandes-exceptionnelles',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.planningSelfService },
+        data: { ouvertureIam: 'planning.self', roles: ROLE_SETS.planningSelfService },
         loadComponent: () =>
           import('./features/planning/pages/mes-demandes-exceptionnelles/mes-demandes-exceptionnelles.component')
             .then(m => m.MesDemandesExceptionnellesComponent),
@@ -558,7 +564,7 @@ export const routes: Routes = [
       {
         path: 'mes-renforts',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.planningSelfService },
+        data: { ouvertureIam: 'planning.self', roles: ROLE_SETS.planningSelfService },
         loadComponent: () =>
           import('./features/planning/pages/mes-renforts/mes-renforts.component')
             .then(m => m.MesRenfortsComponent),
@@ -566,7 +572,7 @@ export const routes: Routes = [
       {
         path: 'planning',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.planningManagers },
+        data: { ouvertureIam: ['planning.self', 'planning.equipe', 'planning.change-requests', 'planning.exceptional-requests', 'planning.reinforcement', 'planning.generate', 'planning.validation', 'planning.shift-config', 'planning.publish'], roles: ROLE_SETS.planningManagers },
         loadChildren: () =>
           import('./features/planning/planning-routing-module')
             .then(m => m.PlanningRoutingModule),
