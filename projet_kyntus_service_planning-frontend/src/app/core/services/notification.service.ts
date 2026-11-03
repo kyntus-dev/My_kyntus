@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import * as signalR from '@microsoft/signalr';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { decodeJwtPayload } from '../session/kyntus-auth-token.util';
 
 export interface PlanningNotification {
   /** Id de la notification persistée côté backend (présent si chargée depuis l'API). */
@@ -107,10 +108,11 @@ export class NotificationService {
     const token = this.getToken();
     if (!token) return '';
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payload = (decodeJwtPayload(token) ?? {}) as Record<string, any>;
       return payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier']
-          ?? payload.sub
-          ?? payload.nameid
+          ?? payload['sub']
+          ?? payload['nameid']
           ?? '';
     } catch {
       return '';
@@ -300,10 +302,11 @@ private connectPlanningHub(): void {
     try {
       const token = this.getToken();
       if (!token) return false;
-      const payload = JSON.parse(atob(token.split('.')[1]));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payload = (decodeJwtPayload(token) ?? {}) as Record<string, any>;
       const role =
         payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']
-        ?? payload.role
+        ?? payload['role']
         ?? '';
       const r = String(role).trim().toLowerCase();
       return r === 'rh' || r === 'admin';

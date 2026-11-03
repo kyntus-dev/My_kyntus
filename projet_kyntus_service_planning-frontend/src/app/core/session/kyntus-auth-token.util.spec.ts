@@ -9,6 +9,12 @@ function makeToken(payload: Record<string, unknown>): string {
 }
 
 describe('readJwtRole', () => {
+  it('décode les accents (jeton UTF-8) : « Ingénieur », pas « IngÃ©nieur »', () => {
+    const octets = new TextEncoder().encode(JSON.stringify({ role: 'Ingénieur', exp: 4102444800 }));
+    const b64 = btoa(String.fromCharCode(...octets)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    expect(readJwtRole(`hdr.${b64}.sig`)).toBe('Ingénieur');
+  });
+
   it('lit le claim court role (JwtSecurityTokenHandler outbound)', () => {
     const token = makeToken({ role: 'Superviseur', exp: 4102444800 });
     expect(readJwtRole(token)).toBe('Superviseur');
