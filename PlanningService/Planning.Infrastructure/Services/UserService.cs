@@ -1193,8 +1193,9 @@ public class UserService : IUserService
     /// retrouvé par e-mail et son rôle aligné, <b>sans mot de passe</b> (Auth ne le modifie pas et
     /// ne crée aucun compte dans ce cas). Le lien AuthUserId est enregistré au passage.
     /// </summary>
-    private async Task SyncRoleToAuthByEmailAsync(User user)
+    private async Task<bool> SyncRoleToAuthByEmailAsync(User user, bool journaliserEchec = true)
     {
+        if (string.IsNullOrWhiteSpace(user.Email)) return false;
         try
         {
             var response = await _httpClient.PostAsJsonAsync(
@@ -1202,26 +1203,36 @@ public class UserService : IUserService
                 new { Email = user.Email, DefaultPassword = (string?)null, RoleName = user.Role?.Name, EmployeeId = user.Guid });
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Auth : rôle {Role} non appliqué à {Email} ({Status}) : {Body}",
-                    user.Role?.Name, user.Email, (int)response.StatusCode, await response.Content.ReadAsStringAsync());
-                return;
+                if (journaliserEchec)
+                    _logger.LogWarning("Auth : rôle {Role} non appliqué à {Email} ({Status}) : {Body}",
+                        user.Role?.Name, user.Email, (int)response.StatusCode, await response.Content.ReadAsStringAsync());
+                return false;
             }
             var result = await response.Content.ReadFromJsonAsync<AuthRegisterResult>();
-            if (result is { Id: > 0 })
-            {
-                user.AuthUserId = result.Id;
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("Auth : rôle {Role} appliqué à {Email} (AuthUserId={Id}).", user.Role?.Name, user.Email, result.Id);
-            }
+            if (result is not { Id: > 0 }) return false;
+            user.AuthUserId = result.Id;
+            await _context.SaveChangesAsync();
+            if (result.SubjectId != Guid.Empty)
+                await _directoryEmployeeWrite.TryLinkAuthSubjectAsync(user.Guid, result.SubjectId);
+            _logger.LogInformation("Auth : rôle {Role} appliqué à {Email} (AuthUserId={Id}).", user.Role?.Name, user.Email, result.Id);
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Auth : synchronisation du rôle impossible pour {Email}.", user.Email);
+            return false;
         }
     }
 
     private async Task SyncToAuthServiceAsync(User user, string? defaultPassword = null)
     {
+        // Compte non lié et aucun mot de passe imposé : si un compte Auth existe déjà pour cet
+        // e-mail, seul son rôle est aligné (aucun mot de passe envoyé, donc jamais réinitialisé).
+        // Le provisionnement avec mot de passe généré ne sert que si le compte n'existe pas.
+        if (!user.AuthUserId.HasValue && string.IsNullOrWhiteSpace(defaultPassword)
+            && await SyncRoleToAuthByEmailAsync(user, journaliserEchec: false))
+            return;
+
         var maxRetries = 3;
 
         for (int attempt = 1; attempt <= maxRetries; attempt++)
@@ -1402,7 +1413,6 @@ public class UserService : IUserService
         if (dto.NiveauExpertiseMetier.HasValue && !IsHrOrAdminRole(callerRole))
             throw new UnauthorizedAccessException("Seuls RH et Admin peuvent modifier l'expertise métier.");
 
-        var roleChanged = user.RoleId != dto.RoleId;
         user.RoleId = dto.RoleId;
         user.SubServiceId = dto.SubServiceId;
         user.FirstName = dto.FirstName;
@@ -1422,9 +1432,11 @@ public class UserService : IUserService
         await _context.SaveChangesAsync();
         await _context.Entry(user).Reference(u => u.Role).LoadAsync();
 
+        // La fiche fait foi : chaque enregistrement réaligne le rôle de connexion, même sans
+        // changement (un compte resté désynchronisé se corrige en ré-enregistrant sa fiche).
         if (user.AuthUserId.HasValue)
             await SyncToAuthServiceAsync(user);
-        else if (roleChanged)
+        else
             await SyncRoleToAuthByEmailAsync(user);
         if (activeChanged)
             await SyncAuthActiveAsync(user);
