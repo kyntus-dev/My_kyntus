@@ -53,6 +53,12 @@ export function isPiloteRole(roleName: string): boolean {
   return canonicalizeRole(roleName) === 'pilote';
 }
 
+/** Cellule IT (Ingénieur, Support IT) : affectation facultative à une activité / pôle / cellule / service. */
+export function isEquipeItRole(roleName: string): boolean {
+  const r = canonicalizeRole(roleName);
+  return r === 'ingenieur' || r === 'supportit';
+}
+
 export function isEquipeFormationRole(roleName: string): boolean {
   return canonicalizeRole(roleName) === 'equipeformation';
 }
@@ -82,7 +88,7 @@ export function orgRoleAssignmentDepth(roleName: string): OrgRoleAssignmentDepth
   if (isChefDeProjetRole(roleName)) return 'activite';
   if (isSuperviseurRole(roleName)) return 'activite';
   if (isReferentTechniqueRole(roleName)) return 'cellule';
-  if (isPiloteRole(roleName)) return 'service';
+  if (isPiloteRole(roleName) || isEquipeItRole(roleName)) return 'service';
   return 'none';
 }
 
@@ -146,6 +152,9 @@ export function orgAssignmentHint(roleName: string, depth: OrgRoleAssignmentDept
     if (isReferentTechniqueRole(roleName)) {
       return 'Référent technique : sélectionnez un ou plusieurs services (un principal obligatoire).';
     }
+    if (isEquipeItRole(roleName)) {
+      return 'Cellule IT : activité, pôle, cellule et service de rattachement (facultatif).';
+    }
     return 'Pilote : activité, pôle et cellule d’affectation (le service est sélectionné automatiquement lorsqu’il est unique).';
   }
   return '';
@@ -154,6 +163,7 @@ export function orgAssignmentHint(roleName: string, depth: OrgRoleAssignmentDept
 /** Appel Prime structure/* après création employé (pas pour pilote — sync RabbitMQ). */
 export function needsPrimeStructureAssignment(roleName: string): boolean {
   const depth = orgRoleAssignmentDepth(roleName);
-  if (depth === 'none' || isPiloteRole(roleName)) return false;
+  // Pilote : affectation « Pilote » dédiée ; cellule IT : simple rattachement (pas de titulature).
+  if (depth === 'none' || isPiloteRole(roleName) || isEquipeItRole(roleName)) return false;
   return true;
 }

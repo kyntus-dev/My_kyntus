@@ -61,9 +61,9 @@ public sealed class DirectoryWriteService(
             LastName = request.LastName.Trim(),
             Role = role,
             BusinessDepartmentId = request.BusinessDepartmentId,
-            ServiceId = dept?.Kind == BusinessDepartmentKind.Support ? null : serviceId,
-            CelluleId = dept?.Kind == BusinessDepartmentKind.Support ? null : celluleId,
-            PoleId = dept?.Kind == BusinessDepartmentKind.Support ? null : poleId,
+            ServiceId = SansRattachement(dept, role) ? null : serviceId,
+            CelluleId = SansRattachement(dept, role) ? null : celluleId,
+            PoleId = SansRattachement(dept, role) ? null : poleId,
             ParentId = request.ParentId,
             HireDate = request.HireDate ?? DateTime.UtcNow,
             IsActive = true,
@@ -100,9 +100,9 @@ public sealed class DirectoryWriteService(
         employee.Email = request.Email.Trim();
         employee.Role = role;
         employee.BusinessDepartmentId = request.BusinessDepartmentId;
-        employee.ServiceId = dept?.Kind == BusinessDepartmentKind.Support ? null : serviceId;
-        employee.CelluleId = dept?.Kind == BusinessDepartmentKind.Support ? null : celluleId;
-        employee.PoleId = dept?.Kind == BusinessDepartmentKind.Support ? null : poleId;
+        employee.ServiceId = SansRattachement(dept, role) ? null : serviceId;
+        employee.CelluleId = SansRattachement(dept, role) ? null : celluleId;
+        employee.PoleId = SansRattachement(dept, role) ? null : poleId;
         employee.ParentId = request.ParentId;
         employee.HireDate = request.HireDate ?? employee.HireDate;
         employee.IsActive = true;
@@ -123,6 +123,13 @@ public sealed class DirectoryWriteService(
         return Map(employee);
     }
 
+    /// <summary>
+    /// Département Support : pas de pôle / cellule / service, sauf pour la cellule IT (Ingénieur,
+    /// Support IT), qui peut être rattachée à une cellule tout en restant dans son département.
+    /// </summary>
+    private static bool SansRattachement(BusinessDepartment? dept, string? role) =>
+        dept?.Kind == BusinessDepartmentKind.Support && !KyntusRoleNames.IsEquipeIt(role);
+
     public async Task<EmployeeDto?> UpdateEmployeeAsync(Guid id, UpdateEmployeeRequest request, Guid? changedBy, CancellationToken ct = default)
     {
         var employee = await db.Employees.FirstOrDefaultAsync(e => e.Id == id, ct);
@@ -135,7 +142,7 @@ public sealed class DirectoryWriteService(
         employee.Email = request.Email.Trim();
         employee.Role = KyntusRoleNames.NormalizePlanningRole(request.Role);
         employee.BusinessDepartmentId = request.BusinessDepartmentId ?? employee.BusinessDepartmentId;
-        if (dept?.Kind == BusinessDepartmentKind.Support)
+        if (SansRattachement(dept, employee.Role))
         {
             employee.ServiceId = null;
             employee.CelluleId = null;

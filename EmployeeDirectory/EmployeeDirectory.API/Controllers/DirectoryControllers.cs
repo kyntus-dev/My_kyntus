@@ -10,6 +10,7 @@ using EmployeeDirectory.Application.Queries.Health;
 using EmployeeDirectory.Application.Rebac;
 using EmployeeDirectory.Application.Reconcile;
 using EmployeeDirectory.Domain.Enums;
+using Kyntus.Messaging.Contracts;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -419,14 +420,22 @@ public class DirectoryOrgController(
                 .ToList();
         }
 
-        var forceOverride = body.ForceTenureOverride == true
-            && User.IsInRole("Admin");
+        // Règle des 6 mois : un changement fait par un Admin ou un Ingénieur passe toujours
+        // (tracé comme dérogation dans l'historique) ; les autres rôles y restent soumis.
+        var roleAuteur = User.GetAuthRole();
+        var auteurExempte = User.IsInRole("Admin") || User.IsInRole(KyntusRoleNames.Ingenieur)
+                            || string.Equals(roleAuteur, "Admin", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(roleAuteur, KyntusRoleNames.Ingenieur, StringComparison.OrdinalIgnoreCase);
+        var forceOverride = auteurExempte || (body.ForceTenureOverride == true && User.IsInRole("Admin"));
+        var motif = auteurExempte && string.IsNullOrWhiteSpace(body.Reason)
+            ? $"Changement par {roleAuteur ?? "Admin"}"
+            : body.Reason;
 
         try
         {
             var result = await mediator.Send(
                 new AssignStructureRoleCommand(
-                    kind, nodeId, employeeId, changedBy, body.Reason, revokeIds, forceOverride),
+                    kind, nodeId, employeeId, changedBy, motif, revokeIds, forceOverride),
                 ct);
             // Réorganisation 2026 : toute affectation unitaire (page Organisation RH, import Excel)
             // respecte les règles de périmètre — référent technique → services de sa cellule ;

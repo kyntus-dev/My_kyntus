@@ -77,6 +77,7 @@ import {
   isSupportManagerRole,
   isChefDeProjetRole,
   isPiloteRole,
+  isEquipeItRole,
   type OrgRoleAssignmentDepth,
 } from '../../../../core/org/org-role-assignment';
 import {
@@ -698,7 +699,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
   }
 
   get showOrgAssignmentBlock(): boolean {
-    return !this.isSupportMode && this.orgAssignmentDepth !== 'none';
+    // Cellule IT : rattachement possible même dans un département Support.
+    return (!this.isSupportMode || isEquipeItRole(this.selectedRoleName)) && this.orgAssignmentDepth !== 'none';
   }
 
   get showSupportAssignmentBlock(): boolean {
@@ -2709,6 +2711,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
     if (this.isSupportMode) return null;
     const depth = this.orgAssignmentDepth;
     if (!orgAssignmentIsRequired(depth)) return null;
+    // Cellule IT : rattachement facultatif ; s'il est commencé, il doit aller jusqu'au service.
+    if (isEquipeItRole(this.selectedRoleName) && !this.orgPoleId.trim() && !this.orgCelluleId.trim()) return null;
 
     if (this.supportsMultiOrg) {
       const multiErr = validateMultiOrgSelection(
@@ -2831,7 +2835,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
     let subServiceId = this.form.subServiceId ?? undefined;
     const managedServiceIds: number[] = [];
     const managedSubServiceIds: number[] = [];
-    if (this.isSupportMode) {
+    if (this.isSupportMode && !isEquipeItRole(roleName)) {
       subServiceId = undefined;
     } else if (isChefDeProjetRole(roleName) || isSuperviseurRole(roleName)) {
       subServiceId = undefined;
@@ -3099,7 +3103,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
           lastName: this.form.lastName.trim(),
           email: this.form.email.trim(),
           role: roleName,
-          serviceId: null,
+          // Cellule IT : garde son rattachement pôle / cellule / service dans le département Support.
+          serviceId: isEquipeItRole(roleName) ? this.orgServiceId.trim() || null : null,
           parentId: null,
           isActive: true,
           hireDate: hireDateISO,
