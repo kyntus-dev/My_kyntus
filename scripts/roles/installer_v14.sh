@@ -81,9 +81,22 @@ if [ ${#A_FAIRE[@]} -gt 0 ]; then
   printf '%s\n' "${POSES[@]}" > "$SAUV/correctifs_poses_v14_${ENV}_$STAMP.txt"
 
   echo "=== 4. Construction (les services actuels continuent de tourner) ==="
-  if ! "${DC[@]}" build "${SERVICES[@]}"; then
+  # Un service à la fois : une erreur sur l'un n'interrompt pas les autres, toutes les erreurs
+  # sont listées en une seule fois.
+  ECHECS=()
+  for s in "${SERVICES[@]}"; do
+    echo "  construction de $s…"
+    "${DC[@]}" build "$s" > "/tmp/build_$s.log" 2>&1 && echo "    OK" || { ECHECS+=("$s"); echo "    ÉCHEC"; }
+  done
+  if [ ${#ECHECS[@]} -gt 0 ]; then
+    echo
+    for s in "${ECHECS[@]}"; do
+      echo "--- Erreurs de $s ---"
+      grep -E "error (CS|TS|NG)[0-9]+|ERROR in|error:" "/tmp/build_$s.log" | sed -E 's/^[#0-9. ]+//' | sort -u | head -20
+    done
+    echo
     echo "ÉCHEC de construction : les services n'ont pas été remplacés."
-    echo "Envoyez-moi les lignes « error » ci-dessus. Pour retirer les correctifs :"
+    echo "Envoyez-moi les lignes « Erreurs » ci-dessus (journaux complets : /tmp/build_<service>.log). Pour retirer les correctifs :"
     echo "  cd $DIR && tac $SAUV/correctifs_poses_v14_${ENV}_$STAMP.txt | while read -r p; do patch -p1 -R --batch < /tmp/\$p; done"
     exit 1
   fi
