@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installe d'un coup toutes les versions manquantes jusqu’à la v15 (rôles), dans l'ordre :
-#   v11.5 → v11.6 → v12 (serveur) → v12 (application) → v12.1 → v12.2 → v13 → v14 → v14.1 → v15
+#   v11.5 → v11.6 → v12 (serveur) → v12 (application) → v12.1 → v12.2 → v13 → v14 → v14.1 → v15 → v15.1
 #
 #   bash installer_v15.sh test     environnement de test (~/kyntus-test)
 #   bash installer_v15.sh prod     production (/home/o/projets_mykyntus-)
@@ -34,6 +34,7 @@ VERSIONS=(
   "v14|reorg-2026-code-v14.patch|EmployeeDirectory/EmployeeDirectory.Infrastructure/Services/PilotRotationTenureService.cs|EstExempte"
   "v14.1|reorg-2026-code-v14-1.patch|EmployeeDirectory/EmployeeDirectory.API/Controllers/DirectoryControllers.cs|évite le conflit OrgNodeLevel"
   "v15|reorg-2026-code-v15.patch|PlanningService/Planning.API/Controllers/PlanningController.cs|CapValidateSuperviseur"
+  "v15.1|reorg-2026-code-v15-1.patch|projet_kyntus_service_planning-frontend/src/app/core/platform-access/platform-access.service.ts|accordeExplicitement"
 )
 
 echo "=== 1. Versions ($ENV) ==="
