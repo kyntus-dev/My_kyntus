@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Kyntus.Messaging.Contracts;
 using Planning.Application.Abstractions;
+using Planning.Domain.Enums;
 using Planning.Application.NotificationEmail;
 using Planning.Domain.Entities;
 using Planning.Infrastructure.Persistence;
@@ -60,9 +62,27 @@ public sealed class EmailOutboxProcessor(
             .OrderBy(n => n.Id)
             .Take(HarvestBatch)
             .ToListAsync(ct);
+        // Planning encore en brouillon : les agents ne reçoivent rien avant la validation du
+        // superviseur ; la publication leur envoie ensuite leur planning complet par e-mail.
+        var planningIds = planningNotifications.Where(n => n.WeeklyPlanningId != null)
+            .Select(n => n.WeeklyPlanningId!.Value).Distinct().ToList();
+        var brouillons = planningIds.Count == 0
+            ? new HashSet<int>()
+            : (await db.WeeklyPlannings.AsNoTracking()
+                .Where(p => planningIds.Contains(p.Id) && p.Status == PlanningStatus.Draft)
+                .Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+        var destinataires = planningNotifications.Where(n => n.WeeklyPlanningId is int id && brouillons.Contains(id))
+            .Select(n => n.UserId).Distinct().ToList();
+        var roles = destinataires.Count == 0
+            ? new Dictionary<int, string>()
+            : await db.Users.AsNoTracking().Where(u => destinataires.Contains(u.Id))
+                .Select(u => new { u.Id, Role = u.Role.Name }).ToDictionaryAsync(x => x.Id, x => x.Role, ct);
+
         foreach (var n in planningNotifications)
         {
-            if (enabled && !PlanningNotificationEmailRules.IsCoveredByPlanningEmail(n.WeeklyPlanningId, n.Message))
+            var retenu = n.WeeklyPlanningId is int pid && brouillons.Contains(pid)
+                         && EstAgent(roles.GetValueOrDefault(n.UserId));
+            if (enabled && !retenu && !PlanningNotificationEmailRules.IsCoveredByPlanningEmail(n.WeeklyPlanningId, n.Message))
             {
                 var (source, title) = PlanningNotificationEmailRules.Classify(n.WeekCode, n.SubServiceName);
                 queued += await queue.EnqueueNotificationAsync(
@@ -103,6 +123,10 @@ public sealed class EmailOutboxProcessor(
 
         return queued;
     }
+
+    /// <summary>Agent (pilote ou cellule IT) : destinataire du planning, pas son valideur.</summary>
+    internal static bool EstAgent(string? role) =>
+        KyntusRoleNames.IsPilote(role) || KyntusRoleNames.IsEquipeIt(role);
 
     /// <summary>Envoie les e-mails échus dans la limite de la cadence. Renvoie le nombre d'e-mails envoyés.</summary>
     public async Task<int> SendDueAsync(CancellationToken ct = default)

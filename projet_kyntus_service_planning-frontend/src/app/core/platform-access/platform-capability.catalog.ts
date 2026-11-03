@@ -117,7 +117,7 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'planning.reinforcement', label: 'Renforts samedi', module: 'Planification', view: TEAM_LEAD, act: TEAM_LEAD },
   { id: 'planning.generate', label: 'Générer le planning', module: 'Planification', view: PLANNING_GENERATE, act: PLANNING_GENERATE, defaultScope: 'Cellule' },
   { id: 'planning.shift-config', label: 'Configuration des horaires', module: 'Planification', view: PLANNING_SHIFT_CONFIG, configure: PLANNING_SHIFT_CONFIG, defaultScope: 'Cellule' },
-  { id: 'planning.validation', label: 'Valider les plannings', module: 'Planification', view: PLANNING_VALIDATION, validate: ADMIN_RH },
+  { id: 'planning.validation', label: 'Valider les plannings', module: 'Planification', view: PLANNING_VALIDATION, validate: PLANNING_VALIDATION },
   { id: 'planning.publish', label: 'Publier un planning (2e validation)', module: 'Planification', view: ADMIN_RH, validate: ADMIN_RH },
 
   { id: 'planning-it', label: 'Planning IT', module: 'Planification', view: [KyntusRoleNames.Admin, KyntusRoleNames.Ingenieur, KyntusRoleNames.SupportIt], act: [KyntusRoleNames.Ingenieur, KyntusRoleNames.SupportIt], configure: ADMIN },

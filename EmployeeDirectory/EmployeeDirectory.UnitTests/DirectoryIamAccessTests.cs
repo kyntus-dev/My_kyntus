@@ -38,6 +38,7 @@ public class DirectoryIamAccessTests : IDisposable
         Assert.Contains(rows, x => x.Action == "planning.equipe.View" && x.Scope == "Cellule");
         Assert.Contains(rows, x => x.Action == "planning.shift-config.Configure" && x.Scope == "Cellule");
         Assert.Contains(rows, x => x.Action == "planning.validation.View" && x.Scope == "Cellule");
+        Assert.Contains(rows, x => x.Action == "planning.validation.Validate" && x.Scope == "Cellule");
     }
 
     [Fact]

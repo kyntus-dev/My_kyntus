@@ -1978,8 +1978,9 @@ public partial class PlanningService : IPlanningService
                 deepLink));
         }
 
+        // Seul envoi aux agents : à la validation (premier envoi ou mise à jour d'un planning déjà diffusé).
         if (_pilotEmails is not null)
-            await _pilotEmails.SendToAssignedPilotsAsync(planning.Id, updated: false);
+            await _pilotEmails.SendToAssignedPilotsAsync(planning.Id, updated: alreadyNotified);
 
         return await GetPlanningByIdAsync(planning.Id)
             ?? throw new Exception("Erreur publication planning.");
@@ -1995,11 +1996,13 @@ public partial class PlanningService : IPlanningService
         if (planning == null)
             return;
 
-        if (_pilotEmails is not null)
-            await _pilotEmails.SendToAssignedPilotsAsync(planning.Id, updated: true);
-
+        // Planning repassé en brouillon : aucun e-mail aux agents tant que le superviseur
+        // (ou RH / Admin) ne l'a pas validé à nouveau ; la validation enverra la mise à jour.
         if (planning.Status != PlanningStatus.Published)
             return;
+
+        if (_pilotEmails is not null)
+            await _pilotEmails.SendToAssignedPilotsAsync(planning.Id, updated: true);
 
         var subServiceName = planning.SubService?.Name ?? "";
         var reasonText = string.IsNullOrWhiteSpace(reason)

@@ -81,7 +81,8 @@ public static class PlatformAccessCatalog
         S("planning.reinforcement", "Renforts samedi", "Planification", View: TeamLead, Act: TeamLead),
         S("planning.generate", "Générer le planning", "Planification", View: PlanningGenerate, Act: PlanningGenerate),
         S("planning.shift-config", "Configuration des horaires", "Planification", View: PlanningShiftConfig, Configure: PlanningShiftConfig),
-        S("planning.validation", "Valider les plannings", "Planification", View: PlanningValidation, Validate: AdminRh),
+        // Superviseur : valide (= publie) les plannings de son périmètre (cellule).
+        S("planning.validation", "Valider les plannings", "Planification", View: PlanningValidation, Validate: PlanningValidation),
         S("planning.publish", "Publier un planning (2e validation)", "Planification", View: AdminRh, Validate: AdminRh),
 
         // Planning IT : chaque membre IT saisit ses horaires (Agir) et voit ceux des collègues ;

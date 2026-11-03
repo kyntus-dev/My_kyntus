@@ -77,7 +77,7 @@ public class PilotPlanningPersonalEmailServiceTests
     }
 
     [Fact]
-    public async Task Notify_republish_sends_update_mail_even_when_draft()
+    public async Task Notify_republish_ne_mail_pas_les_agents_tant_que_brouillon()
     {
         await using var db = await SeedAsync();
         var planning = await db.WeeklyPlannings.SingleAsync();
@@ -93,8 +93,28 @@ public class PilotPlanningPersonalEmailServiceTests
 
         await svc.NotifyPlanningRepublishedAsync(1, "regen congés");
 
-        Assert.Single(recorder.Calls);
-        Assert.Equal((1, true), recorder.Calls[0]);
+        // L'e-mail partira à la validation du superviseur (publication), pas avant.
+        Assert.Empty(recorder.Calls);
+    }
+
+    [Fact]
+    public async Task Notify_republish_planning_publie_envoie_la_mise_a_jour()
+    {
+        await using var db = await SeedAsync();
+        var planning = await db.WeeklyPlannings.SingleAsync();
+        planning.Status = PlanningStatus.Published;
+        await db.SaveChangesAsync();
+
+        var recorder = new RecordingPilotEmailService();
+        var svc = new PlanningService(
+            db,
+            new FakePlanningHubContext(),
+            new PlanningPerimeterResolver(db),
+            pilotEmails: recorder);
+
+        await svc.NotifyPlanningRepublishedAsync(1, "modification");
+
+        Assert.Equal((1, true), Assert.Single(recorder.Calls));
     }
 
     private static async Task<AppDbContext> SeedAsync()

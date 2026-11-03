@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Planning.Application.Abstractions;
 using Planning.Application.NotificationEmail;
 using Planning.Domain.Entities;
+using Planning.Domain.Enums;
 using Planning.Infrastructure.Persistence;
 using Planning.Infrastructure.Services.NotificationEmail;
 
@@ -135,6 +136,26 @@ public class NotificationEmailTests
         var cursor = await db.NotificationEmailCursors.SingleAsync();
         Assert.Equal(12, cursor.LastPlanningNotificationId);
         Assert.Equal(1, cursor.LastContractNotificationId);
+    }
+
+    [Fact]
+    public async Task Harvest_ne_mail_pas_l_agent_sur_un_planning_en_brouillon()
+    {
+        await using var db = await SeedAsync();
+        var processor = CreateProcessor(db, new RecordingSender());
+        Assert.Equal(0, await processor.HarvestAsync()); // initialise le curseur
+
+        db.SubServices.Add(new SubService { Id = 70, ServiceId = 70, Name = "Cellule", Code = "C70" });
+        db.Services.Add(new Service { Id = 70, Name = "Service", Code = "S70" });
+        db.WeeklyPlannings.Add(new WeeklyPlanning { Id = 70, SubServiceId = 70, WeekCode = "2026-W45", Status = PlanningStatus.Draft });
+        db.PlanningNotifications.AddRange(
+            Notification(20, 1, 70, "Votre shift du lundi a été modifié."),          // agent : retenu
+            Notification(21, 4, 70, "Planning 2026-W45 en attente de validation.")); // RH : envoyé
+        await db.SaveChangesAsync();
+
+        Assert.Equal(1, await processor.HarvestAsync());
+        Assert.Equal("sara@kyntus.com", (await db.EmailOutboxMessages.SingleAsync()).ToEmail);
+        Assert.Equal(21, (await db.NotificationEmailCursors.SingleAsync()).LastPlanningNotificationId);
     }
 
     // ── Envoi ─────────────────────────────────────────────────────────────

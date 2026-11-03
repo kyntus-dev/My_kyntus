@@ -187,8 +187,10 @@ selectedHolidayShiftId      = 0;
     const isAdminRh = role === 'Admin' || role === 'RH';
     // RH/Admin : correction manuelle des brouillons même si le catalogue IAM
     // est incomplet. La publication reste canValidate (bouton Valider).
+    // Superviseur : « Valider les plannings › Valider » sur son périmètre (contrôlé côté serveur).
     this.canValidate = isAdminRh
-      || (this.access.hasCatalog() && this.access.canValidate('planning.publish'));
+      || (this.access.hasCatalog()
+        && (this.access.canValidate('planning.publish') || this.access.canValidate('planning.validation')));
 
     const qp = this.route.snapshot.queryParamMap;
     const from = (qp.get('from') || '').toLowerCase();
