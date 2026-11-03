@@ -230,6 +230,10 @@
       <p class="ku-card-sub pt-note">
         Les pointeuses n’enregistrent pas si c’est une entrée ou une sortie : le premier pointage est l’arrivée, le dernier le départ,
         et les pointages intermédiaires vont par paires (sortie en pause, retour). Pause autorisée : toutes pauses de la journée confondues.
+        Tolérance de {{ d.toleranceMinutes }} minutes : une arrivée jusqu’à {{ d.toleranceMinutes }} minutes après l’heure prévue n’est pas un retard ;
+        au-delà, tout le retard compte (9 h 06 pour 9 h = 6 minutes). Même règle pour les pauses : jusqu’à la pause autorisée
+        + {{ d.toleranceMinutes }} minutes (1 h 25 pour 1 h 20), pas de retard ; au-delà, tout le dépassement compte (1 h 26 = 6 minutes).
+        Les badgeages d’accès à une zone (armoire technique) ne sont pas comptés.
       </p>
     </section>
   }

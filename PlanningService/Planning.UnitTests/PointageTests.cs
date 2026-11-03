@@ -41,6 +41,25 @@ public class PointageTests
             PointageCalculator.CalculerJour(Jour, [T("09:57:00"), T("18:00:00")], Planning("10:00"), Lendemain).Statut);
     }
 
+    [Theory]
+    [InlineData(85, 0)]  // 1 h 25 pour 1 h 20 : dans la tolérance
+    [InlineData(86, 6)]  // 1 h 26 : tout le dépassement compte
+    [InlineData(80, 0)]
+    public void Pause_tolerance_de_5_minutes_puis_depassement_entier(int pauseMinutes, int retardAttendu)
+    {
+        Assert.Equal(retardAttendu, PointageCalculator.RetardAvecTolerance(pauseMinutes - 80, 5));
+    }
+
+    [Fact]
+    public void Pointeuse_armoire_technique_ignoree()
+    {
+        var motifs = PointageTerminaux.Motifs("armoire, SN-ZONE-9");
+        Assert.True(PointageTerminaux.EstExclu("Armoire Technique", "CQZ1", motifs));
+        Assert.True(PointageTerminaux.EstExclu("Porte IT", "sn-zone-9", motifs));
+        Assert.False(PointageTerminaux.EstExclu("Entrée principale", "CQZ2", motifs));
+        Assert.False(PointageTerminaux.EstExclu("Armoire", null, PointageTerminaux.Motifs("")));
+    }
+
     [Fact]
     public void Depassement_de_pause_cumule_sur_la_journee()
     {

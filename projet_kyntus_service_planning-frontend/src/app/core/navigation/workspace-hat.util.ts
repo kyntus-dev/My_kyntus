@@ -1,4 +1,4 @@
-import { canonicalizeRole, isPiloteRole } from '../org/org-role-assignment';
+import { canonicalizeRole, isEquipeItRole, isPiloteRole } from '../org/org-role-assignment';
 
 /** Contexte d’interface : équipe (périmètre) ou salarié (personnel). */
 export type WorkspaceHat = 'team' | 'self';
@@ -11,8 +11,9 @@ export const TEAM_LANDING = '/home';
 
 export function isDualHatRole(jwtRole: string): boolean {
   const c = canonicalizeRole(jwtRole);
-  // Toute casquette connue sauf Pilote (Employee ≡ Pilote).
-  return c.length > 0 && !isPiloteRole(jwtRole);
+  // Toute casquette connue sauf Pilote (Employee ≡ Pilote) et la cellule IT (Ingénieur, Support IT),
+  // qui n'ont qu'un espace personnel : pas de bascule « Mon espace / Mon équipe ».
+  return c.length > 0 && !isPiloteRole(jwtRole) && !isEquipeItRole(jwtRole);
 }
 
 export function itemVisibleForHat(itemHat: MenuHat | undefined, active: WorkspaceHat): boolean {

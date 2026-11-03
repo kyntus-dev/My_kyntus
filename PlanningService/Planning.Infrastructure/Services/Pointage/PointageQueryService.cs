@@ -163,10 +163,13 @@ public sealed class PointageQueryService(
 
         var debut = du.ToDateTime(TimeOnly.MinValue);
         var fin = au.AddDays(1).ToDateTime(TimeOnly.MinValue);
-        var pointages = await db.PointagesBruts.AsNoTracking()
+        var lus = await db.PointagesBruts.AsNoTracking()
             .Where(p => codes.Contains(p.EmpCode) && p.PunchTime >= debut && p.PunchTime < fin)
-            .Select(p => new { p.EmpCode, p.PunchTime })
+            .Select(p => new { p.EmpCode, p.PunchTime, p.TerminalAlias, p.TerminalSn })
             .ToListAsync(ct);
+        // Badgeages d'accès à une zone (armoire technique…) : ni arrivée, ni départ, ni pause.
+        var motifsExclus = PointageTerminaux.Motifs(O.TerminauxExclus);
+        var pointages = lus.Where(p => !PointageTerminaux.EstExclu(p.TerminalAlias, p.TerminalSn, motifsExclus)).ToList();
         var pointagesParJour = pointages
             .GroupBy(p => (userParCode[p.EmpCode], DateOnly.FromDateTime(p.PunchTime)))
             .ToDictionary(g => g.Key, g => g.Select(p => p.PunchTime).ToList());

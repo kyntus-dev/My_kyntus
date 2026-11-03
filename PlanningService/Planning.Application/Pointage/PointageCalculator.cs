@@ -85,7 +85,8 @@ public sealed record PointageTotaux(
 /// Règles (identiques à HTEL) :
 /// - arrivée dans les <c>tolérance</c> minutes qui suivent l'heure de planning : pas de retard ;
 ///   au-delà, tout le retard compte (9 h 06 pour 9 h = 6 minutes) ;
-/// - retard pause = cumul des pauses de la journée au-delà de la pause prévue au planning ;
+/// - pauses : même tolérance. Jusqu'à pause autorisée + tolérance (1 h 20 + 5 = 1 h 25) : pas de
+///   retard ; au-delà, tout le dépassement compte (1 h 26 de pauses pour 1 h 20 = 6 minutes) ;
 /// - nombre impair de pointages sur une journée passée = pointage manquant, journée non calculée ;
 /// - production = départ − arrivée − pauses (08:00 → 17:00 avec 1 h de pause = 8 h).
 /// </summary>
@@ -151,7 +152,7 @@ public static class PointageCalculator
         var retardEntree = (int)Math.Floor((pointages[0] - jour.ToDateTime(debut.Value)).TotalMinutes);
         if (retardEntree <= toleranceMinutes)
             retardEntree = 0;
-        var retardPause = Math.Max(0, pauseMinutes - pauseAutorisee);
+        var retardPause = RetardAvecTolerance(pauseMinutes - pauseAutorisee, toleranceMinutes);
 
         return Result(
             retardEntree + retardPause > 0 ? PointageJourStatuts.Retard : PointageJourStatuts.AHeure,
@@ -160,6 +161,10 @@ public static class PointageCalculator
             retardPause,
             production);
     }
+
+    /// <summary>Dépassement dans la tolérance : 0 ; au-delà : le dépassement entier.</summary>
+    public static int RetardAvecTolerance(int depassementMinutes, int toleranceMinutes) =>
+        depassementMinutes <= toleranceMinutes ? 0 : depassementMinutes;
 
     public static PointageTotaux Totaliser(IEnumerable<PointageJourResult> jours)
     {

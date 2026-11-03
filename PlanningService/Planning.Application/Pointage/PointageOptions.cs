@@ -58,6 +58,13 @@ public sealed class PointageOptions
     /// </summary>
     public bool PauseSelonShift { get; set; }
 
+    /// <summary>
+    /// Pointeuses ignorées dans les calculs : badgeages d'accès à une zone (armoire technique…), qui ne
+    /// sont ni des arrivées ni des pauses. Liste séparée par des virgules, comparée sans accents ni
+    /// majuscules au nom (alias) ou au numéro de série de la pointeuse. Variable Pointage__TerminauxExclus.
+    /// </summary>
+    public string TerminauxExclus { get; set; } = "armoire";
+
     /// <summary>Période maximale du planning prévu / réalisé d'une équipe (jours).</summary>
     public int PeriodeEquipeDetailMaxJours { get; set; } = 31;
 
