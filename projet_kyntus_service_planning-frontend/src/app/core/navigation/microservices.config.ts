@@ -122,6 +122,7 @@ export const MICROSERVICES: Microservice[] = [
     children: [
       { label: 'Vue d’ensemble', route: '/admin?section=overview', platformAdminSection: 'overview', roles: ADMIN_RH, hat: 'both', capability: 'admin.overview' },
       { label: 'Accès par rôle', route: '/admin?section=access', platformAdminSection: 'access', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
+      { label: 'Rôles', route: '/admin?section=roles', platformAdminSection: 'roles', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
       { label: 'Organisation & sync', route: '/admin?section=sync', platformAdminSection: 'sync', roles: ADMIN_RH, hat: 'both', capability: 'admin.sync' },
       { label: 'Inbox anomalies', route: '/admin?section=anomalies', platformAdminSection: 'anomalies', roles: ADMIN_RH, hat: 'both', capability: 'admin.anomalies' },
       { label: 'Configuration modules', route: '/admin?section=modules', platformAdminSection: 'modules', roles: ADMIN_RH, hat: 'both', capability: 'admin.modules' },

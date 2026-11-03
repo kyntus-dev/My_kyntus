@@ -55,7 +55,7 @@ bash "$ICI/aligner_roles_fiche.sh" "$C" | sed '/Lecture seule/d'
 echo
 echo "================ 4. Réparation ================"
 read -r -p "Créer les rôles manquants et aligner les comptes ci-dessus sur leur fiche ? Tapez OUI : " REP
-[ "$REP" = "OUI" ] || { echo "Rien n'a été modifié."; exit 0; }
+[ "$(echo "$REP" | tr a-z A-Z)" = "OUI" ] || { echo "Rien n'a été modifié."; exit 0; }
 
 STAMP=$(date +%Y%m%d_%H%M%S)
 docker exec "$C" pg_dump -U postgres -Fc auth_db > "$SAUV/auth_db_avant_reparation_roles_$STAMP.dump" \

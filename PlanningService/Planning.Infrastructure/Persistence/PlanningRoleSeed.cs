@@ -27,6 +27,18 @@ internal static class PlanningRoleSeed
         (KyntusRoleNames.SupportIt, "Support IT — cellule IT"),
     ];
 
+    /// <summary>
+    /// Rôles système (catalogue, anciens noms de connexion) : ni renommables ni supprimables
+    /// depuis l'interface, car le code et les autres services s'appuient sur leur nom.
+    /// </summary>
+    internal static readonly HashSet<string> NomsSysteme = new(
+        Catalog.Select(c => c.Name).Concat(
+        [
+            KyntusRoleNames.Employee, KyntusRoleNames.Coach, KyntusRoleNames.Rp, KyntusRoleNames.Manager,
+            "Formateur", "Equipe_Formation", "Comptable", "Employé",
+        ]),
+        StringComparer.OrdinalIgnoreCase);
+
     internal static async Task EnsureCatalogAsync(AppDbContext context, CancellationToken ct = default)
     {
         var existing = await context.Roles

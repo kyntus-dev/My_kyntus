@@ -7,10 +7,26 @@ public static class PlatformAccessCatalog
 
     public static readonly string[] Roles =
     [
-        "Admin", "RH", "Audit", "Manager", "Superviseur", "Coach", "Référent technique",
+        "Admin", "RH", "Audit", "Superviseur", "Référent technique",
         "RP", "Chef de projet", "Pilote", "Employee", "Formateur", "Equipe_Formation",
         "Qualiticien", "Comptabilité", "Ingénieur", "Support IT"
     ];
+
+    /// <summary>
+    /// Anciens noms de connexion fusionnés : « Manager » = Superviseur, « Coach » = Référent technique.
+    /// Ils ne sont plus proposés ; leurs comptes utilisent les droits du rôle cible.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> Alias =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Manager"] = "Superviseur",
+            ["Coach"] = "Référent technique",
+        };
+
+    /// <summary>Rôle créé par l'Admin : lettres, chiffres, espaces, - _ . ' (2 à 50 caractères).</summary>
+    public static bool EstNomRolePersonnalise(string? role) =>
+        !string.IsNullOrWhiteSpace(role)
+        && System.Text.RegularExpressions.Regex.IsMatch(role.Trim(), @"^[\p{L}\p{N}][\p{L}\p{N} _'’.\-]{1,49}$");
 
     /// <summary>Cellule IT : planning IT partagé.</summary>
     private static readonly string[] EquipeIt = ["Ingénieur", "Support IT"];
@@ -119,6 +135,7 @@ public static class PlatformAccessCatalog
     public static string NormalizeRole(string role)
     {
         var trimmed = (role ?? string.Empty).Trim();
+        if (Alias.TryGetValue(trimmed, out var cible)) return cible;
         return Roles.FirstOrDefault(r => string.Equals(r, trimmed, StringComparison.OrdinalIgnoreCase))
                ?? trimmed;
     }
@@ -145,7 +162,8 @@ public static class PlatformAccessCatalog
         error = null;
 
         if (string.IsNullOrWhiteSpace(normalizedRole)
-            || !Roles.Contains(normalizedRole, StringComparer.OrdinalIgnoreCase))
+            || (!Roles.Contains(normalizedRole, StringComparer.OrdinalIgnoreCase)
+                && !EstNomRolePersonnalise(normalizedRole)))
         {
             error = "rôle inconnu";
             return false;

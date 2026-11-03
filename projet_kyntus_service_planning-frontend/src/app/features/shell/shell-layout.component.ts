@@ -1,5 +1,6 @@
 import { Component, DestroyRef, OnDestroy, OnInit, ViewEncapsulation, inject, ElementRef, ViewChild, HostListener, effect, signal } from '@angular/core';
 import { KyntusRoleWatchService } from '../../core/session/kyntus-role-watch.service';
+import { libelleRole } from '../../core/org/role-libelle';
 
 import { CommonModule } from '@angular/common';
 
@@ -143,6 +144,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   currentUser: any = null;
 
   role = '';
+  readonly libelleRole = libelleRole;
 
   sidebarOpen = false;
   sidebarCollapsed = false;

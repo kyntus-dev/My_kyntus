@@ -98,7 +98,7 @@
         <div class="ks-user-av">{{ userInitials }}</div>
         <div class="ks-user-info">
           <strong>{{ displayName }}</strong>
-          <span>{{ role || currentUser?.email || '—' }}</span>
+          <span>{{ libelleRole(role, true) || currentUser?.email || '—' }}</span>
         </div>
       </div>
       <button class="ks-logout" (click)="logout()" [attr.title]="sidebarCollapsed ? 'Déconnexion' : null">

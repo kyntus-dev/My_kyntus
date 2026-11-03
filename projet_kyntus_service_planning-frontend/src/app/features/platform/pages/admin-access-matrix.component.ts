@@ -16,6 +16,9 @@ import {
   type IamMatrixDto,
 } from '../../../core/platform-access/platform-iam-api.service';
 import { KyntusSessionService } from '../../../core/session/kyntus-session.service';
+import { RolesAdminService } from '../../../core/services/roles-admin.service';
+import { libelleRole } from '../../../core/org/role-libelle';
+import { rolesMatrice } from '../roles/roles-iam.util';
 
 @Component({
   selector: 'app-admin-access-matrix',
@@ -35,8 +38,8 @@ import { KyntusSessionService } from '../../../core/session/kyntus-session.servi
           [kyntusSelectSync]="role()"
           (kyntusSelectSyncChange)="onRoleChange($event)"
         >
-          @for (r of roles; track r) {
-            <option [value]="r">{{ r }}</option>
+          @for (r of roles(); track r) {
+            <option [value]="r">{{ libelleRole(r) }}</option>
           }
         </select>
       </label>
@@ -132,7 +135,10 @@ export class AdminAccessMatrixComponent implements OnInit {
   private readonly access = inject(PlatformAccessService);
   private readonly session = inject(KyntusSessionService);
 
-  readonly roles = PLATFORM_ROLES;
+  private readonly rolesAdmin = inject(RolesAdminService);
+  readonly libelleRole = libelleRole;
+  /** Rôles du catalogue + rôles créés par l'Admin (écran « Rôles »). */
+  readonly roles = signal<string[]>([...PLATFORM_ROLES]);
   readonly verbs = PLATFORM_VERBS;
   readonly scopes = PLATFORM_SCOPES;
   readonly role = signal<string>('Superviseur');
@@ -153,6 +159,10 @@ export class AdminAccessMatrixComponent implements OnInit {
 
   ngOnInit(): void {
     void this.reload();
+    this.rolesAdmin.lister().subscribe({
+      next: (r) => this.roles.set(rolesMatrice(PLATFORM_ROLES, r.filter((x) => !x.systeme).map((x) => x.name))),
+      error: () => undefined,
+    });
   }
 
   verbLabel(v: PlatformVerb): string {

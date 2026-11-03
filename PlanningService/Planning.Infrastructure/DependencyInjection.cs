@@ -94,6 +94,17 @@ public static class DependencyInjection
         services.AddScoped<IDirectoryEmployeeWriteClient, DirectoryEmployeeWriteClient>();
         services.AddScoped<IFormationInitialTrainingClient, FormationInitialTrainingClient>();
         services.AddScoped<IDirectoryHierarchyClient, DirectoryHierarchyClient>();
+        // Client interne vers Auth pour la gestion des rôles (même adresse et même clé que UserService).
+        services.AddHttpClient(RoleService.AuthClient, (sp, client) =>
+        {
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var baseUrl = configuration["Auth:BaseUrl"] ?? "http://kyntus_auth_backend:8080/";
+            client.BaseAddress = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+            var apiKey = configuration["InternalServices:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+                client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Service-Key", apiKey);
+        });
         services.AddHttpClient<IUserService, UserService>((sp, client) =>
         {
             var configuration = sp.GetRequiredService<IConfiguration>();

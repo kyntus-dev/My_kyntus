@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject } from '@angular/core';
+import { libelleRole } from '../../../../core/org/role-libelle';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -680,6 +681,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
   get isSupportMode(): boolean {
     return this.orgMode === 'support';
   }
+
+  readonly libelleRole = libelleRole;
 
   get filteredRoles(): RoleOption[] {
     const operationalStructureRoles = (name: string) =>

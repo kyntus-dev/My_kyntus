@@ -1,0 +1,18 @@
+.ar { display: flex; flex-direction: column; gap: 16px; }
+.ar-new { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(220px, 2fr) auto; gap: 10px; align-items: center; }
+.ar-search { width: 280px; }
+.ar-head-actions { display: flex; gap: 8px; }
+.ar-table td { vertical-align: middle; }
+.ar-table .ku-input { width: 100%; min-width: 160px; }
+.ar-num { text-align: center; width: 90px; }
+.ar-actions { white-space: nowrap; text-align: right; }
+.ar-actions .ku-btn + .ku-btn { margin-left: 6px; }
+.ar-table tr.is-edit td { background: color-mix(in srgb, var(--ky-blue) 6%, transparent); }
+.ar-table tr.is-del td, .ar-del-row td { background: color-mix(in srgb, var(--danger, #e11d48) 6%, transparent); }
+.ar-del { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ar-del select { width: auto; min-width: 220px; }
+.ar-note { margin: 12px 0 0; font-size: 0.8rem; }
+@media (max-width: 720px) {
+  .ar-new { grid-template-columns: 1fr; }
+  .ar-search { width: 100%; }
+}

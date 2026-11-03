@@ -237,6 +237,32 @@ public class UserService : IUserService
         await SyncToAuthServiceAsync(user);
     }
 
+    public async Task<bool> ChangerRoleAsync(int userId, int roleId, CancellationToken ct = default)
+    {
+        var user = await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null) return false;
+        if (user.RoleId == roleId) return true;
+
+        user.RoleId = roleId;
+        await _context.SaveChangesAsync(ct);
+        await _context.Entry(user).Reference(u => u.Role).LoadAsync(ct);
+
+        // Jamais de mot de passe ni de création de compte : seul le rôle de connexion change.
+        if (user.AuthUserId.HasValue)
+            await SyncToAuthServiceAsync(user);
+        else
+            await SyncRoleToAuthByEmailAsync(user);
+
+        if (IsDirectoryWriteMaster())
+            await _directoryEmployeeWrite.TryUpdateEmployeeAsync(user, ct);
+        else
+        {
+            await PublishEmployeUpdatedForUserAsync(user, user.SubServiceId);
+            await _context.SaveChangesAsync(ct);
+        }
+        return true;
+    }
+
     public async Task SyncMissingAuthUsersAsync()
     {
         var users = await _context.Users

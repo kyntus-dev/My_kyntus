@@ -613,7 +613,7 @@
 
                   @for (role of filteredRoles; track role.id) {
 
-                    <option [ngValue]="role.id">{{ role.name }}</option>
+                    <option [ngValue]="role.id">{{ libelleRole(role.name) }}</option>
 
                   }
 
@@ -1160,7 +1160,7 @@
                   >
                     <option [ngValue]="0">— Sélectionner un rôle —</option>
                     @for (role of roles; track role.id) {
-                      <option [ngValue]="role.id">{{ role.name }}</option>
+                      <option [ngValue]="role.id">{{ libelleRole(role.name) }}</option>
                     }
                   </select>
                 </div>

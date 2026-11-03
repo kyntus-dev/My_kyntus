@@ -85,7 +85,7 @@ sql "SELECT email, role_fiche AS fiche, role_connexion AS connexion, role_cible 
 N=$(sql "SELECT count(*) FROM ecarts WHERE $FILTRE AND cible_id IS NOT NULL AND nb = 1;" -At)
 [ "$N" -gt 0 ] || { echo "Aucun compte à aligner."; exit 0; }
 read -r -p "Aligner ces $N compte(s) sur leur fiche ? Tapez OUI : " REP
-[ "$REP" = "OUI" ] || { echo "Annulé, rien n'a été modifié."; exit 0; }
+[ "$(echo "$REP" | tr a-z A-Z)" = "OUI" ] || { echo "Annulé, rien n'a été modifié."; exit 0; }
 
 F="$SAUV/roles_connexion_avant_alignement_$(date +%Y%m%d_%H%M%S).csv"
 sql "COPY (SELECT u.\"Id\", u.\"Email\", u.\"RoleId\", e.role_connexion AS \"Role\" FROM ecarts e JOIN \"Users\" u ON u.\"Id\" = e.auth_id

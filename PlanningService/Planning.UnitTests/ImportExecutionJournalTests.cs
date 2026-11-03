@@ -156,6 +156,7 @@ public class ImportExecutionJournalTests
         public Task<bool> RollbackFailedCreationAsync(int id, CancellationToken ct = default) => throw new NotImplementedException();
         public Task SyncMissingAuthUsersAsync() => Task.CompletedTask;
         public Task SyncUserRoleToAuthAsync(int userId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> ChangerRoleAsync(int userId, int roleId, CancellationToken ct = default) => Task.FromResult(true);
         public Task<UserDto?> GetUserByAuthIdAsync(int authUserId) => Task.FromResult<UserDto?>(null);
         public Task<UserDto?> GetUserByEmailAsync(string email) => Task.FromResult<UserDto?>(null);
         public Task<UserDto?> GetOrLinkUserForAuthAsync(int authUserId, string? email) => Task.FromResult<UserDto?>(null);

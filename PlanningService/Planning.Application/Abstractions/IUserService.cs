@@ -53,6 +53,12 @@ public interface IUserService
     /// </summary>
     Task SyncUserRoleToAuthAsync(int userId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Change le rôle d'un compte et le propage partout (connexion sans mot de passe, annuaire).
+    /// Utilisé pour réaffecter les comptes d'un rôle supprimé.
+    /// </summary>
+    Task<bool> ChangerRoleAsync(int userId, int roleId, CancellationToken ct = default);
+
     Task<UserDto?> GetUserByAuthIdAsync(int authUserId);
     Task<UserDto?> GetUserByEmailAsync(string email);
     Task<UserDto?> GetOrLinkUserForAuthAsync(int authUserId, string? email);

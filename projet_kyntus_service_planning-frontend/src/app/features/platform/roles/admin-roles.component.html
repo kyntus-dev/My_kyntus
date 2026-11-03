@@ -1,0 +1,112 @@
+<div class="ar">
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Rôles</span><span class="ku-kpi-value">{{ roles().length }}</span>
+      <span class="ku-kpi-sub">dont {{ crees().length }} créé(s) par l’Admin</span></div>
+    <div class="ku-kpi"><span class="ku-kpi-label">Comptes actifs</span><span class="ku-kpi-value">{{ totalComptes() }}</span>
+      <span class="ku-kpi-sub">répartis sur ces rôles</span></div>
+  </div>
+
+  <section class="ku-card">
+    <div class="ku-card-head">
+      <div>
+        <h3 class="ku-card-title">Nouveau rôle</h3>
+        <p class="ku-card-sub">Créé sans aucun droit : cochez ensuite ses accès dans « Accès par rôle ».</p>
+      </div>
+    </div>
+    <form class="ar-new" (ngSubmit)="creer()">
+      <input class="ku-input" name="nom" placeholder="Nom du rôle (ex. Chargé qualité)" maxlength="50"
+             [ngModel]="nouveauNom()" (ngModelChange)="nouveauNom.set($event)" required />
+      <input class="ku-input ar-desc" name="desc" placeholder="Description (facultative)" maxlength="200"
+             [ngModel]="nouvelleDescription()" (ngModelChange)="nouvelleDescription.set($event)" />
+      <button type="submit" class="ku-btn ku-btn--primary" [disabled]="!nouveauNom().trim() || enCours()">Créer le rôle</button>
+    </form>
+  </section>
+
+  <section class="ku-card">
+    <div class="ku-card-head">
+      <div class="ku-toolbar">
+        <input class="ku-input ar-search" type="search" placeholder="Rechercher un rôle…"
+               [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+      </div>
+      <div class="ar-head-actions">
+        <button type="button" class="ku-btn ku-btn--sm" (click)="ouvrirAcces()">Accès par rôle</button>
+        <button type="button" class="ku-btn ku-btn--sm" (click)="load()" [disabled]="loading()">Actualiser</button>
+      </div>
+    </div>
+
+    @if (loading() && !roles().length) {
+      <div class="ku-skeleton"></div>
+    } @else if (error()) {
+      <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
+    } @else {
+      <div class="ku-table-wrap">
+        <table class="ku-table ar-table">
+          <thead>
+            <tr><th>Rôle</th><th>Description</th><th class="ar-num">Comptes</th><th>Type</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (r of visibles(); track r.id) {
+              <tr [class.is-edit]="edition() === r.id" [class.is-del]="suppression()?.id === r.id">
+                @if (edition() === r.id) {
+                  <td>
+                    @if (r.systeme) { <b>{{ libelleRole(r.name) }}</b> }
+                    @else {
+                      <input class="ku-input" maxlength="50" [ngModel]="editionNom()" (ngModelChange)="editionNom.set($event)" />
+                    }
+                  </td>
+                  <td><input class="ku-input" maxlength="200" [ngModel]="editionDescription()" (ngModelChange)="editionDescription.set($event)" /></td>
+                  <td class="ar-num">{{ r.nbComptes }}</td>
+                  <td>{{ r.systeme ? 'Système' : 'Créé' }}</td>
+                  <td class="ar-actions">
+                    <button type="button" class="ku-btn ku-btn--sm ku-btn--primary" (click)="enregistrer(r)" [disabled]="enCours()">Enregistrer</button>
+                    <button type="button" class="ku-btn ku-btn--sm ku-btn--ghost" (click)="annuler()">Annuler</button>
+                  </td>
+                } @else {
+                  <td><b>{{ libelleRole(r.name) }}</b></td>
+                  <td class="ku-muted">{{ r.description }}</td>
+                  <td class="ar-num"><span class="ku-chip ku-chip--plain" [class.ku-chip--info]="r.nbComptes > 0">{{ r.nbComptes }}</span></td>
+                  <td>
+                    @if (r.systeme) { <span class="ku-chip ku-chip--plain" title="Utilisé par la plateforme : seule la description est modifiable">Système</span> }
+                    @else { <span class="ku-chip ku-chip--ok">Créé</span> }
+                  </td>
+                  <td class="ar-actions">
+                    <button type="button" class="ku-btn ku-btn--sm" (click)="modifier(r)">Modifier</button>
+                    @if (!r.systeme) {
+                      <button type="button" class="ku-btn ku-btn--sm ku-btn--danger" (click)="demanderSuppression(r)">Supprimer</button>
+                    }
+                  </td>
+                }
+              </tr>
+              @if (suppression()?.id === r.id) {
+                <tr class="ar-del-row">
+                  <td colspan="5">
+                    <div class="ar-del">
+                      @if (r.nbComptes > 0) {
+                        <span>{{ r.nbComptes }} compte(s) ont ce rôle. Ils passeront au rôle :</span>
+                        <select class="ku-input" [ngModel]="remplacementId()" (ngModelChange)="remplacementId.set($event)">
+                          <option [ngValue]="null" disabled>Choisir…</option>
+                          @for (x of remplacements(); track x.id) { <option [ngValue]="x.id">{{ libelleRole(x.name) }}</option> }
+                        </select>
+                      } @else {
+                        <span>Aucun compte n’a ce rôle.</span>
+                      }
+                      <button type="button" class="ku-btn ku-btn--sm ku-btn--danger" (click)="supprimer()"
+                              [disabled]="enCours() || (r.nbComptes > 0 && !remplacementId())">Supprimer le rôle</button>
+                      <button type="button" class="ku-btn ku-btn--sm ku-btn--ghost" (click)="annuler()">Annuler</button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            } @empty {
+              <tr><td colspan="5" class="ku-empty">Aucun rôle trouvé.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="ku-muted ar-note">
+        Les rôles système sont utilisés par la plateforme : seule leur description se modifie.
+        Après un changement, les personnes concernées voient leur nouveau rôle en moins de 30 secondes.
+      </p>
+    }
+  </section>
+</div>

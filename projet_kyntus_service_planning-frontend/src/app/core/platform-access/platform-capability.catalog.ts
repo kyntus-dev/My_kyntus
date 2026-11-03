@@ -6,13 +6,13 @@ export type PlatformVerb = (typeof PLATFORM_VERBS)[number];
 export const PLATFORM_SCOPES = ['Global', 'Pole', 'Cellule', 'Service', 'Self'] as const;
 export type PlatformScope = (typeof PLATFORM_SCOPES)[number];
 
+/** Rôles de « Accès par rôle ». Manager et Coach n'y figurent plus : ils utilisent les droits de
+ *  Superviseur et Référent technique (fusion v13). */
 export const PLATFORM_ROLES = [
   KyntusRoleNames.Admin,
   KyntusRoleNames.RH,
   KyntusRoleNames.Audit,
-  KyntusRoleNames.Manager,
   KyntusRoleNames.Superviseur,
-  KyntusRoleNames.Coach,
   KyntusRoleNames.ReferentTechnique,
   KyntusRoleNames.Rp,
   KyntusRoleNames.ChefDeProjet,
