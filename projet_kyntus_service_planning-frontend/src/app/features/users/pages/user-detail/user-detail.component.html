@@ -26,6 +26,12 @@
             <app-lucide-icon [icon]="icons.edit" className="w-4 h-4" />
             Modifier
           </button>
+          @if (peutReaffecter() && user.isActive !== false) {
+            <button type="button" class="ky-btn-secondary" (click)="changerService()" title="Réaffecter l’agent dans un autre service">
+              <app-lucide-icon [icon]="icons.service" className="w-4 h-4" />
+              Changer de service
+            </button>
+          }
           @if (peutGererDroits && user.guid) {
             <button type="button" class="ky-btn-secondary" (click)="gererDroits()" title="Rubriques accessibles à ce compte (rôle + exceptions)">
               <app-lucide-icon [icon]="icons.droits" className="w-4 h-4" />

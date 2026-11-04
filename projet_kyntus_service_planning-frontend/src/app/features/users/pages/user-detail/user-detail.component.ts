@@ -11,7 +11,8 @@ import { EmployeeFieldService } from '../../services/employee-field.service';
 import type { EmployeeImportFieldConfig } from '../../services/employee-import.service';
 import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
 import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
-import { ArrowLeft, History, KeyRound, Pencil, RotateCcw, ShieldCheck, UserX } from 'lucide';
+import { ArrowLeft, ArrowRightLeft, History, KeyRound, Pencil, RotateCcw, ShieldCheck, UserX } from 'lucide';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import type { Department } from '../../../prime/models';
 import { PrimeOrgApiService, type OrgAssignmentsOverview } from '../../../prime/services/prime-org-api.service';
@@ -54,7 +55,10 @@ import { EmployeeDeactivateDialogComponent } from '../../components/employee-dea
   styleUrls: ['./user-detail.component.css']
 })
 export class UserDetailComponent implements OnInit {
-  readonly icons = { back: ArrowLeft, edit: Pencil, deactivate: UserX, reactivate: RotateCcw, history: History, key: KeyRound, droits: ShieldCheck };
+  readonly icons = { back: ArrowLeft, edit: Pencil, deactivate: UserX, reactivate: RotateCcw, history: History, key: KeyRound, droits: ShieldCheck, service: ArrowRightLeft };
+  /** Changement de service (droit « rh.affectations »). */
+  private readonly platformAccess = inject(PlatformAccessService);
+  readonly peutReaffecter = () => this.platformAccess.canAct('rh.affectations') || this.peutGererDroits;
   /** Droits d'accès du compte (Admin) : rôle + exceptions propres au compte. */
   readonly peutGererDroits = inject(KyntusSessionService).getRole() === 'Admin';
   readonly orgCellLabel = orgCellLabel;
@@ -275,6 +279,10 @@ export class UserDetailComponent implements OnInit {
 
   goBack(): void { this.router.navigate(['/users']); }
   editUser(): void { this.router.navigate(['/users', 'edit', this.user?.id]); }
+
+  changerService(): void {
+    if (this.user?.id) void this.router.navigate(['/reaffectations'], { queryParams: { agent: this.user.id } });
+  }
 
   gererDroits(): void {
     if (this.user?.guid) void this.router.navigate(['/admin'], { queryParams: { section: 'comptes', compte: this.user.guid.toLowerCase() } });

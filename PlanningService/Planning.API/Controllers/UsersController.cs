@@ -18,8 +18,62 @@ public class UsersController(
     IMediator mediator,
     IUserService userService,
     IEmployeeDocumentFieldQueryService documentFieldQuery,
-    IPolicyEvaluator policyEvaluator) : ControllerBase
+    IPolicyEvaluator policyEvaluator,
+    IAgentReaffectation reaffectation) : ControllerBase
 {
+    private const string MessageReaffectation =
+        "Le changement de service est réservé aux rôles autorisés (« Réaffecter les agents » dans Accès par rôle).";
+
+    /// <summary>Droit « rh.affectations » (Accès par rôle / par compte) ; l'Admin l'a toujours.</summary>
+    private async Task<bool> PeutReaffecterAsync(string verbe, CancellationToken ct)
+    {
+        var role = User.GetAuthRole() ?? "Employee";
+        if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)) return true;
+        var decision = await policyEvaluator.EvaluateAsync(
+            new PolicyRequest(User.GetSubjectId() ?? Guid.Empty, role, $"rh.affectations.{verbe}", "platform"), ct);
+        return decision.Allowed;
+    }
+
+    private Task<ReaffectationAuteur> AuteurReaffectationAsync(CancellationToken ct) =>
+        reaffectation.ResoudreAsync(User.GetAuthUserId(), User.GetEmail(), IsHrOrAdminConnected(), ct);
+
+    /// <summary>Agents et services entre lesquels le demandeur peut réaffecter (son périmètre).</summary>
+    [HttpGet("reaffectations/options")]
+    public async Task<ActionResult<ReaffectationOptionsDto>> ReaffectationOptions(CancellationToken ct)
+    {
+        if (!await PeutReaffecterAsync("View", ct) && !await PeutReaffecterAsync("Act", ct)) return Forbid();
+        return Ok(await reaffectation.OptionsAsync(await AuteurReaffectationAsync(ct), ct));
+    }
+
+    /// <summary>Historique des changements de service (périmètre du demandeur).</summary>
+    [HttpGet("reaffectations")]
+    public async Task<ActionResult<IReadOnlyList<ReaffectationDto>>> Reaffectations(
+        [FromQuery] int? userId, [FromQuery] int? max, CancellationToken ct)
+    {
+        if (!await PeutReaffecterAsync("View", ct) && !await PeutReaffecterAsync("Act", ct)) return Forbid();
+        return Ok(await reaffectation.HistoriqueAsync(await AuteurReaffectationAsync(ct), userId, max ?? 200, ct));
+    }
+
+    /// <summary>Réaffecte un agent dans un autre service (de A vers B), avec un motif.</summary>
+    [HttpPost("{id:int}/reaffectation")]
+    public async Task<ActionResult<ReaffectationDto>> Reaffecter(int id, [FromBody] ReaffectationRequest body, CancellationToken ct)
+    {
+        if (!await PeutReaffecterAsync("Act", ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = MessageReaffectation });
+        try
+        {
+            return Ok(await reaffectation.ReaffecterAsync(await AuteurReaffectationAsync(ct), id, body, ct));
+        }
+        catch (ReaffectationRefusException ex) when (ex.HorsPerimetre)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+        catch (ReaffectationRefusException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     private async Task<ActionResult?> DenyUnlessCanManageUsersAsync()
     {
         var role = User.GetAuthRole() ?? "Employee";
@@ -228,6 +282,10 @@ public class UsersController(
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
         if (!await CanAccessUserAsync(id, ct)) return Forbid();
         if (!ModelState.IsValid) return BadRequest(ModelState);
+        // Changer le service depuis la fiche demande le même droit que l'écran « Réaffectations ».
+        var actuel = await userService.GetUserByIdAsync(id);
+        if (actuel is not null && actuel.SubServiceId != dto.SubServiceId && !await PeutReaffecterAsync("Act", ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = MessageReaffectation });
         try
         {
             var user = await userService.UpdateUserAsync(id, dto);

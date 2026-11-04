@@ -65,6 +65,8 @@ public static class PlatformAccessCatalog
         S("admin.overview", "Vue d'ensemble", "Administration", View: AdminRh),
         S("admin.access", "Accès par rôle", "Administration", View: Admin, Configure: Admin),
         S("admin.users", "Utilisateurs", "Administration", View: AdminRh, Act: AdminRh),
+        // v21 : changement de service d'un agent (de A vers B). Modifier = réaffecter.
+        S("rh.affectations", "Réaffecter les agents (changement de service)", "Ressources humaines", View: AdminRh, Act: AdminRh),
         S("admin.organisation", "Organisation", "Administration", View: AdminRh, Act: AdminRh),
         S("admin.sync", "Synchro organisation", "Administration", View: AdminRh, Act: AdminRh),
         S("admin.modules", "Configuration des modules", "Administration", View: AdminRh),

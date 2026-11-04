@@ -64,6 +64,7 @@ public class AppDbContext : DbContext
     public DbSet<RegimeHoraireJour> RegimeHoraireJours { get; set; } = null!;
     public DbSet<RegimeHoraireAffectation> RegimeHoraireAffectations { get; set; } = null!;
     public DbSet<HeureSortieAcces> HeureSortieAcces { get; set; } = null!;
+    public DbSet<ReaffectationAgent> ReaffectationsAgents { get; set; } = null!;
     public DbSet<PlanningItHoraire> PlanningItHoraires { get; set; } = null!;
     public DbSet<PlanningItCommentaire> PlanningItCommentaires { get; set; } = null!;
     /// <summary>Tableau des présences : saisies des responsables (motif, retard autorisé, commentaire).</summary>
@@ -660,6 +661,19 @@ public class AppDbContext : DbContext
             e.Property(x => x.Cible).HasMaxLength(16).IsRequired();
             e.HasIndex(x => new { x.Cible, x.CibleId }).IsUnique();
             e.HasIndex(x => x.RegimeHoraireId);
+        });
+
+        modelBuilder.Entity<ReaffectationAgent>(e =>
+        {
+            e.ToTable("ReaffectationsAgents");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.AncienLibelle).HasMaxLength(300);
+            e.Property(x => x.NouveauLibelle).HasMaxLength(300);
+            e.Property(x => x.Motif).HasMaxLength(500);
+            e.Property(x => x.Origine).HasMaxLength(40);
+            e.Property(x => x.CreatedByNom).HasMaxLength(160);
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
+            e.HasIndex(x => x.CreatedAt);
         });
 
         modelBuilder.Entity<HeureSortieAcces>(e =>

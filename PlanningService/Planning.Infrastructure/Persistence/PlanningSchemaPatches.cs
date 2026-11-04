@@ -1079,4 +1079,28 @@ public static class PlanningSchemaPatches
             Console.WriteLine($"⚠️ Index unique AppliesToSaturday ignoré: {ex.Message}");
         }
     }
+
+    /// <summary>Historique des réaffectations d'agents (v21) : table nouvelle, vide au départ.</summary>
+    public static async Task EnsureReaffectationsAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "ReaffectationsAgents" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "AncienSubServiceId" integer NULL,
+                "NouveauSubServiceId" integer NOT NULL,
+                "AncienLibelle" varchar(300) NULL,
+                "NouveauLibelle" varchar(300) NOT NULL,
+                "Motif" varchar(500) NULL,
+                "Origine" varchar(40) NOT NULL DEFAULT 'Réaffectation',
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" varchar(160) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_ReaffectationsAgents_UserId_CreatedAt" ON "ReaffectationsAgents" ("UserId", "CreatedAt");
+            CREATE INDEX IF NOT EXISTS "IX_ReaffectationsAgents_CreatedAt" ON "ReaffectationsAgents" ("CreatedAt");
+            """,
+            ct);
+    }
 }

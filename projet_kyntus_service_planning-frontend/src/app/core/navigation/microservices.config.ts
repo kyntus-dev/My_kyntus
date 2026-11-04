@@ -195,6 +195,7 @@ export const MICROSERVICES: Microservice[] = [
       { label: 'Import employés', route: '/import', roles: ADMIN_RH, hat: 'team' },
       { label: 'Contrats', route: '/contracts', roles: MANAGER_ROLES, hat: 'team' },
       { label: 'Liaisons HTEL', route: '/users/htel-liaisons', roles: ADMIN_RH, hat: 'team' },
+      { label: 'Réaffectations', route: '/reaffectations', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'rh.affectations' },
       { label: 'Historique des rotations', route: '/pilotage-rh', roles: ADMIN_RH, hat: 'team' },
       { label: 'Champs personnalisés', route: '/users/fields', roles: ADMIN_RH, hat: 'team' },
     ],

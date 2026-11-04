@@ -1,0 +1,129 @@
+<div class="ku-page ra">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Ressources humaines · {{ options()?.perimetre ?? 'Votre périmètre' }}</p>
+      <h1 class="ku-hero-title">Réaffectations</h1>
+      <p class="ku-hero-sub">Changer un agent de service, du service A au service B, avec un motif. Chaque changement est conservé dans l’historique.</p>
+    </div>
+  </header>
+
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Changements de service</span><span class="ku-kpi-value">{{ synthese().total }}</span>
+      <span class="ku-kpi-sub">{{ synthese().agents }} agent(s) concerné(s)</span></div>
+    <div class="ku-kpi"><span class="ku-kpi-label">Ce mois-ci</span><span class="ku-kpi-value">{{ synthese().ceMois }}</span>
+      <span class="ku-kpi-sub">réaffectations et modifications de fiche</span></div>
+    <div class="ku-kpi"><span class="ku-kpi-label">Agents de votre périmètre</span><span class="ku-kpi-value">{{ options()?.agents?.length ?? '—' }}</span>
+      <span class="ku-kpi-sub">{{ options()?.services?.length ?? 0 }} service(s) de destination possibles</span></div>
+  </div>
+
+  @if (error()) {
+    <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
+  } @else {
+    <section class="ku-card ra-form">
+      <div class="ra-etapes">
+        <!-- 1. Agent -->
+        <div class="ra-etape" [class.fait]="agent()">
+          <span class="ra-num">1</span>
+          <div class="ra-contenu">
+            <h3>Agent</h3>
+            @if (agent(); as a) {
+              <div class="ra-choisi">
+                <span class="ra-av">{{ initiales(a.nom) }}</span>
+                <div><b>{{ a.nom }}</b><small>{{ a.role ?? '' }}</small></div>
+                <button type="button" class="ra-lien" (click)="changerAgent()">Changer</button>
+              </div>
+            } @else {
+              <input class="ku-input" type="search" placeholder="Rechercher un agent, un service…" [disabled]="loading() || !peutAgir()"
+                     [ngModel]="rechercheAgent()" (ngModelChange)="rechercheAgent.set($event)" />
+              <div class="ra-liste">
+                @if (loading()) { <div class="ku-skeleton"></div> }
+                @for (a of agentsFiltres(); track a.id) {
+                  <button type="button" class="ra-item" [disabled]="!peutAgir()" (click)="choisirAgent(a)">
+                    <span class="ra-av petit">{{ initiales(a.nom) }}</span>
+                    <span><b>{{ a.nom }}</b><small>{{ a.service ?? '—' }} · {{ a.cellule ?? '—' }}</small></span>
+                  </button>
+                } @empty {
+                  @if (!loading()) { <p class="ku-muted ra-vide">Aucun agent.</p> }
+                }
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- 2. De A vers B -->
+        <div class="ra-etape" [class.fait]="cible()" [class.inactif]="!agent()">
+          <span class="ra-num">2</span>
+          <div class="ra-contenu">
+            <h3>Nouveau service</h3>
+            @if (agent(); as a) {
+              <div class="ra-trajet">
+                <div class="ra-bloc"><small>Service actuel (A)</small><b>{{ a.service ?? 'Aucun' }}</b><span>{{ a.cellule ?? '' }}</span></div>
+                <span class="ra-fleche" aria-hidden="true">→</span>
+                <div class="ra-bloc" [class.vide]="!serviceCible()"><small>Nouveau service (B)</small>
+                  <b>{{ serviceCible()?.service ?? 'À choisir' }}</b><span>{{ serviceCible()?.cellule ?? '' }}</span></div>
+              </div>
+              <input class="ku-input" type="search" placeholder="Filtrer les services…" [ngModel]="rechercheService()" (ngModelChange)="rechercheService.set($event)" />
+              <div class="ra-services">
+                @for (g of groupes(); track g.titre) {
+                  <p class="ra-groupe">{{ g.titre }}</p>
+                  <div class="ra-puces">
+                    @for (s of g.services; track s.id) {
+                      <button type="button" class="ra-puce" [class.on]="cible() === s.id" (click)="cible.set(s.id)">{{ s.service }}</button>
+                    }
+                  </div>
+                } @empty {
+                  <p class="ku-muted ra-vide">Aucun autre service dans votre périmètre.</p>
+                }
+              </div>
+            } @else {
+              <p class="ku-muted ra-vide">Choisissez d’abord un agent.</p>
+            }
+          </div>
+        </div>
+
+        <!-- 3. Motif et validation -->
+        <div class="ra-etape" [class.inactif]="!cible()">
+          <span class="ra-num">3</span>
+          <div class="ra-contenu">
+            <h3>Motif</h3>
+            <textarea class="ku-input ra-motif" maxlength="500" placeholder="Ex. renfort de l’équipe B, demande de l’agent, rotation…"
+                      [disabled]="!cible()" [ngModel]="motif()" (ngModelChange)="motif.set($event)"></textarea>
+            <button type="button" class="ku-btn ku-btn--primary ra-valider" [disabled]="!agent() || !cible() || saving() || !peutAgir()" (click)="valider()">
+              {{ saving() ? 'Réaffectation…' : 'Réaffecter l’agent' }}
+            </button>
+            @if (!peutAgir()) { <small class="ku-muted">Consultation seule : le droit « Modifier » sur « Réaffecter les agents » est nécessaire.</small> }
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ku-card">
+      <div class="ra-hist-tete">
+        <div><h3 class="ku-card-title">Historique</h3><p class="ku-card-sub">Réaffectations et changements faits depuis la fiche employé.</p></div>
+        <input class="ku-input ra-filtre" type="search" placeholder="Rechercher…" [ngModel]="filtreHistorique()" (ngModelChange)="filtreHistorique.set($event)" />
+      </div>
+      @if (historiqueFiltre().length) {
+        <div class="ku-table-wrap">
+          <table class="ku-table ky-table ra-table">
+            <thead><tr><th>Date</th><th>Agent</th><th>De (A)</th><th></th><th>Vers (B)</th><th>Motif</th><th>Par</th></tr></thead>
+            <tbody>
+              @for (h of historiqueFiltre(); track h.id) {
+                <tr>
+                  <td class="ku-mono">{{ dateHeure(h.le) }}</td>
+                  <td><b>{{ h.agent }}</b></td>
+                  <td class="ku-muted">{{ h.ancien ?? '—' }}</td>
+                  <td class="ra-mini-fleche">→</td>
+                  <td><b>{{ h.nouveau }}</b></td>
+                  <td class="ra-texte">{{ h.motif ?? '' }}@if (h.origine !== 'Réaffectation') { <span class="ku-chip ku-chip--plain">{{ h.origine }}</span> }</td>
+                  <td class="ku-muted">{{ h.par ?? '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="ku-empty"><strong>Aucun changement</strong>de service enregistré pour l’instant.</div>
+      }
+    </section>
+  }
+</div>

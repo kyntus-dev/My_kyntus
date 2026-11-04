@@ -349,6 +349,15 @@ export const routes: Routes = [
             .then(m => m.PilotageRhComponent),
       },
       {
+        // Réaffectations (v21) : changement de service d'un agent, droit « rh.affectations ».
+        path: 'reaffectations',
+        canActivate: [AuthGuard],
+        data: { roles: ROLE_SETS.congesEquipe, capability: 'rh.affectations' },
+        loadComponent: () =>
+          import('./features/rh/reaffectations/reaffectations.component')
+            .then(m => m.ReaffectationsComponent),
+      },
+      {
         path: 'users',
         canActivate: [AuthGuard],
         data: { ouvertureIam: 'admin.users', roles: ROLE_SETS.adminRh },

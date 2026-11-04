@@ -100,6 +100,7 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'admin.overview', label: 'Vue d’ensemble', module: 'Administration', view: ADMIN_RH },
   { id: 'admin.access', label: 'Accès par rôle', module: 'Administration', view: ADMIN, configure: ADMIN },
   { id: 'admin.users', label: 'Utilisateurs', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },
+  { id: 'rh.affectations', label: 'Réaffecter les agents (changement de service)', module: 'Ressources humaines', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'admin.organisation', label: 'Organisation', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'admin.sync', label: 'Synchro organisation', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'admin.modules', label: 'Configuration des modules', module: 'Administration', view: ADMIN_RH },

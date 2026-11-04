@@ -109,6 +109,8 @@ public static class DependencyInjection
             if (!string.IsNullOrWhiteSpace(apiKey))
                 client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Service-Key", apiKey);
         });
+        // Réaffectations (v21) : implémentées par UserService (mêmes synchronisations que la fiche).
+        services.AddScoped<IAgentReaffectation>(sp => (IAgentReaffectation)sp.GetRequiredService<IUserService>());
         services.AddHttpClient<IUserService, UserService>((sp, client) =>
         {
             var configuration = sp.GetRequiredService<IConfiguration>();

@@ -16,7 +16,7 @@ using Planning.Application.Abstractions.EmployeeImport;
 namespace Planning.Infrastructure.Services;
 
 file record AuthRegisterResult(int Id, string Email, Guid SubjectId);
-public class UserService : IUserService
+public partial class UserService : IUserService, Planning.Application.Abstractions.IAgentReaffectation
 {
     private sealed record AuthBatchSyncItem(User User, string? DefaultPassword);
     private sealed record AuthBatchSyncResult(string Email, bool Success, int? AuthUserId, string? Message);
@@ -1527,6 +1527,7 @@ public class UserService : IUserService
         if (dto.NiveauExpertiseMetier.HasValue && !IsHrOrAdminRole(callerRole))
             throw new UnauthorizedAccessException("Seuls RH et Admin peuvent modifier l'expertise métier.");
 
+        var ancienSubServiceId = user.SubServiceId;
         user.RoleId = dto.RoleId;
         user.SubServiceId = dto.SubServiceId;
         user.FirstName = dto.FirstName;
@@ -1569,6 +1570,8 @@ public class UserService : IUserService
 
         if (user.SubServiceId is int subId)
             await EnsureBalancedSaturdayGroupAsync(user.Id, subId);
+        if (ancienSubServiceId != user.SubServiceId)
+            await JournaliserChangementServiceAsync(user, ancienSubServiceId);
 
         // Évite LoadOrgNameContext (GET Directory complet) sur le chemin import / update fréquent.
         var hrProfile = await _context.UserHrProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == id);
