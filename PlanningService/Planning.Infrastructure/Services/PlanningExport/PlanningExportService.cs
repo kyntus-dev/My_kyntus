@@ -58,6 +58,8 @@ public sealed class PlanningExportService(AppDbContext db, IPresenceService pres
             .Select(c => new { c.UserId, c.StartDate, c.EndDate })
             .ToListAsync(ct);
 
+        var congesParUser = conges.GroupBy(c => c.UserId).ToDictionary(g => g.Key, g => g.ToList());
+
         var users = await db.Users.AsNoTracking()
             .Where(u => ids.Contains(u.Id))
             .Select(u => new
@@ -80,7 +82,7 @@ public sealed class PlanningExportService(AppDbContext db, IPresenceService pres
                 u.Service,
                 Jours(du, au).Select(jour =>
                 {
-                    var conge = conges.Any(c => c.UserId == u.Id && c.StartDate <= jour && c.EndDate >= jour);
+                    var conge = congesParUser.TryGetValue(u.Id, out var siens) && siens.Any(c => c.StartDate <= jour && c.EndDate >= jour);
                     if (!parJour.TryGetValue((u.Id, jour), out var a))
                         return new PlanningExportJourDto(jour, conge ? "Congé" : null, null, null, 0, conge, false, false);
                     if (a.IsOnLeave || conge)

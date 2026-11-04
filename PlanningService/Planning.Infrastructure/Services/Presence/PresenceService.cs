@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Planning.Application.Pointage;
 using Planning.Application.Presence;
@@ -17,8 +18,15 @@ public sealed class PresenceService(
     AppDbContext db,
     IPointageQueryService pointage,
     IPlanningPerimeterResolver perimeter,
-    IOptionsMonitor<PointageOptions> options) : IPresenceService
+    IOptionsMonitor<PointageOptions> options,
+    IMemoryCache? cache = null) : IPresenceService
 {
+    /// <summary>
+    /// Calcul du pointage gardé 30 s : passer du tableau aux retards puis à l'export paie ne
+    /// recalcule pas tout. Les saisies des responsables (motifs, autorisations) sont relues à chaque fois.
+    /// </summary>
+    private static readonly TimeSpan DureeCache = TimeSpan.FromSeconds(30);
+
     /// <summary>Période affichée au plus (une période de paie du 24 au 23 tient dans 31 jours).</summary>
     public const int PeriodeMaxJours = 31;
 
@@ -121,7 +129,7 @@ public sealed class PresenceService(
     private async Task<List<PresenceAgentDto>> ConstruireAsync(IReadOnlyList<int> ids, DateOnly du, DateOnly au, CancellationToken ct)
     {
         if (ids.Count == 0) return [];
-        var suivis = await pointage.CalculerPourAsync(ids, du, au, ct);
+        var suivis = await CalculerAvecCacheAsync(ids, du, au, ct);
 
         var users = await db.Users.AsNoTracking()
             .Where(u => ids.Contains(u.Id))
@@ -148,6 +156,8 @@ public sealed class PresenceService(
             .Select(c => new { c.UserId, c.StartDate, c.EndDate, c.AbsenceType })
             .ToListAsync(ct);
 
+        var congesParAgent = conges.GroupBy(c => c.UserId).ToDictionary(g => g.Key, g => g.ToList());
+
         var result = new List<PresenceAgentDto>(suivis.Count);
         foreach (var s in suivis)
         {
@@ -155,7 +165,9 @@ public sealed class PresenceService(
             var profil = profils.GetValueOrDefault(s.UserId);
             var jours = s.Jours.Select(j =>
             {
-                var conge = conges.FirstOrDefault(c => c.UserId == s.UserId && c.StartDate <= j.Jour && c.EndDate >= j.Jour);
+                var conge = congesParAgent.TryGetValue(s.UserId, out var siens)
+                    ? siens.FirstOrDefault(c => c.StartDate <= j.Jour && c.EndDate >= j.Jour)
+                    : null;
                 var codeAuto = PresenceRegles.CodeAuto(
                     j,
                     conge is null ? null : PresenceCodes.DepuisConge(conge.AbsenceType),
@@ -300,5 +312,18 @@ public sealed class PresenceService(
     {
         var local = (u.Email ?? string.Empty).Split('@')[0];
         return local.Length > 0 ? local : $"{u.FirstName} {u.LastName}".Trim();
+    }
+
+    private async Task<IReadOnlyList<PointageSuiviDto>> CalculerAvecCacheAsync(IReadOnlyList<int> ids, DateOnly du, DateOnly au, CancellationToken ct)
+    {
+        if (cache is null || ids.Count < 2)
+            return await pointage.CalculerPourAsync(ids, du, au, ct);
+        // Clé complète (période + liste des agents) : jamais de mélange entre deux périmètres.
+        var cle = $"presences:pointage:{du:yyyyMMdd}:{au:yyyyMMdd}:{string.Join(',', ids.OrderBy(x => x))}";
+        if (cache.TryGetValue(cle, out IReadOnlyList<PointageSuiviDto>? deja) && deja is not null)
+            return deja;
+        var calcul = await pointage.CalculerPourAsync(ids, du, au, ct);
+        cache.Set(cle, calcul, DureeCache);
+        return calcul;
     }
 }

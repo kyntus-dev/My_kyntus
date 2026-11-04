@@ -77,8 +77,8 @@
           <thead>
             <tr>
               <th class="pz-agent">Agent</th>
-              @for (j of jours(); track j) {
-                <th class="pz-jour" [class.pz-dim]="enteteJour(j).weekend" [class.pz-today]="j === aujourdhui"><span>{{ enteteJour(j).court }}</span><b>{{ enteteJour(j).num }}</b></th>
+              @for (e of entetes(); track e.jour) {
+                <th class="pz-jour" [class.pz-dim]="e.weekend" [class.pz-today]="e.today"><span>{{ e.court }}</span><b>{{ e.num }}</b></th>
               }
               <th class="pz-tot" title="Jours d’absence">Abs.</th>
               <th class="pz-tot" title="Retards non autorisés">Retards</th>
@@ -86,31 +86,32 @@
             </tr>
           </thead>
           <tbody>
-            @for (a of agents(); track a.userId) {
+            @for (l of lignes(); track l.agent.userId) {
+              @let a = l.agent;
               <tr>
                 <th class="pz-agent" scope="row">
                   <b>{{ a.nom }}</b>
                   <small>{{ a.cellule ?? '—' }} · {{ a.type }}</small>
                 </th>
-                @for (jour of jours(); track jour) {
-                  @let j = jourDe(a, jour);
-                  <td class="pz-cell" [class.pz-dim]="enteteJour(jour).weekend" [class.pz-today]="jour === aujourdhui">
+                @for (c of l.cases; track c.jour) {
+                  @let j = c.j;
+                  <td class="pz-cell" [class.pz-dim]="c.dim" [class.pz-today]="c.today">
                     @if (j) {
                       <button type="button" class="pz-code"
-                              [ngClass]="'pz-f-' + familleCode(j.code)"
+                              [ngClass]="c.classe"
                               [class.pz-retard]="j.retardRetenuMinutes > 0"
                               [class.pz-manuel]="!j.auto"
                               [class.pz-manque]="j.manquePointage"
                               [class.pz-partiel]="j.absencePartielle"
                               [disabled]="!data()?.peutModifier"
-                              [title]="infobulle(a, j)"
+                              [title]="c.titre"
                               (click)="ouvrir(a, j)">
                         @if (j.commentaire) { <i class="pz-dot"></i> }{{ j.code ?? '' }}
                       </button>
                     }
                   </td>
                 }
-                <td class="pz-tot" [class.ku-neg]="absences(a) > 0">{{ absences(a) || '' }}</td>
+                <td class="pz-tot" [class.ku-neg]="l.absences > 0">{{ l.absences || '' }}</td>
                 <td class="pz-tot" [class.ku-neg]="a.totaux.retardRetenuMinutes > 0">{{ a.totaux.retardRetenuMinutes ? formatMinutes(a.totaux.retardRetenuMinutes) : '' }}</td>
                 <td class="pz-tot pz-tot-last">{{ a.totaux.manquesPointage || '' }}</td>
               </tr>

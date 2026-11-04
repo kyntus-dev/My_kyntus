@@ -71,6 +71,8 @@ public static class DependencyInjection
         services.AddScoped<IIamAdminService, DirectoryIamAdminService>();
         services.AddScoped<IPermissionCatalog, DirectoryIamReadService>();
         services.AddScoped<IRebacClient, DirectoryIamReadService>();
+        services.AddScoped<ISubjectPermissionOverrides, DirectoryIamReadService>();
+        services.AddScoped<IIamUserAccessService, DirectoryIamUserAccessService>();
 
         services.AddScoped<DirectoryEmployeSyncService>();
         services.AddScoped<DirectoryOrgSyncService>();

@@ -236,6 +236,7 @@ public sealed class PointageQueryService(
             .Select(c => new { c.UserId, c.StartDate, c.EndDate })
             .ToListAsync(ct);
 
+        var congesParUser = conges.GroupBy(c => c.UserId).ToDictionary(g => g.Key, g => g.ToList());
         var today = Aujourdhui();
         var derniereSynchro = await DerniereSynchroAsync(ct);
         var result = new List<PointageSuiviDto>(users.Count);
@@ -253,7 +254,7 @@ public sealed class PointageQueryService(
                         O.PauseSelonShift ? O.PauseParDefautMinutes : O.PauseAutoriseeMinutes);
                 else if (!planningParJour.TryGetValue((user.Id, jour), out planning) && regime is not null)
                     planning = RegimeResolver.PlanningDuJour(regime, jour);
-                if (conges.Any(c => c.UserId == user.Id && c.StartDate <= jour && c.EndDate >= jour))
+                if (congesParUser.TryGetValue(user.Id, out var siens) && siens.Any(c => c.StartDate <= jour && c.EndDate >= jour))
                     planning = (planning ?? new PlanningJour(null, 0, false, false, null)) with { Conge = true };
                 pointagesParJour.TryGetValue((user.Id, jour), out var bruts);
                 var r = PointageCalculator.CalculerJour(

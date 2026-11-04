@@ -6,7 +6,8 @@ namespace Kyntus.Iam;
 public sealed class PolicyEvaluator(
     IPermissionCatalog catalog,
     IRebacClient rebac,
-    ILogger<PolicyEvaluator> logger) : IPolicyEvaluator
+    ILogger<PolicyEvaluator> logger,
+    ISubjectPermissionOverrides? overrides = null) : IPolicyEvaluator
 {
     public async Task<PolicyDecision> EvaluateAsync(PolicyRequest request, CancellationToken ct = default)
     {
@@ -16,6 +17,19 @@ public sealed class PolicyEvaluator(
         if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
         {
             return new PolicyDecision(true);
+        }
+
+        // Exceptions du compte (v19) : un retrait l'emporte sur le rôle ; un ajout ouvre l'écran
+        // (et les ressources du compte lui-même), le périmètre des données restant celui du rôle.
+        if (overrides is not null && request.SubjectId != Guid.Empty)
+        {
+            var exception = await overrides.GetOverrideAsync(request.SubjectId, action, ct);
+            if (exception == false)
+                return new PolicyDecision(false, "Retiré pour ce compte");
+            if (exception == true
+                && (string.IsNullOrWhiteSpace(request.ResourceId)
+                    || (Guid.TryParse(request.ResourceId, out var own) && own == request.SubjectId)))
+                return new PolicyDecision(true);
         }
 
         var scopes = new[] { "Global", "Self", "Subtree", "Pole", "Cellule", "Service" };

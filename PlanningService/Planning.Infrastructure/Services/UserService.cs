@@ -66,7 +66,11 @@ public class UserService : IUserService
 
     public async Task<List<UserDto>> GetAllUsersAsync()
     {
+        // Lecture seule : sans suivi EF, et une requête par collection incluse (évite le produit
+        // cartésien Users × services gérés × cellules gérées, très lent quand l'effectif grandit).
         var users = await _context.Users
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(u => u.Role)
             .Include(u => u.SubService)
                 .ThenInclude(ss => ss!.Service)
@@ -105,6 +109,8 @@ public class UserService : IUserService
             return [];
 
         var users = await _context.Users
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(u => u.Role)
             .Include(u => u.SubService)
                 .ThenInclude(ss => ss!.Service)
@@ -172,6 +178,8 @@ public class UserService : IUserService
     public async Task<List<UserDto>> GetUsersBySubServiceAsync(int subServiceId)
     {
         var users = await _context.Users
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(u => u.Role)
             .Include(u => u.SubService)
             .Include(u => u.ManagedSubServices)
@@ -2099,7 +2107,24 @@ public class UserService : IUserService
 
     private static readonly OrgNameContext EmptyOrgNameContext = new(new(), new(), new());
 
+    /// <summary>
+    /// Noms d'activité lus dans Employee Directory, gardés 60 s : la liste des employés (et chaque
+    /// écran qui la charge) n'interroge plus Directory à chaque ouverture.
+    /// </summary>
+    private static (DateTime Le, OrgNameContext Contexte)? _orgNameCache;
+    private static readonly TimeSpan OrgNameCacheDuree = TimeSpan.FromSeconds(60);
+
     private async Task<OrgNameContext> LoadOrgNameContextAsync()
+    {
+        if (_orgNameCache is { } enCache && DateTime.UtcNow - enCache.Le < OrgNameCacheDuree)
+            return enCache.Contexte;
+        var contexte = await LoadOrgNameContextSansCacheAsync();
+        if (!ReferenceEquals(contexte, EmptyOrgNameContext))
+            _orgNameCache = (DateTime.UtcNow, contexte);
+        return contexte;
+    }
+
+    private async Task<OrgNameContext> LoadOrgNameContextSansCacheAsync()
     {
         try
         {

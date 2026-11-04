@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -11,7 +11,8 @@ import { EmployeeFieldService } from '../../services/employee-field.service';
 import type { EmployeeImportFieldConfig } from '../../services/employee-import.service';
 import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
 import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
-import { ArrowLeft, History, KeyRound, Pencil, RotateCcw, UserX } from 'lucide';
+import { ArrowLeft, History, KeyRound, Pencil, RotateCcw, ShieldCheck, UserX } from 'lucide';
+import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import type { Department } from '../../../prime/models';
 import { PrimeOrgApiService, type OrgAssignmentsOverview } from '../../../prime/services/prime-org-api.service';
 import type { SubService } from '../../../sub-services/sub-services-module';
@@ -53,7 +54,9 @@ import { EmployeeDeactivateDialogComponent } from '../../components/employee-dea
   styleUrls: ['./user-detail.component.css']
 })
 export class UserDetailComponent implements OnInit {
-  readonly icons = { back: ArrowLeft, edit: Pencil, deactivate: UserX, reactivate: RotateCcw, history: History, key: KeyRound };
+  readonly icons = { back: ArrowLeft, edit: Pencil, deactivate: UserX, reactivate: RotateCcw, history: History, key: KeyRound, droits: ShieldCheck };
+  /** Droits d'accès du compte (Admin) : rôle + exceptions propres au compte. */
+  readonly peutGererDroits = inject(KyntusSessionService).getRole() === 'Admin';
   readonly orgCellLabel = orgCellLabel;
   readonly orgDepartmentLabel = orgDepartmentLabel;
   readonly contractLevelLabel = contractLevelLabel;
@@ -272,6 +275,10 @@ export class UserDetailComponent implements OnInit {
 
   goBack(): void { this.router.navigate(['/users']); }
   editUser(): void { this.router.navigate(['/users', 'edit', this.user?.id]); }
+
+  gererDroits(): void {
+    if (this.user?.guid) void this.router.navigate(['/admin'], { queryParams: { section: 'comptes', compte: this.user.guid.toLowerCase() } });
+  }
 
   async resetPassword(): Promise<void> {
     if (!this.user || this.resettingPassword) return;

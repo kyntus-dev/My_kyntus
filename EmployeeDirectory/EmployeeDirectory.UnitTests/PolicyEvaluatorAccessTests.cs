@@ -54,6 +54,44 @@ public class PolicyEvaluatorAccessTests
         Assert.False(decision.Allowed);
     }
 
+    [Fact]
+    public async Task Exception_de_compte_retire_ou_accorde_sans_toucher_au_role()
+    {
+        var farah = Guid.NewGuid();
+        var collegue = Guid.NewGuid();
+        var catalog = new FakeCatalog(("Référent technique", "presences.View", "Cellule"));
+        var overrides = new FakeOverrides((farah, "presences.View", false), (farah, "presences.export.View", true));
+        var evaluator = new PolicyEvaluator(catalog, new DenyRebac(), NullLogger<PolicyEvaluator>.Instance, overrides);
+
+        Assert.False((await evaluator.EvaluateAsync(new PolicyRequest(farah, "Référent technique", "presences.View", "platform"))).Allowed);
+        Assert.True((await evaluator.EvaluateAsync(new PolicyRequest(farah, "Référent technique", "presences.export.View", "platform"))).Allowed);
+        // Les autres comptes du même rôle gardent les droits du rôle.
+        Assert.True((await evaluator.EvaluateAsync(new PolicyRequest(collegue, "Référent technique", "presences.View", "platform"))).Allowed);
+        Assert.False((await evaluator.EvaluateAsync(new PolicyRequest(collegue, "Référent technique", "presences.export.View", "platform"))).Allowed);
+        // Un ajout n'ouvre pas les ressources d'autres personnes.
+        Assert.False((await evaluator.EvaluateAsync(new PolicyRequest(farah, "Référent technique", "presences.export.View", "employee", Guid.NewGuid().ToString()))).Allowed);
+        // L'Admin reste privilégié.
+        Assert.True((await evaluator.EvaluateAsync(new PolicyRequest(farah, "Admin", "presences.View", "platform"))).Allowed);
+    }
+
+    [Fact]
+    public void Cles_effectives_corrigees_par_les_exceptions()
+    {
+        var cles = EmployeeDirectory.Infrastructure.Services.DirectoryIamReadService.AppliquerExceptions(
+            ["presences.View:Cellule", "presences.Act:Cellule", "planning.self.View:Self"],
+            [("presences.Act", false), ("presences.export.View", true), ("planning.self.View", true)]);
+        Assert.Equal(new[] { "presences.View:Cellule", "planning.self.View:Self", "presences.export.View:Self" }, cles);
+    }
+
+    private sealed class FakeOverrides(params (Guid Subject, string Action, bool Accorde)[] rows) : ISubjectPermissionOverrides
+    {
+        public Task<bool?> GetOverrideAsync(Guid subjectId, string action, CancellationToken ct = default)
+        {
+            var r = rows.Where(x => x.Subject == subjectId && x.Action == action).Select(x => (bool?)x.Accorde).FirstOrDefault();
+            return Task.FromResult(r);
+        }
+    }
+
     private sealed class FakeCatalog(params (string Role, string Action, string Scope)[] rows) : IPermissionCatalog
     {
         public Task<bool> RoleHasActionAsync(string role, string action, string scope, CancellationToken ct = default)

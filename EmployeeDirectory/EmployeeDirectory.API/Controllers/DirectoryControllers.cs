@@ -649,6 +649,40 @@ public class DirectoryRebacController(IMediator mediator) : ControllerBase
 
 public record CanActOnRequest(Guid ActorId, Guid TargetEmployeeId);
 
+/// <summary>
+/// Droits d'accès par compte (v19) : le compte hérite de son rôle, avec des exceptions
+/// (rubriques accordées ou retirées) propres à ce compte. Lecture Admin / RH, modification Admin.
+/// </summary>
+[ApiController]
+[Route("api/iam/users")]
+[Authorize]
+public class IamUserAccessController(IIamUserAccessService access) : ControllerBase
+{
+    [HttpGet("{subjectId:guid}/access")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<UserAccessDto>> Get(Guid subjectId, [FromQuery] string? role, CancellationToken ct) =>
+        Ok(await access.GetAsync(subjectId, role ?? "Employee", ct));
+
+    [HttpPut("{subjectId:guid}/access")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<UserAccessDto>> Update(Guid subjectId, [FromBody] UserAccessUpdateRequest body, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await access.UpdateAsync(subjectId, body, User.GetEmail() ?? User.Identity?.Name, ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message, message = ex.Message });
+        }
+    }
+
+    [HttpGet("exceptions")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<IReadOnlyList<UserAccessSummaryDto>>> Exceptions(CancellationToken ct) =>
+        Ok(await access.SummaryAsync(ct));
+}
+
 [ApiController]
 [Route("api/iam")]
 [Authorize]
@@ -664,7 +698,8 @@ public class IamController(IMediator mediator) : ControllerBase
         var preview = !string.IsNullOrWhiteSpace(role)
                       && (string.Equals(callerRole, "Admin", StringComparison.OrdinalIgnoreCase)
                           || string.Equals(callerRole, "RH", StringComparison.OrdinalIgnoreCase));
-        return Ok(await mediator.Send(new GetEffectivePermissionsQuery(subjectId, preview ? role!.Trim() : callerRole), ct));
+        // Aperçu d'un rôle (Admin / RH) : droits du rôle seul, sans les exceptions du compte appelant.
+        return Ok(await mediator.Send(new GetEffectivePermissionsQuery(preview ? Guid.Empty : subjectId, preview ? role!.Trim() : callerRole), ct));
     }
 
     [HttpGet("leave-workflow")]

@@ -26,6 +26,12 @@
             <app-lucide-icon [icon]="icons.edit" className="w-4 h-4" />
             Modifier
           </button>
+          @if (peutGererDroits && user.guid) {
+            <button type="button" class="ky-btn-secondary" (click)="gererDroits()" title="Rubriques accessibles à ce compte (rôle + exceptions)">
+              <app-lucide-icon [icon]="icons.droits" className="w-4 h-4" />
+              Droits d’accès
+            </button>
+          }
           <button type="button" class="ky-btn-secondary" (click)="resetPassword()" [disabled]="resettingPassword">
             <app-lucide-icon [icon]="icons.key" className="w-4 h-4" />
             {{ resettingPassword ? 'Réinitialisation…' : 'Réinitialiser le mot de passe' }}

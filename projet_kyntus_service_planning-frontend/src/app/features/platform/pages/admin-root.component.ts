@@ -9,6 +9,7 @@ import { AdminModulesGalleryComponent } from './admin-modules-gallery.component'
 import { AdminOrgSyncComponent } from './admin-org-sync.component';
 import { AdminAnomaliesComponent } from './admin-anomalies.component';
 import { AdminRolesComponent } from '../roles/admin-roles.component';
+import { AdminUserAccessComponent } from '../user-access/admin-user-access.component';
 
 @Component({
   selector: 'app-admin-root',
@@ -22,6 +23,7 @@ import { AdminRolesComponent } from '../roles/admin-roles.component';
     AdminOrgSyncComponent,
     AdminAnomaliesComponent,
     AdminRolesComponent,
+    AdminUserAccessComponent,
   ],
   template: `
     <section class="plat-page">
@@ -45,6 +47,7 @@ import { AdminRolesComponent } from '../roles/admin-roles.component';
       @switch (section()) {
         @case ('overview') { <app-admin-overview /> }
         @case ('access') { <app-admin-access-matrix /> }
+        @case ('comptes') { <app-admin-user-access /> }
         @case ('roles') { <app-admin-roles /> }
         @case ('sync') { <app-admin-org-sync /> }
         @case ('modules') { <app-admin-modules-gallery /> }
@@ -88,6 +91,7 @@ export class AdminRootComponent {
   readonly tabs = [
     { id: 'overview' as const, label: 'Vue d’ensemble', capability: 'admin.overview' },
     { id: 'access' as const, label: 'Accès par rôle', capability: 'admin.access' },
+    { id: 'comptes' as const, label: 'Accès par compte', capability: 'admin.access' },
     { id: 'roles' as const, label: 'Rôles', capability: 'admin.access' },
     { id: 'sync' as const, label: 'Organisation & sync', capability: 'admin.sync' },
     { id: 'anomalies' as const, label: 'Anomalies', capability: 'admin.anomalies' },

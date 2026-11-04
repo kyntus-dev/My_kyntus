@@ -110,6 +110,36 @@ export class PresencesTableauComponent implements OnInit {
 
   readonly agents = computed(() => filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole));
 
+  /** En-têtes calculés une fois par période (et non à chaque rafraîchissement de l'écran). */
+  readonly entetes = computed(() => this.jours().map((j) => ({ jour: j, ...enteteJour(j), today: j === this.aujourdhui })));
+
+  /**
+   * Lignes prêtes à afficher : une case par jour alignée sur les colonnes, infobulle et classes
+   * calculées une seule fois. Évite des milliers de recherches et de textes recalculés à chaque
+   * survol ou clic (157 agents × 31 jours).
+   */
+  readonly lignes = computed(() => {
+    const entetes = this.entetes();
+    return this.agents().map((a) => {
+      const parJour = new Map(a.jours.map((j) => [j.jour.slice(0, 10), j]));
+      return {
+        agent: a,
+        absences: this.absences(a),
+        cases: entetes.map((e) => {
+          const j = parJour.get(e.jour) ?? null;
+          return {
+            jour: e.jour,
+            dim: e.weekend,
+            today: e.today,
+            j,
+            classe: j ? 'pz-f-' + familleCode(j.code) : '',
+            titre: j ? this.infobulle(a, j) : '',
+          };
+        }),
+      };
+    });
+  });
+
   readonly synthese = computed(() => {
     const l = this.agents();
     return {

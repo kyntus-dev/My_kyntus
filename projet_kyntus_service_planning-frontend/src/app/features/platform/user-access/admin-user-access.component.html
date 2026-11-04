@@ -1,0 +1,143 @@
+<div class="ua">
+  <aside class="ua-comptes">
+    <div class="ua-comptes-tete">
+      <input class="ua-input" type="search" placeholder="Rechercher un compte…" [ngModel]="rechercheCompte()" (ngModelChange)="rechercheCompte.set($event)" />
+      <div class="ua-ligne">
+        <select class="ua-input" [ngModel]="filtreRole()" (ngModelChange)="filtreRole.set($event)" aria-label="Rôle">
+          <option value="">Tous les rôles</option>
+          @for (r of roles(); track r) { <option [value]="r">{{ r }}</option> }
+        </select>
+        <button type="button" class="ua-puce" [class.on]="seulementExceptions()" (click)="seulementExceptions.set(!seulementExceptions())"
+                title="Comptes ayant des droits différents de leur rôle">Avec exceptions</button>
+      </div>
+      <small class="ua-muted">{{ comptesFiltres().length }} compte(s)</small>
+    </div>
+    <div class="ua-liste">
+      @if (chargementComptes()) {
+        <div class="ua-squelette"></div><div class="ua-squelette"></div><div class="ua-squelette"></div>
+      } @else {
+        @for (c of comptesFiltres(); track c.guid) {
+          <button type="button" class="ua-compte" [class.on]="selection()?.guid === c.guid" [class.inactif]="!c.actif" (click)="choisir(c)">
+            <span class="ua-avatar">{{ initiales(c.nom) }}</span>
+            <span class="ua-compte-txt">
+              <b>{{ c.nom }}</b>
+              <small>{{ c.role }}{{ c.cellule ? ' · ' + c.cellule : '' }}{{ c.actif ? '' : ' · inactif' }}</small>
+            </span>
+            @if (resume(c); as r) {
+              <span class="ua-badges">
+                @if (r.accordes) { <span class="ua-badge plus">+{{ r.accordes }}</span> }
+                @if (r.retires) { <span class="ua-badge moins">−{{ r.retires }}</span> }
+              </span>
+            }
+          </button>
+        } @empty {
+          <p class="ua-vide">Aucun compte.</p>
+        }
+      }
+    </div>
+  </aside>
+
+  <section class="ua-detail">
+    @if (!selection()) {
+      <div class="ua-accueil">
+        <div class="ua-accueil-icone">⚿</div>
+        <h2>Droits d’accès par compte</h2>
+        <p>Choisissez un compte. Il hérite des droits de son rôle ; vous pouvez ouvrir ou fermer une rubrique pour ce compte seulement, sans toucher aux autres comptes du rôle.</p>
+        <div class="ua-legende">
+          <span class="ua-pill on">Consulter</span> hérité du rôle
+          <span class="ua-pill plus">Modifier</span> accordé au compte
+          <span class="ua-pill moins">Valider</span> retiré au compte
+          <span class="ua-pill">Configurer</span> non accordé
+        </div>
+      </div>
+    } @else if (chargement()) {
+      <div class="ua-carte"><div class="ua-squelette grand"></div></div>
+    } @else if (erreur()) {
+      <div class="ua-alerte">{{ erreur() }}</div>
+    } @else if (acces(); as a) {
+      <header class="ua-carte ua-tete">
+        <span class="ua-avatar grand">{{ initiales(selection()!.nom) }}</span>
+        <div class="ua-tete-txt">
+          <h2>{{ selection()!.nom }}</h2>
+          <p>{{ selection()!.email }}</p>
+          <div class="ua-chips">
+            <span class="ua-chip role">Rôle : {{ a.role }}</span>
+            @if (nbExceptions()) { <span class="ua-chip exc">{{ nbExceptions() }} exception(s)</span> }
+            @else { <span class="ua-chip">Droits du rôle, sans exception</span> }
+            @if (a.modifieLe) { <span class="ua-chip discret">modifié le {{ a.modifieLe.slice(0, 10).split('-').reverse().join('/') }}{{ a.modifiePar ? ' par ' + a.modifiePar : '' }}</span> }
+          </div>
+        </div>
+        <dl class="ua-totaux">
+          @for (v of ordre; track v) {
+            <div><dt>{{ libelles[v] }}</dt><dd>{{ a.admin ? 'tout' : totaux()[v] }}</dd></div>
+          }
+        </dl>
+      </header>
+
+      @if (a.admin) {
+        <div class="ua-info">Rôle Admin : accès complet à toutes les rubriques. Les exceptions ne s’appliquent pas à ce rôle.</div>
+      } @else if (!peutModifier) {
+        <div class="ua-info">Lecture seule : seul l’Admin modifie les droits d’un compte.</div>
+      }
+
+      <div class="ua-outils">
+        <input class="ua-input" type="search" placeholder="Rechercher une rubrique…" [ngModel]="rechercheRubrique()" (ngModelChange)="rechercheRubrique.set($event)" />
+        <div class="ua-seg" role="tablist">
+          <button type="button" [class.on]="filtre() === 'toutes'" (click)="filtre.set('toutes')">Toutes</button>
+          <button type="button" [class.on]="filtre() === 'accessibles'" (click)="filtre.set('accessibles')">Accessibles</button>
+          <button type="button" [class.on]="filtre() === 'exceptions'" (click)="filtre.set('exceptions')">Exceptions</button>
+        </div>
+        @if (peutModifier && !a.admin && nbExceptions()) {
+          <button type="button" class="ua-lien" (click)="retablirTout()">Revenir aux droits du rôle</button>
+        }
+      </div>
+
+      @for (m of modules(); track m.module) {
+        <article class="ua-carte ua-module">
+          <header><h3>{{ m.module }}</h3><span>{{ m.ouverts }} / {{ m.ecrans.length }} accessible(s)</span></header>
+          @for (e of m.ecrans; track e.id) {
+            <div class="ua-rubrique" [class.exc]="aException(e)">
+              <div class="ua-rubrique-nom">
+                <b>{{ e.label }}</b>
+                @if (aException(e) && peutModifier && !a.admin) {
+                  <button type="button" class="ua-lien petit" (click)="retablirRubrique(e)">rétablir le rôle</button>
+                }
+              </div>
+              <div class="ua-pills">
+                @for (v of ordre; track v) {
+                  @if (verbe(e, v)) {
+                    <button type="button" class="ua-pill"
+                            [class.on]="ouvert(e, v) && etat(e, v) === 'herite'"
+                            [class.plus]="!a.admin && etat(e, v) === 'accorde'"
+                            [class.moins]="!a.admin && etat(e, v) === 'retire'"
+                            [class.modifie]="modifie(e, v)"
+                            [disabled]="!peutModifier || a.admin"
+                            [attr.aria-pressed]="ouvert(e, v)"
+                            [title]="titre(e, v)"
+                            (click)="basculer(e, v)">
+                      <i aria-hidden="true">{{ etat(e, v) === 'accorde' ? '+' : etat(e, v) === 'retire' ? '−' : ouvert(e, v) ? '✓' : '' }}</i>{{ libelles[v] }}
+                    </button>
+                  } @else {
+                    <span class="ua-pill absent" aria-hidden="true"></span>
+                  }
+                }
+              </div>
+            </div>
+          }
+        </article>
+      } @empty {
+        <div class="ua-carte ua-vide">Aucune rubrique pour ce filtre.</div>
+      }
+
+      @if (modifs().length) {
+        <div class="ua-barre">
+          <span><b>{{ modifs().length }}</b> modification(s) non enregistrée(s) pour {{ selection()!.nom }}</span>
+          <button type="button" class="ua-btn" (click)="annuler()">Annuler</button>
+          <button type="button" class="ua-btn pri" [disabled]="enregistrement()" (click)="enregistrer()">
+            {{ enregistrement() ? 'Enregistrement…' : 'Enregistrer' }}
+          </button>
+        </div>
+      }
+    }
+  </section>
+</div>

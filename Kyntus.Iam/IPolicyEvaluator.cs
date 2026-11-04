@@ -29,3 +29,12 @@ public interface IPermissionCatalog
     Task<bool> RoleHasActionAsync(string role, string action, string scope, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetEffectivePermissionKeysAsync(string role, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Exceptions de droits par compte (v19), au-dessus des droits du rôle.
+/// null : pas d'exception ; true : action accordée au compte ; false : action retirée au compte.
+/// </summary>
+public interface ISubjectPermissionOverrides
+{
+    Task<bool?> GetOverrideAsync(Guid subjectId, string action, CancellationToken ct = default);
+}
