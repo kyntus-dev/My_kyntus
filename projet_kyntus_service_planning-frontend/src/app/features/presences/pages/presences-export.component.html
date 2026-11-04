@@ -1,0 +1,180 @@
+<div class="ku-page pz">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Présences et paie · {{ grille()?.perimetre ?? 'Votre périmètre' }}</p>
+      <h1 class="ku-hero-title">Export paie</h1>
+      <p class="ku-hero-sub">Vérifiez l’aperçu puis exportez : le fichier reprend les colonnes et les règles du récapitulatif actuel (recap_absences).</p>
+    </div>
+    <div class="ku-hero-actions">
+      <div class="ku-seg" role="tablist">
+        <button type="button" [class.is-active]="mode() === 'paie'" (click)="choisirMode('paie')">Paie (24 → 23)</button>
+        <button type="button" [class.is-active]="mode() === 'mois'" (click)="choisirMode('mois')">Mois civil</button>
+      </div>
+      <button type="button" class="ku-btn" (click)="changerPeriode(-1)" aria-label="Période précédente">‹</button>
+      <button type="button" class="ku-btn pz-periode" (click)="changerPeriode(0)">{{ periode().libelle }}</button>
+      <button type="button" class="ku-btn" (click)="changerPeriode(1)" aria-label="Période suivante">›</button>
+    </div>
+  </header>
+
+  <app-presences-nav />
+
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Agents exportés</span><span class="ku-kpi-value">{{ synthese().agents }}</span>
+      <span class="ku-kpi-sub">du {{ dateFr(periode().du) }} au {{ dateFr(periode().au) }} · {{ jours().length }} jours (lun.–sam.)</span></div>
+    <div class="ku-kpi"><span class="ku-kpi-label">Jours travaillés</span><span class="ku-kpi-value">{{ synthese().jrsTravailles }}</span>
+      <span class="ku-kpi-sub">{{ synthese().absences }} jour(s) d’absence déduits</span></div>
+    <div class="ku-kpi" [class.ku-kpi--danger]="synthese().penalites < 0"><span class="ku-kpi-label">Pénalités de retard</span>
+      <span class="ku-kpi-value">{{ montantFr(synthese().penalites) }}</span><span class="ku-kpi-sub">{{ synthese().agentsPenalises }} agent(s) · −50 par heure, 7 h max</span></div>
+    <div class="ku-kpi"><span class="ku-kpi-label">Total EVP</span><span class="ku-kpi-value">{{ montantFr(synthese().evp) }}</span>
+      <span class="ku-kpi-sub">éléments variables de la période</span></div>
+  </div>
+
+  <section class="ku-card pze-verif" [class.pze-ok]="synthese().alertes === 0">
+    <div class="pze-verif-tete">
+      <div>
+        <h3 class="ku-card-title">Vérifications avant export</h3>
+        <p class="ku-card-sub">
+          @if (synthese().alertes) { {{ synthese().alertes }} ligne(s) à vérifier — l’export reste possible. }
+          @else { Aucun point bloquant sur les lignes affichées. }
+        </p>
+      </div>
+      <div class="pze-export">
+        <small class="ku-muted">{{ nomFichier() }}</small>
+        <button type="button" class="ku-btn ku-btn--primary" (click)="exporter()" [disabled]="!lignes().length || exportEnCours() || loading()">
+          {{ exportEnCours() ? 'Génération…' : 'Exporter ' + lignes().length + ' ligne(s) (Excel)' }}
+        </button>
+      </div>
+    </div>
+    <ul class="pze-checks">
+      @for (v of verifications(); track v.libelle) {
+        <li [class.ko]="v.n > 0">
+          <span class="pze-n">{{ v.n }}</span>
+          <span>{{ v.libelle }}</span>
+          @if (v.n > 0 && v.lien) { <a [routerLink]="v.lien">Corriger</a> }
+        </li>
+      }
+    </ul>
+    @if (evpIndisponible()) {
+      <p class="pz-alerte">Les éléments variables ne sont pas accessibles avec vos droits : colonnes EVP vides.</p>
+    }
+  </section>
+
+  <section class="ku-card">
+    <div class="pz-filtres pz-filtres--grille">
+      <input class="ku-input pz-search" type="search" placeholder="Rechercher un pilote ou une affectation…"
+             [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+      <select class="ku-input" [ngModel]="activite()" (ngModelChange)="choisirActivite($event)" aria-label="Activité">
+        <option value="">Toutes les activités</option>
+        @for (o of options().activites; track o) { <option [value]="o">{{ o }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="pole()" (ngModelChange)="choisirPole($event)" aria-label="Pôle">
+        <option value="">Tous les pôles</option>
+        @for (o of options().poles; track o) { <option [value]="o">{{ o }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="cellule()" (ngModelChange)="cellule.set($event)" aria-label="Cellule">
+        <option value="">Toutes les cellules</option>
+        @for (o of options().cellules; track o) { <option [value]="o">{{ o }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="contrat()" (ngModelChange)="contrat.set($event)" aria-label="Contrat">
+        <option value="">Tous les contrats</option>
+        <option value="Salarié">Salarié</option>
+        <option value="Sous-Traitant">Sous-Traitant</option>
+      </select>
+      <select class="ku-input" [ngModel]="tri()" (ngModelChange)="tri.set($event)" aria-label="Tri">
+        <option value="affectation">Tri : affectation</option>
+        <option value="pilote">Tri : pilote</option>
+        <option value="absences">Tri : absences</option>
+        <option value="retards">Tri : retards</option>
+        <option value="evp">Tri : EVP</option>
+      </select>
+      <label class="ku-check"><input type="checkbox" [ngModel]="alertesSeulement()" (ngModelChange)="alertesSeulement.set($event)" /> À vérifier seulement</label>
+      <label class="ku-check"><input type="checkbox" [ngModel]="voirJours()" (ngModelChange)="voirJours.set($event)" /> Afficher les jours</label>
+      <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="reinitialiser()">Réinitialiser</button>
+      <span class="pz-compte">{{ lignes().length }} / {{ toutes().length }} agents</span>
+    </div>
+
+    @if (loading() && !grille()) {
+      <div class="ku-skeleton"></div>
+    } @else if (error()) {
+      <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
+    } @else if (!lignes().length) {
+      <div class="ku-empty"><strong>Aucune ligne</strong>{{ toutes().length ? 'Modifiez les filtres.' : grille()?.perimetre }}</div>
+    } @else {
+      <div class="pz-wrap" [class.pz-loading]="loading()">
+        <table class="pz-table ky-table pze-table">
+          <thead>
+            <tr class="pze-groupes">
+              <th class="pz-agent" rowspan="2">Pilote<small>Affectation · type</small></th>
+              @if (voirJours()) { <th [attr.colspan]="jours().length">Jours (lundi → samedi)</th> }
+              <th colspan="3">Entrées</th>
+              <th colspan="5" class="pze-g-deduit">Absences déduites</th>
+              <th colspan="4">Non déduites</th>
+              <th colspan="4" class="pze-g-paie">Paie</th>
+              <th colspan="3">EVP et commentaires</th>
+              <th rowspan="2">À vérifier</th>
+            </tr>
+            <tr>
+              @if (voirJours()) {
+                @for (j of jours(); track j) {
+                  <th class="pz-jour"><span>{{ enteteJour(j).court }}</span><b>{{ enteteJour(j).num }}</b></th>
+                }
+              }
+              <th title="Jours de formation (calendaires)">Form.</th>
+              <th>Entrée</th>
+              <th title="Absences partielles">Abs. part.</th>
+              @for (c of codesDeduits; track c) { <th class="pze-g-deduit">{{ c }}</th> }
+              @for (c of codesNonDeduits; track c) { <th>{{ c }}</th> }
+              <th class="pze-g-paie" title="Jours lundi-samedi − formation − absences déduites">Jrs trav.</th>
+              <th class="pze-g-paie">Total abs.</th>
+              <th class="pze-g-paie" title="Retards non autorisés">Retards</th>
+              <th class="pze-g-paie">Pénalité</th>
+              <th>Manq.</th>
+              <th>Total EVP</th>
+              <th>Détail</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of lignes(); track l.userId) {
+              <tr>
+                <th class="pz-agent" scope="row">
+                  <b>{{ l.pilote }}</b>
+                  <small>{{ l.affectation || '—' }} · {{ l.type }}</small>
+                </th>
+                @if (voirJours()) {
+                  @for (c of l.jours; track $index) {
+                    <td><span class="pz-code pze-code" [class]="'pz-code pze-code pz-f-' + familleCode(c || null)">{{ c }}</span></td>
+                  }
+                }
+                <td class="pze-n">{{ l.formation || '' }}</td>
+                <td class="ku-mono">{{ l.dateEntree }}</td>
+                <td class="pze-n">{{ l.absPartielle || '' }}</td>
+                @for (c of codesDeduits; track c) {
+                  <td class="pze-n pze-g-deduit" [class.ku-neg]="l.deduits[c] > 0">{{ l.deduits[c] || '' }}</td>
+                }
+                @for (c of codesNonDeduits; track c) { <td class="pze-n">{{ l.nonDeduits[c] || '' }}</td> }
+                <td class="pze-n pze-g-paie"><b>{{ l.jrsTravailles }}</b></td>
+                <td class="pze-n pze-g-paie" [class.ku-neg]="l.totalAbsences > 0">{{ l.totalAbsences || '' }}</td>
+                <td class="ku-mono pze-g-paie" [class.ku-neg]="l.retardMinutes > 0">{{ l.retardMinutes ? l.cumulRetards : '' }}</td>
+                <td class="pze-n pze-g-paie" [class.ku-neg]="l.penalite < 0">{{ l.penalite || '' }}</td>
+                <td class="pze-n">{{ l.manques || '' }}</td>
+                <td class="pze-n" [class.ku-neg]="l.totalEvp < 0" [class.ku-pos]="l.totalEvp > 0">{{ l.totalEvp ? montantFr(l.totalEvp) : '' }}</td>
+                <td class="pze-detail" [title]="(l.evp ? 'EVP : ' + l.evp : '') + (l.commentaires ? '\n\nCommentaires : ' + l.commentaires : '') + (l.sortie ? '\n\n' + l.sortie : '')">
+                  @if (l.evp) { <span class="pze-tag">EVP</span> }
+                  @if (l.commentaires) { <span class="pze-tag">Com.</span> }
+                  @if (l.sortie) { <span class="pze-tag pze-tag--ko">Sortie</span> }
+                </td>
+                <td class="pze-alertes">
+                  @for (a of l.alertes; track a) { <span class="ku-chip ku-chip--warn">{{ a }}</span> }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="ku-card-sub pz-note">
+        Aperçu condensé : le fichier Excel contient les 3 colonnes d’identité, un jour par colonne (lundi → samedi) et les colonnes de paie,
+        dans l’ordre du récapitulatif actuel, avec les commentaires et le détail des EVP en texte. Survolez « Détail » pour lire ces textes.
+      </p>
+    }
+  </section>
+</div>

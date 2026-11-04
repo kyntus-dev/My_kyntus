@@ -38,6 +38,8 @@ public static class PlatformAccessCatalog
     [
         "Admin", "RH", "Manager", "Superviseur", "Coach", "Référent technique", "RP", "Chef de projet"
     ];
+    /// <summary>Dossier administratif et export paie : RH, Admin et chefs de projet.</summary>
+    private static readonly string[] RhChefProjet = ["Admin", "RH", "RP", "Chef de projet"];
     private static readonly string[] PlanningGenerate =
     [
         "Admin", "RH", "Manager", "Coach", "Référent technique", "RP", "Chef de projet",
@@ -98,6 +100,10 @@ public static class PlatformAccessCatalog
         // Présences (périmètre du responsable ; RH / Admin : toute l'entreprise).
         S("presences", "Tableau des présences", "Présences et paie", View: TeamLead, Act: TeamLead),
         S("presences.retards", "Retards et autorisations", "Présences et paie", View: TeamLead),
+        S("presences.avertissements", "Avertissements", "Présences et paie", View: TeamLead, Act: TeamLead),
+        S("presences.evp", "Éléments variables de paie", "Présences et paie", View: TeamLead, Act: TeamLead),
+        S("presences.dossier", "Dossier administratif", "Présences et paie", View: RhChefProjet, Act: RhChefProjet),
+        S("presences.export", "Export paie", "Présences et paie", View: RhChefProjet),
 
         S("conges.self", "Mes congés", "Congés", View: Self),
         S("conges.validation", "Valider les congés", "Congés", View: ["Admin", "RH", "Manager", "Superviseur"], Validate: ["Admin", "RH", "Manager", "Superviseur"]),

@@ -80,6 +80,7 @@ public static class DependencyInjection
         services.AddScoped<IRegimeHoraireService, RegimeHoraireService>();
         services.AddScoped<Planning.Application.PlanningIt.IPlanningItService, Planning.Infrastructure.Services.PlanningIt.PlanningItService>();
         services.AddScoped<Planning.Application.Presence.IPresenceService, Planning.Infrastructure.Services.Presence.PresenceService>();
+        services.AddScoped<Planning.Application.Presence.IPresenceSuiviService, Planning.Infrastructure.Services.Presence.PresenceSuiviService>();
         if (!isTesting)
             services.AddHostedService<PointageSyncHostedService>();
 

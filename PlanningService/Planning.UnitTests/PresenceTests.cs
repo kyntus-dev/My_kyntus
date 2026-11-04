@@ -93,6 +93,69 @@ public class PresenceTests
         Assert.Equal(2, rh!.Agents.Count);
     }
 
+    [Fact]
+    public async Task Avertissements_et_evp_limites_au_perimetre()
+    {
+        await using var db = await SeedAsync();
+        var presences = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()));
+        var suivi = new PresenceSuiviService(db, presences);
+        var sup = new PresenceViewer(500, null, null, "Superviseur", Global: false);
+
+        var hors = await Assert.ThrowsAsync<PresenceRefusException>(() =>
+            suivi.AjouterAvertissementAsync(sup, new AvertissementRequest(3, Lundi, "Avertissement écrit", "Retards répétés")));
+        Assert.True(hors.HorsPerimetre);
+        await Assert.ThrowsAsync<PresenceRefusException>(() =>
+            suivi.AjouterAvertissementAsync(sup, new AvertissementRequest(2, Lundi, "Inconnu", "x")));
+
+        var av = await suivi.AjouterAvertissementAsync(sup, new AvertissementRequest(2, Lundi, "avertissement écrit", "Retards répétés"));
+        Assert.Equal("Avertissement écrit", av.Type);
+        Assert.Equal("Alpha Agent", av.Agent);
+        Assert.Equal("sup", av.Auteur);
+
+        var evp = await suivi.AjouterEvpAsync(sup, new EvpRequest(2, Lundi, "Retenue", -150.456m, "Matériel"));
+        Assert.Equal(-150.46m, evp.Montant);
+        evp = await suivi.ModifierEvpAsync(sup, evp.Id, new EvpRequest(2, Lundi, "Prime", 300m, "Objectif atteint"));
+        Assert.Equal("Prime", evp.Type);
+
+        // Une ligne hors périmètre (saisie par RH) reste invisible au superviseur.
+        var rh = new PresenceViewer(null, null, null, "RH", Global: true);
+        await suivi.AjouterEvpAsync(rh, new EvpRequest(3, Lundi, "Prime", 100m, "RH"));
+        Assert.Single(await suivi.ListerEvpAsync(sup, Lundi, Lundi));
+        Assert.Equal(2, (await suivi.ListerEvpAsync(rh, Lundi, Lundi)).Count);
+
+        await suivi.SupprimerAvertissementAsync(sup, av.Id);
+        Assert.Empty(db.Avertissements);
+    }
+
+    [Fact]
+    public async Task Dossier_masque_le_rib_et_gere_les_documents()
+    {
+        await using var db = await SeedAsync();
+        db.UserHrProfiles.Single(p => p.UserId == 2).Rib = "011 780 0000123456789012 34";
+        await db.SaveChangesAsync();
+        var presences = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()));
+        var suivi = new PresenceSuiviService(db, presences);
+        var rh = new PresenceViewer(null, null, null, "RH", Global: true);
+
+        var doc = await suivi.AjouterDocumentAsync(rh, 2, "contrat", "../../etc/contrat.pdf", "application/pdf", [1, 2, 3], " signé ");
+        Assert.Equal("Contrat", doc.Categorie);
+        Assert.Equal("contrat.pdf", doc.NomFichier);
+        Assert.Equal("signé", doc.Commentaire);
+        await Assert.ThrowsAsync<PresenceRefusException>(() =>
+            suivi.AjouterDocumentAsync(rh, 2, "Contrat", "vide.pdf", "application/pdf", [], null));
+
+        var dossier = await suivi.GetDossierAsync(rh, 2);
+        Assert.Equal("Sous-traitant", dossier.Fiche.Type);
+        Assert.EndsWith("1234", dossier.Fiche.Rib);
+        Assert.DoesNotContain("0000123456", dossier.Fiche.Rib);
+        Assert.Single(dossier.Documents);
+        Assert.Equal(new byte[] { 1, 2, 3 }, (await suivi.GetDocumentAsync(rh, doc.Id)).Contenu);
+
+        var sup = new PresenceViewer(500, null, null, "Superviseur", Global: false);
+        var refus = await Assert.ThrowsAsync<PresenceRefusException>(() => suivi.GetDossierAsync(sup, 3));
+        Assert.True(refus.HorsPerimetre);
+    }
+
     private static async Task<AppDbContext> SeedAsync()
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);

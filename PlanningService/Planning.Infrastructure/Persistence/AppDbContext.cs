@@ -68,6 +68,9 @@ public class AppDbContext : DbContext
     public DbSet<PlanningItCommentaire> PlanningItCommentaires { get; set; } = null!;
     /// <summary>Tableau des présences : saisies des responsables (motif, retard autorisé, commentaire).</summary>
     public DbSet<PresenceJour> PresenceJours { get; set; } = null!;
+    public DbSet<Avertissement> Avertissements { get; set; } = null!;
+    public DbSet<ElementVariablePaie> ElementsVariablesPaie { get; set; } = null!;
+    public DbSet<DossierDocument> DossierDocuments { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -677,6 +680,39 @@ public class AppDbContext : DbContext
             e.Property(x => x.UpdatedByNom).HasMaxLength(120);
             e.HasIndex(x => new { x.UserId, x.Jour }).IsUnique();
             e.HasIndex(x => x.Jour);
+        });
+
+        modelBuilder.Entity<Avertissement>(e =>
+        {
+            e.ToTable("Avertissements");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Type).HasMaxLength(60).IsRequired();
+            e.Property(x => x.Commentaire).HasMaxLength(1000).IsRequired();
+            e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.HasIndex(x => new { x.UserId, x.Date });
+        });
+
+        modelBuilder.Entity<ElementVariablePaie>(e =>
+        {
+            e.ToTable("ElementsVariablesPaie");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Type).HasMaxLength(60).IsRequired();
+            e.Property(x => x.Montant).HasPrecision(12, 2);
+            e.Property(x => x.Commentaire).HasMaxLength(1000).IsRequired();
+            e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.HasIndex(x => new { x.UserId, x.Date });
+        });
+
+        modelBuilder.Entity<DossierDocument>(e =>
+        {
+            e.ToTable("DossierDocuments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Categorie).HasMaxLength(60).IsRequired();
+            e.Property(x => x.NomFichier).HasMaxLength(255).IsRequired();
+            e.Property(x => x.ContentType).HasMaxLength(120).IsRequired();
+            e.Property(x => x.Commentaire).HasMaxLength(500);
+            e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.HasIndex(x => x.UserId);
         });
 
         modelBuilder.Entity<PlanningItHoraire>(e =>

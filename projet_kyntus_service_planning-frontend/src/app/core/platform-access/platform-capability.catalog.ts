@@ -52,6 +52,7 @@ const TEAM_LEAD = [
   KyntusRoleNames.Rp,
   KyntusRoleNames.ChefDeProjet,
 ] as const;
+const RH_CHEF_PROJET = [...ADMIN_RH, KyntusRoleNames.Rp, KyntusRoleNames.ChefDeProjet] as const;
 const PLANNING_VALIDATION = [
   ...ADMIN_RH,
   KyntusRoleNames.Superviseur,
@@ -129,6 +130,10 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'pointage.acces-sortie', label: 'Accès Heure de sortie (compte par compte)', module: 'Pointage', view: ADMIN, configure: ADMIN },
   { id: 'presences', label: 'Tableau des présences', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
   { id: 'presences.retards', label: 'Retards et autorisations', module: 'Présences et paie', view: TEAM_LEAD, defaultScope: 'Cellule' },
+  { id: 'presences.avertissements', label: 'Avertissements', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
+  { id: 'presences.evp', label: 'Éléments variables de paie', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
+  { id: 'presences.dossier', label: 'Dossier administratif', module: 'Présences et paie', view: RH_CHEF_PROJET, act: RH_CHEF_PROJET },
+  { id: 'presences.export', label: 'Export paie', module: 'Présences et paie', view: RH_CHEF_PROJET },
 
   { id: 'conges.self', label: 'Mes congés', module: 'Congés', view: SELF, defaultScope: 'Self' },
   { id: 'conges.validation', label: 'Valider les congés', module: 'Congés', view: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur], validate: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur] },

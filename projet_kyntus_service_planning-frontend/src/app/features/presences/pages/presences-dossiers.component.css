@@ -1,0 +1,64 @@
+.pzd { display: grid; grid-template-columns: minmax(260px, 320px) 1fr; gap: 16px; align-items: start; }
+.pzd-liste { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 8px; padding: 14px; }
+.pzd-compte { margin: 0; align-self: flex-start; }
+.pzd-scroll { max-height: calc(100vh - 300px); min-height: 240px; overflow: auto; margin: 0 -6px; padding: 0 6px; }
+.pzd-groupe {
+  display: flex; justify-content: space-between; margin: 12px 4px 4px; font-size: 0.68rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+}
+.pzd-groupe:first-child { margin-top: 2px; }
+.pzd-agent {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border: 1px solid transparent;
+  border-radius: var(--radius-md); background: transparent; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer;
+}
+.pzd-agent:hover { background: color-mix(in srgb, var(--ky-blue) 6%, transparent); }
+.pzd-agent.on { border-color: var(--ky-blue); background: color-mix(in srgb, var(--ky-blue) 10%, transparent); }
+.pzd-agent b { display: block; font-size: 0.82rem; }
+.pzd-agent small { display: block; font-size: 0.7rem; color: var(--text-muted); }
+.pzd-avatar {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%;
+  background: color-mix(in srgb, var(--ky-blue) 14%, var(--bg-card)); color: var(--ky-blue); font-size: 0.7rem; font-weight: 700;
+}
+.pzd-avatar--lg { width: 48px; height: 48px; font-size: 1rem; }
+
+.pzd-detail { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.pzd-vide { padding: 48px 16px; }
+.pzd-tete { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.pzd-tete h2 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.pzd-tete p { margin: 2px 0 0; font-size: 0.82rem; }
+.pzd-badges { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+.pzd-fiche { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px 18px; margin: 16px 0 8px; }
+.pzd-fiche dt { font-size: 0.7rem; color: var(--text-muted); }
+.pzd-fiche dd { margin: 2px 0 0; font-weight: 600; font-size: 0.86rem; overflow-wrap: anywhere; }
+.pzd-large { grid-column: span 2; }
+.pzd-filtre { width: auto; min-width: 200px; }
+
+.pzd-envoi { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(160px, 1fr) minmax(180px, 1.4fr) auto; gap: 8px; align-items: stretch; margin: 12px 0; }
+.pzd-drop {
+  position: relative; display: flex; flex-direction: column; justify-content: center; padding: 6px 12px; min-height: 38px;
+  border: 1.5px dashed var(--border-color); border-radius: var(--radius-md); cursor: pointer; overflow: hidden;
+}
+.pzd-drop:hover, .pzd-drop.on { border-color: var(--ky-blue); background: color-mix(in srgb, var(--ky-blue) 5%, transparent); }
+.pzd-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.pzd-drop b { font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pzd-drop small { font-size: 0.68rem; color: var(--text-muted); }
+
+.pzd-docs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pzd-docs li { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-top: 1px solid var(--border-color); }
+.pzd-docs li:hover { background: color-mix(in srgb, var(--ky-blue) 4%, transparent); }
+.pzd-ext {
+  flex: 0 0 auto; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px;
+  background: var(--bg-input, var(--bg-primary)); border: 1px solid var(--border-color); font-size: 0.66rem; font-weight: 800; color: var(--text-muted);
+}
+.pzd-doc { flex: 1; min-width: 0; }
+.pzd-doc b { display: block; font-size: 0.84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pzd-doc small { display: block; font-size: 0.72rem; color: var(--text-muted); }
+.pzd-com { font-style: italic; }
+
+@media (max-width: 960px) {
+  .pzd { grid-template-columns: 1fr; }
+  .pzd-liste { position: static; }
+  .pzd-scroll { max-height: 280px; }
+  .pzd-envoi { grid-template-columns: 1fr; }
+  .pzd-large { grid-column: auto; }
+}

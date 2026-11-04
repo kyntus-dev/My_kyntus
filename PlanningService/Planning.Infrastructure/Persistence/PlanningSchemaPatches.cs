@@ -971,6 +971,47 @@ public static class PlanningSchemaPatches
             );
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_PresenceJours_UserId_Jour" ON "PresenceJours" ("UserId", "Jour");
             CREATE INDEX IF NOT EXISTS "IX_PresenceJours_Jour" ON "PresenceJours" ("Jour");
+            ALTER TABLE "PresenceJours" ADD COLUMN IF NOT EXISTS "AbsencePartielle" boolean NOT NULL DEFAULT false;
+
+            CREATE TABLE IF NOT EXISTS "Avertissements" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Date" date NOT NULL,
+                "Type" character varying(60) NOT NULL,
+                "Commentaire" character varying(1000) NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" character varying(120) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_Avertissements_UserId_Date" ON "Avertissements" ("UserId", "Date");
+
+            CREATE TABLE IF NOT EXISTS "ElementsVariablesPaie" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Date" date NOT NULL,
+                "Type" character varying(60) NOT NULL,
+                "Montant" numeric(12,2) NOT NULL DEFAULT 0,
+                "Commentaire" character varying(1000) NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" character varying(120) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_ElementsVariablesPaie_UserId_Date" ON "ElementsVariablesPaie" ("UserId", "Date");
+
+            CREATE TABLE IF NOT EXISTS "DossierDocuments" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Categorie" character varying(60) NOT NULL,
+                "NomFichier" character varying(255) NOT NULL,
+                "ContentType" character varying(120) NOT NULL,
+                "Taille" bigint NOT NULL,
+                "Contenu" bytea NOT NULL,
+                "Commentaire" character varying(500) NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" character varying(120) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_DossierDocuments_UserId" ON "DossierDocuments" ("UserId");
             """,
             ct);
     }

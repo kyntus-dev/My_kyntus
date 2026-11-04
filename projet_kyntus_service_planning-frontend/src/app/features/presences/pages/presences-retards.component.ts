@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { PresencesNavComponent } from '../components/presences-nav.component';
 import { HttpClient } from '@angular/common/http';
 import { PresenceService } from '../../../core/services/presence.service';
 import type { PresenceGrilleDto } from '../../../core/models/presence.models';
@@ -20,9 +20,9 @@ type Statut = '' | 'Non autorisé' | 'Autorisé';
 @Component({
   selector: 'app-presences-retards',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, PresencesNavComponent],
   templateUrl: './presences-retards.component.html',
-  styleUrls: ['./presences-tableau.component.css'],
+  styleUrls: ['../presences-commun.css', './presences-tableau.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PresencesRetardsComponent implements OnInit {

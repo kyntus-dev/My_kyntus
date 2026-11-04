@@ -75,7 +75,8 @@ public sealed class PresenceService(
 
         for (var jour = request.Jour; jour <= fin; jour = jour.AddDays(1))
         {
-            var vide = code is null && !request.RetardAutorise && !request.RetardPauseAutorise && commentaire is null;
+            var vide = code is null && !request.RetardAutorise && !request.RetardPauseAutorise && commentaire is null
+                       && !request.AbsencePartielle;
             if (!existantes.TryGetValue(jour, out var ligne))
             {
                 if (vide) continue;
@@ -92,6 +93,7 @@ public sealed class PresenceService(
             ligne.RetardPauseAutorise = request.RetardPauseAutorise;
             ligne.MotifAutorisation = request.RetardAutorise || request.RetardPauseAutorise ? motif : null;
             ligne.Commentaire = commentaire;
+            ligne.AbsencePartielle = request.AbsencePartielle;
             ligne.UpdatedAt = DateTime.UtcNow;
             ligne.UpdatedBy = me?.Id;
             ligne.UpdatedByNom = auteur;
@@ -100,6 +102,18 @@ public sealed class PresenceService(
 
         (grilleDu, grilleAu) = Borner(grilleDu, grilleAu);
         return (await ConstruireAsync([request.UserId], grilleDu, grilleAu, ct)).Single();
+    }
+
+    public async Task<PresenceAuteur> ResoudreAsync(PresenceViewer viewer, CancellationToken ct = default)
+    {
+        var me = await FindViewerAsync(viewer, ct);
+        var nom = me is null ? viewer.Email : NomCourt(me);
+        if (viewer.Global)
+            return new PresenceAuteur(me?.Id, nom, null);
+        if (me is null)
+            return new PresenceAuteur(null, nom, new HashSet<int>());
+        var (ids, _) = await AgentsVisiblesAsync(me, false, ct);
+        return new PresenceAuteur(me.Id, nom, ids.ToHashSet());
     }
 
     // ── Construction ────────────────────────────────────────────────────────────
@@ -114,6 +128,8 @@ public sealed class PresenceService(
             .Select(u => new
             {
                 u.Id,
+                u.FirstName,
+                u.LastName,
                 Service = u.SubService != null ? u.SubService.Name : null,
                 Cellule = u.SubService != null ? u.SubService.Service.Name : null,
                 CelluleId = u.SubService != null ? u.SubService.Service.PrimeCelluleId : null,
@@ -168,7 +184,8 @@ public sealed class PresenceService(
                     j.Statut == PointageJourStatuts.PointageManquant,
                     saisie?.Commentaire,
                     saisie?.UpdatedByNom,
-                    saisie?.UpdatedAt);
+                    saisie?.UpdatedAt,
+                    saisie?.AbsencePartielle ?? false);
             }).ToList();
 
             result.Add(new PresenceAgentDto(
@@ -183,7 +200,10 @@ public sealed class PresenceService(
                 profil?.DateEntree,
                 profil?.DateSortie,
                 jours,
-                Totaux(jours)));
+                Totaux(jours),
+                profil is { EnFormation: true } ? profil.DateDebutFormation : null,
+                profil is { EnFormation: true } ? profil.DateFinFormationPrevue : null,
+                org is null ? null : $"{(org.LastName ?? string.Empty).Trim().ToUpperInvariant()} {(org.FirstName ?? string.Empty).Trim()}".Trim()));
         }
         return result
             .OrderBy(a => a.Cellule ?? "", StringComparer.CurrentCultureIgnoreCase)

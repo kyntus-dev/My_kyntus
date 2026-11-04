@@ -106,7 +106,8 @@ public sealed record PresenceJourDto(
     bool ManquePointage,
     string? Commentaire,
     string? ModifiePar,
-    DateTime? ModifieLe);
+    DateTime? ModifieLe,
+    bool AbsencePartielle = false);
 
 public sealed record PresenceTotauxDto(
     int Presents,
@@ -130,7 +131,10 @@ public sealed record PresenceAgentDto(
     DateOnly? DateEntree,
     DateOnly? DateSortie,
     IReadOnlyList<PresenceJourDto> Jours,
-    PresenceTotauxDto Totaux);
+    PresenceTotauxDto Totaux,
+    DateOnly? FormationDu = null,
+    DateOnly? FormationAu = null,
+    string? Pilote = null); // « NOM Prénom » (colonne Pilote de l'export paie)
 
 public sealed record PresenceGrilleDto(
     string Perimetre,
@@ -151,9 +155,16 @@ public sealed record PresenceSaisieRequest(
     bool RetardAutorise,
     bool RetardPauseAutorise,
     string? MotifAutorisation,
-    string? Commentaire);
+    string? Commentaire,
+    bool AbsencePartielle = false);
 
 public sealed record PresenceViewer(int? AuthUserId, Guid? SubjectId, string? Email, string? Role, bool Global);
+
+/// <summary>Demandeur résolu : son compte Planning et les agents qu'il peut traiter (null = tous).</summary>
+public sealed record PresenceAuteur(int? UserId, string? Nom, IReadOnlySet<int>? Agents)
+{
+    public bool PeutTraiter(int userId) => Agents is null || Agents.Contains(userId);
+}
 
 public interface IPresenceService
 {
@@ -162,6 +173,9 @@ public interface IPresenceService
 
     /// <summary>Enregistre une saisie ; renvoie la ligne de l'agent recalculée sur la période affichée.</summary>
     Task<PresenceAgentDto> SaisirAsync(PresenceViewer viewer, PresenceSaisieRequest request, DateOnly grilleDu, DateOnly grilleAu, CancellationToken ct = default);
+
+    /// <summary>Compte du demandeur et agents de son périmètre (null = toute l'entreprise).</summary>
+    Task<PresenceAuteur> ResoudreAsync(PresenceViewer viewer, CancellationToken ct = default);
 }
 
 /// <summary>Refus métier (hors périmètre, code inconnu…) : 403 / 400 avec ce message.</summary>

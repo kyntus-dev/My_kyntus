@@ -1,9 +1,3 @@
-.pz-periode { min-width: 190px; }
-
-.pz-filtres { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
-.pz-filtres .ku-input { width: auto; min-width: 150px; }
-.pz-filtres .pz-search { min-width: 220px; flex: 1 1 220px; max-width: 320px; }
-
 .pz-legende {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
   font-size: 0.74rem; color: var(--text-muted); margin-bottom: 12px;
@@ -11,7 +5,7 @@
 
 /* ── Tableau ─────────────────────────────────────────────────────────── */
 .pz-wrap {
-  overflow: auto; max-height: 72vh;
+  overflow: auto; max-height: max(420px, calc(100vh - 300px));
   border: 1px solid var(--border-color); border-radius: var(--radius-lg);
   transition: opacity var(--duration-fast);
 }
@@ -22,12 +16,21 @@
   position: sticky; top: 0; z-index: 3; background: var(--bg-input, var(--bg-primary));
   font-weight: 600; color: var(--text-muted); padding: 6px 2px;
 }
-.pz-jour { min-width: 38px; }
+.pz-jour { min-width: 40px; }
 .pz-jour span { display: block; font-size: 0.62rem; text-transform: capitalize; font-weight: 500; }
 .pz-jour b { font-size: 0.78rem; color: var(--text-primary); }
 .pz-table tbody td.pz-dim, .pz-table thead th.pz-dim {
   background: color-mix(in srgb, var(--text-muted) 7%, var(--bg-card)) !important;
 }
+/* Jour courant : colonne teintée, en-tête accentué. */
+.pz-table thead th.pz-today { color: var(--ky-blue); box-shadow: inset 0 -2px 0 var(--ky-blue); }
+.pz-table thead th.pz-today b { color: var(--ky-blue); }
+.pz-table tbody td.pz-today { background: color-mix(in srgb, var(--ky-blue) 6%, var(--bg-card)) !important; }
+/* Ligne survolée : repère horizontal sur toute la largeur. */
+.pz-table tbody tr:hover > td, .pz-table tbody tr:hover > th {
+  background: color-mix(in srgb, var(--ky-blue) 5%, var(--bg-card)) !important;
+}
+.pz-table tbody tr:hover > th.pz-agent { box-shadow: inset 3px 0 0 var(--ky-blue); }
 
 .pz-agent {
   position: sticky; left: 0; z-index: 2; text-align: left !important; min-width: 210px; max-width: 240px;
@@ -64,6 +67,9 @@ button.pz-code:disabled { cursor: default; }
 .pz-f-vide { min-width: 34px; }
 .pz-code.pz-retard { box-shadow: inset 0 -3px 0 var(--danger); }
 .pz-code.pz-manuel { border-style: dashed; border-width: 1.5px; }
+.pz-code.pz-partiel {
+  background-image: linear-gradient(135deg, transparent 58%, color-mix(in srgb, var(--warning) 55%, transparent) 58%);
+}
 .pz-code.pz-manque::after {
   content: ''; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 50%; background: var(--warning);
 }
@@ -114,7 +120,6 @@ button.pz-code:disabled { cursor: default; }
 @keyframes pz-fade { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 720px) {
-  .pz-filtres .ku-input, .pz-filtres .pz-search { flex: 1 1 100%; max-width: none; }
   .pz-agent { min-width: 150px; }
   .pz-seg { grid-template-columns: 1fr; }
 }

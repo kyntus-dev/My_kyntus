@@ -9,10 +9,11 @@
       <button type="button" class="ku-btn" (click)="changerPeriode(-1)" aria-label="Période précédente">‹</button>
       <button type="button" class="ku-btn pz-periode" (click)="changerPeriode(0)" [title]="decalage() === 0 ? 'Période en cours' : 'Revenir à la période en cours'">Paie de {{ periode().libelle }}</button>
       <button type="button" class="ku-btn" (click)="changerPeriode(1)" aria-label="Période suivante">›</button>
-      <a class="ku-btn" routerLink="/presences">Tableau des présences</a>
       <button type="button" class="ku-btn ku-btn--primary" (click)="exporter()" [disabled]="!lignes().length">Exporter (Excel)</button>
     </div>
   </header>
+
+  <app-presences-nav />
 
   <div class="ku-kpis">
     <div class="ku-kpi"><span class="ku-kpi-label">Journées de retard</span><span class="ku-kpi-value">{{ synthese().journees }}</span>
@@ -26,7 +27,7 @@
   </div>
 
   <section class="ku-card">
-    <div class="pz-filtres">
+    <div class="pz-filtres pz-filtres--grille">
       <input class="ku-input pz-search" type="search" placeholder="Rechercher un agent…" [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
       <select class="ku-input" [ngModel]="activite()" (ngModelChange)="choisirActivite($event)" aria-label="Activité">
         <option value="">Toutes les activités</option>
@@ -45,6 +46,7 @@
         <option value="Non autorisé">Non autorisés</option>
         <option value="Autorisé">Autorisés</option>
       </select>
+      <span class="pz-compte">{{ lignes().length }} journée(s)</span>
     </div>
 
     @if (loading() && !data()) {

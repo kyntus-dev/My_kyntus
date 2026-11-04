@@ -413,6 +413,38 @@ export const routes: Routes = [
               import('./features/presences/pages/presences-retards.component')
                 .then(m => m.PresencesRetardsComponent),
           },
+          {
+            path: 'avertissements',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.congesEquipe, capability: 'presences.avertissements' },
+            loadComponent: () =>
+              import('./features/presences/pages/presences-avertissements.component')
+                .then(m => m.PresencesAvertissementsComponent),
+          },
+          {
+            path: 'evp',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.congesEquipe, capability: 'presences.evp' },
+            loadComponent: () =>
+              import('./features/presences/pages/presences-evp.component')
+                .then(m => m.PresencesEvpComponent),
+          },
+          {
+            path: 'dossiers',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.congesEquipe, capability: 'presences.dossier' },
+            loadComponent: () =>
+              import('./features/presences/pages/presences-dossiers.component')
+                .then(m => m.PresencesDossiersComponent),
+          },
+          {
+            path: 'export',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.congesEquipe, capability: 'presences.export' },
+            loadComponent: () =>
+              import('./features/presences/pages/presences-export.component')
+                .then(m => m.PresencesExportComponent),
+          },
         ],
       },
       {

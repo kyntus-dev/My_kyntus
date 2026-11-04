@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { PresenceService } from '../../../core/services/presence.service';
 import type {
@@ -10,6 +9,7 @@ import type {
   PresenceGrilleDto,
   PresenceJourDto,
 } from '../../../core/models/presence.models';
+import { PresencesNavComponent } from '../components/presences-nav.component';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import {
   FILTRES_VIDES,
@@ -20,6 +20,7 @@ import {
   formatMinutes,
   joursDeLaPeriode,
   periodePaie,
+  ymd,
 } from '../lib/presence.util';
 
 interface Activite { id: string; name: string; kind: string; isActive: boolean; poleIds: string[] }
@@ -36,6 +37,7 @@ interface Edition {
   retardPauseAutorise: boolean;
   motifAutorisation: string;
   commentaire: string;
+  absencePartielle: boolean;
 }
 
 /**
@@ -46,9 +48,9 @@ interface Edition {
 @Component({
   selector: 'app-presences-tableau',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, PresencesNavComponent],
   templateUrl: './presences-tableau.component.html',
-  styleUrls: ['./presences-tableau.component.css'],
+  styleUrls: ['../presences-commun.css', './presences-tableau.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PresencesTableauComponent implements OnInit {
@@ -59,6 +61,7 @@ export class PresencesTableauComponent implements OnInit {
   readonly enteteJour = enteteJour;
   readonly familleCode = familleCode;
   readonly formatMinutes = formatMinutes;
+  readonly aujourdhui = ymd(new Date());
 
   readonly decalage = signal(0);
   readonly periode = computed(() => periodePaie(new Date(), this.decalage()));
@@ -197,6 +200,7 @@ export class PresencesTableauComponent implements OnInit {
       retardPauseAutorise: j.retardPauseAutorise,
       motifAutorisation: j.motifAutorisation ?? '',
       commentaire: j.commentaire ?? '',
+      absencePartielle: !!j.absencePartielle,
     });
     const d = this.panneau?.nativeElement;
     if (d && !d.open) d.showModal();
@@ -234,6 +238,7 @@ export class PresencesTableauComponent implements OnInit {
         retardPauseAutorise: e.retardPauseAutorise,
         motifAutorisation: e.motifAutorisation.trim() || null,
         commentaire: e.commentaire.trim() || null,
+        absencePartielle: e.absencePartielle,
       },
       d.du.slice(0, 10),
       d.au.slice(0, 10),
