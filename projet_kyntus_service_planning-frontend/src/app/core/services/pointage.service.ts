@@ -38,6 +38,11 @@ export class PointageService {
     return this.http.get<PointageAujourdhuiDto>(`${this.base}/aujourdhui`);
   }
 
+  /** Mémorise la production choisie dans « Heure de sortie » (null : selon le planning). */
+  enregistrerChoixProduction(choix: '0840' | '0740' | null): Observable<{ choix: string | null }> {
+    return this.http.put<{ choix: string | null }>(`${this.base}/heure-sortie/choix`, { choix });
+  }
+
   correspondances(statut?: string): Observable<PointageCorrespondanceDto[]> {
     return this.http.get<PointageCorrespondanceDto[]>(`${this.base}/correspondances`, {
       params: statut ? { statut } : {},

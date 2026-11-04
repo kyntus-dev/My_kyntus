@@ -10,6 +10,7 @@ import {
   periode,
   statutClass,
   estAnomalie,
+  soldesCumules,
   formatEcart,
   joursEntre,
   lignesExportJours,
@@ -105,7 +106,8 @@ describe('Pointage', () => {
     expect(joursEntre('2026-10-30', '2026-11-02')).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
     const ok = { ...suivi.jours[1], productionMinutes: 520, productionPrevueMinutes: 520, ecartProductionMinutes: 0 };
     expect(estAnomalie(ok)).toBe(false);
-    expect(estAnomalie({ ...ok, ecartProductionMinutes: -10 })).toBe(true);
+    // Heures manquantes un jour : compensées sur la période de paie, plus une anomalie du jour.
+    expect(estAnomalie({ ...ok, ecartProductionMinutes: -10 })).toBe(false);
     expect(estAnomalie(suivi.jours[0])).toBe(true);
     expect(pausesNonPointees({ ...ok, pointages: ['08:00:00', '17:00:00'] })).toBe(true);
     expect(pausesNonPointees({ ...ok, pointages: ['08:00:00', '12:00:00', '13:00:00', '17:00:00'] })).toBe(false);
@@ -131,5 +133,29 @@ describe('Pointage', () => {
     expect(libellePointage(2, 3)).toBe('Pointage');
     expect(filtrerJours(suivi.jours, 'retards').map((j) => j.jour)).toEqual(['2026-10-05']);
     expect(filtrerJours(suivi.jours, 'tous')).toHaveLength(2);
+  });
+});
+
+describe('compensation sur la période de paie', () => {
+  it('cumule les écarts depuis le 24 et repart de zéro au 24 suivant', () => {
+    const c = soldesCumules([
+      { jour: '2026-11-03', ecartProductionMinutes: 5 },
+      { jour: '2026-10-22', ecartProductionMinutes: -20 },
+      { jour: '2026-10-24', ecartProductionMinutes: -1 },
+      { jour: '2026-10-26', ecartProductionMinutes: 1 },
+      { jour: '2026-10-27', ecartProductionMinutes: null },
+    ]);
+    expect(c.get('2026-10-22')).toBe(-20);
+    expect(c.get('2026-10-24')).toBe(-1);
+    expect(c.get('2026-10-26')).toBe(0);
+    expect(c.get('2026-10-27')).toBe(0);
+    expect(c.get('2026-11-03')).toBe(5);
+  });
+
+  it('période de paie en cours et précédente', () => {
+    const now = new Date(2026, 10, 4);
+    expect(periode('paie', now)).toEqual({ du: '2026-10-24', au: '2026-11-04' });
+    expect(periode('paie-precedente', now)).toEqual({ du: '2026-09-24', au: '2026-10-23' });
+    expect(periode('paie', new Date(2026, 10, 25))).toEqual({ du: '2026-11-24', au: '2026-11-25' });
   });
 });

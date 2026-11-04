@@ -26,9 +26,9 @@ export class PointageEquipeComponent implements OnInit {
 
   readonly formatDuree = formatDuree;
   readonly formatEcart = formatEcart;
-  readonly preset = signal<PeriodePreset | 'perso'>('mois');
-  readonly du = signal(periode('mois').du);
-  readonly au = signal(periode('mois').au);
+  readonly preset = signal<PeriodePreset | 'perso'>('paie');
+  readonly du = signal(periode('paie').du);
+  readonly au = signal(periode('paie').au);
   readonly data = signal<PointageEquipeDto | null>(null);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);

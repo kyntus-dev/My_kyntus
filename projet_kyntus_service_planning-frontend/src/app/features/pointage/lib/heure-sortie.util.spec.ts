@@ -144,3 +144,19 @@ describe('heure-sortie.util — heures supplémentaires', () => {
     expect(formatHms(r.productionRealiseeSecondes - r.productionSecondes)).toBe('00:13:39');
   });
 });
+
+describe('choix de production mémorisé (v18)', () => {
+  it('08h40 (07h40 vendredi et samedi) ou 07h40 tous les jours', async () => {
+    const { productionDuChoix, debutPeriodePaie, soldeHeures } = await import('./heure-sortie.util');
+    expect(productionDuChoix('0840', new Date(2026, 10, 2))).toBe(520);
+    expect(productionDuChoix('0840', new Date(2026, 10, 6))).toBe(460);
+    expect(productionDuChoix('0740', new Date(2026, 10, 2))).toBe(460);
+    expect(productionDuChoix(null, new Date(2026, 10, 2))).toBeNull();
+    expect(debutPeriodePaie(new Date(2026, 10, 4))).toEqual(new Date(2026, 9, 24));
+    expect(debutPeriodePaie(new Date(2026, 10, 24))).toEqual(new Date(2026, 10, 24));
+    // Avec le choix 07h40, un lundi à 08h00 de production donne +20 au solde (au lieu de −40).
+    const jours = [{ jour: '2026-11-02', productionMinutes: 480, productionPrevueMinutes: 520 }];
+    expect(soldeHeures(jours, '2026-11-04').soldeMinutes).toBe(-40);
+    expect(soldeHeures(jours, '2026-11-04', (d) => productionDuChoix('0740', d)).soldeMinutes).toBe(20);
+  });
+});

@@ -16,6 +16,7 @@ import {
   formatDuree,
   estAnomalie,
   filtrerJours,
+  soldesCumules,
   formatEcart,
   libellePointage,
   lignesExportJours,
@@ -63,9 +64,9 @@ export class PointageSuiviComponent implements OnInit {
   readonly pausesNonPointees = pausesNonPointees;
 
   readonly userId = signal<number | null>(null);
-  readonly preset = signal<PeriodePreset | 'perso'>('mois');
-  readonly du = signal(periode('mois').du);
-  readonly au = signal(periode('mois').au);
+  readonly preset = signal<PeriodePreset | 'perso'>('paie');
+  readonly du = signal(periode('paie').du);
+  readonly au = signal(periode('paie').au);
   readonly data = signal<PointageSuiviDto | null>(null);
   readonly solde = signal<SoldeCongeDto | null>(null);
   readonly loading = signal(false);
@@ -77,6 +78,8 @@ export class PointageSuiviComponent implements OnInit {
   readonly barreMax = computed(() => Math.max(1, ...this.barres().map((b) => b.minutes)));
   private readonly joursPasses = computed(() => (this.data()?.jours ?? []).filter((j) => j.statut !== 'AVenir'));
   readonly jours = computed(() => filtrerJours(this.joursPasses(), this.filtre()));
+  /** Compensation : solde cumulé depuis le 24, calculé sur toutes les journées (pas seulement celles filtrées). */
+  readonly cumuls = computed(() => soldesCumules(this.joursPasses()));
   readonly compte = computed(() => {
     const j = this.joursPasses();
     return {

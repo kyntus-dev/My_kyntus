@@ -15,8 +15,9 @@
   <section class="ku-card pt-periode">
     <div class="ku-seg" role="group" aria-label="Période">
       <button type="button" [class.is-active]="preset() === 'semaine'" (click)="choisirPreset('semaine')">Cette semaine</button>
-      <button type="button" [class.is-active]="preset() === 'mois'" (click)="choisirPreset('mois')">Mois en cours</button>
-      <button type="button" [class.is-active]="preset() === 'mois-precedent'" (click)="choisirPreset('mois-precedent')">Mois précédent</button>
+      <button type="button" [class.is-active]="preset() === 'paie'" (click)="choisirPreset('paie')" title="Du 24 au 23 : période de compensation des heures">Période de paie</button>
+      <button type="button" [class.is-active]="preset() === 'paie-precedente'" (click)="choisirPreset('paie-precedente')">Période précédente</button>
+      <button type="button" [class.is-active]="preset() === 'mois'" (click)="choisirPreset('mois')">Mois civil</button>
     </div>
     <div class="ku-toolbar">
       <label class="ku-field"><span>Du</span><input class="ku-input" type="date" [ngModel]="du()" (ngModelChange)="du.set($event)" /></label>

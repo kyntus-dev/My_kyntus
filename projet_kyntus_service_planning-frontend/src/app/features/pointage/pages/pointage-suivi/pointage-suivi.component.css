@@ -122,7 +122,7 @@
 .pt-prod { font-variant-numeric: tabular-nums; }
 .pt-mini { display: block; width: 64px; height: 4px; margin: 4px 0 0 auto; border-radius: 2px; background: var(--bg-input, #eef2f7); overflow: hidden; }
 .pt-mini > span { display: block; height: 100%; background: var(--warning); }
-.pt-mini > span.is-ok { background: var(--success); }
+
 
 .pt-detail td { padding: 0 14px 16px 18px; background: color-mix(in srgb, var(--ky-blue) 4%, transparent); cursor: default; }
 .pt-detail-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--bg-card); border: 1px solid var(--border-color); }
@@ -146,3 +146,8 @@
   .pt-col-frise { min-width: 180px; }
 }
 .pt-ecart { display: block; margin-top: 3px; font-weight: 700; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+
+/* Compensation (v18) : écart du jour neutre, solde cumulé coloré. */
+.pt-mini > span { background: color-mix(in srgb, var(--ky-blue) 55%, transparent); }
+.pt-ecart { color: var(--text-muted); font-weight: 600; }
+.pt-cumul { display: block; margin-top: 2px; font-weight: 700; font-size: 0.7rem; }

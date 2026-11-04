@@ -917,6 +917,8 @@ public static class PlanningSchemaPatches
                 "GrantedAt" timestamp with time zone NOT NULL DEFAULT now(),
                 "GrantedBy" integer NULL
             );
+            ALTER TABLE "HeureSortieAcces" ADD COLUMN IF NOT EXISTS "ChoixProduction" varchar(16) NULL;
+            ALTER TABLE "HeureSortieAcces" ADD COLUMN IF NOT EXISTS "ChoixModifieLe" timestamp with time zone NULL;
             """,
             ct);
     }

@@ -50,7 +50,30 @@ public sealed record PointageAujourdhuiDto(
     bool JourTravaille,
     IReadOnlyList<string> Pointages,
     string Statut,
-    DateTime? DerniereSynchro);
+    DateTime? DerniereSynchro,
+    // Production mémorisée par le collaborateur : « 0840 », « 0740 » ou null (v18).
+    string? ChoixProduction = null);
+
+/// <summary>Choix de production proposés dans « Heure de sortie » (v18).</summary>
+public static class ChoixProductionSortie
+{
+    /// <summary>08h40, 07h40 le vendredi et le samedi (règle B3 de l'Excel).</summary>
+    public const string Standard = "0840";
+    /// <summary>07h40 tous les jours.</summary>
+    public const string Court = "0740";
+
+    public static bool EstValide(string? choix) => choix is null or Standard or Court;
+
+    /// <summary>Production du jour pour un choix ; null = pas de choix (planning ou régime).</summary>
+    public static int? ProductionMinutes(string? choix, DateOnly jour) => choix switch
+    {
+        Standard => RegimeResolver.ProductionExcelMinutes(jour),
+        Court => 7 * 60 + 40,
+        _ => null,
+    };
+}
+
+public sealed record ChoixProductionRequest(string? Choix);
 
 /// <summary>Résolution des régimes : la cible la plus précise l'emporte.</summary>
 public static class RegimeResolver

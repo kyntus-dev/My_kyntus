@@ -22,8 +22,9 @@
   <section class="ku-card pt-periode">
     <div class="ku-seg" role="group" aria-label="Période">
       <button type="button" [class.is-active]="preset() === 'semaine'" (click)="choisirPreset('semaine')">Cette semaine</button>
-      <button type="button" [class.is-active]="preset() === 'mois'" (click)="choisirPreset('mois')">Mois en cours</button>
-      <button type="button" [class.is-active]="preset() === 'mois-precedent'" (click)="choisirPreset('mois-precedent')">Mois précédent</button>
+      <button type="button" [class.is-active]="preset() === 'paie'" (click)="choisirPreset('paie')" title="Du 24 au 23 : période de compensation des heures">Période de paie</button>
+      <button type="button" [class.is-active]="preset() === 'paie-precedente'" (click)="choisirPreset('paie-precedente')">Période précédente</button>
+      <button type="button" [class.is-active]="preset() === 'mois'" (click)="choisirPreset('mois')">Mois civil</button>
     </div>
     <div class="ku-toolbar">
       <label class="ku-field"><span>Du</span><input class="ku-input" type="date" [ngModel]="du()" (ngModelChange)="du.set($event)" /></label>
@@ -48,10 +49,10 @@
 
     <div class="ku-kpis">
       <section class="ku-kpi" [class.ku-kpi--ok]="production().ecart >= 0" [class.ku-kpi--warn]="production().ecart < 0">
-        <span class="ku-kpi-label">Production</span>
+        <span class="ku-kpi-label">Production · solde compensé</span>
         <span class="ku-kpi-value">{{ formatDuree(production().realisee) }}</span>
         <span class="ku-kpi-sub">
-          @if (production().prevue) { sur {{ formatDuree(production().prevue) }} prévues · écart {{ formatEcart(production().ecart) }} }
+          @if (production().prevue) { sur {{ formatDuree(production().prevue) }} prévues · solde {{ formatEcart(production().ecart) }} sur la période }
           @else { {{ production().jours }} journée(s) calculée(s) }
         </span>
         @if (production().prevue) {
@@ -133,7 +134,7 @@
               <th class="pt-col-frise">Journée</th>
               <th class="is-num">Pause</th>
               <th class="is-num">Retard</th>
-              <th class="is-num">Production · écart</th>
+              <th class="is-num" title="Écart du jour et solde cumulé depuis le 24 : une journée courte est compensée par les autres journées de la période de paie">Production · solde</th>
             </tr>
           </thead>
           <tbody>
@@ -184,11 +185,17 @@
                   @if (j.productionMinutes != null) {
                     <b class="pt-prod">{{ formatDuree(j.productionMinutes) }}</b>
                     @if (j.productionPrevueMinutes) {
-                      <span class="pt-mini"><span [style.width.%]="pct(j.productionMinutes, j.productionPrevueMinutes)"
-                        [class.is-ok]="j.productionMinutes >= j.productionPrevueMinutes"></span></span>
+                      <span class="pt-mini"><span [style.width.%]="pct(j.productionMinutes, j.productionPrevueMinutes)"></span></span>
                     }
                     @if (j.ecartProductionMinutes != null) {
-                      <small class="pt-ecart" [class.ku-pos]="j.ecartProductionMinutes >= 0" [class.ku-neg]="j.ecartProductionMinutes < 0">{{ formatEcart(j.ecartProductionMinutes) }}</small>
+                      <!-- Écart du jour neutre : les heures se compensent sur la période de paie. -->
+                      <small class="pt-ecart">{{ formatEcart(j.ecartProductionMinutes) }}
+                        @if (cumuls().get(j.jour.slice(0, 10)); as c) {
+                          <span class="pt-cumul" [class.ku-pos]="c >= 0" [class.ku-neg]="c < 0" title="Solde cumulé depuis le 24 (compensation)">cumul {{ formatEcart(c) }}</span>
+                        } @else if (cumuls().has(j.jour.slice(0, 10))) {
+                          <span class="pt-cumul" title="Solde cumulé depuis le 24 (compensation)">cumul 00:00</span>
+                        }
+                      </small>
                     }
                   } @else { <span class="ku-muted">—</span> }
                 </td>

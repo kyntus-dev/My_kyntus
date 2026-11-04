@@ -1,3 +1,4 @@
+import { PlanningExportButtonComponent } from '../../../../shared/planning-export/planning-export-button.component';
 import { Component, OnInit, ViewEncapsulation, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -21,7 +22,7 @@ interface AgentOption {
 @Component({
   selector: 'app-planning-equipe',
   standalone: true,
-  imports: [CommonModule, FormsModule, KyntusPageHeaderComponent],
+  imports: [CommonModule, FormsModule, KyntusPageHeaderComponent, PlanningExportButtonComponent],
   templateUrl: './planning-equipe.component.html',
   styleUrls: ['./planning-equipe.component.css'],
   encapsulation: ViewEncapsulation.None,

@@ -156,6 +156,35 @@ public class PresenceTests
         Assert.True(refus.HorsPerimetre);
     }
 
+    [Fact]
+    public async Task Export_planning_rh_limite_au_perimetre_avec_horaires()
+    {
+        await using var db = await SeedAsync();
+        db.WeeklyPlannings.AddRange(
+            new WeeklyPlanning { Id = 1, SubServiceId = 10, WeekCode = "2026-W45", WeekStartDate = Lundi, Status = PlanningStatus.Published },
+            new WeeklyPlanning { Id = 2, SubServiceId = 20, WeekCode = "2026-W45", WeekStartDate = Lundi, Status = PlanningStatus.Published });
+        db.SubServiceShiftConfigs.Add(new SubServiceShiftConfig
+        {
+            Id = 1, SubServiceId = 10, Label = "Matin", StartTime = new TimeOnly(8, 0), WorkHours = 8, BreakDurationMinutes = 60,
+        });
+        db.ShiftAssignments.AddRange(
+            new ShiftAssignment { Id = 1, WeeklyPlanningId = 1, UserId = 2, AssignedDate = Lundi, SubServiceShiftConfigId = 1 },
+            new ShiftAssignment { Id = 2, WeeklyPlanningId = 1, UserId = 2, AssignedDate = Lundi.AddDays(1), IsOnLeave = true },
+            new ShiftAssignment { Id = 3, WeeklyPlanningId = 2, UserId = 3, AssignedDate = Lundi, SubServiceShiftConfigId = 1 });
+        await db.SaveChangesAsync();
+        var presences = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()));
+        var export = new Planning.Infrastructure.Services.PlanningExport.PlanningExportService(db, presences);
+
+        var sup = await export.GetPlanningRhAsync(new PresenceViewer(500, null, null, "Superviseur", false), Lundi, Lundi.AddDays(1));
+        var agent = Assert.Single(sup.Agents);
+        Assert.Equal("ALPHA Agent", agent.Nom);
+        Assert.Equal(("08:00", "17:00", 480, "Matin"), (agent.Jours[0].Debut, agent.Jours[0].Fin, agent.Jours[0].Minutes, agent.Jours[0].Libelle));
+        Assert.True(agent.Jours[1].Conge);
+
+        var rh = await export.GetPlanningRhAsync(new PresenceViewer(null, null, null, "RH", true), Lundi, Lundi);
+        Assert.Equal(2, rh.Agents.Count);
+    }
+
     private static async Task<AppDbContext> SeedAsync()
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
@@ -207,5 +236,6 @@ public class PresenceTests
         public Task<PointageCorrespondanceDto?> UpdateCorrespondanceAsync(string empCode, PointageCorrespondanceUpdateRequest request, PointageViewer viewer, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> ValiderCorrespondancesAutoAsync(PointageViewer viewer, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<PointageEtatDto> GetEtatAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default) => throw new NotSupportedException();
     }
 }

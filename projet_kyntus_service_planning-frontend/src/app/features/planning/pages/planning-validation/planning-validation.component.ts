@@ -1,3 +1,4 @@
+import { PlanningExportButtonComponent } from '../../../../shared/planning-export/planning-export-button.component';
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -44,7 +45,7 @@ type ValidationDot = 'ok' | 'partial' | 'missing' | 'none';
 @Component({
   selector: 'app-planning-validation',
   standalone: true,
-  imports: [CommonModule, FormsModule, LucideIconComponent, KyntusPageHeaderComponent, RouterLink],
+  imports: [CommonModule, FormsModule, LucideIconComponent, KyntusPageHeaderComponent, RouterLink, PlanningExportButtonComponent],
   templateUrl: './planning-validation.component.html',
   styleUrls: ['./planning-validation.component.css'],
 })

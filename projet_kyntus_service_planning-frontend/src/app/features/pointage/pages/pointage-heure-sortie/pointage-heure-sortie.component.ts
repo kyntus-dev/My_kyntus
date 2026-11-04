@@ -4,14 +4,18 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { PointageService } from '../../../../core/services/pointage.service';
 import type { PointageAujourdhuiDto } from '../../../../core/models/pointage.models';
+import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
 import {
+  CHOIX_PRODUCTION,
+  type ChoixProduction,
   PAUSE_FORFAIT_EXCEL,
-  PRODUCTIONS_PROPOSEES,
   calculerDepuisPointages,
   calculerHeureSortie,
   formatHeure,
   formatHeuresMinutes,
   formatHms,
+  debutPeriodePaie,
+  productionDuChoix,
   productionExcel,
   soldeHeures,
   type SoldeHeures,
@@ -33,6 +37,8 @@ import {
 export class PointageHeureSortieComponent implements OnInit {
   private readonly svc = inject(PointageService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(KyntusToastService);
+  readonly choixProposes = CHOIX_PRODUCTION;
 
   readonly formatHms = formatHms;
   readonly formatHeure = formatHeure;
@@ -51,14 +57,14 @@ export class PointageHeureSortieComponent implements OnInit {
 
   /** Calcul d'après les pointages du jour (par défaut) ou saisie manuelle comme l'Excel. */
   readonly mode = signal<'pointages' | 'manuel'>('pointages');
-  /** Production choisie dans la liste (null : celle du régime, sinon de l'Excel). */
-  readonly productionChoisie = signal<number | null>(null);
+  /** Production mémorisée sur le compte (null : celle du planning ou du régime, sinon de l'Excel). */
+  readonly choix = signal<ChoixProduction | null>(null);
+  readonly enregistrementChoix = signal(false);
 
+  /** Production du planning ou du régime (sans choix mémorisé). */
+  readonly productionPlanning = computed(() => this.jour()?.productionPrevueMinutes ?? productionExcel(this.now()));
   /** B3 : production du jour. */
-  readonly productionDefaut = computed(() => this.jour()?.productionPrevueMinutes ?? productionExcel(this.now()));
-  readonly productionMinutes = computed(() => this.productionChoisie() ?? this.productionDefaut());
-  readonly productionsProposees = computed(() =>
-    [...new Set([...PRODUCTIONS_PROPOSEES, this.productionDefaut()])].sort((a, b) => b - a));
+  readonly productionMinutes = computed(() => productionDuChoix(this.choix(), this.now()) ?? this.productionPlanning());
   /** I4 : pauses forfaitaires. */
   readonly pauseForfaitMinutes = computed(() => this.jour()?.pauseAutoriseeMinutes ?? PAUSE_FORFAIT_EXCEL);
   readonly premierPointage = computed(() => this.jour()?.pointages?.[0] ?? null);
@@ -121,15 +127,17 @@ export class PointageHeureSortieComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     const now = new Date();
-    const du = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('sv-SE');
+    // Compensation sur la période de paie (24 → 23) : solde depuis le 24.
+    const du = debutPeriodePaie(now).toLocaleDateString('sv-SE');
     const au = now.toLocaleDateString('sv-SE');
-    this.svc.monSuivi(du, au).subscribe({
-      next: (s) => this.solde.set(soldeHeures(s.jours, au)),
-      error: () => this.solde.set(null),
-    });
     this.svc.aujourdhui().subscribe({
       next: (j) => {
         this.jour.set(j);
+        this.choix.set(j.choixProduction ?? null);
+        this.svc.monSuivi(du, au).subscribe({
+          next: (s) => this.solde.set(soldeHeures(s.jours, au, (d) => productionDuChoix(this.choix(), d))),
+          error: () => this.solde.set(null),
+        });
         if (!this.entree() && j.pointages.length) this.entree.set(j.pointages[0]);
         if (!j.pointages.length) this.mode.set('manuel');
         this.loading.set(false);
@@ -145,9 +153,24 @@ export class PointageHeureSortieComponent implements OnInit {
     return Math.abs(v);
   }
 
-  choisirProduction(value: string | number): void {
-    const v = Number(value);
-    this.productionChoisie.set(v === this.productionDefaut() ? null : v);
+  /** Choix mémorisé sur le compte : conservé aux prochaines connexions. */
+  choisirProduction(valeur: ChoixProduction | null): void {
+    if (this.enregistrementChoix() || valeur === this.choix()) return;
+    const avant = this.choix();
+    this.choix.set(valeur);
+    this.enregistrementChoix.set(true);
+    this.svc.enregistrerChoixProduction(valeur).subscribe({
+      next: () => {
+        this.enregistrementChoix.set(false);
+        this.toast.success(valeur ? 'Choix mémorisé sur votre compte.' : 'Production selon votre planning.');
+        this.load();
+      },
+      error: (err) => {
+        this.choix.set(avant);
+        this.enregistrementChoix.set(false);
+        this.toast.error(err?.error?.message ?? 'Enregistrement du choix impossible.');
+      },
+    });
   }
 
   reprendrePremierPointage(): void {

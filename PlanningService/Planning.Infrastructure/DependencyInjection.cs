@@ -81,6 +81,7 @@ public static class DependencyInjection
         services.AddScoped<Planning.Application.PlanningIt.IPlanningItService, Planning.Infrastructure.Services.PlanningIt.PlanningItService>();
         services.AddScoped<Planning.Application.Presence.IPresenceService, Planning.Infrastructure.Services.Presence.PresenceService>();
         services.AddScoped<Planning.Application.Presence.IPresenceSuiviService, Planning.Infrastructure.Services.Presence.PresenceSuiviService>();
+        services.AddScoped<Planning.Application.Presence.IPlanningExportService, Planning.Infrastructure.Services.PlanningExport.PlanningExportService>();
         if (!isTesting)
             services.AddHostedService<PointageSyncHostedService>();
 

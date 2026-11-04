@@ -14,10 +14,21 @@ export function formatDuree(minutes: number): string {
 const ymd = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-export type PeriodePreset = 'mois' | 'mois-precedent' | 'semaine';
+export type PeriodePreset = 'mois' | 'mois-precedent' | 'semaine' | 'paie' | 'paie-precedente';
 
-/** Bornes d'une période usuelle (le mois en cours s'arrête à aujourd'hui). */
+/**
+ * Bornes d'une période usuelle (la période en cours s'arrête à aujourd'hui).
+ * Période de paie : du 24 au 23 du mois suivant — c'est la période de compensation des heures.
+ */
 export function periode(preset: PeriodePreset, now = new Date()): { du: string; au: string } {
+  if (preset === 'paie' || preset === 'paie-precedente') {
+    const debut = now.getDate() >= 24
+      ? new Date(now.getFullYear(), now.getMonth(), 24)
+      : new Date(now.getFullYear(), now.getMonth() - 1, 24);
+    if (preset === 'paie') return { du: ymd(debut), au: ymd(now) };
+    const precedent = new Date(debut.getFullYear(), debut.getMonth() - 1, 24);
+    return { du: ymd(precedent), au: ymd(new Date(debut.getFullYear(), debut.getMonth(), 23)) };
+  }
   if (preset === 'mois-precedent') {
     const debut = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const fin = new Date(now.getFullYear(), now.getMonth(), 0);
@@ -168,12 +179,37 @@ export function joursEntre(du: string, au: string): string[] {
   return out;
 }
 
-/** Journée à signaler dans la vue prévu / réalisé (retard, pointage manquant, absence, production insuffisante). */
+/**
+ * Journée à signaler dans la vue prévu / réalisé (retard, pointage manquant, absence).
+ * Une production inférieure à la prévision n'est plus une anomalie en soi : les heures se
+ * compensent sur la période de paie (voir soldesCumules).
+ */
 export function estAnomalie(j: PointageJourDto): boolean {
   return j.statut === 'Retard'
     || j.statut === 'PointageManquant'
-    || j.statut === 'SansPointage'
-    || (j.ecartProductionMinutes ?? 0) < 0;
+    || j.statut === 'SansPointage';
+}
+
+/**
+ * Compensation des heures : solde cumulé (minutes) jour après jour, depuis le début de la période
+ * de paie (le 24). Une journée courte est compensée par les journées plus longues de la même
+ * période ; le cumul repart de zéro chaque 24.
+ */
+export function soldesCumules(jours: readonly { jour: string; ecartProductionMinutes?: number | null }[]): Map<string, number> {
+  const tri = [...jours].sort((a, b) => (a.jour < b.jour ? -1 : a.jour > b.jour ? 1 : 0));
+  const out = new Map<string, number>();
+  let cumul = 0;
+  let periodeCourante = '';
+  for (const j of tri) {
+    const date = j.jour.slice(0, 10);
+    const [y, m, d] = date.split('-').map(Number);
+    const debut = d >= 24 ? new Date(y, m - 1, 24) : new Date(y, m - 2, 24);
+    const cle = ymd(debut);
+    if (cle !== periodeCourante) { periodeCourante = cle; cumul = 0; }
+    cumul += j.ecartProductionMinutes ?? 0;
+    out.set(date, cumul);
+  }
+  return out;
 }
 
 /** Deux pointages seulement sur une journée planifiée : les pauses n'ont pas été badgées. */

@@ -67,3 +67,17 @@
 .hs-solde small { font-size: 0.68rem; }
 .hs-solde-total { background: color-mix(in srgb, var(--ky-blue) 7%, var(--bg-card)); border-color: color-mix(in srgb, var(--ky-blue) 30%, var(--border-color)) !important; }
 @media (max-width: 640px) { .hs-solde { grid-template-columns: 1fr; } }
+
+/* Choix de production mémorisé (v18). */
+.hs-choix { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.hs-choix button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 12px; text-align: left;
+  border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-card); color: var(--text-primary);
+  font: inherit; cursor: pointer; transition: border-color var(--duration-fast), background var(--duration-fast);
+}
+.hs-choix button:hover:not(:disabled) { border-color: var(--ky-blue); }
+.hs-choix button.on { border-color: var(--ky-blue); background: color-mix(in srgb, var(--ky-blue) 9%, transparent); box-shadow: inset 0 0 0 1px var(--ky-blue); }
+.hs-choix button b { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.hs-choix button small { font-size: 0.7rem; color: var(--text-muted); }
+.hs-choix button:disabled { opacity: 0.6; cursor: progress; }
+@media (max-width: 560px) { .hs-choix { grid-template-columns: 1fr; } }

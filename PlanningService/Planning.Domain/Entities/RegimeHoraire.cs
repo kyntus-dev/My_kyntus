@@ -73,4 +73,11 @@ public class HeureSortieAcces
     public int UserId { get; set; }
     public DateTime GrantedAt { get; set; } = DateTime.UtcNow;
     public int? GrantedBy { get; set; }
+
+    /// <summary>
+    /// Production choisie par le collaborateur et mémorisée (v18) : « 0840 » = 08h40 (07h40 le vendredi
+    /// et le samedi, règle de l'Excel) ; « 0740 » = 07h40 tous les jours ; null = celle du planning ou du régime.
+    /// </summary>
+    public string? ChoixProduction { get; set; }
+    public DateTime? ChoixModifieLe { get; set; }
 }

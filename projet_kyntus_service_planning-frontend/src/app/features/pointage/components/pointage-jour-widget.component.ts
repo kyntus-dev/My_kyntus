@@ -5,7 +5,7 @@ import { PointageService } from '../../../core/services/pointage.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ROLE_SETS } from '../../../core/org/kyntus-role-names';
 import type { PointageAujourdhuiDto } from '../../../core/models/pointage.models';
-import { calculerDepuisPointages, formatHeure, formatHeuresMinutes, formatHms } from '../lib/heure-sortie.util';
+import { calculerDepuisPointages, formatHeure, formatHeuresMinutes, formatHms, productionDuChoix } from '../lib/heure-sortie.util';
 import { STATUT_LABELS } from '../lib/pointage.util';
 
 /**
@@ -33,7 +33,7 @@ import { STATUT_LABELS } from '../lib/pointage.util';
             <div class="pjw-figures">
               <div><span>Arrivée</span><b>{{ j.pointages[0].slice(0, 5) }}</b></div>
               <div><span>Production</span><b>{{ formatHms(r.productionRealiseeSecondes > 0 ? r.productionRealiseeSecondes : 0).slice(0, 5) }}</b>
-                <small>/ {{ formatHeuresMinutes(j.productionPrevueMinutes) }}</small></div>
+                <small>/ {{ formatHeuresMinutes(production()) }}</small></div>
               <div><span>Sortie prévue</span><b class="pjw-exit">{{ formatHeure(r.sortieSecondes) }}</b></div>
               <div><span>Il reste</span><b>{{ r.resteSecondes > 0 ? formatHms(r.resteSecondes).slice(0, 5) : 'Terminé' }}</b></div>
             </div>
@@ -91,12 +91,18 @@ export class PointageJourWidgetComponent implements OnInit {
   readonly equipe = signal(false);
   readonly admin = signal(false);
 
+  /** Production du jour : choix mémorisé dans « Heure de sortie », sinon planning ou régime. */
+  readonly production = computed(() => {
+    const j = this.jour();
+    return productionDuChoix(j?.choixProduction, this.now()) ?? j?.productionPrevueMinutes ?? 0;
+  });
+
   readonly resultat = computed(() => {
     const j = this.jour();
     // Production et heure de sortie : seulement pour les personnes choisies par l'Admin (régime horaire).
     if (!j?.pointages.length || !j.accesCalculSortie) return null;
     // Même calcul que la page « Heure de sortie » : d'après les pointages du jour.
-    return calculerDepuisPointages(j.pointages, j.productionPrevueMinutes, this.now());
+    return calculerDepuisPointages(j.pointages, this.production(), this.now());
   });
   readonly pourcent = computed(() => Math.min(100, Math.max(0, (this.resultat()?.avancement ?? 0) * 100)));
   readonly statut = computed(() => {

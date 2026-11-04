@@ -12,6 +12,7 @@
       <button type="button" class="ku-btn" (click)="changerSemaine(-1)" aria-label="Semaine précédente">‹</button>
       <button type="button" class="ku-btn" (click)="changerSemaine(0)" [disabled]="decalage() === 0">Cette semaine</button>
       <button type="button" class="ku-btn" (click)="changerSemaine(1)" aria-label="Semaine suivante">›</button>
+      <app-planning-export-button type="it" />
       @if (moi()) {
         <button type="button" class="ku-btn ku-btn--primary" (click)="copierSemainePrecedente()">Recopier ma semaine précédente</button>
       }

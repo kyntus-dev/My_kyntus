@@ -26,6 +26,12 @@ public interface IPointageQueryService
     /// </summary>
     Task<IReadOnlyList<PointageSuiviDto>> CalculerPourAsync(IReadOnlyList<int> userIds, DateOnly du, DateOnly au, CancellationToken ct = default);
 
+    /// <summary>
+    /// Mémorise la production choisie dans « Heure de sortie » (« 0840 », « 0740 » ou null).
+    /// Réservé aux comptes ayant accès à « Heure de sortie » ; false sinon.
+    /// </summary>
+    Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default);
+
     /// <summary>Journée en cours du collaborateur connecté (page « Heure de sortie », tableau de bord).</summary>
     Task<PointageAujourdhuiDto?> GetAujourdhuiAsync(PointageViewer viewer, CancellationToken ct = default);
 

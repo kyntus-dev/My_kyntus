@@ -118,6 +118,25 @@ public sealed class PointageController(
         }
     }
 
+    /// <summary>
+    /// Production mémorisée pour « Heure de sortie » : « 0840 » (08h40, 07h40 le vendredi), « 0740 » ou null.
+    /// Réservé aux comptes ayant accès à « Heure de sortie ».
+    /// </summary>
+    [HttpPut("heure-sortie/choix")]
+    public async Task<IActionResult> ChoixProduction([FromBody] ChoixProductionRequest body, CancellationToken ct)
+    {
+        try
+        {
+            return await query.EnregistrerChoixProductionAsync(Viewer(), body.Choix, ct)
+                ? Ok(new { choix = body.Choix })
+                : StatusCode(StatusCodes.Status403Forbidden, new { message = "« Heure de sortie » n'est pas ouvert à votre compte." });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     private PointageViewer Viewer() =>
         new(User.GetAuthUserId(), User.GetSubjectId(), User.GetEmail(), User.GetAuthRole());
 

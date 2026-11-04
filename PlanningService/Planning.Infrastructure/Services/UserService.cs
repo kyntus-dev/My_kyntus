@@ -921,13 +921,25 @@ public class UserService : IUserService
             return null;
 
         var password = PasswordGenerator.Generate();
+
+        // Le mot de passe Planning n'est changé qu'une fois le compte de connexion (Auth) à jour :
+        // un échec côté Auth ne laisse plus deux mots de passe différents.
+        var auth = await ResetAuthPasswordAsync(user, password, ct);
+        if (!auth.Ok && auth.Introuvable)
+        {
+            // Compte de connexion absent (jamais créé, ou supprimé) : on le recrée, ou on le
+            // relie par e-mail, avec ce mot de passe. Le lien AuthUserId est enregistré.
+            _logger.LogWarning(
+                "PasswordReset: compte Auth introuvable pour {Email} (AuthUserId={AuthUserId}) — réprovisionnement.",
+                user.Email, user.AuthUserId);
+            auth = await ReprovisionnerAuthAsync(user, password, ct);
+        }
+        if (!auth.Ok)
+            throw new InvalidOperationException(
+                $"La réinitialisation du compte de connexion a échoué : {auth.Message} Réessayez ou contactez l'administrateur.");
+
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
         await _context.SaveChangesAsync(ct);
-
-        var ok = await ResetAuthPasswordAsync(user, password, ct);
-        if (!ok)
-            throw new InvalidOperationException(
-                "La réinitialisation Auth a échoué. Réessayez ou contactez l'administrateur.");
 
         _logger.LogInformation(
             "PasswordReset: PlanningUserId={UserId} Email={Email} Actor={Actor}",
@@ -1043,7 +1055,9 @@ public class UserService : IUserService
         return result;
     }
 
-    private async Task<bool> ResetAuthPasswordAsync(User user, string newPassword, CancellationToken ct)
+    private sealed record ResultatAuth(bool Ok, bool Introuvable, string Message);
+
+    private async Task<ResultatAuth> ResetAuthPasswordAsync(User user, string newPassword, CancellationToken ct)
     {
         try
         {
@@ -1052,27 +1066,93 @@ public class UserService : IUserService
                 new
                 {
                     EmployeeId = user.Guid,
+                    AuthUserId = user.AuthUserId,
                     Email = user.Email,
                     NewPassword = newPassword,
                 },
                 ct);
 
             if (response.IsSuccessStatusCode)
-                return true;
+                return new ResultatAuth(true, false, string.Empty);
 
             var body = await response.Content.ReadAsStringAsync(ct);
             _logger.LogWarning(
-                "Reset Auth password failed for {Email}: {Status} {Body}",
+                "Reset Auth password failed for {Email} (AuthUserId={AuthUserId}, Guid={Guid}): {Status} {Body}",
                 user.Email,
+                user.AuthUserId,
+                user.Guid,
                 response.StatusCode,
                 body);
-            return false;
+            return new ResultatAuth(
+                false,
+                response.StatusCode == System.Net.HttpStatusCode.NotFound,
+                MessageAuth(body, $"service d'authentification ({(int)response.StatusCode})."));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Reset Auth password exception for {Email}", user.Email);
-            return false;
+            return new ResultatAuth(false, false, "service d'authentification injoignable.");
         }
+    }
+
+    /// <summary>Recrée (ou relie par e-mail) le compte de connexion avec le mot de passe donné.</summary>
+    private async Task<ResultatAuth> ReprovisionnerAuthAsync(User user, string password, CancellationToken ct)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                "api/auth/register-from-planning",
+                new
+                {
+                    Email = user.Email,
+                    DefaultPassword = password,
+                    RoleName = user.Role?.Name,
+                    EmployeeId = user.Guid,
+                },
+                ct);
+            if (response.IsSuccessStatusCode
+                && await response.Content.ReadFromJsonAsync<AuthRegisterResult>(cancellationToken: ct) is { } result)
+            {
+                user.AuthUserId = result.Id;
+                await _context.SaveChangesAsync(ct);
+                if (result.SubjectId != Guid.Empty)
+                    await _directoryEmployeeWrite.TryLinkAuthSubjectAsync(user.Guid, result.SubjectId);
+                _logger.LogInformation(
+                    "PasswordReset: compte Auth réprovisionné pour {Email} (AuthUserId={Id}).", user.Email, result.Id);
+                return new ResultatAuth(true, false, string.Empty);
+            }
+
+            var body = await response.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("Réprovisionnement Auth échoué pour {Email} : {Status} {Body}", user.Email, response.StatusCode, body);
+            return new ResultatAuth(false, false, MessageAuth(body, $"compte de connexion introuvable et recréation impossible ({(int)response.StatusCode})."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Réprovisionnement Auth : exception pour {Email}", user.Email);
+            return new ResultatAuth(false, false, "service d'authentification injoignable.");
+        }
+    }
+
+    /// <summary>Message lisible renvoyé par le service Auth ({ "message": "…" }), sinon <paramref name="defaut"/>.</summary>
+    public static string MessageAuth(string? body, string defaut)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return defaut;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                && (doc.RootElement.TryGetProperty("message", out var m) || doc.RootElement.TryGetProperty("Message", out m))
+                && m.ValueKind == System.Text.Json.JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(m.GetString()))
+            {
+                var texte = m.GetString()!.Trim();
+                return texte.EndsWith('.') ? texte : texte + ".";
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+        return defaut;
     }
 
     private static void ValidateCreateUserHrDates(CreateUserDto dto)

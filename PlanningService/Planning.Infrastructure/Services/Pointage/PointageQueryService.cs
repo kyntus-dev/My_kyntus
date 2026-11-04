@@ -117,12 +117,14 @@ public sealed class PointageQueryService(
         var travaille = jour.Statut is not (PointageJourStatuts.Repos or PointageJourStatuts.Conge or PointageJourStatuts.Ferie)
                         || jour.Pointages.Count > 0;
 
+        var acces = await db.HeureSortieAcces.AsNoTracking().FirstOrDefaultAsync(a => a.UserId == me.Id, ct);
+
         return new PointageAujourdhuiDto(
             today,
             me.Id,
             suivi.Collaborateur,
             // Accès donné par l'Admin compte par compte (l'Admin y a toujours accès).
-            string.Equals(viewer.Role, "Admin", StringComparison.OrdinalIgnoreCase) || await regimes.ADroitHeureSortieAsync(me.Id, ct),
+            string.Equals(viewer.Role, "Admin", StringComparison.OrdinalIgnoreCase) || acces is not null,
             regime?.Nom,
             regime?.Cible,
             jour.Source,
@@ -132,7 +134,30 @@ public sealed class PointageQueryService(
             travaille,
             jour.Pointages,
             jour.Statut,
-            suivi.DerniereSynchro);
+            suivi.DerniereSynchro,
+            acces?.ChoixProduction);
+    }
+
+    public async Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default)
+    {
+        if (!ChoixProductionSortie.EstValide(choix))
+            throw new ArgumentException("Choix inconnu : « 0840 » (08h40, 07h40 le vendredi) ou « 0740 » (07h40).");
+        var me = await FindViewerAsync(viewer, ct);
+        if (me is null)
+            return false;
+        var acces = await db.HeureSortieAcces.FirstOrDefaultAsync(a => a.UserId == me.Id, ct);
+        if (acces is null)
+        {
+            // Seuls les comptes concernés (liste de l'Admin) mémorisent un choix ; l'Admin y a toujours accès.
+            if (!string.Equals(viewer.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+                return false;
+            acces = new HeureSortieAcces { UserId = me.Id, GrantedBy = me.Id };
+            db.HeureSortieAcces.Add(acces);
+        }
+        acces.ChoixProduction = choix;
+        acces.ChoixModifieLe = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     /// <summary>

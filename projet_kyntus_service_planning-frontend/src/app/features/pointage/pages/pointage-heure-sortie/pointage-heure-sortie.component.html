@@ -43,14 +43,22 @@
             <button type="button" [class.is-active]="mode() === 'manuel'" (click)="mode.set('manuel')">Saisie manuelle</button>
           </div>
 
-          <label class="ku-field">
-            <span>Production du jour</span>
-            <select class="ku-input ku-input--lg" [ngModel]="productionMinutes()" (ngModelChange)="choisirProduction($event)">
-              @for (pm of productionsProposees(); track pm) {
-                <option [ngValue]="pm">{{ formatHeuresMinutes(pm) }}@if (pm === productionDefaut()) { (par défaut) }</option>
+          <div class="ku-field">
+            <span>Production du jour · {{ formatHeuresMinutes(productionMinutes()) }}</span>
+            <div class="hs-choix" role="radiogroup" aria-label="Production mémorisée">
+              @for (c of choixProposes; track c.valeur) {
+                <button type="button" role="radio" [attr.aria-checked]="choix() === c.valeur" [class.on]="choix() === c.valeur"
+                        [disabled]="enregistrementChoix()" (click)="choisirProduction(c.valeur)">
+                  <b>{{ c.libelle }}</b><small>{{ c.detail }}</small>
+                </button>
               }
-            </select>
-          </label>
+              <button type="button" role="radio" [attr.aria-checked]="choix() === null" [class.on]="choix() === null"
+                      [disabled]="enregistrementChoix()" (click)="choisirProduction(null)">
+                <b>{{ formatHeuresMinutes(productionPlanning()) }}</b><small>selon mon planning</small>
+              </button>
+            </div>
+            <small>Votre choix est mémorisé sur votre compte et repris à chaque connexion.</small>
+          </div>
 
           @if (mode() === 'pointages' && resultatPointages(); as rp) {
             <div class="hs-auto">
@@ -166,7 +174,7 @@
             @if (solde(); as so) {
               <div class="hs-solde">
                 <div>
-                  <span>Solde du mois (jours précédents)</span>
+                  <span>Solde depuis le 24 (jours précédents)</span>
                   <b [class.ku-pos]="so.soldeMinutes > 0" [class.ku-neg]="so.soldeMinutes < 0">{{ so.soldeMinutes >= 0 ? '+' : '−' }}{{ formatHms(abs(so.soldeMinutes * 60)) }}</b>
                   <small class="ku-muted">+{{ formatHms(so.plusMinutes * 60) }} en plus · −{{ formatHms(so.moinsMinutes * 60) }} manquantes · {{ so.jours }} jour(s)</small>
                 </div>
@@ -214,7 +222,7 @@
           <li><b>Saisie manuelle</b> (Excel) : pauses = pauses forfaitaires ({{ formatHeuresMinutes(pauseForfaitMinutes()) }}) + pause déjeuner saisie.</li>
           <li><b>Il me reste</b> = sortie − heure actuelle.</li>
           <li><b>Production réalisée</b> = (heure actuelle − arrivée) − pauses ; l’avancement est la production réalisée divisée par la production du jour.</li>
-          <li><b>Heures supplémentaires</b> : production réalisée au-delà de la production du jour. Le solde du mois additionne les heures en plus et compense les heures manquantes des journées précédentes (production prévue du planning ou du régime, sinon la règle de l’Excel).</li>
+          <li><b>Heures supplémentaires</b> : production réalisée au-delà de la production du jour. Le solde de la période de paie (depuis le 24) additionne les heures en plus et compense les heures manquantes des journées précédentes (production mémorisée si vous en avez choisi une, sinon celle du planning ou du régime, sinon la règle de l’Excel).</li>
           <li><b>Production du jour</b> : 8 h 40 ou 7 h 40, au choix dans la liste ; par défaut, celle de votre régime horaire, sinon la règle de l’Excel (07:40 le vendredi et le samedi, 08:40 sinon).</li>
         </ul>
         <p class="ku-muted">Les heures de prière de l’Excel viennent d’un autre classeur qui n’a pas été transmis : elles ne sont pas reprises.</p>

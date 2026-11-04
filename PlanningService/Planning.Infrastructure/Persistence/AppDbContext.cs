@@ -667,6 +667,7 @@ public class AppDbContext : DbContext
             e.ToTable("HeureSortieAcces");
             e.HasKey(x => x.UserId);
             e.Property(x => x.UserId).ValueGeneratedNever();
+            e.Property(x => x.ChoixProduction).HasMaxLength(16);
         });
 
         // Planning IT : horaires saisis par les membres de la cellule IT.

@@ -222,6 +222,28 @@ export function calculerDepuisPointages(
 /** Productions proposées dans la liste (08:40 et 07:40, comme l'Excel). */
 export const PRODUCTIONS_PROPOSEES = [520, 460];
 
+/** Production mémorisée par le collaborateur (v18). */
+export type ChoixProduction = '0840' | '0740';
+
+export const CHOIX_PRODUCTION: readonly { valeur: ChoixProduction; libelle: string; detail: string }[] = [
+  { valeur: '0840', libelle: '08h40', detail: '07h40 le vendredi et le samedi' },
+  { valeur: '0740', libelle: '07h40', detail: 'tous les jours' },
+];
+
+/** Production du jour pour un choix mémorisé ; null : pas de choix (planning ou régime). */
+export function productionDuChoix(choix: ChoixProduction | null | undefined, date: Date): number | null {
+  if (choix === '0840') return productionExcel(date);
+  if (choix === '0740') return 460;
+  return null;
+}
+
+/** Début de la période de paie (le 24) contenant `date` : la compensation des heures se fait sur 24 → 23. */
+export function debutPeriodePaie(date: Date): Date {
+  return date.getDate() >= 24
+    ? new Date(date.getFullYear(), date.getMonth(), 24)
+    : new Date(date.getFullYear(), date.getMonth() - 1, 24);
+}
+
 // ── Heures supplémentaires et solde ───────────────────────────────────────────
 
 export interface SoldeHeures {
@@ -240,6 +262,8 @@ export interface SoldeHeures {
 export function soldeHeures(
   jours: readonly { jour: string; productionMinutes?: number | null; productionPrevueMinutes?: number | null }[],
   aujourdhui: string,
+  /** Production imposée par le choix mémorisé du collaborateur (prioritaire). */
+  prevueImposee?: (date: Date) => number | null,
 ): SoldeHeures {
   let plus = 0;
   let moins = 0;
@@ -248,7 +272,8 @@ export function soldeHeures(
     const date = j.jour.slice(0, 10);
     if (date >= aujourdhui || j.productionMinutes == null) continue;
     const [y, m, d] = date.split('-').map(Number);
-    const prevue = j.productionPrevueMinutes ?? productionExcel(new Date(y, m - 1, d));
+    const jourDate = new Date(y, m - 1, d);
+    const prevue = prevueImposee?.(jourDate) ?? j.productionPrevueMinutes ?? productionExcel(jourDate);
     const ecart = j.productionMinutes - prevue;
     if (ecart > 0) plus += ecart; else moins -= ecart;
     n++;

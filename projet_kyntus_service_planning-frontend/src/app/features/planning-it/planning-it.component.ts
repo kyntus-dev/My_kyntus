@@ -1,3 +1,4 @@
+import { PlanningExportButtonComponent } from '../../shared/planning-export/planning-export-button.component';
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -23,7 +24,7 @@ const RAFRAICHISSEMENT_MS = 15_000;
 @Component({
   selector: 'app-planning-it',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PlanningExportButtonComponent],
   templateUrl: './planning-it.component.html',
   styleUrls: ['./planning-it.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

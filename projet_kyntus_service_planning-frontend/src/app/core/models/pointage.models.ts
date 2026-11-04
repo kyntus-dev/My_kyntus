@@ -115,6 +115,8 @@ export interface PointageAujourdhuiDto {
   pointages: string[];
   statut: PointageJourStatut;
   derniereSynchro: string | null;
+  /** Production mémorisée dans « Heure de sortie » : « 0840 », « 0740 » ou null (v18). */
+  choixProduction?: '0840' | '0740' | null;
 }
 
 export type PointageCorrespondanceStatut = 'AValider' | 'Auto' | 'Valide' | 'Ignore';
