@@ -66,6 +66,8 @@ public class AppDbContext : DbContext
     public DbSet<HeureSortieAcces> HeureSortieAcces { get; set; } = null!;
     public DbSet<PlanningItHoraire> PlanningItHoraires { get; set; } = null!;
     public DbSet<PlanningItCommentaire> PlanningItCommentaires { get; set; } = null!;
+    /// <summary>Tableau des présences : saisies des responsables (motif, retard autorisé, commentaire).</summary>
+    public DbSet<PresenceJour> PresenceJours { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -665,6 +667,18 @@ public class AppDbContext : DbContext
         });
 
         // Planning IT : horaires saisis par les membres de la cellule IT.
+        modelBuilder.Entity<PresenceJour>(e =>
+        {
+            e.ToTable("PresenceJours");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Code).HasMaxLength(10);
+            e.Property(x => x.MotifAutorisation).HasMaxLength(300);
+            e.Property(x => x.Commentaire).HasMaxLength(1000);
+            e.Property(x => x.UpdatedByNom).HasMaxLength(120);
+            e.HasIndex(x => new { x.UserId, x.Jour }).IsUnique();
+            e.HasIndex(x => x.Jour);
+        });
+
         modelBuilder.Entity<PlanningItHoraire>(e =>
         {
             e.ToTable("PlanningItHoraires");

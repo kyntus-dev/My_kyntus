@@ -95,6 +95,10 @@ public static class PlatformAccessCatalog
         S("pointage.correspondances", "Correspondance pointeuses", "Pointage", View: AdminRh, Act: AdminRh),
         S("pointage.acces-sortie", "Accès Heure de sortie (compte par compte)", "Pointage", View: Admin, Configure: Admin),
 
+        // Présences (périmètre du responsable ; RH / Admin : toute l'entreprise).
+        S("presences", "Tableau des présences", "Présences et paie", View: TeamLead, Act: TeamLead),
+        S("presences.retards", "Retards et autorisations", "Présences et paie", View: TeamLead),
+
         S("conges.self", "Mes congés", "Congés", View: Self),
         S("conges.validation", "Valider les congés", "Congés", View: ["Admin", "RH", "Manager", "Superviseur"], Validate: ["Admin", "RH", "Manager", "Superviseur"]),
         S("conges.history", "Historique des congés", "Congés", View: ["Admin", "RH", "Manager"]),

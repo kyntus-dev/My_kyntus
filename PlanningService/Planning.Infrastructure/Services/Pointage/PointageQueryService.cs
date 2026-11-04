@@ -89,6 +89,18 @@ public sealed class PointageQueryService(
         return new PointageEquipeDetailDto(libelle!, du, au, await DerniereSynchroAsync(ct), suivis);
     }
 
+    public async Task<IReadOnlyList<PointageSuiviDto>> CalculerPourAsync(IReadOnlyList<int> userIds, DateOnly du, DateOnly au, CancellationToken ct = default)
+    {
+        if (userIds.Count == 0) return [];
+        if (au < du) (du, au) = (au, du);
+        if (au.DayNumber - du.DayNumber >= O.PeriodeMaxJours)
+            du = au.AddDays(-(O.PeriodeMaxJours - 1));
+        var ids = userIds.Distinct().ToList();
+        var users = await db.Users.AsNoTracking().Include(u => u.SubService)
+            .Where(u => ids.Contains(u.Id)).ToListAsync(ct);
+        return await CalculerAsync(users, du, au, ct);
+    }
+
     public async Task<PointageAujourdhuiDto?> GetAujourdhuiAsync(PointageViewer viewer, CancellationToken ct = default)
     {
         var me = await FindViewerAsync(viewer, ct);

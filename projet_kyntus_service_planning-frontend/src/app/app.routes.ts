@@ -392,6 +392,30 @@ export const routes: Routes = [
             .then(m => m.CongeManagerComponent),
       },
       {
+        // Présences et paie : tableau des présences (pointage + saisies), retards et autorisations.
+        // Droits dans « Accès par rôle » ; chaque responsable ne voit que son périmètre (serveur).
+        path: 'presences',
+        children: [
+          {
+            path: '',
+            pathMatch: 'full',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.congesEquipe, capability: 'presences' },
+            loadComponent: () =>
+              import('./features/presences/pages/presences-tableau.component')
+                .then(m => m.PresencesTableauComponent),
+          },
+          {
+            path: 'retards',
+            canActivate: [AuthGuard],
+            data: { roles: ROLE_SETS.congesEquipe, capability: 'presences.retards' },
+            loadComponent: () =>
+              import('./features/presences/pages/presences-retards.component')
+                .then(m => m.PresencesRetardsComponent),
+          },
+        ],
+      },
+      {
         // Pointages ZKBio Time (lecture seule) : suivi personnel, équipe, correspondances RH.
         path: 'pointage',
         children: [

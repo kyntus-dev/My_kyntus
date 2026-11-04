@@ -951,6 +951,30 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>Tableau des présences : saisies des responsables (table vide à la création).</summary>
+    public static async Task EnsurePresencesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PresenceJours" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Jour" date NOT NULL,
+                "Code" character varying(10) NULL,
+                "RetardAutorise" boolean NOT NULL DEFAULT false,
+                "RetardPauseAutorise" boolean NOT NULL DEFAULT false,
+                "MotifAutorisation" character varying(300) NULL,
+                "Commentaire" character varying(1000) NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" integer NULL,
+                "UpdatedByNom" character varying(120) NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_PresenceJours_UserId_Jour" ON "PresenceJours" ("UserId", "Jour");
+            CREATE INDEX IF NOT EXISTS "IX_PresenceJours_Jour" ON "PresenceJours" ("Jour");
+            """,
+            ct);
+    }
+
     /// <summary>Index lecture fréquents (grille, demandes exceptionnelles, users actifs).</summary>
     public static async Task EnsurePerfIndexesAsync(AppDbContext db, CancellationToken ct = default)
     {

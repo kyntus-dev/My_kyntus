@@ -78,6 +78,7 @@ public static class PlanningStartup
                 await TryPatch("regimes-horaires", () => PlanningSchemaPatches.EnsureRegimesHorairesAsync(db));
                 await TryPatch("heure-sortie-acces", () => PlanningSchemaPatches.EnsureHeureSortieAccesAsync(db));
                 await TryPatch("planning-it", () => PlanningSchemaPatches.EnsurePlanningItAsync(db));
+                await TryPatch("presences", () => PlanningSchemaPatches.EnsurePresencesAsync(db));
                 await TryPatch("perf-indexes", () => PlanningSchemaPatches.EnsurePerfIndexesAsync(db));
                 Console.WriteLine("✅ Patches schéma Planning appliqués.");
             }

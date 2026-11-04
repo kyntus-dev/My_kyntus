@@ -251,6 +251,16 @@ export const MICROSERVICES: Microservice[] = [
     ],
   },
   {
+    // Présences et paie (lot A) : responsables de leur périmètre, RH et Admin.
+    id: 'presences',
+    label: 'Présences et paie',
+    icon: ICONS.calendar,
+    children: [
+      { label: 'Tableau des présences', route: '/presences', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences' },
+      { label: 'Retards et autorisations', route: '/presences/retards', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences.retards' },
+    ],
+  },
+  {
     id: 'conges',
     label: 'Congés et absences',
     icon: ICONS.leave,

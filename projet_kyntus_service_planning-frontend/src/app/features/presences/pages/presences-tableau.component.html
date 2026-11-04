@@ -1,0 +1,209 @@
+<div class="ku-page pz">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Présences et paie · {{ data()?.perimetre ?? 'Votre périmètre' }}</p>
+      <h1 class="ku-hero-title">Présences et absences</h1>
+      <p class="ku-hero-sub">Calculé à partir du pointage. Cliquez sur une journée pour qualifier une absence, autoriser un retard ou ajouter un commentaire.</p>
+    </div>
+    <div class="ku-hero-actions">
+      <button type="button" class="ku-btn" (click)="changerPeriode(-1)" aria-label="Période précédente">‹</button>
+      <button type="button" class="ku-btn pz-periode" (click)="changerPeriode(0)" [title]="decalage() === 0 ? 'Période en cours' : 'Revenir à la période en cours'">Paie de {{ periode().libelle }}</button>
+      <button type="button" class="ku-btn" (click)="changerPeriode(1)" aria-label="Période suivante">›</button>
+      <a class="ku-btn ku-btn--primary" routerLink="/presences/retards">Retards</a>
+    </div>
+  </header>
+
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Agents</span><span class="ku-kpi-value">{{ synthese().agents }}</span>
+      <span class="ku-kpi-sub">du {{ periode().du | date: 'dd/MM' }} au {{ periode().au | date: 'dd/MM/yyyy' }}</span></div>
+    <div class="ku-kpi" [class.ku-kpi--warn]="synthese().aQualifier > 0"><span class="ku-kpi-label">Absences à qualifier</span>
+      <span class="ku-kpi-value">{{ synthese().aQualifier }}</span>
+      <span class="ku-kpi-sub">jours sans pointage, comptés ABS N</span></div>
+    <div class="ku-kpi" [class.ku-kpi--danger]="synthese().retards > 0"><span class="ku-kpi-label">Retards non autorisés</span>
+      <span class="ku-kpi-value">{{ formatMinutes(synthese().retards) }}</span>
+      <span class="ku-kpi-sub">{{ formatMinutes(synthese().autorises) }} autorisés</span></div>
+    <div class="ku-kpi" [class.ku-kpi--warn]="synthese().manques > 0"><span class="ku-kpi-label">Pointages manquants</span>
+      <span class="ku-kpi-value">{{ synthese().manques }}</span>
+      <span class="ku-kpi-sub">{{ synthese().absences }} jour(s) d’absence au total</span></div>
+  </div>
+
+  <section class="ku-card">
+    <div class="pz-filtres">
+      <input class="ku-input pz-search" type="search" placeholder="Rechercher un agent…"
+             [ngModel]="filtres().recherche" (ngModelChange)="filtrer({ recherche: $event })" />
+      <select class="ku-input" [ngModel]="filtres().activite" (ngModelChange)="filtrer({ activite: $event })" aria-label="Activité">
+        <option value="">Toutes les activités</option>
+        @for (o of options().activites; track o) { <option [value]="o">{{ o }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="filtres().pole" (ngModelChange)="filtrer({ pole: $event })" aria-label="Pôle">
+        <option value="">Tous les pôles</option>
+        @for (o of options().poles; track o) { <option [value]="o">{{ o }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="filtres().cellule" (ngModelChange)="filtrer({ cellule: $event })" aria-label="Cellule">
+        <option value="">Toutes les cellules</option>
+        @for (o of options().cellules; track o) { <option [value]="o">{{ o }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="filtres().type" (ngModelChange)="filtrer({ type: $event })" aria-label="Contrat">
+        <option value="">Tous les contrats</option>
+        @for (o of options().types; track o) { <option [value]="o">{{ o }}</option> }
+      </select>
+      <label class="ku-check"><input type="checkbox" [ngModel]="filtres().aTraiter" (ngModelChange)="filtrer({ aTraiter: $event })" /> À traiter seulement</label>
+      <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="reinitialiser()">Réinitialiser</button>
+    </div>
+
+    <div class="pz-legende">
+      <span class="pz-code pz-f-present">P</span> Présent
+      <span class="pz-code pz-f-formation">FOR</span> Formation
+      <span class="pz-code pz-f-absence-nj">ABS N</span> Absence non autorisée
+      <span class="pz-code pz-f-absence">AM</span> Autres absences
+      <span class="pz-code pz-f-conge">CP</span> Congés
+      <span class="pz-code pz-f-present pz-retard">P</span> Retard non autorisé
+      <span class="pz-code pz-f-present"><i class="pz-dot"></i>P</span> Commentaire
+    </div>
+
+    @if (loading() && !data()) {
+      <div class="ku-skeleton"></div>
+    } @else if (error()) {
+      <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
+    } @else if (!agents().length) {
+      <div class="ku-empty"><strong>Aucun agent</strong>{{ data()?.agents?.length ? 'Modifiez les filtres.' : data()?.perimetre }}</div>
+    } @else {
+      <div class="pz-wrap" [class.pz-loading]="loading()">
+        <table class="pz-table ky-table">
+          <thead>
+            <tr>
+              <th class="pz-agent">Agent</th>
+              @for (j of jours(); track j) {
+                <th class="pz-jour" [class.pz-dim]="enteteJour(j).weekend"><span>{{ enteteJour(j).court }}</span><b>{{ enteteJour(j).num }}</b></th>
+              }
+              <th class="pz-tot" title="Jours d’absence">Abs.</th>
+              <th class="pz-tot" title="Retards non autorisés">Retards</th>
+              <th class="pz-tot pz-tot-last" title="Pointages manquants">Manq.</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (a of agents(); track a.userId) {
+              <tr>
+                <th class="pz-agent" scope="row">
+                  <b>{{ a.nom }}</b>
+                  <small>{{ a.cellule ?? '—' }} · {{ a.type }}</small>
+                </th>
+                @for (jour of jours(); track jour) {
+                  @let j = jourDe(a, jour);
+                  <td class="pz-cell" [class.pz-dim]="enteteJour(jour).weekend">
+                    @if (j) {
+                      <button type="button" class="pz-code"
+                              [ngClass]="'pz-f-' + familleCode(j.code)"
+                              [class.pz-retard]="j.retardRetenuMinutes > 0"
+                              [class.pz-manuel]="!j.auto"
+                              [class.pz-manque]="j.manquePointage"
+                              [disabled]="!data()?.peutModifier"
+                              [title]="infobulle(a, j)"
+                              (click)="ouvrir(a, j)">
+                        @if (j.commentaire) { <i class="pz-dot"></i> }{{ j.code ?? '' }}
+                      </button>
+                    }
+                  </td>
+                }
+                <td class="pz-tot" [class.ku-neg]="absences(a) > 0">{{ absences(a) || '' }}</td>
+                <td class="pz-tot" [class.ku-neg]="a.totaux.retardRetenuMinutes > 0">{{ a.totaux.retardRetenuMinutes ? formatMinutes(a.totaux.retardRetenuMinutes) : '' }}</td>
+                <td class="pz-tot pz-tot-last">{{ a.totaux.manquesPointage || '' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="ku-card-sub pz-note">
+        Les jours planifiés sans pointage sont comptés « ABS N » jusqu’à ce qu’un motif soit choisi. Un retard autorisé ne compte plus
+        dans le cumul des retards. Tolérance : {{ data()?.toleranceMinutes }} minutes.
+      </p>
+    }
+  </section>
+
+  <!-- <dialog> natif : affiché au premier plan, quel que soit le défilement de la page. -->
+  <dialog #panneau class="pz-panel" (close)="fermer()" (click)="clicFond($event)">
+  @if (edition(); as e) {
+    <div class="pz-panel-inner" [attr.aria-label]="'Journée de ' + e.agent.nom">
+      <header class="pz-panel-head">
+        <div>
+          <h2>{{ e.agent.nom }}</h2>
+          <p class="ku-muted"><span class="pz-cap">{{ dateCourte(e.jour.jour) }}</span> · {{ e.agent.cellule ?? '' }}</p>
+        </div>
+        <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="fermer()" aria-label="Fermer">✕</button>
+      </header>
+
+      <div class="pz-panel-body">
+        <section class="pz-bloc">
+          <h3>Pointage</h3>
+          <dl class="pz-dl">
+            <div><dt>Prévu</dt><dd>{{ e.jour.planning ?? '—' }}</dd></div>
+            <div><dt>Arrivée / départ</dt><dd>{{ e.jour.arrivee?.slice(0, 5) ?? '—' }} → {{ e.jour.depart?.slice(0, 5) ?? '—' }}</dd></div>
+            <div><dt>Retard arrivée</dt><dd [class.ku-neg]="e.jour.retardEntreeMinutes > 0">{{ formatMinutes(e.jour.retardEntreeMinutes) }}</dd></div>
+            <div><dt>Retard pauses</dt><dd [class.ku-neg]="e.jour.retardPauseMinutes > 0">{{ formatMinutes(e.jour.retardPauseMinutes) }}</dd></div>
+          </dl>
+          @if (e.jour.pointages.length) {
+            <div class="pz-punches">@for (p of e.jour.pointages; track $index) { <span>{{ p.slice(0, 5) }}</span> }</div>
+          } @else {
+            <p class="ku-muted pz-small">Aucun pointage ce jour.</p>
+          }
+          @if (e.jour.manquePointage) { <p class="pz-alerte">Pointage manquant : nombre de pointages impair.</p> }
+        </section>
+
+        <section class="pz-bloc">
+          <h3>Journée</h3>
+          <div class="pz-seg" role="radiogroup">
+            <label [class.on]="e.mode === 'auto'"><input type="radio" name="mode" [checked]="e.mode === 'auto'" (change)="patch({ mode: 'auto' })" />
+              Selon le pointage <small>({{ e.jour.codeAuto ?? 'vide' }})</small></label>
+            <label [class.on]="e.mode === 'present'"><input type="radio" name="mode" [checked]="e.mode === 'present'" (change)="patch({ mode: 'present' })" /> Présent</label>
+            <label [class.on]="e.mode === 'absent'"><input type="radio" name="mode" [checked]="e.mode === 'absent'" (change)="patch({ mode: 'absent' })" /> Absent</label>
+            <label [class.on]="e.mode === 'formation'"><input type="radio" name="mode" [checked]="e.mode === 'formation'" (change)="patch({ mode: 'formation' })" /> Formation</label>
+          </div>
+          @if (e.mode === 'absent') {
+            <label class="ku-field"><span>Motif d’absence</span>
+              <select class="ku-input" [ngModel]="e.motif" (ngModelChange)="patch({ motif: $event })">
+                @for (c of codesAbsence(); track c.code) { <option [value]="c.code">{{ libelleCode(c) }}</option> }
+              </select>
+            </label>
+          }
+          <label class="ku-check pz-small"><input type="checkbox" [ngModel]="e.periode" (ngModelChange)="patch({ periode: $event })" /> Appliquer sur une période</label>
+          @if (e.periode) {
+            <label class="ku-field"><span>Jusqu’au (inclus)</span>
+              <input class="ku-input" type="date" [min]="e.jour.jour.slice(0, 10)" [ngModel]="e.au" (ngModelChange)="patch({ au: $event })" />
+            </label>
+          }
+        </section>
+
+        <section class="pz-bloc">
+          <h3>Retard</h3>
+          <label class="ku-check"><input type="checkbox" [ngModel]="e.retardAutorise" (ngModelChange)="patch({ retardAutorise: $event })" />
+            Retard d’arrivée autorisé @if (e.jour.retardEntreeMinutes) { <small>({{ formatMinutes(e.jour.retardEntreeMinutes) }})</small> }</label>
+          <label class="ku-check"><input type="checkbox" [ngModel]="e.retardPauseAutorise" (ngModelChange)="patch({ retardPauseAutorise: $event })" />
+            Dépassement de pause autorisé @if (e.jour.retardPauseMinutes) { <small>({{ formatMinutes(e.jour.retardPauseMinutes) }})</small> }</label>
+          @if (e.retardAutorise || e.retardPauseAutorise) {
+            <label class="ku-field"><span>Motif de l’autorisation</span>
+              <input class="ku-input" maxlength="300" placeholder="Ex. prévenu la veille, rendez-vous médical…"
+                     [ngModel]="e.motifAutorisation" (ngModelChange)="patch({ motifAutorisation: $event })" />
+            </label>
+          }
+        </section>
+
+        <section class="pz-bloc">
+          <h3>Commentaire de présence</h3>
+          <textarea class="ku-input pz-text" rows="3" maxlength="1000" placeholder="Ex. justificatif reçu, sortie anticipée autorisée…"
+                    [ngModel]="e.commentaire" (ngModelChange)="patch({ commentaire: $event })"></textarea>
+          @if (e.jour.modifiePar) {
+            <p class="ku-muted pz-small">Dernière modification : {{ e.jour.modifiePar }} · {{ e.jour.modifieLe | date: 'dd/MM/yyyy HH:mm' }}</p>
+          }
+        </section>
+      </div>
+
+      <footer class="pz-panel-foot">
+        <button type="button" class="ku-btn" (click)="fermer()">Annuler</button>
+        <button type="button" class="ku-btn ku-btn--primary" (click)="enregistrer()" [disabled]="enregistrement()">
+          {{ enregistrement() ? 'Enregistrement…' : 'Enregistrer' }}
+        </button>
+      </footer>
+    </div>
+  }
+  </dialog>
+</div>

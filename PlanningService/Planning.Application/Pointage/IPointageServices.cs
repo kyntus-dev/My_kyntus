@@ -20,6 +20,12 @@ public interface IPointageQueryService
     /// <summary>Planning prévu / réalisé : journées de chaque collaborateur du périmètre.</summary>
     Task<PointageEquipeDetailDto?> GetEquipeDetailAsync(PointageViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default);
 
+    /// <summary>
+    /// Journées calculées de collaborateurs donnés, sans contrôle de périmètre : l'appelant (tableau
+    /// des présences) a déjà vérifié que ces collaborateurs relèvent du demandeur.
+    /// </summary>
+    Task<IReadOnlyList<PointageSuiviDto>> CalculerPourAsync(IReadOnlyList<int> userIds, DateOnly du, DateOnly au, CancellationToken ct = default);
+
     /// <summary>Journée en cours du collaborateur connecté (page « Heure de sortie », tableau de bord).</summary>
     Task<PointageAujourdhuiDto?> GetAujourdhuiAsync(PointageViewer viewer, CancellationToken ct = default);
 

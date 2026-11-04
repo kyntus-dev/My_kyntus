@@ -127,6 +127,8 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'pointage.regimes', label: 'Régimes horaires', module: 'Pointage', view: ADMIN_RH, configure: ADMIN },
   { id: 'pointage.correspondances', label: 'Correspondance pointeuses', module: 'Pointage', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'pointage.acces-sortie', label: 'Accès Heure de sortie (compte par compte)', module: 'Pointage', view: ADMIN, configure: ADMIN },
+  { id: 'presences', label: 'Tableau des présences', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
+  { id: 'presences.retards', label: 'Retards et autorisations', module: 'Présences et paie', view: TEAM_LEAD, defaultScope: 'Cellule' },
 
   { id: 'conges.self', label: 'Mes congés', module: 'Congés', view: SELF, defaultScope: 'Self' },
   { id: 'conges.validation', label: 'Valider les congés', module: 'Congés', view: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur], validate: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur] },
