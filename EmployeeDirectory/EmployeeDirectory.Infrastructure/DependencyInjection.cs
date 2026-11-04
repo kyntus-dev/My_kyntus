@@ -72,7 +72,7 @@ public static class DependencyInjection
         services.AddScoped<IPermissionCatalog, DirectoryIamReadService>();
         services.AddScoped<IRebacClient, DirectoryIamReadService>();
         services.AddScoped<ISubjectPermissionOverrides, DirectoryIamReadService>();
-        services.AddScoped<IIamUserAccessService, DirectoryIamUserAccessService>();
+        services.AddScoped<EmployeeDirectory.Application.Iam.IIamUserAccessService, DirectoryIamUserAccessService>();
 
         services.AddScoped<DirectoryEmployeSyncService>();
         services.AddScoped<DirectoryOrgSyncService>();
