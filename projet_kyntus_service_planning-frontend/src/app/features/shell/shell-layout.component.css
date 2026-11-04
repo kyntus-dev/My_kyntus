@@ -977,3 +977,109 @@ body.theme-dark .ks-content {
   .ks-topbar-right .ks-pill { padding: 0 8px; font-size: 0; gap: 0; }
   .ks-topbar-right .ks-pill .ks-dot-pulse { margin: 0; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Barre latérale v20 — « Épurée claire » (modèle 1 choisi) :
+   fond uni, recherche de menu (Ctrl K), sous-menus reliés par un fil,
+   repère actif bleu, pied compact (profil + déconnexion en icône).
+   ══════════════════════════════════════════════════════════════════════ */
+.ks-sidebar {
+  background: var(--bg-card);
+  box-shadow: none;
+  border-right: 1px solid var(--border-color);
+}
+.ks-brand { border-bottom: 0; padding-bottom: 6px; }
+.ks-brand::after { display: none; }
+.ks-brand-text span { font-size: 11px; color: var(--text-muted); }
+
+.ks-menu-search {
+  position: relative; display: flex; align-items: center; gap: 8px; margin: 6px 12px 4px; padding: 0 10px; height: 36px;
+  border-radius: 10px; background: var(--bg-input, color-mix(in srgb, var(--text-muted) 8%, transparent)); color: var(--text-muted);
+  border: 1px solid transparent; transition: border-color 0.15s, background 0.15s;
+}
+.ks-menu-search:focus-within { border-color: color-mix(in srgb, var(--ky-blue) 55%, transparent); background: var(--bg-card); }
+.ks-menu-search input {
+  flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text-primary);
+  font: inherit; font-size: 12.5px;
+}
+.ks-menu-search input::-webkit-search-cancel-button { cursor: pointer; }
+.ks-menu-search kbd {
+  font: inherit; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 5px; color: var(--text-muted);
+  border: 1px solid var(--border-color); background: var(--bg-card);
+}
+.ks-menu-results { display: flex; flex-direction: column; gap: 2px; }
+.ks-menu-results .ks-sub-label small { display: block; font-size: 10.5px; color: var(--text-muted); font-weight: 500; }
+.ks-menu-results .ks-sub-item.first { background: color-mix(in srgb, var(--ky-blue) 8%, transparent); color: var(--ky-blue); }
+.ks-menu-empty { margin: 8px 10px; font-size: 12px; color: var(--text-muted); }
+
+.ks-nav { gap: 2px; padding: 8px 12px 12px; }
+.ks-nav-label {
+  padding: 14px 10px 6px; font-size: 10.5px; letter-spacing: 0.09em; color: color-mix(in srgb, var(--text-muted) 80%, transparent);
+}
+
+/* Entrées principales : pas de boîte, simple surbrillance au survol. */
+.ks-home,
+.ks-group-head {
+  padding: 8px 10px; border-radius: 8px; border: 0; background: transparent; box-shadow: none;
+  color: color-mix(in srgb, var(--text-primary) 82%, var(--text-muted)); font-size: 13.5px; font-weight: 500;
+}
+.ks-home:hover,
+.ks-group-head:hover,
+.ks-sub-item:hover {
+  background: color-mix(in srgb, var(--text-muted) 9%, transparent);
+  color: var(--text-primary);
+}
+.ks-home.active {
+  background: color-mix(in srgb, var(--ky-blue) 9%, transparent); color: var(--ky-blue); box-shadow: none; border: 0; font-weight: 600;
+}
+.ks-group-head.open { background: transparent; color: var(--text-primary); font-weight: 600; box-shadow: none; }
+.ks-ic { color: color-mix(in srgb, var(--text-muted) 85%, transparent); opacity: 1; }
+.ks-group-head.open .ks-ic,
+.ks-home.active .ks-ic { color: var(--ky-blue); }
+.ks-chevron { color: var(--text-muted); opacity: 0.7; }
+
+/* Sous-menu : fil vertical, repère actif posé sur le fil. */
+.ks-sub {
+  margin: 2px 0 6px 19px; padding: 2px 0 2px 10px; gap: 1px; border-left: 1px solid var(--border-color);
+}
+.ks-sub-item {
+  padding: 6px 10px; border: 0; border-radius: 7px; font-size: 13px; font-weight: 500;
+  color: var(--text-muted); background: transparent;
+}
+.ks-sub-item::before { left: -11px; width: 2px; background: var(--ky-blue); }
+.ks-sub-item.active {
+  background: color-mix(in srgb, var(--ky-blue) 9%, transparent); border: 0; color: var(--ky-blue); font-weight: 600;
+}
+.ks-sub-item.active::before { height: 62%; }
+.ks-dot { display: none; }
+.ks-sub-section {
+  margin: 8px 0 2px; padding: 0 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-muted) 75%, transparent);
+}
+
+/* Pied : actions rapides discrètes, profil compact. */
+.ks-quick-actions { padding: 6px 12px; border-top: 1px solid var(--border-color); gap: 0; }
+.ks-quick-btn {
+  padding: 7px 10px; border-radius: 8px; border: 0; background: transparent; box-shadow: none;
+  color: color-mix(in srgb, var(--text-primary) 78%, var(--text-muted)); font-size: 13px; font-weight: 500;
+}
+.ks-quick-btn:hover { background: color-mix(in srgb, var(--text-muted) 9%, transparent); color: var(--text-primary); }
+.ks-sidebar-footer { padding: 10px 12px 12px; border-top: 1px solid var(--border-color); }
+.ks-user-row {
+  display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 10px; background: transparent; border: 0; margin: 0;
+}
+.ks-user-row:hover { background: color-mix(in srgb, var(--text-muted) 7%, transparent); }
+.ks-user-av { width: 34px; height: 34px; border-radius: 50%; background: var(--ky-navy-950, #0c1527); color: #fff; font-size: 12px; flex-shrink: 0; }
+.ks-user-info { flex: 1; min-width: 0; }
+.ks-user-info strong { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.ks-user-info span { font-size: 11px; color: var(--text-muted); }
+.ks-logout-ic {
+  flex-shrink: 0; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--danger, #dc2626);
+  transition: background 0.15s, border-color 0.15s;
+}
+.ks-logout-ic:hover { background: var(--danger-bg, #fee2e2); border-color: var(--danger-border, #fecaca); }
+.kyntus-shell.sidebar-collapsed .ks-logout { margin: 0 auto; width: 40px; height: 40px; justify-content: center; }
+.ks-menu-search input,
+.ks-menu-search input:focus,
+.ks-menu-search input:focus-visible { outline: none !important; box-shadow: none !important; border: 0 !important; padding: 0 !important; background: transparent !important; }

@@ -22,7 +22,21 @@
       </div>
     </div>
 
+    <div class="ks-menu-search" *ngIf="!sidebarCollapsed">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input #menuSearch type="search" placeholder="Rechercher un menu…" aria-label="Rechercher un menu"
+             [value]="menuRecherche()" (input)="menuRecherche.set($any($event.target).value)" (keydown)="toucheRecherche($event)" />
+      <kbd *ngIf="!menuRecherche()">Ctrl K</kbd>
+    </div>
+
     <nav class="ks-nav">
+      <div class="ks-menu-results" *ngIf="menuRecherche()">
+        <a class="ks-sub-item" *ngFor="let r of resultatsMenu(); let i = index" [class.first]="i === 0" (click)="ouvrirResultat(r.item)">
+          <span class="ks-sub-label">{{ r.item.label }}<small>{{ r.groupe }}</small></span>
+        </a>
+        <p class="ks-menu-empty" *ngIf="!resultatsMenu().length">Aucun menu ne correspond.</p>
+      </div>
+      <ng-container *ngIf="!menuRecherche()">
       <a class="ks-home" routerLink="/home" routerLinkActive="active" (click)="sidebarOpen = false">
         <span class="ks-ic" [innerHTML]="icon(homeIcon)"></span>
         <span *ngIf="!sidebarCollapsed">Accueil</span>
@@ -75,6 +89,7 @@
           </ng-container>
         </div>
       </div>
+      </ng-container>
     </nav>
 
     <div class="ks-quick-actions" *ngIf="!sidebarCollapsed">
@@ -100,10 +115,12 @@
           <strong>{{ displayName }}</strong>
           <span>{{ libelleRole(role, true) || currentUser?.email || '—' }}</span>
         </div>
+        <button type="button" class="ks-logout-ic" (click)="logout()" title="Déconnexion" aria-label="Déconnexion">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
       </div>
-      <button class="ks-logout" (click)="logout()" [attr.title]="sidebarCollapsed ? 'Déconnexion' : null">
+      <button class="ks-logout" *ngIf="sidebarCollapsed" (click)="logout()" title="Déconnexion" aria-label="Déconnexion">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        <span *ngIf="!sidebarCollapsed">Déconnexion</span>
       </button>
     </div>
   </aside>

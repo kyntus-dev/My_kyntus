@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnDestroy, OnInit, ViewEncapsulation, inject, ElementRef, ViewChild, HostListener, effect, signal } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, OnInit, ViewEncapsulation, inject, ElementRef, ViewChild, HostListener, computed, effect, signal } from '@angular/core';
 import { KyntusRoleWatchService } from '../../core/session/kyntus-role-watch.service';
 import { libelleRole } from '../../core/org/role-libelle';
 
@@ -169,6 +169,49 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   readonly groups = signal<Microservice[]>([]);
 
   readonly openGroups = signal(new Set<string>());
+
+  /** Recherche dans le menu (Ctrl K) : liste à plat des entrées dont le libellé correspond. */
+  readonly menuRecherche = signal('');
+  @ViewChild('menuSearch') private menuSearch?: ElementRef<HTMLInputElement>;
+  readonly resultatsMenu = computed(() => {
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const q = norm(this.menuRecherche().trim());
+    if (!q) return [];
+    const out: { item: MenuItem; groupe: string }[] = [];
+    for (const g of this.groups()) {
+      for (const item of g.children ?? []) {
+        if (item.isSectionHeader) continue;
+        if (norm(`${item.label} ${g.label}`).includes(q)) out.push({ item, groupe: g.label });
+      }
+    }
+    return out.slice(0, 12);
+  });
+
+  @HostListener('document:keydown', ['$event'])
+  raccourciMenu(e: KeyboardEvent): void {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      if (this.sidebarCollapsed) this.toggleCollapse();
+      this.sidebarOpen = true;
+      setTimeout(() => this.menuSearch?.nativeElement.focus(), 0);
+    }
+  }
+
+  ouvrirResultat(item: MenuItem): void {
+    this.menuRecherche.set('');
+    void this.onItemClick(item);
+  }
+
+  /** Entrée dans la recherche : ouvre le premier résultat ; Échap : efface. */
+  toucheRecherche(e: KeyboardEvent): void {
+    if (e.key === 'Enter') {
+      const premier = this.resultatsMenu()[0];
+      if (premier) this.ouvrirResultat(premier.item);
+    } else if (e.key === 'Escape') {
+      this.menuRecherche.set('');
+      (e.target as HTMLInputElement).blur();
+    }
+  }
 
   private subDocRole?: { unsubscribe(): void };
 
