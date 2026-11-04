@@ -66,6 +66,7 @@ public static class PlatformAccessCatalog
         S("admin.access", "Accès par rôle", "Administration", View: Admin, Configure: Admin),
         S("admin.users", "Utilisateurs", "Administration", View: AdminRh, Act: AdminRh),
         // v21 : changement de service d'un agent (de A vers B). Modifier = réaffecter.
+        S("rh.contrats", "Contrats", "Ressources humaines", View: TeamLead),
         S("rh.affectations", "Réaffecter les agents (changement de service)", "Ressources humaines", View: AdminRh, Act: AdminRh),
         S("admin.organisation", "Organisation", "Administration", View: AdminRh, Act: AdminRh),
         S("admin.sync", "Synchro organisation", "Administration", View: AdminRh, Act: AdminRh),
@@ -79,6 +80,8 @@ public static class PlatformAccessCatalog
         S("audit.reporting", "Reporting", "Audit", View: AdminAudit),
 
         S("planning.self", "Mes plannings", "Planification", View: Self),
+        // v22 : entrées de menu qui n'avaient pas encore d'écran dans « Accès par rôle ».
+        S("planning.renforts-self", "Mes renforts samedi", "Planification", View: Self),
         S("planning.equipe", "Planning de l'équipe", "Planification", View: TeamLead),
         S("planning.change-requests", "Traiter les changements", "Planification", View: TeamLead, Act: TeamLead),
         S("planning.exceptional-requests", "Demandes exceptionnelles", "Planification", View: TeamLead, Act: TeamLead),
@@ -108,6 +111,7 @@ public static class PlatformAccessCatalog
         S("presences.export", "Export paie", "Présences et paie", View: RhChefProjet),
 
         S("conges.self", "Mes congés", "Congés", View: Self),
+        S("conges.equipe", "Congés de l'équipe", "Congés", View: TeamLead),
         S("conges.validation", "Valider les congés", "Congés", View: ["Admin", "RH", "Manager", "Superviseur"], Validate: ["Admin", "RH", "Manager", "Superviseur"]),
         S("conges.history", "Historique des congés", "Congés", View: ["Admin", "RH", "Manager"]),
         S("conges.quotas", "Quotas cellule / service", "Congés", View: ["Superviseur", "Admin"], Configure: ["Superviseur", "Admin"]),

@@ -46,8 +46,7 @@ export class NavigationMenuService {
       }))
       .filter((g) => g.children.length > 0
         && (this.jwtRoleAllowed(g.roles, jwtRole)
-          || (this.access.hasCatalog() && g.children.some((c) =>
-            (!!c.capability && this.access.canView(c.capability)) || this.access.accordeExplicitement(c.ouvertureIam)))));
+          || (this.access.hasCatalog() && g.children.some((c) => !!(c.capability ?? c.ouvertureIam)))));
   }
 
   private resolveGroup(group: Microservice, jwtRole: string): Microservice {
@@ -150,12 +149,17 @@ export class NavigationMenuService {
     return buildDocumentationMenuItemsForRole(mapped);
   }
 
+  /**
+   * « Accès par rôle » (et « Accès par compte ») décide dès que les droits sont chargés : une entrée
+   * liée à un écran IAM (capability ou ouvertureIam) n'est affichée que si ce droit est accordé,
+   * dans un sens comme dans l'autre. La liste de rôles ne sert qu'avant le chargement des droits
+   * et pour les entrées sans écran IAM.
+   */
   private itemAllowed(item: MenuItem, jwtRole: string): boolean {
-    if (item.capability && this.access.hasCatalog()) {
-      return this.access.canView(item.capability);
+    const ecran = item.capability ?? item.ouvertureIam;
+    if (ecran && this.access.hasCatalog()) {
+      return item.capabilityVerb === 'Act' ? this.access.canAct(ecran) : this.access.canView(ecran);
     }
-    // Entrée réservée par défaut à des rôles, mais ouverte à ce rôle dans « Accès par rôle ».
-    if (this.access.accordeExplicitement(item.ouvertureIam)) return true;
     return this.jwtRoleAllowed(item.roles, jwtRole);
   }
 

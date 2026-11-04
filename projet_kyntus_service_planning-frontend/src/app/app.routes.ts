@@ -113,7 +113,7 @@ export const routes: Routes = [
       {
         path: 'reclamations-admin',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.reclamationsAdmin },
+        data: { roles: ROLE_SETS.reclamationsAdmin, ouvertureIam: 'qualite.admin' },
         loadComponent: () =>
           import('./features/reclamation/admin/reclamation-admin.component')
             .then(m => m.ReclamationAdminComponent),
@@ -284,7 +284,7 @@ export const routes: Routes = [
       {
         path: 'newsletter',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh },
+        data: { roles: ROLE_SETS.adminRh, ouvertureIam: 'communication.newsletter' },
         component: NewsletterAdminComponent,
       },
       {
@@ -318,7 +318,7 @@ export const routes: Routes = [
       {
         path: 'departements-metier',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh },
+        data: { roles: ROLE_SETS.adminRh, ouvertureIam: 'admin.organisation' },
         loadComponent: () =>
           import('./features/prime/pages/allowances/business-departments-page.component')
             .then((m) => m.BusinessDepartmentsPageComponent),
@@ -343,7 +343,7 @@ export const routes: Routes = [
       {
         path: 'pilotage-rh',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh },
+        data: { roles: ROLE_SETS.adminRh, ouvertureIam: 'admin.users' },
         loadComponent: () =>
           import('./features/rh/pilotage-rh/pilotage-rh.component')
             .then(m => m.PilotageRhComponent),
@@ -368,7 +368,7 @@ export const routes: Routes = [
       {
         path: 'import',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh },
+        data: { roles: ROLE_SETS.adminRh, ouvertureIam: 'admin.users' },
         loadComponent: () =>
           import('./features/users/pages/employee-import-guided/employee-import-guided.component')
             .then(m => m.EmployeeImportGuidedComponent),
@@ -378,7 +378,7 @@ export const routes: Routes = [
       {
         path: 'contracts',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.congesManager },
+        data: { roles: ROLE_SETS.congesManager, ouvertureIam: 'rh.contrats' },
         loadChildren: () =>
           import('./features/contract/contract-routing-module')
             .then(m => m.ContractRoutingModule),
@@ -543,7 +543,7 @@ export const routes: Routes = [
             // Congés de l'équipe : chaque responsable ne voit que son périmètre (contrôlé côté serveur).
             path: 'equipe',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.congesEquipe },
+            data: { roles: ROLE_SETS.congesEquipe, ouvertureIam: 'conges.equipe' },
             loadComponent: () =>
               import('./features/conge/pages/conge-equipe/conge-equipe.component')
                 .then(m => m.CongeEquipeComponent),
@@ -629,7 +629,7 @@ export const routes: Routes = [
       {
         path: 'mes-renforts',
         canActivate: [AuthGuard],
-        data: { ouvertureIam: 'planning.self', roles: ROLE_SETS.planningSelfService },
+        data: { ouvertureIam: 'planning.renforts-self', roles: ROLE_SETS.planningSelfService },
         loadComponent: () =>
           import('./features/planning/pages/mes-renforts/mes-renforts.component')
             .then(m => m.MesRenfortsComponent),

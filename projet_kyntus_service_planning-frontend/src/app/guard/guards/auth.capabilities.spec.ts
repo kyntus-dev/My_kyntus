@@ -53,6 +53,13 @@ describe('AuthGuard — « Accès par rôle » fait foi', () => {
     expect(await refus.guard.canActivate(route({ roles: ['Superviseur'], ouvertureIam: 'planning.equipe' }))).toBe(false);
   });
 
+  it('retire une page à un rôle de la liste quand « Accès par rôle » ne l’accorde plus', async () => {
+    // Rôle présent dans la liste par défaut (Ingénieur), mais renforts samedi retirés dans Accès par rôle.
+    const { guard, navigate } = garde(['planning.self']);
+    expect(await guard.canActivate(route({ roles: ['Ingénieur'], ouvertureIam: 'planning.renforts-self' }))).toBe(false);
+    expect(navigate).toHaveBeenCalledWith(['/unauthorized']);
+  });
+
   it('refuse un écran non accordé', async () => {
     const { guard, navigate } = garde([]);
     expect(await guard.canActivate(route({ roles: ['Admin'], capability: 'admin.access' }))).toBe(false);

@@ -66,8 +66,14 @@ export class AuthGuard implements CanActivate {
       return true;
     }
     // Page réservée par défaut à une liste de rôles, mais ouverte à ce rôle dans « Accès par rôle ».
+    // Écran IAM lié à la page : « Accès par rôle » décide (accordé → ouvert, retiré → refusé).
     const ouverture = route.data?.['ouvertureIam'] as string | string[] | undefined;
-    if (ouverture && this.access.accordeExplicitement(ouverture)) return true;
+    if (ouverture && this.access.hasCatalog()) {
+      const ecrans = typeof ouverture === 'string' ? [ouverture] : ouverture;
+      if (ecrans.some((c) => this.access.canView(c))) return true;
+      this.router.navigate(['/unauthorized']);
+      return false;
+    }
     if (allowedRoles?.length) {
       if (!token || isJwtExpired(token)) {
         this.router.navigate(['/unauthorized']);

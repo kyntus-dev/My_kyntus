@@ -100,6 +100,7 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'admin.overview', label: 'Vue d’ensemble', module: 'Administration', view: ADMIN_RH },
   { id: 'admin.access', label: 'Accès par rôle', module: 'Administration', view: ADMIN, configure: ADMIN },
   { id: 'admin.users', label: 'Utilisateurs', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },
+  { id: 'rh.contrats', label: 'Contrats', module: 'Ressources humaines', view: TEAM_LEAD },
   { id: 'rh.affectations', label: 'Réaffecter les agents (changement de service)', module: 'Ressources humaines', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'admin.organisation', label: 'Organisation', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'admin.sync', label: 'Synchro organisation', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },
@@ -113,6 +114,7 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'audit.reporting', label: 'Reporting', module: 'Audit', view: ADMIN_AUDIT },
 
   { id: 'planning.self', label: 'Mes plannings', module: 'Planification', view: SELF, defaultScope: 'Self' },
+  { id: 'planning.renforts-self', label: 'Mes renforts samedi', module: 'Planification', view: SELF, defaultScope: 'Self' },
   { id: 'planning.equipe', label: 'Planning de l’équipe', module: 'Planification', view: TEAM_LEAD, defaultScope: 'Cellule' },
   { id: 'planning.change-requests', label: 'Traiter les changements', module: 'Planification', view: TEAM_LEAD, act: TEAM_LEAD },
   { id: 'planning.exceptional-requests', label: 'Demandes exceptionnelles', module: 'Planification', view: TEAM_LEAD, act: TEAM_LEAD },
@@ -137,6 +139,7 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'presences.export', label: 'Export paie', module: 'Présences et paie', view: RH_CHEF_PROJET },
 
   { id: 'conges.self', label: 'Mes congés', module: 'Congés', view: SELF, defaultScope: 'Self' },
+  { id: 'conges.equipe', label: 'Congés de l’équipe', module: 'Congés', view: TEAM_LEAD },
   { id: 'conges.validation', label: 'Valider les congés', module: 'Congés', view: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur], validate: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur] },
   { id: 'conges.history', label: 'Historique des congés', module: 'Congés', view: [...ADMIN_RH, KyntusRoleNames.Manager] },
   { id: 'conges.quotas', label: 'Quotas cellule / service', module: 'Congés', view: [KyntusRoleNames.Superviseur, KyntusRoleNames.Admin], configure: [KyntusRoleNames.Superviseur, KyntusRoleNames.Admin] },
