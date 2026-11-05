@@ -19,6 +19,16 @@
   @if (error()) {
     <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
   } @else {
+    @if (perimetreVide()) {
+      <div class="ku-alert ku-alert--warn">
+        <div>
+          <strong>Aucun service dans votre périmètre</strong>
+          <p>Le périmètre d’un responsable vient d’Organisation RH › Structure de production : un superviseur couvre les cellules
+            dont il est responsable, un référent technique ses services, un chef de projet ses pôles. Demandez à l’Admin ou au RH
+            de vous désigner responsable de votre cellule.</p>
+        </div>
+      </div>
+    }
     <section class="ku-card ra-form">
       <div class="ra-etapes">
         <!-- 1. Agent -->

@@ -51,6 +51,12 @@ export class ReaffectationsComponent implements OnInit {
     return this.access.canAct('rh.affectations');
   });
 
+  /** Responsable sans cellule / service / pôle dans Organisation RH. */
+  readonly perimetreVide = computed(() => {
+    const o = this.options();
+    return !!o && !this.loading() && o.services.length === 0 && o.perimetre !== 'Toute l\'entreprise';
+  });
+
   readonly agentsFiltres = computed(() => {
     const q = sansAccents(this.rechercheAgent().trim());
     const tous = this.options()?.agents ?? [];

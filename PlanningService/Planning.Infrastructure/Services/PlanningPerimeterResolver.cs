@@ -16,6 +16,10 @@ namespace Planning.Infrastructure.Services;
 /// (Floor.PrimePoleId) qu'il détient dans Employee Directory — la projection ne créait
 /// aucun lien Planning pour ce rôle, d'où un périmètre vide.
 /// Interrupteur : Planning__ChefDeProjetPerimeterFromPoles=false.
+/// v25 : de même, un Superviseur couvre les cellules et un Référent technique les services dont il
+/// est responsable dans Organisation RH. Les liens Planning (UserManagedServices / UserSubServices)
+/// sont effacés à chaque enregistrement de la fiche employé, d'où un périmètre vide après un
+/// changement de rôle. Interrupteur : Planning__PerimetreDepuisAnnuaire=false.
 /// </summary>
 public interface IPlanningPerimeterResolver
 {
@@ -32,6 +36,9 @@ public sealed class PlanningPerimeterResolver(
 {
     private bool ChefDeProjetPerimeterEnabled =>
         !bool.TryParse(configuration?["Planning:ChefDeProjetPerimeterFromPoles"], out var enabled) || enabled;
+
+    private bool PerimetreAnnuaireActif =>
+        !bool.TryParse(configuration?["Planning:PerimetreDepuisAnnuaire"], out var actif) || actif;
 
     public async Task<HashSet<int>> GetManagedSubServiceIdsAsync(User manager, CancellationToken ct = default)
     {
@@ -72,7 +79,7 @@ public sealed class PlanningPerimeterResolver(
             KyntusCacheTtl.Entity,
             ct);
         var set = cached.ToHashSet();
-        if (rebac is null || !ChefDeProjetPerimeterEnabled)
+        if (rebac is null || (!ChefDeProjetPerimeterEnabled && !PerimetreAnnuaireActif))
             return set;
 
         var owner = await db.Users.AsNoTracking()
@@ -82,13 +89,14 @@ public sealed class PlanningPerimeterResolver(
     }
 
     /// <summary>
-    /// Ajoute au périmètre d'un Chef de projet les sous-services de ses pôles Directory.
-    /// En cas d'échec de l'appel Directory (ex. tâche de fond sans JWT), renvoie le périmètre
-    /// local inchangé : jamais d'élargissement non vérifié, jamais d'exception.
+    /// Ajoute au périmètre les responsabilités tenues dans Organisation RH (Employee Directory) :
+    /// pôles d'un Chef de projet, cellules d'un Superviseur (ou Manager), services d'un Référent
+    /// technique. En cas d'échec de l'appel Directory (ex. tâche de fond sans JWT), renvoie le
+    /// périmètre local inchangé : jamais d'élargissement non vérifié, jamais d'exception.
     /// </summary>
     private async Task<HashSet<int>> WithChefDeProjetPolesAsync(User user, HashSet<int> ids, CancellationToken ct)
     {
-        if (rebac is null || !ChefDeProjetPerimeterEnabled || user.Guid == Guid.Empty)
+        if (rebac is null || user.Guid == Guid.Empty)
             return ids;
 
         var roleName = user.Role?.Name
@@ -96,42 +104,60 @@ public sealed class PlanningPerimeterResolver(
                 .Where(r => r.Id == user.RoleId)
                 .Select(r => r.Name)
                 .FirstOrDefaultAsync(ct);
-        if (!KyntusRoleNames.IsChefDeProjet(roleName))
+
+        string? kind = null;
+        if (KyntusRoleNames.IsChefDeProjet(roleName) && ChefDeProjetPerimeterEnabled) kind = "ChefDeProjet";
+        else if ((KyntusRoleNames.IsSuperviseur(roleName) || KyntusRoleNames.IsSupportManager(roleName)) && PerimetreAnnuaireActif) kind = "Superviseur";
+        else if (KyntusRoleNames.IsReferentTechnique(roleName) && PerimetreAnnuaireActif) kind = "ReferentTechnique";
+        if (kind is null)
             return ids;
 
-        var cacheKey = $"{KyntusCacheKeys.PlanningPerimeter(user.Id)}:cp-poles";
-        List<int>? fromPoles = null;
+        var cacheKey = kind == "ChefDeProjet"
+            ? $"{KyntusCacheKeys.PlanningPerimeter(user.Id)}:cp-poles"
+            : $"{KyntusCacheKeys.PlanningPerimeter(user.Id)}:annuaire-{kind}";
+        List<int>? depuisAnnuaire = null;
         if (cache is not null)
-            fromPoles = await cache.GetAsync<List<int>>(cacheKey, ct);
+            depuisAnnuaire = await cache.GetAsync<List<int>>(cacheKey, ct);
 
-        if (fromPoles is null)
+        if (depuisAnnuaire is null)
         {
             try
             {
-                var poleIds = (await rebac.GetManagedNodeIdsAsync(user.Guid, "ChefDeProjet", ct))
+                var noeuds = (await rebac.GetManagedNodeIdsAsync(user.Guid, kind, ct))
                     .Where(p => !string.IsNullOrWhiteSpace(p))
                     .Select(p => p.Trim())
                     .ToList();
-                fromPoles = poleIds.Count == 0
-                    ? []
-                    : await db.SubServices.AsNoTracking()
+                depuisAnnuaire = noeuds.Count == 0 ? [] : kind switch
+                {
+                    "ChefDeProjet" => await db.SubServices.AsNoTracking()
                         .Where(ss => ss.Service != null
                                      && ss.Service.Floor != null
                                      && ss.Service.Floor.PrimePoleId != null
-                                     && poleIds.Contains(ss.Service.Floor.PrimePoleId))
+                                     && noeuds.Contains(ss.Service.Floor.PrimePoleId))
                         .Select(ss => ss.Id)
-                        .ToListAsync(ct);
+                        .ToListAsync(ct),
+                    "Superviseur" => await db.SubServices.AsNoTracking()
+                        .Where(ss => ss.Service != null
+                                     && ss.Service.PrimeCelluleId != null
+                                     && noeuds.Contains(ss.Service.PrimeCelluleId))
+                        .Select(ss => ss.Id)
+                        .ToListAsync(ct),
+                    _ => await db.SubServices.AsNoTracking()
+                        .Where(ss => ss.PrimeServiceId != null && noeuds.Contains(ss.PrimeServiceId))
+                        .Select(ss => ss.Id)
+                        .ToListAsync(ct),
+                };
                 if (cache is not null)
-                    await cache.SetAsync(cacheKey, fromPoles, KyntusCacheTtl.Entity, ct);
+                    await cache.SetAsync(cacheKey, depuisAnnuaire, KyntusCacheTtl.Entity, ct);
             }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "Périmètre Chef de projet (pôles Directory) indisponible pour l'utilisateur {UserId}", user.Id);
+                logger?.LogWarning(ex, "Périmètre Organisation RH ({Kind}) indisponible pour l'utilisateur {UserId}", kind, user.Id);
                 return ids;
             }
         }
 
-        ids.UnionWith(fromPoles);
+        ids.UnionWith(depuisAnnuaire);
         return ids;
     }
 
