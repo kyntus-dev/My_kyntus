@@ -66,8 +66,9 @@ public static class PlatformAccessCatalog
     private static readonly string[] FormationSuivi = ["Admin", "Equipe_Formation", "Formateur"];
     private static readonly string[] ReclamationsSelf =
     [
+        // v24 : comme le serveur des réclamations (ni Superviseur, ni Formateur).
         "Admin", "RH", "Audit", "Manager", "Coach", "Référent technique", "RP", "Chef de projet",
-        "Superviseur", "Pilote", "Employee", "Equipe_Formation", "Formateur", "Ingénieur", "Support IT"
+        "Pilote", "Employee", "Equipe_Formation", "Ingénieur", "Support IT"
     ];
     private static readonly string[] CqEvaluations =
     [
@@ -139,7 +140,7 @@ public static class PlatformAccessCatalog
         S("conges.self", "Mes congés", "Congés", View: Self),
         S("conges.equipe", "Congés de l'équipe", "Congés", View: TeamLead),
         S("conges.validation", "Valider les congés", "Congés", View: ["Admin", "RH", "Manager", "Superviseur"], Validate: ["Admin", "RH", "Manager", "Superviseur"]),
-        S("conges.history", "Historique des congés", "Congés", View: ["Admin", "RH", "Manager"]),
+        S("conges.history", "Historique des congés", "Congés", View: AdminRh), // v24 : API réservée à Admin et RH
         S("conges.quotas", "Quotas cellule / service", "Congés", View: ["Superviseur", "Admin"], Configure: ["Superviseur", "Admin"]),
         S("conges.periodes", "Périodes interdites", "Congés", View: AdminRh, Configure: AdminRh),
 

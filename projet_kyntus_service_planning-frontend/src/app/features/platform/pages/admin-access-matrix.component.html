@@ -94,16 +94,25 @@
                 <b>{{ l.label }}</b>
                 @if (modifiee(l)) { <small class="ar-modif">modifié</small> }
                 @if (!joker()) { @let e = ecart(l); @if (e) { <small class="ar-ecart" [title]="e">≠ défaut</small> } }
+                @if (!joker()) {
+                  @let v = verrou(l);
+                  @if (v) {
+                    <small class="ar-verrou" [class.alerte]="sansEffet(l)"
+                           [title]="(v.niveau === 'tout' ? 'Le serveur réserve cette rubrique à : ' : 'Le serveur réserve la modification à : ') + v.roles + (sansEffet(l) ? '. Le droit enregistré est sans effet : « Rétablir les droits par défaut » le retire.' : '')">
+                      {{ sansEffet(l) ? 'sans effet' : (v.niveau === 'tout' ? 'réservé : ' + v.roles : 'consultation seule') }}
+                    </small>
+                  }
+                }
               </div>
               <div class="ar-niveaux" [class.ferme]="niveauDe(l) === 'Aucun'" [style.--n]="l.niveaux.length" role="radiogroup" [attr.aria-label]="'Niveau pour ' + l.label">
                 <span class="ar-jauge" [class.vide]="niveauDe(l) === 'Aucun'" [style.width]="'calc(' + jauge(l) + '% - 6px)'"></span>
                 @for (n of l.niveaux; track n) {
                   <button type="button" role="radio" [attr.aria-checked]="niveauDe(l) === n"
-                          [class.on]="rang(l, n)" [disabled]="!peutModifier()" (click)="niveau(l, n)">{{ libelleNiveau[n] }}</button>
+                          [class.on]="rang(l, n)" [disabled]="!peutModifier() || niveauBloque(l, n)" (click)="niveau(l, n)">{{ libelleNiveau[n] }}</button>
                 }
               </div>
               <button type="button" class="ar-switch" [class.on]="l.verbes.has('Configure')" [class.cache]="!l.configurable"
-                      [disabled]="!peutModifier() || !l.configurable" [attr.aria-pressed]="l.verbes.has('Configure')"
+                      [disabled]="!peutModifier() || !l.configurable || (!l.verbes.has('Configure') && !!verrou(l))" [attr.aria-pressed]="l.verbes.has('Configure')"
                       (click)="configurer(l)" title="Configurer : réglages de la rubrique">
                 <i></i>Configurer
               </button>

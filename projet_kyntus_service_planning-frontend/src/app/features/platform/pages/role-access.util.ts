@@ -1,4 +1,4 @@
-import type { PlatformScope, PlatformScreen, PlatformVerb } from '../../../core/platform-access/platform-capability.catalog';
+import { plafondAutorise, type PlatformScope, type PlatformScreen, type PlatformVerb } from '../../../core/platform-access/platform-capability.catalog';
 import type { IamPermissionDto, UpsertIamPermissionRequest } from '../../../core/platform-access/platform-iam-api.service';
 
 /**
@@ -160,13 +160,14 @@ export function lignesParDefaut(
   ecrans: readonly PlatformScreen[],
   perimetreParDefaut: (ecran: PlatformScreen) => PlatformScope,
 ): LigneRubrique[] {
-  const a = (liste?: readonly string[]) => !!liste?.some((r) => memeRole(r, role));
+  const a = (liste: readonly string[] | undefined, s: PlatformScreen, v: PlatformVerb) =>
+    !!liste?.some((r) => memeRole(r, role)) && plafondAutorise(s, role, v);
   return ecrans.map((s) => {
     const verbes = new Set<PlatformVerb>();
-    if (a(s.view)) verbes.add('View');
-    if (a(s.act)) verbes.add('Act');
-    if (a(s.validate)) verbes.add('Validate');
-    if (a(s.configure)) verbes.add('Configure');
+    if (a(s.view, s, 'View')) verbes.add('View');
+    if (a(s.act, s, 'Act')) verbes.add('Act');
+    if (a(s.validate, s, 'Validate')) verbes.add('Validate');
+    if (a(s.configure, s, 'Configure')) verbes.add('Configure');
     if (verbes.size) verbes.add('View');
     return {
       capability: s.id,
@@ -190,3 +191,16 @@ export function differeDuDefaut(defaut: LigneRubrique | undefined, l: LigneRubri
 export function clesDesLignes(lignes: readonly LigneRubrique[]): string[] {
   return lignes.flatMap((l) => [...l.verbes].map((v) => `${l.capability}.${v}:${l.perimetre}`));
 }
+
+/**
+ * Limite fixée par le serveur pour ce rôle : « tout » = la rubrique ne peut pas être ouverte,
+ * « agir » = seulement « Consulter ». null = aucune limite.
+ */
+export function verrouServeur(s: PlatformScreen | undefined, role: string): { niveau: 'tout' | 'agir'; roles: string } | null {
+  if (!s) return null;
+  if (!plafondAutorise(s, role, 'View')) return { niveau: 'tout', roles: (s.serveur ?? []).filter(unique).join(', ') };
+  if (!plafondAutorise(s, role, 'Act')) return { niveau: 'agir', roles: (s.serveurAgir ?? []).filter(unique).join(', ') };
+  return null;
+}
+
+const unique = (r: string, i: number, t: readonly string[]) => t.indexOf(r) === i;

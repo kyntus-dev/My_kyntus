@@ -21,10 +21,21 @@ describe('aperçu du menu par rôle', () => {
   });
 
   it('une rubrique accordée ajoute l’entrée, une rubrique retirée l’enlève', () => {
-    const cles = [...defauts('Ingénieur'), 'pointage.equipe.View:Self'];
-    expect(groupe('Ingénieur', cles, 'pointage')!.entrees).toContain('Pointages de l’équipe');
+    const cles = [...defauts('Ingénieur'), 'planning.equipe.View:Self'];
+    expect(groupe('Ingénieur', cles, 'planning')!.entrees).toContain('Planning de l’équipe');
     const sansFil = defauts('Pilote').filter((k) => !k.startsWith('communication.fil.'));
     expect(groupe('Pilote', sansFil, 'communication')).toBeUndefined();
+  });
+
+  it('un écran que le serveur réserve à d’autres rôles reste masqué, même accordé', () => {
+    // Cas signalé : régimes, accès heure de sortie, validation et historique des congés accordés
+    // à un rôle que les API refusent.
+    const cles = [...defauts('Ingénieur'), 'pointage.equipe.View:Self', 'pointage.regimes.View:Self',
+      'pointage.acces-sortie.View:Self', 'conges.validation.View:Self', 'conges.history.View:Self'];
+    expect(groupe('Ingénieur', cles, 'pointage')!.entrees).toEqual(['Mon suivi', 'Heure de sortie (comptes autorisés)']);
+    expect(groupe('Ingénieur', cles, 'conges')!.entrees).toEqual(['Mes congés', 'Congés de ma cellule']);
+    // Admin (joker) : « Mes évaluations » CQ est réservé aux pilotes par le service Qualité.
+    expect(groupe('Admin', ['*:Global'], 'controle-qualite')!.entrees).not.toContain('Mes évaluations');
   });
 
   it('un module retiré disparaît entièrement, titres de section compris', () => {

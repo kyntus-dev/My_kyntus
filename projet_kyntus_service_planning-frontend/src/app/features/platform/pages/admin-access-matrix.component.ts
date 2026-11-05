@@ -35,6 +35,7 @@ import {
   lignesParDefaut,
   niveauDe,
   rubriquesOuvertes,
+  verrouServeur,
 } from './role-access.util';
 
 type Filtre = 'toutes' | 'ouvertes' | 'modifiees' | 'ecarts';
@@ -158,13 +159,36 @@ export class AdminAccessMatrixComponent implements OnInit {
     this.construire();
   }
 
+  /** Limites du serveur pour le rôle affiché, rubrique par rubrique. */
+  private readonly verrous = computed(() => {
+    const role = this.role();
+    return new Map(PLATFORM_SCREENS.map((s) => [s.id, verrouServeur(s, role)]));
+  });
+
+  verrou(l: LigneRubrique): { niveau: 'tout' | 'agir'; roles: string } | null {
+    return this.verrous().get(l.capability) ?? null;
+  }
+
+  /** Niveau impossible pour ce rôle (le serveur le refuserait). */
+  niveauBloque(l: LigneRubrique, n: Niveau): boolean {
+    const v = this.verrou(l);
+    return !!v && n !== 'Aucun' && (v.niveau === 'tout' || n !== 'View');
+  }
+
+  /** Droit enregistré que le serveur ignore pour ce rôle. */
+  sansEffet(l: LigneRubrique): boolean {
+    const v = this.verrou(l);
+    if (!v) return false;
+    return v.niveau === 'tout' ? l.verbes.size > 0 : [...l.verbes].some((x) => x !== 'View');
+  }
+
   niveau(l: LigneRubrique, n: Niveau): void {
-    if (!this.peutModifier()) return;
+    if (!this.peutModifier() || this.niveauBloque(l, n)) return;
     this.remplacer(avecNiveau(l, n));
   }
 
   configurer(l: LigneRubrique): void {
-    if (!this.peutModifier()) return;
+    if (!this.peutModifier() || (!l.verbes.has('Configure') && this.verrou(l))) return;
     this.remplacer(avecConfiguration(l, !l.verbes.has('Configure')));
   }
 
@@ -175,7 +199,7 @@ export class AdminAccessMatrixComponent implements OnInit {
 
   toutModule(module: string, n: Niveau): void {
     if (!this.peutModifier()) return;
-    this.lignes.set(this.lignes().map((l) => (l.module === module ? avecNiveau(l, n) : l)));
+    this.lignes.set(this.lignes().map((l) => (l.module === module && !this.niveauBloque(l, n) ? avecNiveau(l, n) : l)));
   }
 
   /** Largeur de la jauge : position du niveau dans les niveaux proposés. */

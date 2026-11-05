@@ -1,4 +1,5 @@
 import { roleNamesMatch } from '../org/org-role-assignment';
+import { PLATFORM_SCREENS, plafondAutorise } from '../platform-access/platform-capability.catalog';
 import type { MenuItem, Microservice } from './microservices.config';
 
 /** Écrans IAM d'une entrée de menu (capability, puis ouvertureIam simple ou multiple). */
@@ -13,7 +14,9 @@ export function ecransDe(item: Pick<MenuItem, 'capability' | 'ouvertureIam'>): r
  * « Consulter » est aussi accordé par Modifier, Valider ou Configurer ; « Modifier » par Valider
  * ou Configurer — comme dans PlatformAccessService.
  */
-export function droitAccorde(cles: readonly string[], ecran: string, verbe: 'View' | 'Act'): boolean {
+export function droitAccorde(cles: readonly string[], ecran: string, verbe: 'View' | 'Act', role?: string): boolean {
+  // Écran réservé par le serveur à d'autres rôles : jamais accordé en pratique.
+  if (role !== undefined && !plafondAutorise(PLATFORM_SCREENS.find((s) => s.id === ecran), role, verbe)) return false;
   if (cles.includes('*:Global')) return true;
   const verbes = verbe === 'View' ? ['View', 'Act', 'Validate', 'Configure'] : ['Act', 'Validate', 'Configure'];
   return cles.some((k) => verbes.some((v) => k.startsWith(`${ecran}.${v}:`)));
@@ -36,7 +39,7 @@ export function apercuMenu(role: string, cles: readonly string[], groupes: reado
   const roleOk = (roles?: readonly string[]) => !roles?.length || roles.some((r) => roleNamesMatch(r, role));
   const out: GroupeApercu[] = [];
   for (const g of groupes) {
-    if (g.ouvertureIam && !droitAccorde(cles, g.ouvertureIam, 'View')) continue;
+    if (g.ouvertureIam && !droitAccorde(cles, g.ouvertureIam, 'View', role)) continue;
     if (g.dynamicChildren) {
       if (roleOk(g.roles)) out.push({ id: g.id, label: g.label, entrees: [], module: true });
       continue;
@@ -48,7 +51,7 @@ export function apercuMenu(role: string, cles: readonly string[], groupes: reado
       const ecrans = ecransDe(c);
       if (ecrans.length) lieAuxDroits = true;
       const ok = ecrans.length
-        ? ecrans.some((e) => droitAccorde(cles, e, c.capabilityVerb === 'Act' ? 'Act' : 'View'))
+        ? ecrans.some((e) => droitAccorde(cles, e, c.capabilityVerb === 'Act' ? 'Act' : 'View', role))
         : roleOk(c.roles);
       // « Heure de sortie » : en plus du droit, l'accès est donné compte par compte (Pointage).
       const libelle = c.route === '/pointage/heure-de-sortie' ? `${c.label} (comptes autorisés)` : c.label;

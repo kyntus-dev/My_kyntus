@@ -152,3 +152,9 @@
   font-size: 0.66rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; cursor: help;
   color: var(--ky-blue); background: color-mix(in srgb, var(--ky-blue) 10%, transparent);
 }
+.ar-verrou {
+  font-size: 0.66rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; cursor: help; margin-left: 4px;
+  color: var(--text-muted); background: var(--bg-input, #eef2f7);
+}
+.ar-verrou.alerte { color: #fff; background: var(--danger, #d64545); }
+.ar-niveaux button:disabled:not(.on) { opacity: 0.35; }
