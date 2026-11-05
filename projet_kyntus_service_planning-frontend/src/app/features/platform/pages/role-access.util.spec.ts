@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { PlatformScreen } from '../../../core/platform-access/platform-capability.catalog';
 import type { IamPermissionDto } from '../../../core/platform-access/platform-iam-api.service';
-import { avecConfiguration, avecNiveau, avecPerimetre, ecritures, lignesDuRole, niveauDe, rubriquesOuvertes } from './role-access.util';
+import {
+  avecConfiguration, avecNiveau, avecPerimetre, clesDesLignes, differeDuDefaut, ecritures, lignesDuRole, lignesParDefaut, niveauDe, rubriquesOuvertes,
+} from './role-access.util';
 
 const ecrans: PlatformScreen[] = [
   { id: 'presences', label: 'Tableau des présences', module: 'Présences', view: [], act: ['x'] },
@@ -48,5 +50,21 @@ describe('accès par rôle (niveaux)', () => {
     const avant = lignes();
     expect(avecNiveau(avecConfiguration(avant[3], true), 'Aucun').verbes.size).toBe(0);
     expect(ecritures('Superviseur', perms, avant, avant)).toEqual([]);
+  });
+});
+
+describe('droits par défaut', () => {
+  const ecrans = [
+    { id: 'pointage.self', label: 'Mon suivi', module: 'Pointage', view: ['Ingénieur', 'Pilote'] },
+    { id: 'pointage.equipe', label: 'Équipe', module: 'Pointage', view: ['Superviseur'] },
+    { id: 'pointage.regimes', label: 'Régimes', module: 'Pointage', view: ['RH'], configure: ['RH'] },
+  ];
+  it('reprend les rôles du catalogue et repère les écarts', () => {
+    const d = lignesParDefaut('Ingénieur', ecrans, () => 'Self');
+    expect(d.map((l) => niveauDe(l))).toEqual(['View', 'Aucun', 'Aucun']);
+    const ouvert = avecNiveau(d[1], 'View');
+    expect(differeDuDefaut(d[1], ouvert)).toBe(true);
+    expect(differeDuDefaut(d[0], avecPerimetre(d[0], 'Cellule'))).toBe(false);
+    expect(clesDesLignes([d[0], ouvert])).toEqual(['pointage.self.View:Self', 'pointage.equipe.View:Self']);
   });
 });

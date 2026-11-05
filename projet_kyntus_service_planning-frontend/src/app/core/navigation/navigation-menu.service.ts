@@ -2,6 +2,7 @@
 
 import { APP_GUIDE_ROUTE, MICROSERVICES, Microservice, MenuItem } from './microservices.config';
 import { AppGuideService } from '../help/app-guide.service';
+import { ecransDe } from './menu-apercu.util';
 import { buildPrimeMenuItemsForRole } from './prime-menu.config';
 import { buildParrainageMenuItemsForRole } from './parrainage-menu.config';
 import {
@@ -39,14 +40,18 @@ export class NavigationMenuService {
     void this.access.ensureLoaded();
     const dualHat = this.workspace.canSwitch();
     const hat = this.workspace.hat();
-    return MICROSERVICES.map((g) => this.resolveGroup(g, jwtRole))
+    const catalogue = this.access.hasCatalog();
+    return MICROSERVICES
+      // Module retiré dans « Accès par rôle » : le groupe entier disparaît.
+      .filter((g) => !(catalogue && g.ouvertureIam && !this.access.canView(g.ouvertureIam)))
+      .map((g) => this.resolveGroup(g, jwtRole))
       .map((g) => ({
         ...g,
         children: filterItemsByHat(g.children, hat, dualHat),
       }))
-      .filter((g) => g.children.length > 0
+      .filter((g) => g.children.some((c) => !c.isSectionHeader)
         && (this.jwtRoleAllowed(g.roles, jwtRole)
-          || (this.access.hasCatalog() && g.children.some((c) => !!(c.capability ?? c.ouvertureIam)))));
+          || (catalogue && g.children.some((c) => ecransDe(c).length > 0))));
   }
 
   private resolveGroup(group: Microservice, jwtRole: string): Microservice {
@@ -156,9 +161,13 @@ export class NavigationMenuService {
    * et pour les entrées sans écran IAM.
    */
   private itemAllowed(item: MenuItem, jwtRole: string): boolean {
-    const ecran = item.capability ?? item.ouvertureIam;
-    if (ecran && this.access.hasCatalog()) {
-      return item.capabilityVerb === 'Act' ? this.access.canAct(ecran) : this.access.canView(ecran);
+    if (this.access.hasCatalog()) {
+      // Titres de section : gardés seulement s'ils précèdent une entrée affichée (filterItemsByHat).
+      if (item.isSectionHeader) return true;
+      const ecrans = ecransDe(item);
+      if (ecrans.length) {
+        return ecrans.some((e) => (item.capabilityVerb === 'Act' ? this.access.canAct(e) : this.access.canView(e)));
+      }
     }
     return this.jwtRoleAllowed(item.roles, jwtRole);
   }

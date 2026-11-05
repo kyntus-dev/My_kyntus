@@ -16,10 +16,42 @@
         <h2>{{ libelleRole(role()) }} <span>· {{ joker() ? 'accès complet' : ouvertes() + ' rubrique(s) ouverte(s)' }}</span></h2>
         <p>Le niveau s’applique à tous les comptes du rôle. Pour un seul compte, utilisez « Accès par compte ».</p>
       </div>
-      <div class="ar-legende" aria-hidden="true">
-        <span><i class="n0"></i>Aucun</span><span><i class="n1"></i>Consulter</span><span><i class="n2"></i>Modifier</span><span><i class="n3"></i>Valider</span>
+      <div class="ar-actions">
+        <button type="button" class="ar-act" [class.on]="apercuOuvert()" [attr.aria-expanded]="apercuOuvert()" (click)="apercuOuvert.set(!apercuOuvert())">
+          Menu de ce rôle <b>{{ entreesApercu() }}</b>
+        </button>
+        @if (peutModifier()) {
+          <button type="button" class="ar-act" [disabled]="!ecarts().length" (click)="retablirDefauts()"
+                  title="Remettre les rubriques du rôle au réglage d’origine">Rétablir les droits par défaut</button>
+        }
       </div>
     </header>
+
+    @if (apercuOuvert()) {
+      <section class="ar-apercu" aria-label="Aperçu du menu">
+        <header>
+          <div>
+            <h3>Ce que voient les comptes {{ libelleRole(role()) }} dans le menu</h3>
+            <p>Avec les réglages affichés ci-dessous{{ modifiees().length ? ', modifications non enregistrées comprises' : '' }}. Un compte peut avoir en plus ses exceptions (« Accès par compte »).</p>
+          </div>
+          <button type="button" class="ar-fermer" (click)="apercuOuvert.set(false)" aria-label="Fermer l’aperçu">×</button>
+        </header>
+        <div class="ar-apercu-grille">
+          @for (g of apercu(); track g.id) {
+            <div class="ar-apercu-groupe">
+              <b>{{ g.label }}</b>
+              @if (g.module) {
+                <small>Entrées selon les réglages du module</small>
+              } @else {
+                <ul>@for (e of g.entrees; track e) { <li>{{ e }}</li> }</ul>
+              }
+            </div>
+          } @empty {
+            <p class="ar-vide">Aucune entrée : ce rôle ne voit que l’accueil.</p>
+          }
+        </div>
+      </section>
+    }
 
     @if (joker()) {
       <div class="ar-info">Ce rôle a l’accès complet à toutes les rubriques (Admin) : rien à régler ici.</div>
@@ -33,6 +65,10 @@
         <button type="button" [class.on]="filtre() === 'toutes'" (click)="filtre.set('toutes')">Toutes</button>
         <button type="button" [class.on]="filtre() === 'ouvertes'" (click)="filtre.set('ouvertes')">Ouvertes</button>
         <button type="button" [class.on]="filtre() === 'modifiees'" (click)="filtre.set('modifiees')">Modifiées @if (modifiees().length) { <b>{{ modifiees().length }}</b> }</button>
+        <button type="button" [class.on]="filtre() === 'ecarts'" (click)="filtre.set('ecarts')" title="Rubriques réglées autrement que par défaut">Hors défaut @if (!joker() && ecarts().length) { <b>{{ ecarts().length }}</b> }</button>
+      </div>
+      <div class="ar-legende" aria-hidden="true">
+        <span><i class="n0"></i>Aucun</span><span><i class="n1"></i>Consulter</span><span><i class="n2"></i>Modifier</span><span><i class="n3"></i>Valider</span>
       </div>
     </div>
 
@@ -57,6 +93,7 @@
               <div class="ar-nom">
                 <b>{{ l.label }}</b>
                 @if (modifiee(l)) { <small class="ar-modif">modifié</small> }
+                @if (!joker()) { @let e = ecart(l); @if (e) { <small class="ar-ecart" [title]="e">≠ défaut</small> } }
               </div>
               <div class="ar-niveaux" [class.ferme]="niveauDe(l) === 'Aucun'" [style.--n]="l.niveaux.length" role="radiogroup" [attr.aria-label]="'Niveau pour ' + l.label">
                 <span class="ar-jauge" [class.vide]="niveauDe(l) === 'Aucun'" [style.width]="'calc(' + jauge(l) + '% - 6px)'"></span>

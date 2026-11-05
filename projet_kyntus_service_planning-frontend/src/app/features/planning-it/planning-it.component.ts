@@ -11,6 +11,7 @@ import type {
   PlanningItStatut,
 } from '../../core/models/planning-it.models';
 import { KyntusToastService } from '../../shared/components/ui/kyntus-toast.service';
+import { libelleSemaine, semaineIso } from '../../shared/utils/semaine-iso';
 import { casesModifiees, cle, completude, copieSemaine, enteteJour, joursAffiches, lundiDe } from './planning-it.util';
 
 /** Rafraîchissement automatique : les saisies des collègues apparaissent sans recharger la page. */
@@ -46,6 +47,11 @@ export class PlanningItComponent implements OnInit {
   readonly menuOuvert = signal<string | null>(null);
   private saisieActive = false;
 
+  /** Semaine affichée, numérotée sur l'année : « S45 ». */
+  readonly semaine = computed(() => {
+    const lundi = this.data()?.du?.slice(0, 10) ?? lundiDe(this.decalage());
+    return { ...semaineIso(lundi), libelle: libelleSemaine(lundi) };
+  });
   readonly jours = computed(() => (this.data() ? joursAffiches(this.data()!) : []));
   readonly moi = computed(() => this.data()?.membres.find((m) => m.estMoi) ?? null);
   readonly synthese = computed(() => (this.data() ? completude(this.data()!, this.jours()) : { complets: 0, total: 0 }));

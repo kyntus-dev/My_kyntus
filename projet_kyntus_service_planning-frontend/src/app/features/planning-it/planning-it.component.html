@@ -10,6 +10,7 @@
     </div>
     <div class="ku-hero-actions">
       <button type="button" class="ku-btn" (click)="changerSemaine(-1)" aria-label="Semaine précédente">‹</button>
+      <span class="pit-sem" [attr.aria-label]="'Semaine ' + semaine().numero + ' de ' + semaine().annee">{{ semaine().libelle }}</span>
       <button type="button" class="ku-btn" (click)="changerSemaine(0)" [disabled]="decalage() === 0">Cette semaine</button>
       <button type="button" class="ku-btn" (click)="changerSemaine(1)" aria-label="Semaine suivante">›</button>
       <app-planning-export-button type="it" />
@@ -25,9 +26,9 @@
     <div class="ku-skeleton pit-sk"></div>
   } @else if (data(); as d) {
     <div class="ku-kpis">
-      <div class="ku-kpi"><span class="ku-kpi-label">Semaine</span>
-        <span class="ku-kpi-value pit-kpi-sm">{{ enteteJour(d.du).date }} → {{ enteteJour(d.au).date }}</span>
-        <span class="ku-kpi-sub">{{ d.membres.length }} membre(s) de la cellule IT</span></div>
+      <div class="ku-kpi"><span class="ku-kpi-label">Semaine {{ semaine().annee }}</span>
+        <span class="ku-kpi-value">{{ semaine().libelle }}</span>
+        <span class="ku-kpi-sub">du {{ enteteJour(d.du).date }} au {{ enteteJour(d.au).date }} · {{ d.membres.length }} membre(s) de la cellule IT</span></div>
       <div class="ku-kpi" [class.ku-kpi--ok]="synthese().complets === synthese().total" [class.ku-kpi--warn]="synthese().complets < synthese().total">
         <span class="ku-kpi-label">Plannings complets</span>
         <span class="ku-kpi-value">{{ synthese().complets }} / {{ synthese().total }}</span>

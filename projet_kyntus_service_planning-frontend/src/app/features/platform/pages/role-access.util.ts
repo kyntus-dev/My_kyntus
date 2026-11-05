@@ -150,3 +150,43 @@ export function rubriquesOuvertes(permissions: readonly IamPermissionDto[], role
 export function aJoker(permissions: readonly IamPermissionDto[], role: string): boolean {
   return memeRole(role, 'Admin') || permissions.some((p) => p.isAllowed && memeRole(p.role, role) && p.action === '*');
 }
+
+/**
+ * Droits par défaut d'un rôle (ceux du catalogue, ajoutés au démarrage de l'Annuaire) : sert à
+ * « Rétablir les droits par défaut » et à repérer les rubriques réglées autrement.
+ */
+export function lignesParDefaut(
+  role: string,
+  ecrans: readonly PlatformScreen[],
+  perimetreParDefaut: (ecran: PlatformScreen) => PlatformScope,
+): LigneRubrique[] {
+  const a = (liste?: readonly string[]) => !!liste?.some((r) => memeRole(r, role));
+  return ecrans.map((s) => {
+    const verbes = new Set<PlatformVerb>();
+    if (a(s.view)) verbes.add('View');
+    if (a(s.act)) verbes.add('Act');
+    if (a(s.validate)) verbes.add('Validate');
+    if (a(s.configure)) verbes.add('Configure');
+    if (verbes.size) verbes.add('View');
+    return {
+      capability: s.id,
+      label: s.label,
+      module: s.module,
+      niveaux: niveauxProposes(s),
+      configurable: !!s.configure?.length,
+      verbes,
+      perimetre: perimetreParDefaut(s),
+    };
+  });
+}
+
+/** Niveau (ou « Configurer ») différent du réglage par défaut ; le périmètre n'est pas comparé. */
+export function differeDuDefaut(defaut: LigneRubrique | undefined, l: LigneRubrique): boolean {
+  const d = defaut?.verbes ?? new Set<PlatformVerb>();
+  return d.size !== l.verbes.size || [...l.verbes].some((v) => !d.has(v));
+}
+
+/** Clés « écran.Verbe:Périmètre » des lignes (brouillon compris), pour l'aperçu du menu. */
+export function clesDesLignes(lignes: readonly LigneRubrique[]): string[] {
+  return lignes.flatMap((l) => [...l.verbes].map((v) => `${l.capability}.${v}:${l.perimetre}`));
+}

@@ -16,6 +16,8 @@ import { libelleRole } from '../../../core/org/role-libelle';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { rolesMatrice } from '../roles/roles-iam.util';
+import { MICROSERVICES } from '../../../core/navigation/microservices.config';
+import { apercuMenu } from '../../../core/navigation/menu-apercu.util';
 import {
   LIBELLE_NIVEAU,
   LIBELLE_PERIMETRE,
@@ -25,14 +27,17 @@ import {
   avecConfiguration,
   avecNiveau,
   avecPerimetre,
+  clesDesLignes,
+  differeDuDefaut,
   ecritures,
   estModifiee,
   lignesDuRole,
+  lignesParDefaut,
   niveauDe,
   rubriquesOuvertes,
 } from './role-access.util';
 
-type Filtre = 'toutes' | 'ouvertes' | 'modifiees';
+type Filtre = 'toutes' | 'ouvertes' | 'modifiees' | 'ecarts';
 
 /**
  * « Accès par rôle » : une ligne par rubrique, un niveau en un clic (Aucun · Consulter ·
@@ -72,6 +77,7 @@ export class AdminAccessMatrixComponent implements OnInit {
   readonly error = signal('');
   readonly recherche = signal('');
   readonly filtre = signal<Filtre>('toutes');
+  readonly apercuOuvert = signal(false);
   readonly canWrite = computed(() => (this.session.getRole() || '').toLowerCase() === 'admin');
 
   readonly joker = computed(() => aJoker(this.permissions(), this.role()));
@@ -83,15 +89,30 @@ export class AdminAccessMatrixComponent implements OnInit {
   readonly modifiees = computed(() => this.lignes().filter((l) => estModifiee(this.avantParCap().get(l.capability), l)));
   readonly ouvertes = computed(() => this.lignes().filter((l) => l.verbes.has('View')).length);
 
+  /** Réglage par défaut du rôle (catalogue), rubrique par rubrique. */
+  private readonly defautParCap = computed(() => {
+    const role = this.role();
+    return new Map(lignesParDefaut(role, PLATFORM_SCREENS, (s) => defaultScopeForRole(role, s)).map((l) => [l.capability, l]));
+  });
+  readonly ecarts = computed(() => this.lignes().filter((l) => differeDuDefaut(this.defautParCap().get(l.capability), l)));
+  /** Menu que verront les comptes du rôle avec les réglages affichés (brouillon compris). */
+  readonly apercu = computed(() =>
+    this.joker()
+      ? apercuMenu(this.role(), ['*:Global'], MICROSERVICES)
+      : apercuMenu(this.role(), clesDesLignes(this.lignes()), MICROSERVICES));
+  readonly entreesApercu = computed(() => this.apercu().reduce((n, g) => n + g.entrees.length, 0));
+
   readonly modules = computed(() => {
     const q = this.recherche().trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
     const modif = new Set(this.modifiees().map((l) => l.capability));
+    const ecarts = new Set(this.ecarts().map((l) => l.capability));
     const groupes = new Map<string, LigneRubrique[]>();
     for (const l of this.lignes()) {
       const texte = `${l.label} ${l.module}`.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
       if (q && !texte.includes(q)) continue;
       if (this.filtre() === 'ouvertes' && !l.verbes.has('View')) continue;
       if (this.filtre() === 'modifiees' && !modif.has(l.capability)) continue;
+      if (this.filtre() === 'ecarts' && !ecarts.has(l.capability)) continue;
       groupes.set(l.module, [...(groupes.get(l.module) ?? []), l]);
     }
     return [...groupes.entries()].map(([module, lignes]) => ({
@@ -169,6 +190,38 @@ export class AdminAccessMatrixComponent implements OnInit {
 
   modifiee(l: LigneRubrique): boolean {
     return estModifiee(this.avantParCap().get(l.capability), l);
+  }
+
+  /** Rubrique réglée autrement que par défaut : libellé du niveau par défaut, sinon null. */
+  ecart(l: LigneRubrique): string | null {
+    const d = this.defautParCap().get(l.capability);
+    if (!differeDuDefaut(d, l)) return null;
+    const n = d ? niveauDe(d) : 'Aucun';
+    return `Par défaut : ${LIBELLE_NIVEAU[n]}${d?.verbes.has('Configure') ? ' + Configurer' : ''}`;
+  }
+
+  /** Remet toutes les rubriques du rôle au réglage par défaut (à enregistrer ensuite). */
+  async retablirDefauts(): Promise<void> {
+    if (!this.peutModifier()) return;
+    const n = this.ecarts().length;
+    if (!n) {
+      this.toast.info(`Le rôle ${libelleRole(this.role())} a déjà les droits par défaut.`);
+      return;
+    }
+    const ok = await this.confirm.confirm({
+      title: 'Rétablir les droits par défaut',
+      message: `${n} rubrique(s) du rôle ${libelleRole(this.role())} reviennent au réglage par défaut. Rien n'est enregistré avant « Enregistrer ». Les exceptions de « Accès par compte » ne changent pas.`,
+      confirmLabel: 'Rétablir',
+      variant: 'warning',
+    });
+    if (!ok) return;
+    const defauts = this.defautParCap();
+    this.lignes.set(this.lignes().map((l) => {
+      const d = defauts.get(l.capability);
+      if (!d || !differeDuDefaut(d, l)) return l;
+      return { ...l, verbes: new Set(d.verbes), perimetre: d.verbes.size ? d.perimetre : l.perimetre };
+    }));
+    this.filtre.set('modifiees');
   }
 
   annuler(): void {

@@ -1,3 +1,5 @@
+import { libelleSemaine, semaineIso } from '../utils/semaine-iso';
+
 /**
  * Export Excel des plannings (RH publié et planning IT) : choix de la période et construction des
  * lignes. Une ligne par collaborateur, une colonne par jour, puis les totaux.
@@ -23,7 +25,7 @@ export interface PeriodeExport {
 export function semaine(decalage: number, now = new Date()): PeriodeExport {
   const lundi = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7) + 7 * decalage);
   const dimanche = new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate() + 6);
-  return { du: ymd(lundi), au: ymd(dimanche), libelle: `Semaine du ${fr(ymd(lundi))} au ${fr(ymd(dimanche))}` };
+  return { du: ymd(lundi), au: ymd(dimanche), libelle: `${libelleSemaine(lundi)} ${semaineIso(lundi).annee} · du ${fr(ymd(lundi))} au ${fr(ymd(dimanche))}` };
 }
 
 /** Mois de paie : du 24 du mois précédent au 23 (le mois en cours change le 24). */

@@ -65,3 +65,8 @@ body.theme-dark .pit-cell.s-Conge { background: #7c4a2d !important; }
   background: transparent !important; border: 1px solid transparent !important;
 }
 .pit-table .pit-com input.pit-com-input.pit-com-input.pit-com-input.pit-com-input:focus { background: var(--bg-card) !important; border-color: var(--ky-blue) !important; }
+.pit-sem {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 56px; padding: 0 12px; height: 36px;
+  border-radius: 10px; background: color-mix(in srgb, var(--ky-blue) 10%, var(--bg-card)); color: var(--ky-blue);
+  font-weight: 800; font-size: 0.95rem; letter-spacing: 0.02em;
+}

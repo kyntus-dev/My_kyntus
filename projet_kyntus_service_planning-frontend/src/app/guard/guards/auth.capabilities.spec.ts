@@ -65,4 +65,12 @@ describe('AuthGuard — « Accès par rôle » fait foi', () => {
     expect(await guard.canActivate(route({ roles: ['Admin'], capability: 'admin.access' }))).toBe(false);
     expect(navigate).toHaveBeenCalledWith(['/unauthorized']);
   });
+
+  it('ferme un module entier (Prime, Parrainage, Documentation) retiré dans « Accès par rôle »', async () => {
+    const { guard, navigate } = garde([]);
+    expect(await guard.canActivate(route({ moduleIam: 'prime.module' }))).toBe(false);
+    expect(navigate).toHaveBeenCalledWith(['/unauthorized']);
+    const ouvert = garde(['prime.module']);
+    expect(await ouvert.guard.canActivate(route({ moduleIam: 'prime.module' }))).toBe(true);
+  });
 });

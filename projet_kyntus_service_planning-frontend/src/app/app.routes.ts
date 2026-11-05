@@ -105,7 +105,7 @@ export const routes: Routes = [
       {
         path: 'reclamations',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.reclamationsEmployee },
+        data: { roles: ROLE_SETS.reclamationsEmployee, ouvertureIam: 'qualite.self' },
         loadComponent: () =>
           import('./features/reclamation/employee/reclamation-employee.component')
             .then(m => m.ReclamationEmployeeComponent),
@@ -121,7 +121,7 @@ export const routes: Routes = [
       {
         path: 'qualite/cq',
         canActivate: [AuthGuard],
-        data: { roles: [...ROLE_SETS.qualiteCq, ...ROLE_SETS.qualiteCqPilot] },
+        data: { roles: [...ROLE_SETS.qualiteCq, ...ROLE_SETS.qualiteCqPilot], ouvertureIam: ['cq.evaluations', 'cq.coaching', 'cq.self', 'cq.parametres', 'cq.admin'] },
         loadComponent: () =>
           import('./features/qualite/qualite-cq-host.component')
             .then(m => m.QualiteCqHostComponent),
@@ -132,7 +132,7 @@ export const routes: Routes = [
       {
         path: 'formations/planifier',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.formationPlanner },
+        data: { roles: ROLE_SETS.formationPlanner, ouvertureIam: 'formation.planification' },
         loadComponent: () =>
           import('./features/formation/rh/formation-rh-plan.component')
             .then(m => m.FormationRhPlanComponent),
@@ -140,7 +140,7 @@ export const routes: Routes = [
       {
         path: 'formations/dashboard',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.formationPlanner },
+        data: { roles: ROLE_SETS.formationPlanner, ouvertureIam: 'formation.planification' },
         loadComponent: () =>
           import('./features/formation/dashboard/formation-dashboard.component')
             .then(m => m.FormationDashboardComponent),
@@ -148,7 +148,7 @@ export const routes: Routes = [
       {
         path: 'formations/initiales',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.formationFormateur },
+        data: { roles: ROLE_SETS.formationFormateur, ouvertureIam: 'formation.suivi-initiale' },
         loadComponent: () =>
           import('./features/formation/formateur/formation-formateur-initial.component')
             .then(m => m.FormationFormateurInitialComponent),
@@ -164,7 +164,7 @@ export const routes: Routes = [
       {
         path: 'formations/bibliotheque',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.formationPlanner },
+        data: { roles: ROLE_SETS.formationPlanner, ouvertureIam: 'formation.planification' },
         loadComponent: () =>
           import('./features/formation/catalog/formation-catalog-admin.component')
             .then(m => m.FormationCatalogAdminComponent),
@@ -204,6 +204,7 @@ export const routes: Routes = [
         canActivate: [AuthGuard],
         data: {
           roles: ROLE_SETS.mesSessions,
+          ouvertureIam: 'formation.self',
         },
         loadComponent: () =>
           import('./features/formation/sessions/formation-mes-sessions.component')
@@ -214,6 +215,7 @@ export const routes: Routes = [
         canActivate: [AuthGuard],
         data: {
           roles: ROLE_SETS.mesSessions,
+          ouvertureIam: 'formation.self',
         },
         loadComponent: () =>
           import('./features/formation/sessions/formation-session-quiz.component')
@@ -224,6 +226,7 @@ export const routes: Routes = [
         canActivate: [AuthGuard],
         data: {
           roles: ROLE_SETS.mesFormations,
+          ouvertureIam: 'formation.self',
         },
         loadComponent: () =>
           import('./features/formation/employee/formation-employee.component')
@@ -234,6 +237,7 @@ export const routes: Routes = [
         canActivate: [AuthGuard],
         data: {
           roles: ROLE_SETS.mesFormations,
+          ouvertureIam: 'formation.self',
         },
         loadComponent: () =>
           import('./features/formation/employee/formation-quiz-history.component')
@@ -244,6 +248,7 @@ export const routes: Routes = [
         canActivate: [AuthGuard],
         data: {
           roles: ROLE_SETS.mesFormations,
+          ouvertureIam: 'formation.self',
         },
         loadComponent: () =>
           import('./features/formation/sessions/formation-take-quiz.component')
@@ -254,6 +259,7 @@ export const routes: Routes = [
         canActivate: [AuthGuard],
         data: {
           roles: ROLE_SETS.mesFormations,
+          ouvertureIam: 'formation.self',
         },
         loadComponent: () =>
           import('./features/formation/catalog/formation-catalog-player.component')
@@ -264,6 +270,7 @@ export const routes: Routes = [
         canActivate: [AuthGuard],
         data: {
           roles: ROLE_SETS.mesFormations,
+          ouvertureIam: 'formation.self',
         },
         loadComponent: () =>
           import('./features/formation/catalog/formation-catalog-player.component')
@@ -274,6 +281,7 @@ export const routes: Routes = [
         canActivate: [AuthGuard],
         data: {
           roles: ROLE_SETS.mesFormations,
+          ouvertureIam: 'formation.self',
         },
         loadComponent: () =>
           import('./features/formation/sessions/formation-take-quiz.component')
@@ -290,7 +298,7 @@ export const routes: Routes = [
       {
         path: 'mes-newsletters',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.allAuthenticated },
+        data: { roles: ROLE_SETS.allAuthenticated, ouvertureIam: 'communication.fil' },
         loadComponent: () =>
           import('./features/newsletter-inbox/my-newsletters-page.component')
             .then(m => m.MyNewslettersPageComponent),
@@ -647,7 +655,7 @@ export const routes: Routes = [
       {
         path: 'documentation',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.documentation },
+        data: { roles: ROLE_SETS.documentation, moduleIam: 'documentation.module' },
         loadChildren: () =>
           import('./features/documentation/documentation.module')
             .then(m => m.DocumentationModule),
@@ -657,7 +665,7 @@ export const routes: Routes = [
       {
         path: 'prime',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.prime },
+        data: { roles: ROLE_SETS.prime, moduleIam: 'prime.module' },
         loadChildren: () =>
           import('./features/prime/prime.routes').then((m) => m.PRIME_ROUTES),
       },
@@ -666,7 +674,7 @@ export const routes: Routes = [
       {
         path: 'parrainage',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.parrainage },
+        data: { roles: ROLE_SETS.parrainage, moduleIam: 'parrainage.module' },
         loadChildren: () =>
           import('./features/parrainage/parrainage.routes').then((m) => m.PARRAINAGE_ROUTES),
       },

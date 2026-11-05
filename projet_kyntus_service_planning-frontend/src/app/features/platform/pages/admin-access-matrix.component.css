@@ -122,3 +122,33 @@
   .ar-titre { display: none; }
   .ar-role { flex: 0 0 auto; }
 }
+
+/* v23 : aperçu du menu du rôle, retour aux droits par défaut, écarts au défaut. */
+.ar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ar-act {
+  min-height: 34px; padding: 0 14px; border: 1px solid var(--border-color); border-radius: 9px; background: var(--bg-card);
+  color: var(--text-primary); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.ar-act:hover:not(:disabled) { border-color: var(--ky-blue); color: var(--ky-blue); }
+.ar-act.on { border-color: var(--ky-blue); background: color-mix(in srgb, var(--ky-blue) 8%, var(--bg-card)); color: var(--ky-blue); }
+.ar-act:disabled { opacity: 0.5; cursor: default; }
+.ar-act b { padding: 0 7px; border-radius: 8px; background: var(--ky-blue); color: #fff; font-size: 0.68rem; line-height: 1.5; }
+.ar-outils .ar-legende { margin-left: auto; }
+.ar-apercu {
+  border: 1px solid color-mix(in srgb, var(--ky-blue) 30%, var(--border-color)); border-radius: 14px; padding: 14px 16px;
+  background: color-mix(in srgb, var(--ky-blue) 4%, var(--bg-card));
+}
+.ar-apercu > header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.ar-apercu h3 { margin: 0; font-size: 0.92rem; }
+.ar-apercu p { margin: 3px 0 0; font-size: 0.76rem; color: var(--text-muted); }
+.ar-fermer { border: 0; background: none; font-size: 1.3rem; line-height: 1; color: var(--text-muted); cursor: pointer; }
+.ar-apercu-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.ar-apercu-groupe { padding: 10px 12px; border-radius: 10px; background: var(--bg-card); border: 1px solid var(--border-color); }
+.ar-apercu-groupe b { display: block; font-size: 0.8rem; margin-bottom: 4px; }
+.ar-apercu-groupe small { font-size: 0.72rem; color: var(--text-muted); }
+.ar-apercu-groupe ul { margin: 0; padding-left: 16px; font-size: 0.76rem; color: var(--text-primary); }
+.ar-apercu-groupe li { margin: 2px 0; }
+.ar-ecart {
+  font-size: 0.66rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; cursor: help;
+  color: var(--ky-blue); background: color-mix(in srgb, var(--ky-blue) 10%, transparent);
+}

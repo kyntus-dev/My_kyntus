@@ -96,6 +96,31 @@ const SELF = [
   KyntusRoleNames.Comptabilite,
 ] as const;
 
+/** v23 : jeux de rôles des entrées de menu qui n'avaient pas encore de rubrique (mêmes rôles qu'avant). */
+const SELF_SANS_COMPTA = SELF.filter((r) => r !== KyntusRoleNames.Comptabilite);
+const FORMATION_PLANIF = [...ADMIN_RH, KyntusRoleNames.Rp, KyntusRoleNames.ChefDeProjet, KyntusRoleNames.Superviseur, KyntusRoleNames.Qualiticien] as const;
+const FORMATION_SUIVI = [KyntusRoleNames.Admin, KyntusRoleNames.EquipeFormation, KyntusRoleNames.Formateur] as const;
+const RECLAMATIONS_SELF = [
+  ...ADMIN_RH, KyntusRoleNames.Audit, KyntusRoleNames.Manager, KyntusRoleNames.Coach, KyntusRoleNames.ReferentTechnique,
+  KyntusRoleNames.Rp, KyntusRoleNames.ChefDeProjet, KyntusRoleNames.Superviseur, KyntusRoleNames.Pilote, KyntusRoleNames.Employee,
+  KyntusRoleNames.EquipeFormation, KyntusRoleNames.Formateur, KyntusRoleNames.Ingenieur, KyntusRoleNames.SupportIt,
+] as const;
+const CQ_EVALUATIONS = [
+  KyntusRoleNames.Qualiticien, ...ADMIN_RH, KyntusRoleNames.Superviseur, KyntusRoleNames.Coach, KyntusRoleNames.ReferentTechnique,
+  KyntusRoleNames.Manager, KyntusRoleNames.Rp, KyntusRoleNames.ChefDeProjet,
+] as const;
+const CQ_COACHING = [KyntusRoleNames.Qualiticien, ...ADMIN_RH, KyntusRoleNames.Superviseur, KyntusRoleNames.Coach, KyntusRoleNames.ReferentTechnique] as const;
+const PILOTES = [KyntusRoleNames.Pilote, KyntusRoleNames.Employee] as const;
+const PRIME_MODULE = [
+  ...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Coach, KyntusRoleNames.ReferentTechnique, KyntusRoleNames.Rp,
+  KyntusRoleNames.ChefDeProjet, ...PILOTES, KyntusRoleNames.Ingenieur, KyntusRoleNames.SupportIt, KyntusRoleNames.Audit,
+  KyntusRoleNames.Superviseur, KyntusRoleNames.Comptabilite,
+] as const;
+const PARRAINAGE_MODULE = [
+  ...ADMIN_RH, KyntusRoleNames.Manager, ...PILOTES, KyntusRoleNames.Audit, KyntusRoleNames.Coach, KyntusRoleNames.ReferentTechnique,
+  KyntusRoleNames.Rp, KyntusRoleNames.ChefDeProjet, KyntusRoleNames.Superviseur, KyntusRoleNames.Ingenieur, KyntusRoleNames.SupportIt,
+] as const;
+
 export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'admin.overview', label: 'Vue d’ensemble', module: 'Administration', view: ADMIN_RH },
   { id: 'admin.access', label: 'Accès par rôle', module: 'Administration', view: ADMIN, configure: ADMIN },
@@ -145,26 +170,38 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'conges.quotas', label: 'Quotas cellule / service', module: 'Congés', view: [KyntusRoleNames.Superviseur, KyntusRoleNames.Admin], configure: [KyntusRoleNames.Superviseur, KyntusRoleNames.Admin] },
   { id: 'conges.periodes', label: 'Périodes interdites', module: 'Congés', view: ADMIN_RH, configure: ADMIN_RH },
 
+  { id: 'documentation.module', label: 'Module Documentation (accès au menu)', module: 'Documentation', view: SELF, defaultScope: 'Self' },
   { id: 'documentation.admin-config', label: 'Configuration documentation', module: 'Documentation', view: ADMIN, configure: ADMIN },
   { id: 'documentation.doc-types', label: 'Types de documents', module: 'Documentation', view: ADMIN, configure: ADMIN },
   { id: 'documentation.permissions', label: 'Permissions documents', module: 'Documentation', view: ADMIN, configure: ADMIN },
   { id: 'documentation.storage', label: 'Stockage DMS', module: 'Documentation', view: ADMIN, configure: ADMIN },
   { id: 'documentation.workflow', label: 'Workflows documentaires', module: 'Documentation', view: ADMIN, configure: ADMIN },
 
+  { id: 'prime.module', label: 'Module Prime (accès au menu)', module: 'Prime', view: PRIME_MODULE },
   { id: 'prime.workflow', label: 'Flux de validation Prime', module: 'Prime', view: ADMIN, configure: ADMIN },
   { id: 'prime.rbac', label: 'RBAC métier Prime', module: 'Prime', view: ADMIN, configure: ADMIN },
   { id: 'prime.catalog', label: 'Types de prime Support', module: 'Prime', view: ADMIN_RH, configure: ADMIN_RH },
 
+  { id: 'parrainage.module', label: 'Module Parrainage (accès au menu)', module: 'Parrainage', view: PARRAINAGE_MODULE },
   { id: 'parrainage.workflow', label: 'Flux parrainage', module: 'Parrainage', view: ADMIN, configure: ADMIN },
   { id: 'parrainage.config', label: 'Barèmes et configuration', module: 'Parrainage', view: ADMIN_RH, configure: ADMIN },
 
+  { id: 'formation.self', label: 'Mes formations et mes sessions', module: 'Formation', view: SELF_SANS_COMPTA, defaultScope: 'Self' },
+  { id: 'formation.planification', label: 'Formation continue (tableau de bord, bibliothèque, planifier)', module: 'Formation', view: FORMATION_PLANIF, act: FORMATION_PLANIF },
+  { id: 'formation.suivi-initiale', label: 'Suivi formation initiale', module: 'Formation', view: FORMATION_SUIVI, act: FORMATION_SUIVI },
   { id: 'formation.admin', label: 'Gérer les formations', module: 'Formation', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'formation.checklist', label: 'Checklist documents', module: 'Formation', view: ADMIN_RH, configure: ADMIN_RH },
   { id: 'formation.passage', label: 'Passage en production', module: 'Formation', view: ADMIN_RH, act: ADMIN_RH },
 
+  { id: 'communication.fil', label: 'Fil d’actualités', module: 'Communication', view: SELF, defaultScope: 'Self' },
   { id: 'communication.newsletter', label: 'Nouvelle publication', module: 'Communication', view: ADMIN_RH, act: ADMIN_RH },
 
+  { id: 'qualite.self', label: 'Mes demandes', module: 'Qualité', view: RECLAMATIONS_SELF, act: RECLAMATIONS_SELF, defaultScope: 'Self' },
   { id: 'qualite.admin', label: 'Traiter les demandes', module: 'Qualité', view: [KyntusRoleNames.RH, KyntusRoleNames.Manager, KyntusRoleNames.Rp, KyntusRoleNames.Admin, KyntusRoleNames.Audit], act: [KyntusRoleNames.RH, KyntusRoleNames.Manager, KyntusRoleNames.Rp, KyntusRoleNames.Admin] },
+  { id: 'cq.evaluations', label: 'Évaluations CQ (grilles, appels à évaluer)', module: 'Contrôle qualité', view: CQ_EVALUATIONS, act: CQ_EVALUATIONS },
+  { id: 'cq.coaching', label: 'Coaching CQ', module: 'Contrôle qualité', view: CQ_COACHING, act: CQ_COACHING },
+  { id: 'cq.self', label: 'Mes évaluations et mes coachings CQ', module: 'Contrôle qualité', view: PILOTES, defaultScope: 'Self' },
+  { id: 'cq.parametres', label: 'Paramètres CQ', module: 'Contrôle qualité', view: [KyntusRoleNames.Qualiticien], configure: [KyntusRoleNames.Qualiticien] },
   { id: 'cq.admin', label: 'Administration CQ', module: 'Contrôle qualité', view: ADMIN_RH, configure: ADMIN_RH },
 ];
 

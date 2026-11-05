@@ -56,6 +56,13 @@ export class AuthGuard implements CanActivate {
         // Catalogue IAM optionnel — ne pas bloquer le login.
       }
     }
+    // Module retiré dans « Accès par rôle » (Prime, Parrainage, Documentation) : accès refusé ;
+    // accordé, le module applique ensuite ses propres règles d'accès.
+    const moduleIam = route.data?.['moduleIam'] as string | undefined;
+    if (moduleIam && this.access.hasCatalog() && !this.access.canView(moduleIam)) {
+      this.router.navigate(['/unauthorized']);
+      return false;
+    }
     // « Accès par rôle » fait foi : un rôle à qui l'Admin a ouvert l'écran y entre, même s'il ne
     // figure pas dans la liste de rôles par défaut (rôles IT, rôles créés par l'Admin…).
     if (capabilities.length && this.access.hasCatalog()) {

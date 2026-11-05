@@ -87,7 +87,8 @@ export function filterItemsByHat<T extends { hat?: MenuHat; isSectionHeader?: bo
   hat: WorkspaceHat,
   dualHat: boolean,
 ): T[] {
-  if (!dualHat) return items;
+  // Titres de section sans entrée en dessous (entrées retirées par les droits ou la casquette) : masqués.
+  if (!dualHat) return dropOrphanSectionHeaders(items);
   const kept = items.filter((item) => item.isSectionHeader || itemVisibleForHat(item.hat, hat));
   return dropOrphanSectionHeaders(kept);
 }

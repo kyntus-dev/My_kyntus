@@ -60,6 +60,32 @@ public static class PlatformAccessCatalog
         "Qualiticien", "Comptabilité", "Ingénieur", "Support IT"
     ];
 
+    // v23 : entrées de menu qui n'avaient pas encore de rubrique (mêmes rôles qu'avant).
+    private static readonly string[] SelfSansCompta = [.. Self.Where(r => r != "Comptabilité")];
+    private static readonly string[] FormationPlanif = ["Admin", "RH", "RP", "Chef de projet", "Superviseur", "Qualiticien"];
+    private static readonly string[] FormationSuivi = ["Admin", "Equipe_Formation", "Formateur"];
+    private static readonly string[] ReclamationsSelf =
+    [
+        "Admin", "RH", "Audit", "Manager", "Coach", "Référent technique", "RP", "Chef de projet",
+        "Superviseur", "Pilote", "Employee", "Equipe_Formation", "Formateur", "Ingénieur", "Support IT"
+    ];
+    private static readonly string[] CqEvaluations =
+    [
+        "Qualiticien", "Admin", "RH", "Superviseur", "Coach", "Référent technique", "Manager", "RP", "Chef de projet"
+    ];
+    private static readonly string[] CqCoaching = ["Qualiticien", "Admin", "RH", "Superviseur", "Coach", "Référent technique"];
+    private static readonly string[] Pilotes = ["Pilote", "Employee"];
+    private static readonly string[] PrimeModule =
+    [
+        "Admin", "RH", "Manager", "Coach", "Référent technique", "RP", "Chef de projet", "Pilote", "Employee",
+        "Ingénieur", "Support IT", "Audit", "Superviseur", "Comptabilité"
+    ];
+    private static readonly string[] ParrainageModule =
+    [
+        "Admin", "RH", "Manager", "Pilote", "Employee", "Audit", "Coach", "Référent technique", "RP", "Chef de projet", "Superviseur",
+        "Ingénieur", "Support IT"
+    ];
+
     public static IReadOnlyList<PlatformScreenDef> Screens { get; } =
     [
         S("admin.overview", "Vue d'ensemble", "Administration", View: AdminRh),
@@ -117,26 +143,38 @@ public static class PlatformAccessCatalog
         S("conges.quotas", "Quotas cellule / service", "Congés", View: ["Superviseur", "Admin"], Configure: ["Superviseur", "Admin"]),
         S("conges.periodes", "Périodes interdites", "Congés", View: AdminRh, Configure: AdminRh),
 
+        S("documentation.module", "Module Documentation (accès au menu)", "Documentation", View: Self),
         S("documentation.admin-config", "Configuration documentation", "Documentation", View: Admin, Configure: Admin),
         S("documentation.doc-types", "Types de documents", "Documentation", View: Admin, Configure: Admin),
         S("documentation.permissions", "Permissions documents", "Documentation", View: Admin, Configure: Admin),
         S("documentation.storage", "Stockage DMS", "Documentation", View: Admin, Configure: Admin),
         S("documentation.workflow", "Workflows documentaires", "Documentation", View: Admin, Configure: Admin),
 
+        S("prime.module", "Module Prime (accès au menu)", "Prime", View: PrimeModule),
         S("prime.workflow", "Flux de validation Prime", "Prime", View: Admin, Configure: Admin),
         S("prime.rbac", "RBAC métier Prime", "Prime", View: Admin, Configure: Admin),
         S("prime.catalog", "Types de prime Support", "Prime", View: AdminRh, Configure: AdminRh),
 
+        S("parrainage.module", "Module Parrainage (accès au menu)", "Parrainage", View: ParrainageModule),
         S("parrainage.workflow", "Flux parrainage", "Parrainage", View: Admin, Configure: Admin),
         S("parrainage.config", "Barèmes et configuration", "Parrainage", View: AdminRh, Configure: Admin),
 
+        S("formation.self", "Mes formations et mes sessions", "Formation", View: SelfSansCompta),
+        S("formation.planification", "Formation continue (tableau de bord, bibliothèque, planifier)", "Formation", View: FormationPlanif, Act: FormationPlanif),
+        S("formation.suivi-initiale", "Suivi formation initiale", "Formation", View: FormationSuivi, Act: FormationSuivi),
         S("formation.admin", "Gérer les formations", "Formation", View: AdminRh, Act: AdminRh),
         S("formation.checklist", "Checklist documents", "Formation", View: AdminRh, Configure: AdminRh),
         S("formation.passage", "Passage en production", "Formation", View: AdminRh, Act: AdminRh),
 
+        S("communication.fil", "Fil d'actualités", "Communication", View: Self),
         S("communication.newsletter", "Nouvelle publication", "Communication", View: AdminRh, Act: AdminRh),
 
+        S("qualite.self", "Mes demandes", "Qualité", View: ReclamationsSelf, Act: ReclamationsSelf),
         S("qualite.admin", "Traiter les demandes", "Qualité", View: ["RH", "Manager", "RP", "Admin", "Audit"], Act: ["RH", "Manager", "RP", "Admin"]),
+        S("cq.evaluations", "Évaluations CQ (grilles, appels à évaluer)", "Contrôle qualité", View: CqEvaluations, Act: CqEvaluations),
+        S("cq.coaching", "Coaching CQ", "Contrôle qualité", View: CqCoaching, Act: CqCoaching),
+        S("cq.self", "Mes évaluations et mes coachings CQ", "Contrôle qualité", View: Pilotes),
+        S("cq.parametres", "Paramètres CQ", "Contrôle qualité", View: ["Qualiticien"], Configure: ["Qualiticien"]),
         S("cq.admin", "Administration CQ", "Contrôle qualité", View: AdminRh, Configure: AdminRh),
     ];
 
