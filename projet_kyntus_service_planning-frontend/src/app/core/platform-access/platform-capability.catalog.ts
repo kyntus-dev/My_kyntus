@@ -154,7 +154,7 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'admin.access', label: 'Accès par rôle', module: 'Administration', view: ADMIN, configure: ADMIN },
   { id: 'admin.users', label: 'Utilisateurs', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH, serveurAgir: SRV_ADMIN_RH },
   { id: 'rh.contrats', label: 'Contrats', module: 'Ressources humaines', view: TEAM_LEAD },
-  { id: 'rh.affectations', label: 'Réaffecter les agents (service, pôle, contrat, poste)', module: 'Ressources humaines', view: ADMIN_RH, act: ADMIN_RH },
+  { id: 'rh.affectations', label: 'Réaffecter les agents (service, pôle, contrat, poste)', module: 'Ressources humaines', view: ADMIN_RH, act: ADMIN_RH, defaultScope: 'Global' },
   { id: 'rh.activation', label: 'Activer / désactiver les comptes', module: 'Ressources humaines', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'admin.organisation', label: 'Organisation', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'admin.sync', label: 'Synchro organisation', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },

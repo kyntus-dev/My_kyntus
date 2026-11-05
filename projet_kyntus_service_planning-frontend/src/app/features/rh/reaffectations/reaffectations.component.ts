@@ -1,3 +1,4 @@
+import { firstValueFrom } from 'rxjs';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -108,6 +109,11 @@ export class ReaffectationsComponent implements OnInit {
   /** Postes hors production encore rattachés à un service (ex. pilote passé en équipe formation). */
   readonly aRegulariser = computed(() => (this.options()?.agents ?? []).filter((a) => a.aRegulariser));
   readonly regularisation = signal<number | null>(null);
+  /** Structures support d'Organisation RH (Formation, RH…) pour un poste hors production. */
+  readonly structuresSupport = computed(() =>
+    this.contrats().filter((c) => (c.kind ?? '').toLowerCase() === 'support' && c.isActive !== false)
+      .sort((a, b) => a.name.localeCompare(b.name, 'fr')));
+  readonly departementSupport = signal('');
   readonly choix = computed(() =>
     choixRattachement(this.options()?.services ?? [], this.parPole(), this.filtres()));
   private readonly filtres = computed(() => ({ contrat: this.filtreContrat(), pole: this.filtrePole(), cellule: this.filtreCellule() }));
@@ -186,7 +192,7 @@ export class ReaffectationsComponent implements OnInit {
     this.roleCible.set(v);
     const p = this.roles().find((r) => r.id === v);
     // Poste hors production : proposé par défaut sans service ; poste de production : un service.
-    if (p && !p.production && (this.changePoste() || p.sansService)) { this.horsProduction.set(true); this.cible.set(null); }
+    if (p && !p.production && (this.changePoste() || p.sansService)) { this.horsProduction.set(true); this.cible.set(null); this.proposerStructure(p.nom); }
     if (p?.production) this.horsProduction.set(false);
   }
 
@@ -269,20 +275,58 @@ export class ReaffectationsComponent implements OnInit {
     this.reinitialiserChoix();
     this.rechercheAgent.set('');
     // Poste hors production encore dans un service : la sortie de production est proposée d'office.
-    if (a.aRegulariser) this.horsProduction.set(true);
+    if (a.aRegulariser) { this.horsProduction.set(true); this.proposerStructure(a.role); }
+  }
+
+  /** Structure support proposée d'après le poste (ex. « Formation » pour l'équipe formation). */
+  private proposerStructure(poste: string | null | undefined): void {
+    this.departementSupport.set(this.structurePour(poste) ?? '');
+  }
+
+  private structurePour(poste: string | null | undefined): string | null {
+    const p = sansAccents(poste ?? '');
+    const motCle = p.includes('formation') || p.includes('formateur') ? 'formation'
+      : p === 'rh' ? 'ressources humaines' : p.includes('compta') ? 'compta' : p.includes('audit') ? 'audit' : '';
+    const d = motCle ? this.structuresSupport().find((s) => sansAccents(s.name).includes(motCle) || sansAccents(s.name) === p) : undefined;
+    return d?.id ?? null;
+  }
+
+  /** Retire de la production tous les agents à régulariser (une confirmation). */
+  async toutRegulariser(): Promise<void> {
+    const liste = this.aRegulariser();
+    if (!liste.length) return;
+    const ok = await this.confirm.confirm({
+      title: 'Tout régulariser',
+      message: `${liste.length} agent(s) quittent leur service de production : ils sortent de ses plannings et de son équipe.`,
+      confirmLabel: 'Tout régulariser',
+      variant: 'warning',
+    });
+    if (!ok) return;
+    let reussis = 0;
+    for (const a of liste) {
+      this.regularisation.set(a.id);
+      try {
+        await firstValueFrom(this.svc.reaffecter(a.id, null, `Régularisation : le poste ${a.role} n'est pas en production.`, null, this.structurePour(a.role)));
+        reussis++;
+      } catch { /* l'agent reste dans la liste */ }
+    }
+    this.regularisation.set(null);
+    this.charger();
+    this.toast.success(`${reussis} / ${liste.length} agent(s) régularisé(s).`);
   }
 
   /** Retire de la production un agent dont le poste n'est plus en production (un clic, avec confirmation). */
   async regulariser(a: ReaffectationAgentOptionDto): Promise<void> {
     const ok = await this.confirm.confirm({
       title: 'Retirer de la production',
-      message: `${a.nom} (${a.role}) quitte « ${a.service} » : il sort des plannings à venir et de l'équipe de ce service.`,
+      message: `${a.nom} (${a.role}) quitte « ${a.service} » : il sort des plannings de ce service (dès aujourd'hui) et de son équipe.`
+        + (this.structurePour(a.role) ? ` Il est rattaché à « ${this.structuresSupport().find((d) => d.id === this.structurePour(a.role))?.name} » dans Organisation RH.` : ''),
       confirmLabel: 'Retirer',
       variant: 'warning',
     });
     if (!ok) return;
     this.regularisation.set(a.id);
-    this.svc.reaffecter(a.id, null, `Régularisation : le poste ${a.role} n'est pas en production.`).subscribe({
+    this.svc.reaffecter(a.id, null, `Régularisation : le poste ${a.role} n'est pas en production.`, null, this.structurePour(a.role)).subscribe({
       next: (h) => {
         this.regularisation.set(null);
         this.historique.set([h, ...this.historique()]);
@@ -302,6 +346,7 @@ export class ReaffectationsComponent implements OnInit {
   }
 
   private reinitialiserChoix(): void {
+    this.departementSupport.set('');
     this.cible.set(null);
     this.horsProduction.set(false);
     this.roleCible.set(null);
@@ -324,7 +369,8 @@ export class ReaffectationsComponent implements OnInit {
     this.saving.set(true);
     const subServiceId = this.horsProduction() ? null : this.cible() ?? a.subServiceId;
     const resume = `${a.nom} : ${poste ? `poste ${poste.nom}, ` : ''}${subServiceId === null ? 'hors production' : s?.service ?? ''}.`;
-    this.svc.reaffecter(a.id, subServiceId, this.motif().trim() || null, poste?.id ?? null).subscribe({
+    const structure = subServiceId === null ? this.departementSupport() || null : null;
+    this.svc.reaffecter(a.id, subServiceId, this.motif().trim() || null, poste?.id ?? null, structure).subscribe({
       next: (h) => {
         this.saving.set(false);
         this.historique.set([h, ...this.historique()]);

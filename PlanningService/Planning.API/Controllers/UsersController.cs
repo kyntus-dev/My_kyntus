@@ -34,9 +34,32 @@ public class UsersController(
         return decision.Allowed;
     }
 
-    private Task<ReaffectationAuteur> AuteurReaffectationAsync(CancellationToken ct) =>
-        reaffectation.ResoudreAsync(User.GetAuthUserId(), User.GetEmail(), IsHrOrAdminConnected(), ct,
-            admin: string.Equals(User.GetAuthRole(), "Admin", StringComparison.OrdinalIgnoreCase));
+    /// <summary>
+    /// Auteur d'une réaffectation / activation. Admin et RH : toute l'entreprise. Autres rôles : selon
+    /// le périmètre réglé dans « Accès par rôle » — « Toute l'entreprise » (Global) = n'importe quel agent
+    /// vers n'importe quel service ; Pôle / Cellule / Service = son périmètre d'Organisation RH (v28).
+    /// </summary>
+    private async Task<ReaffectationAuteur> AuteurReaffectationAsync(CancellationToken ct, string droit = "rh.affectations")
+    {
+        var role = User.GetAuthRole() ?? "Employee";
+        var admin = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
+        var rh = IsHrOrAdmin(role);
+        var global = rh || await PorteeGlobaleAsync(role, droit, ct);
+        return await reaffectation.ResoudreAsync(User.GetAuthUserId(), User.GetEmail(), global, ct, admin, rh);
+    }
+
+    /// <summary>Le droit est accordé au rôle avec le périmètre « Toute l'entreprise ».</summary>
+    private async Task<bool> PorteeGlobaleAsync(string role, string droit, CancellationToken ct)
+    {
+        // Ressource fictive : seul le périmètre Global l'accepte (Pôle / Cellule / Service / Soi-même la refusent).
+        foreach (var verbe in new[] { "Act", "View" })
+        {
+            var decision = await policyEvaluator.EvaluateAsync(
+                new PolicyRequest(User.GetSubjectId() ?? Guid.Empty, role, $"{droit}.{verbe}", "platform", "toute-l-entreprise"), ct);
+            if (decision.Allowed) return true;
+        }
+        return false;
+    }
 
     /// <summary>Droit « rh.activation » (v26) : désactiver / réactiver les comptes de son périmètre.</summary>
     private async Task<bool> PeutActiverAsync(string verbe, CancellationToken ct)
@@ -53,7 +76,7 @@ public class UsersController(
     public async Task<ActionResult<IReadOnlyList<CompteAgentDto>>> ComptesPerimetre(CancellationToken ct)
     {
         if (!await PeutActiverAsync("View", ct) && !await PeutActiverAsync("Act", ct)) return Forbid();
-        return Ok(await reaffectation.ComptesAsync(await AuteurReaffectationAsync(ct), ct));
+        return Ok(await reaffectation.ComptesAsync(await AuteurReaffectationAsync(ct, "rh.activation"), ct));
     }
 
     /// <summary>Désactive (avec date de sortie) ou réactive le compte d'un agent du périmètre.</summary>
@@ -67,7 +90,7 @@ public class UsersController(
             });
         try
         {
-            return Ok(await reaffectation.ActiverCompteAsync(await AuteurReaffectationAsync(ct), id, body, ct));
+            return Ok(await reaffectation.ActiverCompteAsync(await AuteurReaffectationAsync(ct, "rh.activation"), id, body, ct));
         }
         catch (ReaffectationRefusException ex) when (ex.HorsPerimetre)
         {

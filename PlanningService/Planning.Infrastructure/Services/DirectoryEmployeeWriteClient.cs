@@ -41,6 +41,9 @@ public interface IDirectoryEmployeeWriteClient
     Task<bool> IsEmailUsedInDirectoryAsync(string email, Guid? excludeEmployeeId = null, CancellationToken ct = default);
 
     Task<bool> TryUpdateEmployeeAsync(User user, CancellationToken ct = default);
+
+    /// <summary>Idem, en rattachant l'agent à un département (structure support, v28).</summary>
+    Task<bool> TryUpdateEmployeeAsync(User user, Guid? departementId, CancellationToken ct = default);
     Task<bool> TryLinkAuthSubjectAsync(Guid employeeId, Guid authSubjectId, CancellationToken ct = default);
     Task<bool> TryDeleteEmployeeAsync(Guid employeeGuid, CancellationToken ct = default);
 
@@ -254,6 +257,9 @@ public sealed class DirectoryEmployeeWriteClient(
             ct);
 
     public Task<bool> TryUpdateEmployeeAsync(User user, CancellationToken ct = default) =>
+        TryUpdateEmployeeAsync(user, null, ct);
+
+    public Task<bool> TryUpdateEmployeeAsync(User user, Guid? departementId, CancellationToken ct = default) =>
         ExecuteWithRetriesAsync(
             async () =>
             {
@@ -276,6 +282,7 @@ public sealed class DirectoryEmployeeWriteClient(
                     email = user.Email,
                     role = user.Role?.Name ?? KyntusRoleNames.Employee,
                     serviceId = primeServiceId,
+                    businessDepartmentId = departementId,
                     parentId = hr?.SuperviseurId,
                     isActive = user.IsActive,
                     hireDate = user.HireDate,

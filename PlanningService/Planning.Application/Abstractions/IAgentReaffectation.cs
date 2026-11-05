@@ -19,7 +19,8 @@ public sealed record ReaffectationDto(
 /// v26 : SubServiceId null = « hors production » (aucun service), possible seulement pour un rôle
 /// hors production ; RoleId = nouveau poste (null : inchangé).
 /// </summary>
-public sealed record ReaffectationRequest(int? SubServiceId, string? Motif, int? RoleId = null);
+/// <remarks>v28 : DepartementSupportId = structure support d'Organisation RH (ex. Formation) pour un poste hors production.</remarks>
+public sealed record ReaffectationRequest(int? SubServiceId, string? Motif, int? RoleId = null, string? DepartementSupportId = null);
 
 /// <summary>Service de destination ; PoleId = identifiant du pôle dans Organisation RH (pour le contrat).</summary>
 public sealed record ReaffectationServiceOptionDto(int Id, string Service, string? Cellule, string? Pole, string? PoleId = null);
@@ -41,7 +42,8 @@ public sealed record ReaffectationOptionsDto(
     IReadOnlyList<ReaffectationRoleOptionDto>? Roles = null);
 
 /// <summary>Auteur d'une réaffectation et son périmètre (null : toute l'entreprise).</summary>
-public sealed record ReaffectationAuteur(int? UserId, string? Nom, IReadOnlySet<int>? SubServices, bool Admin = false);
+/// <remarks>Rh : Admin ou RH (seuls à attribuer les postes RH, Audit, Comptabilité, IT).</remarks>
+public sealed record ReaffectationAuteur(int? UserId, string? Nom, IReadOnlySet<int>? SubServices, bool Admin = false, bool Rh = false);
 
 /// <summary>Compte d'un agent du périmètre (activation / désactivation, v26).</summary>
 public sealed record CompteAgentDto(
@@ -60,7 +62,7 @@ public class ReaffectationRefusException(string message, bool horsPerimetre = fa
 /// </summary>
 public interface IAgentReaffectation
 {
-    Task<ReaffectationAuteur> ResoudreAsync(int? authUserId, string? email, bool global, CancellationToken ct = default, bool admin = false);
+    Task<ReaffectationAuteur> ResoudreAsync(int? authUserId, string? email, bool global, CancellationToken ct = default, bool admin = false, bool rh = false);
     Task<ReaffectationOptionsDto> OptionsAsync(ReaffectationAuteur auteur, CancellationToken ct = default);
     Task<ReaffectationDto> ReaffecterAsync(ReaffectationAuteur auteur, int userId, ReaffectationRequest request, CancellationToken ct = default);
     Task<IReadOnlyList<ReaffectationDto>> HistoriqueAsync(ReaffectationAuteur auteur, int? userId, int max, CancellationToken ct = default);

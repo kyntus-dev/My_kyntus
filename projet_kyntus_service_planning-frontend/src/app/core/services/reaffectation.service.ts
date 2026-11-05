@@ -61,8 +61,10 @@ export class ReaffectationService {
   }
 
   /** subServiceId null = hors production ; roleId null = poste inchangé. */
-  reaffecter(userId: number, subServiceId: number | null, motif: string | null, roleId: number | null = null): Observable<ReaffectationDto> {
-    return this.http.post<ReaffectationDto>(`${this.base}/${userId}/reaffectation`, { subServiceId, motif, roleId });
+  reaffecter(
+    userId: number, subServiceId: number | null, motif: string | null, roleId: number | null = null, departementSupportId: string | null = null,
+  ): Observable<ReaffectationDto> {
+    return this.http.post<ReaffectationDto>(`${this.base}/${userId}/reaffectation`, { subServiceId, motif, roleId, departementSupportId });
   }
 
   contrats(): Observable<ContratRef[]> {

@@ -36,6 +36,9 @@
           <div class="ra-hist-tete">
             <div><h3 class="ku-card-title">À régulariser</h3>
               <p class="ku-card-sub">Ces agents ont un poste hors production mais sont encore rattachés à un service : ils apparaissent dans ses plannings et son équipe.</p></div>
+            @if (aRegulariser().length > 1) {
+              <button type="button" class="ku-btn ku-btn--primary" [disabled]="!peutAgir() || regularisation() !== null" (click)="toutRegulariser()">Tout régulariser ({{ aRegulariser().length }})</button>
+            }
           </div>
           <div class="ra-regul-liste">
             @for (a of aRegulariser(); track a.id) {
@@ -116,8 +119,17 @@
                             title="L’agent quitte la production : il sort des plannings et de l’équipe de son service">Aucun service (hors production)</button>
                   </div>
                 }
+                @if (horsProduction() && structuresSupport().length) {
+                  <label class="ra-champ">
+                    <span>Structure support (Organisation RH)</span>
+                    <select class="ku-input" [ngModel]="departementSupport()" (ngModelChange)="departementSupport.set($event)">
+                      <option value="">Aucune</option>
+                      @for (d of structuresSupport(); track d.id) { <option [value]="d.id">{{ d.name }}</option> }
+                    </select>
+                  </label>
+                }
                 @if (posteSansService()) {
-                  <p class="ku-muted ra-vide">Ce poste n’est rattaché à aucun service de production.</p>
+                  <p class="ku-muted ra-vide">Ce poste n’a ni contrat, ni pôle, ni cellule : il est réaffecté directement hors production.</p>
                 } @else {
                 <div class="ra-filtres">
                   <label class="ra-champ"><span>Contrat</span>

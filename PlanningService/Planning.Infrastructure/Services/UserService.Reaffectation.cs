@@ -40,10 +40,10 @@ public partial class UserService
     {
         if (EstPosteEncadrement(role)) return false;
         var cle = CleRole(role);
-        return PostesResponsable.Contains(cle) || (auteur.SubServices is null && PostesRh.Contains(cle));
+        return PostesResponsable.Contains(cle) || ((auteur.Rh || auteur.Admin) && PostesRh.Contains(cle));
     }
 
-    public async Task<ReaffectationAuteur> ResoudreAsync(int? authUserId, string? email, bool global, CancellationToken ct = default, bool admin = false)
+    public async Task<ReaffectationAuteur> ResoudreAsync(int? authUserId, string? email, bool global, CancellationToken ct = default, bool admin = false, bool rh = false)
     {
         User? me = null;
         if (authUserId is int a && a > 0)
@@ -55,11 +55,11 @@ public partial class UserService
         }
         var nom = me is null ? email : $"{me.FirstName} {me.LastName}".Trim();
         if (global)
-            return new ReaffectationAuteur(me?.Id, nom, null, admin);
+            return new ReaffectationAuteur(me?.Id, nom, null, admin, rh);
         if (me is null)
-            return new ReaffectationAuteur(null, nom, new HashSet<int>(), admin);
+            return new ReaffectationAuteur(null, nom, new HashSet<int>(), admin, rh);
         var scope = await _perimeter.GetManagedSubServiceIdsAsync(me.Id, ct);
-        return new ReaffectationAuteur(me.Id, nom, scope, admin);
+        return new ReaffectationAuteur(me.Id, nom, scope, admin, rh);
     }
 
     public async Task<ReaffectationOptionsDto> OptionsAsync(ReaffectationAuteur auteur, CancellationToken ct = default)
@@ -186,10 +186,13 @@ public partial class UserService
             else await SyncRoleToAuthByEmailAsync(user);
         }
 
+        // Structure support (ex. Formation) choisie pour un poste hors production.
+        Guid? departement = cible is null && Guid.TryParse(request.DepartementSupportId, out var dep) ? dep : null;
+
         // Mêmes suites qu'une modification de la fiche : annuaire et groupes du samedi.
         if (IsDirectoryWriteMaster())
         {
-            await _directoryEmployeeWrite.TryUpdateEmployeeAsync(user, ct);
+            await _directoryEmployeeWrite.TryUpdateEmployeeAsync(user, departement, ct);
         }
         else
         {
@@ -209,8 +212,8 @@ public partial class UserService
     }
 
     /// <summary>
-    /// L'agent a quitté un service : il sort des plannings à venir de ce service (journées sans
-    /// déclaration, à partir de demain) ; s'il n'a plus de service, il quitte aussi l'ancien pôle dans
+    /// L'agent a quitté un service : il sort des plannings de ce service à partir d'aujourd'hui
+    /// (journées sans déclaration) ; s'il n'a plus de service, il quitte aussi l'ancien pôle dans
     /// Organisation RH (sinon l'annuaire le replacerait dans son ancien service).
     /// </summary>
     private async Task ApresChangementDeServiceAsync(User user, SubService? ancien, CancellationToken ct)
@@ -219,11 +222,12 @@ public partial class UserService
         {
             try
             {
-                var demain = DateOnly.FromDateTime(DateTime.Today).AddDays(1);
+                // v28 : dès aujourd'hui — l'agent n'occupe plus ce poste.
+                var aujourdhui = DateOnly.FromDateTime(DateTime.Today);
                 var futures = await _context.ShiftAssignments
                     .Where(a => a.UserId == user.Id
                                 && a.WeeklyPlanning.SubServiceId == ancien.Id
-                                && a.AssignedDate >= demain
+                                && a.AssignedDate >= aujourdhui
                                 && !a.Declarations.Any())
                     .ToListAsync(ct);
                 if (futures.Count > 0)
