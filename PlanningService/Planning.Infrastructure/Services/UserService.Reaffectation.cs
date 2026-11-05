@@ -85,12 +85,15 @@ public partial class UserService
                 u.Role.Name,
                 u.RoleId))
             .ToListAsync(ct);
+        agents = agents
+            .Select(a => a with { ARegulariser = a.SubServiceId != null && PostesProduction.QuitteLeService(a.Role) })
+            .ToList();
         // RH / Admin : aussi les agents hors production (sans service), pour les y remettre.
         var roles = (await _context.Roles.AsNoTracking().Select(r => new { r.Id, r.Name }).ToListAsync(ct))
             .Where(r => PosteAttribuable(auteur, r.Name))
             .GroupBy(r => KyntusRoleNames.IsPilote(r.Name) ? "pilote" : CleRole(r.Name))
             .Select(g => g.OrderBy(r => string.Equals(r.Name, KyntusRoleNames.Pilote, StringComparison.OrdinalIgnoreCase) ? 0 : 1).First())
-            .Select(r => new ReaffectationRoleOptionDto(r.Id, r.Name, EstPosteProduction(r.Name)))
+            .Select(r => new ReaffectationRoleOptionDto(r.Id, r.Name, EstPosteProduction(r.Name), PostesProduction.QuitteLeService(r.Name)))
             .OrderBy(r => r.Production ? 0 : 1).ThenBy(r => r.Nom, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
         var libelle = auteur.SubServices is null ? "Toute l'entreprise" : $"Votre périmètre ({services.Count} service(s))";
@@ -138,6 +141,9 @@ public partial class UserService
                     ?? throw new ReaffectationRefusException("Service de destination introuvable.");
         if (cible is null && EstPosteProduction(posteFinal))
             throw new ReaffectationRefusException("Un pilote est rattaché à un service : choisissez son service.");
+        if (cible is not null && PostesProduction.QuitteLeService(posteFinal))
+            throw new ReaffectationRefusException(
+                $"Le poste « {posteFinal} » n'est pas rattaché à un service de production : choisissez « Aucun service (hors production) ».");
         var changeService = user.SubServiceId != cible?.Id;
         if (!changeService && nouveauRole is null)
             throw new ReaffectationRefusException("Aucun changement : choisissez un autre service ou un autre poste.");
@@ -319,12 +325,13 @@ public partial class UserService
     /// <summary>Changement de service fait depuis la fiche employé : ajouté à l'historique.</summary>
     private async Task JournaliserChangementServiceAsync(User user, int? ancienId, CancellationToken ct = default)
     {
-        if (user.SubServiceId is not int nouveauId || ancienId == nouveauId)
+        var nouveauId = user.SubServiceId;
+        if (ancienId == nouveauId)
             return;
         try
         {
             var services = await _context.SubServices.AsNoTracking().Include(s => s.Service)
-                .Where(s => s.Id == nouveauId || (ancienId != null && s.Id == ancienId))
+                .Where(s => (nouveauId != null && s.Id == nouveauId) || (ancienId != null && s.Id == ancienId))
                 .ToListAsync(ct);
             var auteurNom = _httpContextAccessor.HttpContext?.User?.Identity?.Name;
             _context.ReaffectationsAgents.Add(new ReaffectationAgent
@@ -333,7 +340,9 @@ public partial class UserService
                 AncienSubServiceId = ancienId,
                 NouveauSubServiceId = nouveauId,
                 AncienLibelle = services.FirstOrDefault(s => s.Id == ancienId) is { } a ? LibelleService(a) : null,
-                NouveauLibelle = services.FirstOrDefault(s => s.Id == nouveauId) is { } n ? LibelleService(n) : $"#{nouveauId}",
+                NouveauLibelle = nouveauId is null
+                    ? "Hors production (aucun service)"
+                    : services.FirstOrDefault(s => s.Id == nouveauId) is { } n ? LibelleService(n) : $"#{nouveauId}",
                 Origine = "Fiche employé",
                 CreatedByNom = auteurNom,
             });

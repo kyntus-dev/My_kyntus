@@ -24,11 +24,15 @@ public sealed record ReaffectationRequest(int? SubServiceId, string? Motif, int?
 /// <summary>Service de destination ; PoleId = identifiant du pôle dans Organisation RH (pour le contrat).</summary>
 public sealed record ReaffectationServiceOptionDto(int Id, string Service, string? Cellule, string? Pole, string? PoleId = null);
 
+/// <summary>ARegulariser : poste hors production encore rattaché à un service de production (v27).</summary>
 public sealed record ReaffectationAgentOptionDto(
-    int Id, string Nom, int? SubServiceId, string? Service, string? Cellule, string? Role, int? RoleId = null);
+    int Id, string Nom, int? SubServiceId, string? Service, string? Cellule, string? Role, int? RoleId = null, bool ARegulariser = false);
 
-/// <summary>Poste proposé ; Production = un service est obligatoire (pilote).</summary>
-public sealed record ReaffectationRoleOptionDto(int Id, string Nom, bool Production);
+/// <summary>
+/// Poste proposé ; Production = un service est obligatoire (pilote) ; SansService = aucun service de
+/// production possible (équipe formation, RH…), v27.
+/// </summary>
+public sealed record ReaffectationRoleOptionDto(int Id, string Nom, bool Production, bool SansService = false);
 
 public sealed record ReaffectationOptionsDto(
     string Perimetre,

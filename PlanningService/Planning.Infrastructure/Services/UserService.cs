@@ -252,6 +252,11 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         if (user.RoleId == roleId) return true;
 
         user.RoleId = roleId;
+        var ancienService = user.SubServiceId;
+        // v27 : un poste hors production quitte son service de production.
+        var nomRole = await _context.Roles.AsNoTracking().Where(r => r.Id == roleId).Select(r => r.Name).FirstOrDefaultAsync(ct);
+        if (ancienService is not null && PostesProduction.QuitteLeService(nomRole))
+            user.SubServiceId = null;
         await _context.SaveChangesAsync(ct);
         await _context.Entry(user).Reference(u => u.Role).LoadAsync(ct);
 
@@ -267,6 +272,13 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         {
             await PublishEmployeUpdatedForUserAsync(user, user.SubServiceId);
             await _context.SaveChangesAsync(ct);
+        }
+        if (ancienService is int ancienSs && user.SubServiceId is null)
+        {
+            await JournaliserChangementServiceAsync(user, ancienSs, ct);
+            var ancien = await _context.SubServices.AsNoTracking().Include(s => s.Service).ThenInclude(s => s.Floor)
+                .FirstOrDefaultAsync(s => s.Id == ancienSs, ct);
+            await ApresChangementDeServiceAsync(user, ancien, ct);
         }
         return true;
     }
@@ -1528,8 +1540,18 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             throw new UnauthorizedAccessException("Seuls RH et Admin peuvent modifier l'expertise métier.");
 
         var ancienSubServiceId = user.SubServiceId;
+        var ancienRoleId = user.RoleId;
         user.RoleId = dto.RoleId;
         user.SubServiceId = dto.SubServiceId;
+        // v27 : un poste hors production (équipe formation, RH…) quitte le service de production,
+        // sauf si un autre service est choisi en même temps.
+        if (dto.RoleId != ancienRoleId && user.SubServiceId is not null && dto.SubServiceId == ancienSubServiceId)
+        {
+            var nouveauRoleNom = await _context.Roles.AsNoTracking()
+                .Where(r => r.Id == dto.RoleId).Select(r => r.Name).FirstOrDefaultAsync();
+            if (PostesProduction.QuitteLeService(nouveauRoleNom))
+                user.SubServiceId = null;
+        }
         user.FirstName = dto.FirstName;
         user.LastName = dto.LastName;
         user.Email = dto.Email;
@@ -1558,7 +1580,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
 
         if (!IsDirectoryWriteMaster())
         {
-            await PublishEmployeUpdatedForUserAsync(user, dto.SubServiceId);
+            await PublishEmployeUpdatedForUserAsync(user, user.SubServiceId);
             await _context.SaveChangesAsync();
             await _directoryEmployeeEnsure.TryEnsureFromPlanningAsync(user);
         }

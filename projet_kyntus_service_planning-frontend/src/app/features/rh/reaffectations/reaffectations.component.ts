@@ -103,6 +103,11 @@ export class ReaffectationsComponent implements OnInit {
   });
   /** Le poste retenu exige un service (pilote) ; inconnu → oui. */
   readonly posteProduction = computed(() => this.posteCible()?.production ?? true);
+  /** Le poste retenu n'a aucun service de production (équipe formation, RH…). */
+  readonly posteSansService = computed(() => this.posteCible()?.sansService ?? false);
+  /** Postes hors production encore rattachés à un service (ex. pilote passé en équipe formation). */
+  readonly aRegulariser = computed(() => (this.options()?.agents ?? []).filter((a) => a.aRegulariser));
+  readonly regularisation = signal<number | null>(null);
   readonly choix = computed(() =>
     choixRattachement(this.options()?.services ?? [], this.parPole(), this.filtres()));
   private readonly filtres = computed(() => ({ contrat: this.filtreContrat(), pole: this.filtrePole(), cellule: this.filtreCellule() }));
@@ -181,7 +186,7 @@ export class ReaffectationsComponent implements OnInit {
     this.roleCible.set(v);
     const p = this.roles().find((r) => r.id === v);
     // Poste hors production : proposé par défaut sans service ; poste de production : un service.
-    if (p && !p.production && this.changePoste()) { this.horsProduction.set(true); this.cible.set(null); }
+    if (p && !p.production && (this.changePoste() || p.sansService)) { this.horsProduction.set(true); this.cible.set(null); }
     if (p?.production) this.horsProduction.set(false);
   }
 
@@ -263,6 +268,32 @@ export class ReaffectationsComponent implements OnInit {
     this.agent.set(a);
     this.reinitialiserChoix();
     this.rechercheAgent.set('');
+    // Poste hors production encore dans un service : la sortie de production est proposée d'office.
+    if (a.aRegulariser) this.horsProduction.set(true);
+  }
+
+  /** Retire de la production un agent dont le poste n'est plus en production (un clic, avec confirmation). */
+  async regulariser(a: ReaffectationAgentOptionDto): Promise<void> {
+    const ok = await this.confirm.confirm({
+      title: 'Retirer de la production',
+      message: `${a.nom} (${a.role}) quitte « ${a.service} » : il sort des plannings à venir et de l'équipe de ce service.`,
+      confirmLabel: 'Retirer',
+      variant: 'warning',
+    });
+    if (!ok) return;
+    this.regularisation.set(a.id);
+    this.svc.reaffecter(a.id, null, `Régularisation : le poste ${a.role} n'est pas en production.`).subscribe({
+      next: (h) => {
+        this.regularisation.set(null);
+        this.historique.set([h, ...this.historique()]);
+        this.charger();
+        this.toast.success(`${a.nom} est retiré(e) de ${a.service}.`);
+      },
+      error: (err) => {
+        this.regularisation.set(null);
+        this.toast.error(err?.error?.message ?? 'Régularisation impossible.');
+      },
+    });
   }
 
   changerAgent(): void {

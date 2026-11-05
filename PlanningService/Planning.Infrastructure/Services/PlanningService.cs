@@ -743,8 +743,10 @@ public partial class PlanningService : IPlanningService
         if (!shiftConfigs.Any())
             throw new Exception("Aucune config de shifts trouvée.");
 
+        // v27 : un poste hors production (équipe formation, RH, IT…) n'est jamais planifié ici.
         var employees = await _context.Users
             .Where(u => u.SubServiceId == planning.SubServiceId && u.IsActive)
+            .Where(PostesProduction.Planifiable)
             .OrderBy(u => u.Id)
             .ToListAsync();
 
@@ -1534,6 +1536,7 @@ public partial class PlanningService : IPlanningService
 
         var employees = await _context.Users
             .Where(u => u.SubServiceId == planning.SubServiceId && u.IsActive)
+            .Where(PostesProduction.Planifiable)
             .OrderBy(u => u.EarlyShiftCount)
             .ToListAsync();
 

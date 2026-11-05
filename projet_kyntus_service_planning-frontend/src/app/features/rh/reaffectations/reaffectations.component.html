@@ -31,6 +31,25 @@
           </div>
         </div>
       }
+      @if (aRegulariser().length) {
+        <section class="ku-card ra-regul">
+          <div class="ra-hist-tete">
+            <div><h3 class="ku-card-title">À régulariser</h3>
+              <p class="ku-card-sub">Ces agents ont un poste hors production mais sont encore rattachés à un service : ils apparaissent dans ses plannings et son équipe.</p></div>
+          </div>
+          <div class="ra-regul-liste">
+            @for (a of aRegulariser(); track a.id) {
+              <div class="ra-regul-ligne">
+                <span class="ra-av petit">{{ initiales(a.nom) }}</span>
+                <span class="ra-regul-nom"><b>{{ a.nom }}</b><small>{{ a.role }} · encore dans {{ a.service }} ({{ a.cellule ?? '—' }})</small></span>
+                <button type="button" class="ku-btn ku-btn--primary" [disabled]="!peutAgir() || regularisation() === a.id" (click)="regulariser(a)">
+                  {{ regularisation() === a.id ? 'Retrait…' : 'Retirer de la production' }}
+                </button>
+              </div>
+            }
+          </div>
+        </section>
+      }
       <section class="ku-card ra-form">
         <div class="ra-etapes">
           <!-- 1. Agent -->
@@ -53,6 +72,7 @@
                     <button type="button" class="ra-item" [disabled]="!peutAgir()" (click)="choisirAgent(a)">
                       <span class="ra-av petit">{{ initiales(a.nom) }}</span>
                       <span><b>{{ a.nom }}</b><small>{{ a.role ?? '—' }} · {{ a.service ?? 'aucun service' }} · {{ a.cellule ?? '—' }}</small></span>
+                      @if (a.aRegulariser) { <span class="ra-badge" title="Poste hors production encore dans un service">à régulariser</span> }
                     </button>
                   } @empty {
                     @if (!loading()) { <p class="ku-muted ra-vide">Aucun agent.</p> }
@@ -90,6 +110,15 @@
                   </select>
                 </label>
 
+                @if (!posteProduction()) {
+                  <div class="ra-puces ra-hors">
+                    <button type="button" class="ra-puce" [class.on]="horsProduction()" (click)="choisirHorsProduction()"
+                            title="L’agent quitte la production : il sort des plannings et de l’équipe de son service">Aucun service (hors production)</button>
+                  </div>
+                }
+                @if (posteSansService()) {
+                  <p class="ku-muted ra-vide">Ce poste n’est rattaché à aucun service de production.</p>
+                } @else {
                 <div class="ra-filtres">
                   <label class="ra-champ"><span>Contrat</span>
                     <select class="ku-input" [ngModel]="filtreContrat()" (ngModelChange)="changerContrat($event)">
@@ -109,12 +138,6 @@
                 </div>
                 <input class="ku-input" type="search" placeholder="Filtrer les services…" [ngModel]="rechercheService()" (ngModelChange)="rechercheService.set($event)" />
                 <div class="ra-services">
-                  @if (!posteProduction()) {
-                    <div class="ra-puces ra-hors">
-                      <button type="button" class="ra-puce" [class.on]="horsProduction()" (click)="choisirHorsProduction()"
-                              title="L’agent quitte la production : il sort des plannings et de l’équipe de son service">Aucun service (hors production)</button>
-                    </div>
-                  }
                   @for (g of groupes(); track g.titre) {
                     <p class="ra-groupe">{{ g.titre }}</p>
                     <div class="ra-puces">
@@ -126,6 +149,7 @@
                     <p class="ku-muted ra-vide">Aucun autre service pour ces critères.</p>
                   }
                 </div>
+                }
               } @else {
                 <p class="ku-muted ra-vide">Choisissez d’abord un agent.</p>
               }

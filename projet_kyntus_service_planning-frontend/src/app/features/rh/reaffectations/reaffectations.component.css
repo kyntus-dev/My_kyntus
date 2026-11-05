@@ -81,3 +81,12 @@
 .ra-sortie { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--text-muted); }
 .ra-sortie input { width: 150px; min-height: 32px; }
 @media (max-width: 1100px) { .ra-filtres { grid-template-columns: 1fr; } }
+
+/* v27 : postes hors production encore rattachés à un service. */
+.ra-regul { border-color: color-mix(in srgb, var(--warning, #d97706) 45%, var(--border-color)); background: color-mix(in srgb, var(--warning, #d97706) 5%, var(--bg-card)); }
+.ra-regul-liste { display: flex; flex-direction: column; gap: 6px; }
+.ra-regul-ligne { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--bg-card); border: 1px solid var(--border-color); }
+.ra-regul-nom { flex: 1; min-width: 0; }
+.ra-regul-nom b { display: block; font-size: 0.84rem; }
+.ra-regul-nom small { display: block; font-size: 0.72rem; color: var(--text-muted); }
+.ra-badge { margin-left: auto; flex: 0 0 auto; padding: 1px 8px; border-radius: 999px; font-size: 0.66rem; font-weight: 700; color: #92400e; background: color-mix(in srgb, #f59e0b 18%, transparent); }

@@ -25,9 +25,15 @@ export interface ReaffectationServiceOptionDto {
 }
 export interface ReaffectationAgentOptionDto {
   id: number; nom: string; subServiceId: number | null; service: string | null; cellule: string | null; role: string | null; roleId?: number | null;
+  /** Poste hors production encore rattaché à un service de production (à régulariser). */
+  aRegulariser?: boolean;
 }
 /** Poste proposé ; production = un service est obligatoire. */
-export interface ReaffectationRoleOptionDto { id: number; nom: string; production: boolean }
+export interface ReaffectationRoleOptionDto {
+  id: number; nom: string; production: boolean;
+  /** Aucun service de production possible (équipe formation, RH…). */
+  sansService?: boolean;
+}
 export interface ReaffectationOptionsDto {
   perimetre: string; agents: ReaffectationAgentOptionDto[]; services: ReaffectationServiceOptionDto[]; roles?: ReaffectationRoleOptionDto[];
 }
