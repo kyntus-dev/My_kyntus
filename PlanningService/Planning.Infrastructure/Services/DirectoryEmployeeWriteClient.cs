@@ -43,6 +43,12 @@ public interface IDirectoryEmployeeWriteClient
     Task<bool> TryUpdateEmployeeAsync(User user, CancellationToken ct = default);
     Task<bool> TryLinkAuthSubjectAsync(Guid employeeId, Guid authSubjectId, CancellationToken ct = default);
     Task<bool> TryDeleteEmployeeAsync(Guid employeeGuid, CancellationToken ct = default);
+
+    /// <summary>
+    /// Détache l'agent d'un nœud d'Organisation RH (level « pole », « cellule », « service » ou « all ») et
+    /// clôt ses titulatures sur ce nœud (v26 : sortie de la production lors d'une réaffectation).
+    /// </summary>
+    Task<bool> TryClearOrgPlacementAsync(Guid employeeGuid, string level, string? nodeId, CancellationToken ct = default);
 }
 
 public sealed class DirectoryEmployeeWriteClient(
@@ -365,6 +371,29 @@ public sealed class DirectoryEmployeeWriteClient(
                 return response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound;
             },
             $"delete guid={employeeGuid}",
+            false,
+            ct);
+    }
+
+    public Task<bool> TryClearOrgPlacementAsync(Guid employeeGuid, string level, string? nodeId, CancellationToken ct = default)
+    {
+        if (employeeGuid == Guid.Empty) return Task.FromResult(false);
+        return ExecuteWithRetriesAsync(
+            async () =>
+            {
+                var client = CreateClient();
+                using var request = new HttpRequestMessage(HttpMethod.Post, $"api/directory/employees/{employeeGuid:D}/clear-org-placement")
+                {
+                    Content = JsonContent.Create(new { level, nodeId }),
+                };
+                AttachAuth(request);
+                var response = await client.SendAsync(request, ct);
+                if (response.IsSuccessStatusCode) return true;
+                var body = await response.Content.ReadAsStringAsync(ct);
+                logger.LogWarning("Directory clear-org-placement échec {Status} pour {Guid}: {Body}", response.StatusCode, employeeGuid, body);
+                return false;
+            },
+            $"clear-org-placement guid={employeeGuid} {level}",
             false,
             ct);
     }

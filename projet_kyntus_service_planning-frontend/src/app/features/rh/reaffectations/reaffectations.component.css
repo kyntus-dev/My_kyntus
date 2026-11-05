@@ -58,3 +58,26 @@
 .ra-mini-fleche { color: var(--ky-blue); font-weight: 700; }
 
 @media (max-width: 1100px) { .ra-etapes { grid-template-columns: 1fr; } }
+
+/* v26 : poste, contrat › pôle › cellule, comptes. */
+.ra-champ { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ra-champ > span { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.ra-champ select { min-height: 34px; }
+.ra-filtres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ra-hors { margin: 4px 0 2px; }
+.ra-hors .ra-puce { border-style: dashed; }
+.ra-hors .ra-puce.on { border-style: solid; }
+.ra-outils { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ra-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--bg-input, var(--bg-primary)); }
+.ra-seg button { min-height: 30px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.ra-seg button.on { background: var(--bg-card); color: var(--text-primary); box-shadow: var(--shadow-1); }
+.ra-seg b { margin-left: 4px; font-size: 0.7rem; color: var(--text-muted); }
+.ra-comptes { max-height: 460px; overflow: auto; }
+.ra-etat { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; color: var(--text-muted); background: var(--bg-input, #eef2f7); }
+.ra-etat.on { color: #0f7a3d; background: color-mix(in srgb, #16a34a 14%, transparent); }
+.ra-inactif td { opacity: 0.75; }
+.ra-actions { text-align: right; }
+.ra-actions .ku-btn { margin-left: 6px; }
+.ra-sortie { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--text-muted); }
+.ra-sortie input { width: 150px; min-height: 32px; }
+@media (max-width: 1100px) { .ra-filtres { grid-template-columns: 1fr; } }

@@ -35,7 +35,49 @@ public class UsersController(
     }
 
     private Task<ReaffectationAuteur> AuteurReaffectationAsync(CancellationToken ct) =>
-        reaffectation.ResoudreAsync(User.GetAuthUserId(), User.GetEmail(), IsHrOrAdminConnected(), ct);
+        reaffectation.ResoudreAsync(User.GetAuthUserId(), User.GetEmail(), IsHrOrAdminConnected(), ct,
+            admin: string.Equals(User.GetAuthRole(), "Admin", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Droit « rh.activation » (v26) : désactiver / réactiver les comptes de son périmètre.</summary>
+    private async Task<bool> PeutActiverAsync(string verbe, CancellationToken ct)
+    {
+        var role = User.GetAuthRole() ?? "Employee";
+        if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)) return true;
+        var decision = await policyEvaluator.EvaluateAsync(
+            new PolicyRequest(User.GetSubjectId() ?? Guid.Empty, role, $"rh.activation.{verbe}", "platform"), ct);
+        return decision.Allowed;
+    }
+
+    /// <summary>Comptes des agents du périmètre, actifs et désactivés.</summary>
+    [HttpGet("reaffectations/comptes")]
+    public async Task<ActionResult<IReadOnlyList<CompteAgentDto>>> ComptesPerimetre(CancellationToken ct)
+    {
+        if (!await PeutActiverAsync("View", ct) && !await PeutActiverAsync("Act", ct)) return Forbid();
+        return Ok(await reaffectation.ComptesAsync(await AuteurReaffectationAsync(ct), ct));
+    }
+
+    /// <summary>Désactive (avec date de sortie) ou réactive le compte d'un agent du périmètre.</summary>
+    [HttpPost("{id:int}/activation")]
+    public async Task<ActionResult<CompteAgentDto>> ActiverCompte(int id, [FromBody] ActivationCompteRequest body, CancellationToken ct)
+    {
+        if (!await PeutActiverAsync("Act", ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = "L'activation des comptes est réservée aux rôles autorisés (« Activer / désactiver les comptes » dans Accès par rôle).",
+            });
+        try
+        {
+            return Ok(await reaffectation.ActiverCompteAsync(await AuteurReaffectationAsync(ct), id, body, ct));
+        }
+        catch (ReaffectationRefusException ex) when (ex.HorsPerimetre)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+        catch (ReaffectationRefusException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 
     /// <summary>Agents et services entre lesquels le demandeur peut réaffecter (son périmètre).</summary>
     [HttpGet("reaffectations/options")]

@@ -1571,7 +1571,15 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         if (user.SubServiceId is int subId)
             await EnsureBalancedSaturdayGroupAsync(user.Id, subId);
         if (ancienSubServiceId != user.SubServiceId)
+        {
             await JournaliserChangementServiceAsync(user, ancienSubServiceId);
+            // v26 : comme une réaffectation — plannings à venir de l'ancien service, annuaire.
+            var ancienService = ancienSubServiceId is int ancienSs
+                ? await _context.SubServices.AsNoTracking().Include(s => s.Service).ThenInclude(s => s.Floor)
+                    .FirstOrDefaultAsync(s => s.Id == ancienSs)
+                : null;
+            await ApresChangementDeServiceAsync(user, ancienService, CancellationToken.None);
+        }
 
         // Évite LoadOrgNameContext (GET Directory complet) sur le chemin import / update fréquent.
         var hrProfile = await _context.UserHrProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == id);

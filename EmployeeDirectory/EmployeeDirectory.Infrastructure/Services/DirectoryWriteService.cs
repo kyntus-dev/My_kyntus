@@ -136,12 +136,16 @@ public sealed class DirectoryWriteService(
         if (employee is null) return null;
 
         var (poleId, celluleId, serviceId) = await ResolveOrgIdsAsync(request.ServiceId, ct);
-        var dept = await ResolveBusinessDepartmentAsync(request.BusinessDepartmentId ?? employee.BusinessDepartmentId, ct);
+        // v26 : changement de pôle sans contrat précisé → le contrat suit le pôle (s'il n'en a qu'un).
+        var deptId = request.BusinessDepartmentId;
+        if (deptId is null && poleId is not null && !string.Equals(poleId, employee.PoleId, StringComparison.OrdinalIgnoreCase))
+            deptId = await ContratDuPoleAsync(poleId, ct);
+        var dept = await ResolveBusinessDepartmentAsync(deptId ?? employee.BusinessDepartmentId, ct);
         employee.FirstName = request.FirstName.Trim();
         employee.LastName = request.LastName.Trim();
         employee.Email = request.Email.Trim();
         employee.Role = KyntusRoleNames.NormalizePlanningRole(request.Role);
-        employee.BusinessDepartmentId = request.BusinessDepartmentId ?? employee.BusinessDepartmentId;
+        employee.BusinessDepartmentId = deptId ?? employee.BusinessDepartmentId;
         if (SansRattachement(dept, employee.Role))
         {
             employee.ServiceId = null;
@@ -172,6 +176,18 @@ public sealed class DirectoryWriteService(
         await EnqueueEmployeeChangedAsync(employee, isDeleted: false, emitLegacyCreate: false, ct);
         await PersistAndInvalidateAsync(ct);
         return Map(employee);
+    }
+
+    /// <summary>Contrat (département métier) d'un pôle, s'il est rattaché à un seul contrat.</summary>
+    private async Task<Guid?> ContratDuPoleAsync(string poleId, CancellationToken ct)
+    {
+        var contrats = await db.DepartmentPoleAssignments.AsNoTracking()
+            .Where(a => a.PoleId == poleId)
+            .Select(a => a.BusinessDepartmentId)
+            .Distinct()
+            .Take(2)
+            .ToListAsync(ct);
+        return contrats.Count == 1 ? contrats[0] : null;
     }
 
     public async Task<EmployeeDto?> ClearOrgPlacementAsync(

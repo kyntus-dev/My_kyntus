@@ -672,6 +672,8 @@ public class AppDbContext : DbContext
             e.Property(x => x.Motif).HasMaxLength(500);
             e.Property(x => x.Origine).HasMaxLength(40);
             e.Property(x => x.CreatedByNom).HasMaxLength(160);
+            e.Property(x => x.AncienRole).HasMaxLength(80);
+            e.Property(x => x.NouveauRole).HasMaxLength(80);
             e.HasIndex(x => new { x.UserId, x.CreatedAt });
             e.HasIndex(x => x.CreatedAt);
         });

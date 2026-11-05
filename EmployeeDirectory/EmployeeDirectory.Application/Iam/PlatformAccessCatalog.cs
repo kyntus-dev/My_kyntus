@@ -94,7 +94,9 @@ public static class PlatformAccessCatalog
         S("admin.users", "Utilisateurs", "Administration", View: AdminRh, Act: AdminRh),
         // v21 : changement de service d'un agent (de A vers B). Modifier = réaffecter.
         S("rh.contrats", "Contrats", "Ressources humaines", View: TeamLead),
-        S("rh.affectations", "Réaffecter les agents (changement de service)", "Ressources humaines", View: AdminRh, Act: AdminRh),
+        S("rh.affectations", "Réaffecter les agents (service, pôle, contrat, poste)", "Ressources humaines", View: AdminRh, Act: AdminRh),
+        // v26 : désactiver / réactiver les comptes des agents de son périmètre.
+        S("rh.activation", "Activer / désactiver les comptes", "Ressources humaines", View: AdminRh, Act: AdminRh),
         S("admin.organisation", "Organisation", "Administration", View: AdminRh, Act: AdminRh),
         S("admin.sync", "Synchro organisation", "Administration", View: AdminRh, Act: AdminRh),
         S("admin.modules", "Configuration des modules", "Administration", View: AdminRh),

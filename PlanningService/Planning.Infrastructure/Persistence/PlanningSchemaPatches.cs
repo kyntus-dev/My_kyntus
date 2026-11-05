@@ -1100,6 +1100,10 @@ public static class PlanningSchemaPatches
             );
             CREATE INDEX IF NOT EXISTS "IX_ReaffectationsAgents_UserId_CreatedAt" ON "ReaffectationsAgents" ("UserId", "CreatedAt");
             CREATE INDEX IF NOT EXISTS "IX_ReaffectationsAgents_CreatedAt" ON "ReaffectationsAgents" ("CreatedAt");
+            -- v26 : changement de poste et sortie de la production (aucun service).
+            ALTER TABLE "ReaffectationsAgents" ADD COLUMN IF NOT EXISTS "AncienRole" varchar(80) NULL;
+            ALTER TABLE "ReaffectationsAgents" ADD COLUMN IF NOT EXISTS "NouveauRole" varchar(80) NULL;
+            ALTER TABLE "ReaffectationsAgents" ALTER COLUMN "NouveauSubServiceId" DROP NOT NULL;
             """,
             ct);
     }
