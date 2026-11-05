@@ -83,7 +83,9 @@ public partial class UserService
                 u.SubService != null ? u.SubService.Name : null,
                 u.SubService != null ? u.SubService.Service.Name : null,
                 u.Role.Name,
-                u.RoleId))
+                u.RoleId,
+                // Requête EF (arbre d'expression) : tous les arguments explicites, sans valeur par défaut (CS0854).
+                false))
             .ToListAsync(ct);
         agents = agents
             .Select(a => a with { ARegulariser = a.SubServiceId != null && PostesProduction.QuitteLeService(a.Role) })
