@@ -1629,7 +1629,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
                 profile = new UserHrProfile { UserId = id };
                 _context.UserHrProfiles.Add(profile);
             }
-            profile.EnFormation = false;
+            profile.ChangerEnFormation(false, DateOnly.FromDateTime(DateTime.UtcNow));
             profile.DateSortie = dateSortie ?? profile.DateSortie ?? DateOnly.FromDateTime(DateTime.UtcNow);
         }
         else if (profile is not null)
@@ -1724,7 +1724,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             _context.UserHrProfiles.Add(profile);
         }
 
-        profile.EnFormation = false;
+        profile.ChangerEnFormation(false, DateOnly.FromDateTime(DateTime.UtcNow));
         profile.DateSortie ??= DateOnly.FromDateTime(DateTime.UtcNow);
 
         await _context.SaveChangesAsync(ct);
@@ -1765,10 +1765,12 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             _context.UserHrProfiles.Add(profile);
         }
 
-        profile.EnFormation = false;
-        profile.DateFinFormationPrevue = productionStartDate == default
+        var debutProduction = productionStartDate == default
             ? DateOnly.FromDateTime(DateTime.UtcNow)
             : productionStartDate;
+        profile.ChangerEnFormation(false, debutProduction);
+        profile.FormationTermineeLe = debutProduction;
+        profile.DateFinFormationPrevue = debutProduction;
 
         var expertise = niveauExpertiseMetier is >= 1 and <= 3
             ? niveauExpertiseMetier
@@ -2463,7 +2465,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             profile.AncienService = dto.AncienService;
             profile.NiveauScolaire = dto.NiveauScolaire;
             profile.IntitulesEtudes = dto.IntitulesEtudes;
-            profile.EnFormation = dto.EnFormation;
+            profile.ChangerEnFormation(dto.EnFormation, DateOnly.FromDateTime(DateTime.UtcNow));
             profile.DateDebutFormation = dto.DateDebutFormation;
             profile.DateFinFormationPrevue = dto.DateFinFormationPrevue;
         }

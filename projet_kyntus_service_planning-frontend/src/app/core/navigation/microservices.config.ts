@@ -275,9 +275,9 @@ export const MICROSERVICES: Microservice[] = [
     label: 'Présences et paie',
     icon: ICONS.calendar,
     children: [
-      { label: 'Tableau des présences', route: '/presences', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences' },
+      { label: 'Tableau des présences', route: '/presences', roles: [...ROLE_SETS.congesEquipe, KyntusRoleNames.Formateur, KyntusRoleNames.EquipeFormation], hat: 'team', capability: 'presences' },
       { label: 'Retards et autorisations', route: '/presences/retards', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences.retards' },
-      { label: 'Avertissements', route: '/presences/avertissements', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences.avertissements' },
+      { label: 'Manquements', route: '/presences/avertissements', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences.avertissements' },
       { label: 'Éléments variables de paie', route: '/presences/evp', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences.evp' },
       { label: 'Dossiers administratifs', route: '/presences/dossiers', roles: [...ADMIN_RH, 'RP', 'Chef de projet'], hat: 'team', capability: 'presences.dossier' },
       { label: 'Export paie', route: '/presences/export', roles: [...ADMIN_RH, 'RP', 'Chef de projet'], hat: 'team', capability: 'presences.export' },

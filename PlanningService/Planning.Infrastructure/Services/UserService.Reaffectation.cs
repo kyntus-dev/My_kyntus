@@ -253,6 +253,20 @@ public partial class UserService
             user.RoleId = nouveauRole.Id;
             user.Role = nouveauRole;
         }
+
+        // v30 : affecté à un service de production → fin de formation, intégré à la paie dès aujourd'hui.
+        var finFormation = false;
+        if (cible is not null)
+        {
+            var profilRh = await _context.UserHrProfiles.FirstOrDefaultAsync(p => p.UserId == user.Id, ct);
+            if (profilRh is { EnFormation: true })
+            {
+                profilRh.ChangerEnFormation(false, DateOnly.FromDateTime(DateTime.UtcNow));
+                profilRh.UpdatedAt = DateTimeOffset.UtcNow;
+                finFormation = true;
+            }
+        }
+
         var ligne = new ReaffectationAgent
         {
             UserId = user.Id,
@@ -263,7 +277,7 @@ public partial class UserService
             AncienRole = nouveauRole is null ? null : ancienRole,
             NouveauRole = nouveauRole?.Name,
             Motif = string.IsNullOrWhiteSpace(request.Motif) ? null : request.Motif.Trim()[..Math.Min(500, request.Motif.Trim().Length)],
-            Origine = "Réaffectation",
+            Origine = finFormation ? "Fin de formation" : "Réaffectation",
             CreatedBy = auteur.UserId,
             CreatedByNom = auteur.Nom,
         };

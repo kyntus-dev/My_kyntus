@@ -123,3 +123,4 @@ button.pz-code:disabled { cursor: default; }
   .pz-agent { min-width: 150px; }
   .pz-seg { grid-template-columns: 1fr; }
 }
+.pz-formation { color: var(--ku-info, #2563eb); font-weight: 600; }

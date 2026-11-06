@@ -417,7 +417,7 @@ export const routes: Routes = [
             path: '',
             pathMatch: 'full',
             canActivate: [AuthGuard],
-            data: { roles: ROLE_SETS.congesEquipe, capability: 'presences' },
+            data: { roles: [...ROLE_SETS.congesEquipe, 'Formateur', 'Equipe_Formation'], capability: 'presences' },
             loadComponent: () =>
               import('./features/presences/pages/presences-tableau.component')
                 .then(m => m.PresencesTableauComponent),

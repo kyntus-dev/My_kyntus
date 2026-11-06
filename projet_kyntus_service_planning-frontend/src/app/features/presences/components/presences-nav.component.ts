@@ -9,7 +9,7 @@ interface Onglet { label: string; route: string; capability: string }
 const ONGLETS: readonly Onglet[] = [
   { label: 'Tableau des présences', route: '/presences', capability: 'presences' },
   { label: 'Retards', route: '/presences/retards', capability: 'presences.retards' },
-  { label: 'Avertissements', route: '/presences/avertissements', capability: 'presences.avertissements' },
+  { label: 'Manquements', route: '/presences/avertissements', capability: 'presences.avertissements' },
   { label: 'Éléments variables', route: '/presences/evp', capability: 'presences.evp' },
   { label: 'Dossiers', route: '/presences/dossiers', capability: 'presences.dossier' },
   { label: 'Export paie', route: '/presences/export', capability: 'presences.export' },

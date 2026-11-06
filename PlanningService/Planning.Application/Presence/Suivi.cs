@@ -3,8 +3,10 @@ namespace Planning.Application.Presence;
 /// <summary>Listes proposées dans les formulaires (avertissements, éléments variables, dossier).</summary>
 public static class SuiviCatalogues
 {
+    /// <summary>Suite donnée (« Pénalité seule » : le montant du référentiel, sans autre mesure).</summary>
     public static readonly IReadOnlyList<string> TypesAvertissement =
     [
+        "Pénalité seule",
         "Avertissement verbal",
         "Avertissement écrit",
         "Erreur de production",
@@ -44,10 +46,12 @@ public static class SuiviCatalogues
     public const long TailleMaxDocument = 10 * 1024 * 1024;
 }
 
+/// <summary>Manquement saisi. <see cref="Code"/> : code du référentiel (v30) ; null pour les anciennes saisies.</summary>
 public sealed record AvertissementDto(
-    long Id, int UserId, string Agent, DateOnly Date, string Type, string Commentaire, string? Auteur, DateTime CreatedAt);
+    long Id, int UserId, string Agent, DateOnly Date, string Type, string Commentaire, string? Auteur, DateTime CreatedAt,
+    string? Code = null);
 
-public sealed record AvertissementRequest(int UserId, DateOnly Date, string Type, string Commentaire);
+public sealed record AvertissementRequest(int UserId, DateOnly Date, string Type, string Commentaire, string? Code = null);
 
 public sealed record EvpDto(
     long Id, int UserId, string Agent, DateOnly Date, string Type, decimal Montant, string Commentaire, string? Auteur, DateTime CreatedAt);

@@ -6,12 +6,17 @@ import { PlatformAccessService } from '../../../core/platform-access/platform-ac
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { PresencesNavComponent } from '../components/presences-nav.component';
+import { manquement, referentielSaisie } from '../lib/manquements.util';
 import { ymd } from '../lib/presence.util';
 import { type Plage, agentsParCellule, dateFr, messageErreur, plageDates, sansAccents } from '../lib/suivi.util';
 
-interface Formulaire { userId: number | null; date: string; type: string; commentaire: string; recherche: string }
+interface Formulaire { userId: number | null; date: string; code: string; type: string; commentaire: string; recherche: string }
 
-/** Avertissements : type, date et commentaire par agent, dans le périmètre du responsable. */
+/**
+ * v30 : Manquements du référentiel unifié (code, date, commentaire, suite donnée), dans le
+ * périmètre du responsable. Le montant n'est pas saisi : l'export paie l'applique selon le rang
+ * (1er mois, 2e mois consécutif, 3e mois consécutif et +). Les retards viennent du pointage.
+ */
 @Component({
   selector: 'app-presences-avertissements',
   standalone: true,
@@ -42,8 +47,11 @@ export class PresencesAvertissementsComponent implements OnInit {
     return this.access.canAct('presences.avertissements');
   });
 
+  readonly referentiel = referentielSaisie();
+  readonly manquement = manquement;
   readonly recherche = signal('');
   readonly filtreType = signal('');
+  readonly filtreCategorie = signal('');
   readonly filtreCellule = signal('');
   readonly form = signal<Formulaire>(this.vide());
 
@@ -54,8 +62,9 @@ export class PresencesAvertissementsComponent implements OnInit {
   readonly filtrees = computed(() => {
     const q = sansAccents(this.recherche().trim());
     return this.lignes().filter((l) =>
-      (!q || sansAccents(`${l.agent} ${l.commentaire}`).includes(q))
+      (!q || sansAccents(`${l.agent} ${l.commentaire} ${l.code ?? ''} ${manquement(l.code)?.libelle ?? ''}`).includes(q))
       && (!this.filtreType() || l.type === this.filtreType())
+      && (!this.filtreCategorie() || manquement(l.code)?.categorie === this.filtreCategorie())
       && (!this.filtreCellule() || this.celluleDe().get(l.userId) === this.filtreCellule()));
   });
 
@@ -68,6 +77,7 @@ export class PresencesAvertissementsComponent implements OnInit {
       agents: parAgent.size,
       ecrits: l.filter((a) => /écrit|sanction|mise à pied/i.test(a.type)).length,
       recidives: [...parAgent.values()].filter((n) => n > 1).length,
+      disciplinaires: l.filter((a) => { const m = manquement(a.code); return !!m && m.mois1 === null; }).length,
     };
   });
 
@@ -97,12 +107,19 @@ export class PresencesAvertissementsComponent implements OnInit {
     this.error.set(null);
     this.svc.avertissements(du, au).subscribe({
       next: (l) => { this.lignes.set(l); this.loading.set(false); },
-      error: (err) => { this.loading.set(false); this.error.set(messageErreur(err, 'Impossible de charger les avertissements.')); },
+      error: (err) => { this.loading.set(false); this.error.set(messageErreur(err, 'Impossible de charger les manquements.')); },
     });
   }
 
   nombrePour(userId: number): number {
     return this.lignes().filter((l) => l.userId === userId).length;
+  }
+
+  /** Barème du référentiel : « 50 / 100 / 200 DH » ; disciplinaire sans montant. */
+  bareme(code: string | null | undefined): string {
+    const m = manquement(code);
+    if (!m) return '';
+    return m.mois1 === null ? 'Disciplinaire (sans montant)' : `${m.mois1} / ${m.mois2} / ${m.mois3} DH`;
   }
 
   classeType(type: string): string {
@@ -124,17 +141,26 @@ export class PresencesAvertissementsComponent implements OnInit {
     this.form.set({ ...this.form(), ...p });
   }
 
+  choisirCode(code: string): void {
+    const m = manquement(code);
+    // Sans montant (G02, G03) : procédure disciplinaire, « Avertissement écrit » proposé d'office.
+    const type = m && m.mois1 === null && this.form().type === this.types()[0]
+      ? (this.types().find((t) => /écrit/i.test(t)) ?? this.form().type)
+      : this.form().type;
+    this.patch({ code, type });
+  }
+
   enregistrer(): void {
     const f = this.form();
-    if (!f.userId || !f.type || !f.commentaire.trim() || this.saving()) return;
+    if (!f.userId || !f.code || !f.type || !f.commentaire.trim() || this.saving()) return;
     this.saving.set(true);
-    this.svc.ajouterAvertissement({ userId: f.userId, date: f.date, type: f.type, commentaire: f.commentaire.trim() }).subscribe({
+    this.svc.ajouterAvertissement({ userId: f.userId, date: f.date, code: f.code, type: f.type, commentaire: f.commentaire.trim() }).subscribe({
       next: (a) => {
         this.saving.set(false);
         const { du, au } = this.dates();
         if (a.date >= du && a.date <= au) this.lignes.set([a, ...this.lignes()]);
         this.fermer();
-        this.toast.success('Avertissement enregistré.');
+        this.toast.success('Manquement enregistré.');
       },
       error: (err) => { this.saving.set(false); this.toast.error(messageErreur(err, 'Enregistrement impossible.')); },
     });
@@ -142,19 +168,19 @@ export class PresencesAvertissementsComponent implements OnInit {
 
   async supprimer(a: AvertissementDto): Promise<void> {
     const ok = await this.confirm.confirm({
-      title: 'Supprimer l’avertissement',
-      message: `Supprimer l’avertissement « ${a.type} » du ${dateFr(a.date)} pour ${a.agent} ?`,
+      title: 'Supprimer le manquement',
+      message: `Supprimer « ${a.code ? a.code + ' – ' + (manquement(a.code)?.libelle ?? '') : a.type} » du ${dateFr(a.date)} pour ${a.agent} ?`,
       confirmLabel: 'Supprimer',
       variant: 'danger',
     });
     if (!ok) return;
     this.svc.supprimerAvertissement(a.id).subscribe({
-      next: () => { this.lignes.set(this.lignes().filter((l) => l.id !== a.id)); this.toast.success('Avertissement supprimé.'); },
+      next: () => { this.lignes.set(this.lignes().filter((l) => l.id !== a.id)); this.toast.success('Manquement supprimé.'); },
       error: (err) => this.toast.error(messageErreur(err, 'Suppression impossible.')),
     });
   }
 
   private vide(): Formulaire {
-    return { userId: null, date: ymd(new Date()), type: this.types()[0] ?? '', commentaire: '', recherche: '' };
+    return { userId: null, date: ymd(new Date()), code: '', type: this.types()[0] ?? '', commentaire: '', recherche: '' };
   }
 }

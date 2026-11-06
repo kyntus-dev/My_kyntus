@@ -134,7 +134,10 @@ public sealed record PresenceAgentDto(
     PresenceTotauxDto Totaux,
     DateOnly? FormationDu = null,
     DateOnly? FormationAu = null,
-    string? Pilote = null); // « NOM Prénom » (colonne Pilote de l'export paie)
+    string? Pilote = null, // « NOM Prénom » (colonne Pilote de l'export paie)
+    // v30 : case « En formation » cochée (agent hors paie tant qu'il n'est pas en production).
+    // FormationAu = dernier jour de formation une fois terminée (null tant qu'elle continue).
+    bool EnFormation = false);
 
 public sealed record PresenceGrilleDto(
     string Perimetre,

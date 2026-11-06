@@ -21,6 +21,7 @@ public sealed class PresencesSuiviController(IPresenceSuiviService suivi, IPolic
     public ActionResult<object> Catalogues() => Ok(new
     {
         avertissements = SuiviCatalogues.TypesAvertissement,
+        manquements = Referentiel.Manquements,
         evp = SuiviCatalogues.TypesEvp,
         dossier = SuiviCatalogues.CategoriesDossier,
         tailleMaxDocument = SuiviCatalogues.TailleMaxDocument,

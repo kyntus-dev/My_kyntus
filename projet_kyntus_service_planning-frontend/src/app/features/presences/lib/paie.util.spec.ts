@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EvpDto, PresenceAgentDto, PresenceJourDto } from '../../../core/models/presence.models';
-import { entetesPaie, hhmmss, joursOuvres, lignePaie, nomsExport, penalite, valeursPaie } from './paie.util';
+import { entetesPaie, hhmmss, joursOuvres, joursPayes, lignePaie, nomsExport, valeursPaie } from './paie.util';
 import { joursDeLaPeriode } from './presence.util';
 
 function jour(date: string, code: string | null, extra: Partial<PresenceJourDto> = {}): PresenceJourDto {
@@ -23,25 +23,25 @@ function agent(jours: PresenceJourDto[], extra: Partial<PresenceAgentDto> = {}):
 }
 
 describe('export paie', () => {
-  it('reprend les 52 colonnes du fichier d’octobre 2026 (27 jours du lundi au samedi)', () => {
+  it('reprend les 52 colonnes du fichier d’octobre 2026 (27 jours du lundi au samedi), plus « Statut paie »', () => {
     const entetes = entetesPaie('2026-10-01', '2026-10-31');
-    expect(entetes).toHaveLength(52);
+    expect(entetes).toHaveLength(53);
     expect(entetes.slice(0, 4)).toEqual(['Type', 'Affectation', 'Pilote', 'jeu\n01/10']);
     expect(entetes).not.toContain('dim\n04/10');
-    expect(entetes.at(-1)).toBe('Sortie (AR)');
-    expect(entetes.slice(-22, -16)).toEqual(['Formation', 'Date entrée', 'Abs. partielle', 'ABS N (déduit)', 'AM (déduit)', 'AR (déduit)']);
-  });
-
-  it('pénalité : −50 par heure entière, plafonnée à −350', () => {
-    expect(penalite(59)).toBe(0);
-    expect(penalite(60)).toBe(-50);
-    expect(penalite(179)).toBe(-100);
-    expect(penalite(7 * 60)).toBe(-350);
-    expect(penalite(12 * 60)).toBe(-350);
+    expect(entetes.slice(-2)).toEqual(['Sortie (AR)', 'Statut paie']);
+    expect(entetes.slice(-23, -17)).toEqual(['Formation', 'Date entrée', 'Abs. partielle', 'ABS N (déduit)', 'AM (déduit)', 'AR (déduit)']);
     expect(hhmmss(1505)).toBe('25:05:00');
   });
 
-  it('jours travaillés = jours ouvrés − formation − absences déduites ; ABS, CP, DF, REC non déduits', () => {
+  it('paie sur 26 jours : mois complet = 26 − absences ; prorata sinon ; jamais négatif', () => {
+    expect(joursPayes(27, 27, 3)).toBe(23);
+    expect(joursPayes(26, 26, 0)).toBe(26);
+    expect(joursPayes(15, 27, 1)).toBe(13.44);
+    expect(joursPayes(1, 27, 1)).toBe(0);
+    expect(joursPayes(0, 27, 0)).toBe(0);
+  });
+
+  it('jours travaillés = 26 − absences déduites ; ABS, CP, DF, REC non déduits', () => {
     const du = '2026-10-01';
     const au = '2026-10-31';
     const codes: Record<string, string> = {
@@ -61,21 +61,25 @@ describe('export paie', () => {
     expect(joursOuvres(du, au)).toHaveLength(27);
     expect(l.totalAbsences).toBe(3);
     expect(l.nonDeduits).toEqual({ ABS: 1, CP: 1, DF: 0, REC: 1 });
-    expect(l.jrsTravailles).toBe(24);
+    expect(l.jrsTravailles).toBe(23);
+    expect(l.statutPaie).toBe('Production');
     expect(l.type).toBe('Sous-Traitant');
     expect(l.affectation).toBe('SFR FTTH');
     expect(l.cumulRetards).toBe('02:05:00');
-    expect(l.penalite).toBe(-100);
-    expect(l.originePenalite).toBe('calcul');
+    expect(l.penalite).toBe(0);
+    expect(l.originePenalite).toBe('');
     expect(l.absPartielle).toBe(1);
     expect(l.commentaires).toBe('08/10 : (sup) Justificatif reçu');
     expect(l.evp).toBe('05/10 Heures Supp. (à valoriser) : 4 h | 20/10 Prime : Objectif');
     expect(l.totalEvp).toBe(300);
     expect(l.alertes).toContain('EVP à valoriser');
-    expect(valeursPaie(l)).toHaveLength(52);
+    expect(valeursPaie(l)).toHaveLength(53);
+    const avecPenalite = lignePaie(a, evp, du, au, { montant: 250, details: [], origine: 'R01 ×1', disciplinaires: 0, alertes: [] });
+    expect(avecPenalite.penalite).toBe(-250);
+    expect(avecPenalite.originePenalite).toBe('R01 ×1');
   });
 
-  it('formation en jours calendaires, AR jusqu’à la sortie, date d’entrée et texte de sortie', () => {
+  it('formation en jours lundi-samedi, intégration puis sortie : prorata, AR jusqu’à la sortie', () => {
     const du = '2026-10-01';
     const au = '2026-10-31';
     const jours = joursDeLaPeriode(du, au).map((d) => jour(d, d >= '2026-10-12' && d <= '2026-10-14' ? 'AR' : 'FOR'));
@@ -83,11 +87,38 @@ describe('export paie', () => {
       dateEntree: '2026-09-28', dateSortie: '2026-10-12', formationDu: '2026-09-28', formationAu: '2026-10-11',
     }), [], du, au);
 
-    expect(l.formation).toBe(11);
+    expect(l.formation).toBe(9);
+    expect(l.joursProduction).toBe(1);
     expect(l.deduits.AR).toBe(1);
     expect(l.dateEntree).toBe('28/09/2026');
     expect(l.sortie).toBe('Sorti le 12/10/2026 (pendant la période) — à vérifier');
-    expect(l.jrsTravailles).toBe(27 - 11 - 1);
+    expect(l.jrsTravailles).toBe(0);
+    expect(l.statutPaie).toBe('Intégré en production le 12/10/2026 (prorata)');
+  });
+
+  it('agent en formation : dans l’export, hors paie, absences et retards ignorés', () => {
+    const du = '2026-10-01';
+    const au = '2026-10-31';
+    const jours = joursDeLaPeriode(du, au).map((d) => jour(d, d === '2026-10-05' ? 'ABS N' : 'FOR'));
+    const l = lignePaie(agent(jours, { enFormation: true, formationDu: '2026-09-28', formationAu: null, dateEntree: '2026-09-28' }), [], du, au);
+    expect(l.formation).toBe(27);
+    expect(l.joursProduction).toBe(0);
+    expect(l.totalAbsences).toBe(0);
+    expect(l.jrsTravailles).toBe(0);
+    expect(l.statutPaie).toBe('En formation – hors paie');
+  });
+
+  it('intégré en production le 15 : 26 au prorata des jours de production, absences de production seules', () => {
+    const du = '2026-10-01';
+    const au = '2026-10-31';
+    const codes: Record<string, string> = { '2026-10-06': 'ABS N', '2026-10-20': 'ABS N' };
+    const jours = joursDeLaPeriode(du, au).map((d) => jour(d, codes[d] ?? 'P'));
+    const l = lignePaie(agent(jours, { enFormation: false, formationDu: '2026-09-28', formationAu: '2026-10-14' }), [], du, au);
+    expect(l.formation).toBe(12);
+    expect(l.joursProduction).toBe(15);
+    expect(l.deduits['ABS N']).toBe(1);
+    expect(l.jrsTravailles).toBe(13.44);
+    expect(l.statutPaie).toBe('Intégré en production le 15/10/2026 (prorata)');
   });
 
   it('nomme la feuille et le fichier comme l’export actuel', () => {

@@ -187,9 +187,10 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'pointage.regimes', label: 'Régimes horaires', module: 'Pointage', view: ADMIN_RH, configure: ADMIN, serveur: SRV_ADMIN_RH, serveurAgir: SRV_ADMIN },
   { id: 'pointage.correspondances', label: 'Correspondance pointeuses', module: 'Pointage', view: ADMIN_RH, act: ADMIN_RH, serveur: SRV_ADMIN_RH },
   { id: 'pointage.acces-sortie', label: 'Accès Heure de sortie (compte par compte)', module: 'Pointage', view: ADMIN, configure: ADMIN, serveur: SRV_ADMIN },
-  { id: 'presences', label: 'Tableau des présences', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
+  // v30 : formateurs et équipe formation = agents « En formation ».
+  { id: 'presences', label: 'Tableau des présences', module: 'Présences et paie', view: [...TEAM_LEAD, KyntusRoleNames.Formateur, KyntusRoleNames.EquipeFormation], act: [...TEAM_LEAD, KyntusRoleNames.Formateur, KyntusRoleNames.EquipeFormation], defaultScope: 'Cellule' },
   { id: 'presences.retards', label: 'Retards et autorisations', module: 'Présences et paie', view: TEAM_LEAD, defaultScope: 'Cellule' },
-  { id: 'presences.avertissements', label: 'Avertissements', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
+  { id: 'presences.avertissements', label: 'Manquements (référentiel)', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
   { id: 'presences.evp', label: 'Éléments variables de paie', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
   { id: 'presences.dossier', label: 'Dossier administratif', module: 'Présences et paie', view: RH_CHEF_PROJET, act: RH_CHEF_PROJET },
   { id: 'presences.export', label: 'Export paie', module: 'Présences et paie', view: RH_CHEF_PROJET },

@@ -70,12 +70,25 @@ public sealed class PresenceSuiviService(AppDbContext db, IPresenceService prese
     public async Task<AvertissementDto> AjouterAvertissementAsync(PresenceViewer viewer, AvertissementRequest request, CancellationToken ct = default)
     {
         var auteur = await AutoriserAsync(viewer, request.UserId, ct);
-        var type = Choix(request.Type, SuiviCatalogues.TypesAvertissement, "Type d'avertissement");
+        // v30 : code du référentiel des manquements ; les retards (R01…R03) viennent du pointage.
+        string? code = null;
+        if (!string.IsNullOrWhiteSpace(request.Code))
+        {
+            var manquement = Referentiel.Trouver(request.Code)
+                             ?? throw new PresenceRefusException($"Code « {request.Code.Trim()} » absent du référentiel.");
+            if (Referentiel.EstRetard(manquement.Code))
+                throw new PresenceRefusException("Les retards (R01 à R03) sont calculés depuis le pointage : ils ne se saisissent pas.");
+            code = manquement.Code;
+        }
+        var type = code is not null && string.IsNullOrWhiteSpace(request.Type)
+            ? SuiviCatalogues.TypesAvertissement[0]
+            : Choix(request.Type, SuiviCatalogues.TypesAvertissement, "Type d'avertissement");
         var ligne = new Avertissement
         {
             UserId = request.UserId,
             Date = request.Date,
             Type = type,
+            Code = code,
             Commentaire = Obligatoire(request.Commentaire, 1000, "Le commentaire"),
             CreatedBy = auteur.UserId,
             CreatedByNom = auteur.Nom,
@@ -253,7 +266,7 @@ public sealed class PresenceSuiviService(AppDbContext db, IPresenceService prese
     }
 
     private static AvertissementDto Map(Avertissement a, IReadOnlyDictionary<int, string> noms) =>
-        new(a.Id, a.UserId, noms.GetValueOrDefault(a.UserId) ?? $"#{a.UserId}", a.Date, a.Type, a.Commentaire, a.CreatedByNom, a.CreatedAt);
+        new(a.Id, a.UserId, noms.GetValueOrDefault(a.UserId) ?? $"#{a.UserId}", a.Date, a.Type, a.Commentaire, a.CreatedByNom, a.CreatedAt, a.Code);
 
     private static EvpDto Map(ElementVariablePaie e, IReadOnlyDictionary<int, string> noms) =>
         new(e.Id, e.UserId, noms.GetValueOrDefault(e.UserId) ?? $"#{e.UserId}", e.Date, e.Type, e.Montant, e.Commentaire, e.CreatedByNom, e.CreatedAt);

@@ -56,7 +56,7 @@ public sealed class DirectoryEmployeeHrProfileProjectionConsumer(AppDbContext db
         profile.AncienService = msg.AncienService;
         profile.NiveauScolaire = msg.NiveauScolaire;
         profile.IntitulesEtudes = msg.IntitulesEtudes;
-        profile.EnFormation = msg.EnFormation;
+        profile.ChangerEnFormation(msg.EnFormation, DateOnly.FromDateTime(DateTime.UtcNow));
         profile.DateDebutFormation = msg.DateDebutFormation;
         profile.DateFinFormationPrevue = msg.DateFinFormationPrevue;
         profile.NiveauExpertiseMetier = msg.NiveauExpertiseMetier;

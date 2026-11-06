@@ -3,7 +3,7 @@
     <div>
       <p class="ku-hero-eyebrow">Présences et paie · {{ grille()?.perimetre ?? 'Votre périmètre' }}</p>
       <h1 class="ku-hero-title">Export paie</h1>
-      <p class="ku-hero-sub">Vérifiez l’aperçu puis exportez : le fichier reprend les colonnes et les règles du récapitulatif actuel (recap_absences).</p>
+      <p class="ku-hero-sub">Vérifiez l’aperçu puis exportez : colonnes du récapitulatif actuel (recap_absences), paie sur 26 jours au prorata, pénalités du référentiel des manquements.</p>
     </div>
     <div class="ku-hero-actions">
       <div class="ku-seg" role="tablist">
@@ -22,9 +22,9 @@
     <div class="ku-kpi"><span class="ku-kpi-label">Agents exportés</span><span class="ku-kpi-value">{{ synthese().agents }}</span>
       <span class="ku-kpi-sub">du {{ dateFr(periode().du) }} au {{ dateFr(periode().au) }} · {{ jours().length }} jours (lun.–sam.)</span></div>
     <div class="ku-kpi"><span class="ku-kpi-label">Jours travaillés</span><span class="ku-kpi-value">{{ synthese().jrsTravailles }}</span>
-      <span class="ku-kpi-sub">{{ synthese().absences }} jour(s) d’absence déduits</span></div>
-    <div class="ku-kpi" [class.ku-kpi--danger]="synthese().penalites < 0"><span class="ku-kpi-label">Pénalités de retard</span>
-      <span class="ku-kpi-value">{{ montantFr(synthese().penalites) }}</span><span class="ku-kpi-sub">{{ synthese().agentsPenalises }} agent(s) · −50 par heure, 7 h max</span></div>
+      <span class="ku-kpi-sub">base 26 jours · {{ synthese().absences }} jour(s) d’absence déduits · {{ synthese().horsPaie }} hors paie</span></div>
+    <div class="ku-kpi" [class.ku-kpi--danger]="synthese().penalites < 0"><span class="ku-kpi-label">Pénalités (référentiel)</span>
+      <span class="ku-kpi-value">{{ montantFr(synthese().penalites) }}</span><span class="ku-kpi-sub">{{ synthese().agentsPenalises }} agent(s) · retards et manquements saisis</span></div>
     <div class="ku-kpi"><span class="ku-kpi-label">Total EVP</span><span class="ku-kpi-value">{{ montantFr(synthese().evp) }}</span>
       <span class="ku-kpi-sub">éléments variables de la période</span></div>
   </div>
@@ -54,6 +54,9 @@
         </li>
       }
     </ul>
+    @if (saisies() === null) {
+      <p class="pz-alerte">Les manquements saisis ne sont pas accessibles avec vos droits : seules les pénalités de retard sont calculées.</p>
+    }
     @if (evpIndisponible()) {
       <p class="pz-alerte">Les éléments variables ne sont pas accessibles avec vos droits : colonnes EVP vides.</p>
     }
@@ -109,7 +112,7 @@
               <th colspan="3">Entrées</th>
               <th colspan="5" class="pze-g-deduit">Absences déduites</th>
               <th colspan="4">Non déduites</th>
-              <th colspan="4" class="pze-g-paie">Paie</th>
+              <th colspan="5" class="pze-g-paie">Paie</th>
               <th colspan="3">EVP et commentaires</th>
               <th rowspan="2">À vérifier</th>
             </tr>
@@ -119,12 +122,13 @@
                   <th class="pz-jour"><span>{{ enteteJour(j).court }}</span><b>{{ enteteJour(j).num }}</b></th>
                 }
               }
-              <th title="Jours de formation (calendaires)">Form.</th>
+              <th title="Jours de formation (lundi-samedi), hors paie">Form.</th>
               <th>Entrée</th>
               <th title="Absences partielles">Abs. part.</th>
               @for (c of codesDeduits; track c) { <th class="pze-g-deduit">{{ c }}</th> }
               @for (c of codesNonDeduits; track c) { <th>{{ c }}</th> }
-              <th class="pze-g-paie" title="Jours lundi-samedi − formation − absences déduites">Jrs trav.</th>
+              <th class="pze-g-paie" title="Statut paie : production, prorata, en formation">Statut</th>
+              <th class="pze-g-paie" title="26 × jours de production ÷ jours lundi-samedi − absences déduites">Jrs trav.</th>
               <th class="pze-g-paie">Total abs.</th>
               <th class="pze-g-paie" title="Retards non autorisés">Retards</th>
               <th class="pze-g-paie">Pénalité</th>
@@ -152,13 +156,19 @@
                   <td class="pze-n pze-g-deduit" [class.ku-neg]="l.deduits[c] > 0">{{ l.deduits[c] || '' }}</td>
                 }
                 @for (c of codesNonDeduits; track c) { <td class="pze-n">{{ l.nonDeduits[c] || '' }}</td> }
+                <td class="pze-g-paie pze-statut">
+                  @if (l.statutPaie !== 'Production') {
+                    <span class="ku-chip" [class.ku-chip--info]="l.joursProduction === 0" [class.ku-chip--warn]="l.joursProduction > 0">{{ l.statutPaie }}</span>
+                  }
+                </td>
                 <td class="pze-n pze-g-paie"><b>{{ l.jrsTravailles }}</b></td>
                 <td class="pze-n pze-g-paie" [class.ku-neg]="l.totalAbsences > 0">{{ l.totalAbsences || '' }}</td>
                 <td class="ku-mono pze-g-paie" [class.ku-neg]="l.retardMinutes > 0">{{ l.retardMinutes ? l.cumulRetards : '' }}</td>
-                <td class="pze-n pze-g-paie" [class.ku-neg]="l.penalite < 0">{{ l.penalite || '' }}</td>
+                <td class="pze-n pze-g-paie" [class.ku-neg]="l.penalite < 0" [title]="l.originePenalite">{{ l.penalite || '' }}</td>
                 <td class="pze-n">{{ l.manques || '' }}</td>
                 <td class="pze-n" [class.ku-neg]="l.totalEvp < 0" [class.ku-pos]="l.totalEvp > 0">{{ l.totalEvp ? montantFr(l.totalEvp) : '' }}</td>
-                <td class="pze-detail" [title]="(l.evp ? 'EVP : ' + l.evp : '') + (l.commentaires ? '\n\nCommentaires : ' + l.commentaires : '') + (l.sortie ? '\n\n' + l.sortie : '')">
+                <td class="pze-detail" [title]="(l.originePenalite ? 'Pénalités : ' + l.originePenalite + '\n\n' : '') + (l.evp ? 'EVP : ' + l.evp : '') + (l.commentaires ? '\n\nCommentaires : ' + l.commentaires : '') + (l.sortie ? '\n\n' + l.sortie : '')">
+                  @if (l.originePenalite) { <span class="pze-tag pze-tag--ko">Pén.</span> }
                   @if (l.evp) { <span class="pze-tag">EVP</span> }
                   @if (l.commentaires) { <span class="pze-tag">Com.</span> }
                   @if (l.sortie) { <span class="pze-tag pze-tag--ko">Sortie</span> }
@@ -173,7 +183,8 @@
       </div>
       <p class="ku-card-sub pz-note">
         Aperçu condensé : le fichier Excel contient les 3 colonnes d’identité, un jour par colonne (lundi → samedi) et les colonnes de paie,
-        dans l’ordre du récapitulatif actuel, avec les commentaires et le détail des EVP en texte. Survolez « Détail » pour lire ces textes.
+        dans l’ordre du récapitulatif actuel, avec les commentaires, le détail des EVP et l’origine des pénalités (code, rang, montant) en texte,
+        puis la colonne « Statut paie ». Survolez « Pénalité » ou « Détail » pour lire ces textes.
       </p>
     }
   </section>

@@ -60,6 +60,8 @@ export interface PresenceAgentDto {
   formationAu?: string | null;
   /** « NOM Prénom » (colonne Pilote de l'export paie). */
   pilote?: string | null;
+  /** v30 : case « En formation » cochée (hors paie tant qu'il n'a pas intégré la production). */
+  enFormation?: boolean;
 }
 
 export interface PresenceGrilleDto {
@@ -89,6 +91,8 @@ export interface PresenceSaisieRequest {
 
 export interface SuiviCatalogues {
   avertissements: string[];
+  /** v30 : référentiel unifié des manquements. */
+  manquements?: ManquementRef[];
   evp: string[];
   dossier: string[];
   tailleMaxDocument: number;
@@ -112,6 +116,8 @@ export interface AvertissementDto {
   commentaire: string;
   auteur: string | null;
   createdAt: string;
+  /** v30 : code du référentiel (C01, Q04…) ; null pour les anciennes saisies. */
+  code?: string | null;
 }
 
 export interface AvertissementRequest {
@@ -119,6 +125,18 @@ export interface AvertissementRequest {
   date: string;
   type: string;
   commentaire: string;
+  code?: string | null;
+}
+
+/** Ligne du référentiel unifié (montants en DH ; null = disciplinaire, sans montant). */
+export interface ManquementRef {
+  code: string;
+  categorie: string;
+  libelle: string;
+  mois1: number | null;
+  mois2: number | null;
+  mois3: number | null;
+  gravite: string;
 }
 
 export interface EvpDto {

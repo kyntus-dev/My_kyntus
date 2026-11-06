@@ -2,8 +2,8 @@
   <header class="ku-hero">
     <div>
       <p class="ku-hero-eyebrow">Présences et paie · {{ dates().libelle }}</p>
-      <h1 class="ku-hero-title">Avertissements</h1>
-      <p class="ku-hero-sub">Avertissements, erreurs de production et sanctions de vos agents, avec le commentaire du responsable.</p>
+      <h1 class="ku-hero-title">Manquements</h1>
+      <p class="ku-hero-sub">Manquements du référentiel unifié (discipline, qualité et process). Le montant est appliqué par l’export paie selon le rang : 1er mois, 2e mois consécutif, 3e mois consécutif et +. Les retards sont calculés depuis le pointage.</p>
     </div>
     <div class="ku-hero-actions">
       <div class="ku-seg" role="tablist">
@@ -15,7 +15,7 @@
         <button type="button" class="ku-btn" (click)="changerPeriode(1)" aria-label="Période suivante">›</button>
       }
       @if (peutAgir()) {
-        <button type="button" class="ku-btn ku-btn--primary" (click)="ouvrir()">+ Nouvel avertissement</button>
+        <button type="button" class="ku-btn ku-btn--primary" (click)="ouvrir()">+ Nouveau manquement</button>
       }
     </div>
   </header>
@@ -23,10 +23,12 @@
   <app-presences-nav />
 
   <div class="ku-kpis">
-    <div class="ku-kpi"><span class="ku-kpi-label">Avertissements</span><span class="ku-kpi-value">{{ synthese().total }}</span>
+    <div class="ku-kpi"><span class="ku-kpi-label">Manquements</span><span class="ku-kpi-value">{{ synthese().total }}</span>
       <span class="ku-kpi-sub">du {{ dateFr(dates().du) }} au {{ dateFr(dates().au) }}</span></div>
     <div class="ku-kpi"><span class="ku-kpi-label">Agents concernés</span><span class="ku-kpi-value">{{ synthese().agents }}</span>
-      <span class="ku-kpi-sub">{{ synthese().recidives }} avec plusieurs avertissements</span></div>
+      <span class="ku-kpi-sub">{{ synthese().recidives }} avec plusieurs manquements</span></div>
+    <div class="ku-kpi" [class.ku-kpi--danger]="synthese().disciplinaires > 0"><span class="ku-kpi-label">Disciplinaires</span>
+      <span class="ku-kpi-value">{{ synthese().disciplinaires }}</span><span class="ku-kpi-sub">G02 / G03 : sans montant, procédure disciplinaire</span></div>
     <div class="ku-kpi" [class.ku-kpi--danger]="synthese().ecrits > 0"><span class="ku-kpi-label">Écrits et sanctions</span>
       <span class="ku-kpi-value">{{ synthese().ecrits }}</span><span class="ku-kpi-sub">avertissements écrits, sanctions, mises à pied</span></div>
   </div>
@@ -35,8 +37,12 @@
     <div class="pz-filtres pz-filtres--grille">
       <input class="ku-input pz-search" type="search" placeholder="Rechercher un agent ou un commentaire…"
              [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
-      <select class="ku-input" [ngModel]="filtreType()" (ngModelChange)="filtreType.set($event)" aria-label="Type">
-        <option value="">Tous les types</option>
+      <select class="ku-input" [ngModel]="filtreCategorie()" (ngModelChange)="filtreCategorie.set($event)" aria-label="Catégorie">
+        <option value="">Toutes les catégories</option>
+        @for (g of referentiel; track g.categorie) { <option [value]="g.categorie">{{ g.categorie }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="filtreType()" (ngModelChange)="filtreType.set($event)" aria-label="Suite donnée">
+        <option value="">Toutes les suites</option>
         @for (t of types(); track t) { <option [value]="t">{{ t }}</option> }
       </select>
       <select class="ku-input" [ngModel]="filtreCellule()" (ngModelChange)="filtreCellule.set($event)" aria-label="Cellule">
@@ -51,12 +57,12 @@
     } @else if (error()) {
       <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
     } @else if (!filtrees().length) {
-      <div class="ku-empty"><strong>Aucun avertissement</strong>sur cette période avec ces filtres.</div>
+      <div class="ku-empty"><strong>Aucun manquement</strong>sur cette période avec ces filtres.</div>
     } @else {
       <div class="ku-table-wrap">
         <table class="ku-table ky-table pz-liste">
           <thead>
-            <tr><th>Date</th><th>Agent</th><th>Type</th><th>Commentaire</th><th>Saisi par</th><th></th></tr>
+            <tr><th>Date</th><th>Agent</th><th>Manquement</th><th>Suite donnée</th><th>Commentaire</th><th>Saisi par</th><th></th></tr>
           </thead>
           <tbody>
             @for (a of filtrees(); track a.id) {
@@ -64,6 +70,12 @@
                 <td class="ku-mono">{{ dateFr(a.date) }}</td>
                 <td><b>{{ a.agent }}</b>
                   <small>{{ celluleDe().get(a.userId) || '—' }}@if (nombrePour(a.userId) > 1) { · {{ nombrePour(a.userId) }} sur la période }</small></td>
+                <td>
+                  @if (manquement(a.code); as m) {
+                    <b class="ku-mono">{{ m.code }}</b> {{ m.libelle }}
+                    <small>{{ m.categorie }} · gravité {{ m.gravite }} · {{ bareme(m.code) }}</small>
+                  } @else { <span class="ku-muted">Ancienne saisie (sans code)</span> }
+                </td>
                 <td><span [class]="'ku-chip ' + classeType(a.type)">{{ a.type }}</span></td>
                 <td class="pz-texte">{{ a.commentaire }}</td>
                 <td class="ku-muted">{{ a.auteur ?? '—' }}<small>{{ dateFr(a.createdAt) }}</small></td>
@@ -82,9 +94,9 @@
     }
   </section>
 
-  <dialog #modal class="pz-modal" aria-label="Nouvel avertissement">
+  <dialog #modal class="pz-modal" aria-label="Nouveau manquement">
     <form (ngSubmit)="enregistrer()">
-      <h2>Nouvel avertissement</h2>
+      <h2>Nouveau manquement</h2>
       <label class="ku-field"><span>Agent</span>
         <input class="ku-input" type="search" placeholder="Filtrer par nom ou cellule…" [ngModel]="form().recherche"
                (ngModelChange)="patch({ recherche: $event })" [ngModelOptions]="{ standalone: true }" />
@@ -101,19 +113,32 @@
         <label class="ku-field"><span>Date</span>
           <input class="ku-input" type="date" required [ngModel]="form().date" (ngModelChange)="patch({ date: $event })" [ngModelOptions]="{ standalone: true }" />
         </label>
-        <label class="ku-field"><span>Type</span>
+        <label class="ku-field"><span>Suite donnée</span>
           <select class="ku-input" required [ngModel]="form().type" (ngModelChange)="patch({ type: $event })" [ngModelOptions]="{ standalone: true }">
             @for (t of types(); track t) { <option [value]="t">{{ t }}</option> }
           </select>
         </label>
       </div>
+      <label class="ku-field"><span>Manquement (référentiel)</span>
+        <select class="ku-input" required [ngModel]="form().code" (ngModelChange)="choisirCode($event)" [ngModelOptions]="{ standalone: true }">
+          <option value="" disabled>Choisir un code</option>
+          @for (g of referentiel; track g.categorie) {
+            <optgroup [label]="g.categorie">
+              @for (m of g.codes; track m.code) { <option [value]="m.code">{{ m.code }} – {{ m.libelle }}</option> }
+            </optgroup>
+          }
+        </select>
+        @if (manquement(form().code); as m) {
+          <small class="ku-muted">Gravité {{ m.gravite }} · {{ bareme(m.code) }} (1er mois / 2e mois consécutif / 3e mois consécutif et +)</small>
+        }
+      </label>
       <label class="ku-field"><span>Commentaire</span>
         <textarea class="ku-input" maxlength="1000" required placeholder="Faits, date, échange avec l’agent…"
                   [ngModel]="form().commentaire" (ngModelChange)="patch({ commentaire: $event })" [ngModelOptions]="{ standalone: true }"></textarea>
       </label>
       <footer>
         <button type="button" class="ku-btn" (click)="fermer()">Annuler</button>
-        <button type="submit" class="ku-btn ku-btn--primary" [disabled]="saving() || !form().userId || !form().type || !form().commentaire.trim()">
+        <button type="submit" class="ku-btn ku-btn--primary" [disabled]="saving() || !form().userId || !form().code || !form().type || !form().commentaire.trim()">
           {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
         </button>
       </footer>

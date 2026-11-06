@@ -43,3 +43,5 @@
 .pze-tag--ko { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
 .pze-alertes { text-align: left !important; }
 .pze-alertes .ku-chip { margin: 1px 3px 1px 0; font-size: 0.66rem; padding: 1px 7px; }
+.pze-statut { text-align: left !important; white-space: nowrap; }
+.pze-statut .ku-chip { font-size: 11px; }

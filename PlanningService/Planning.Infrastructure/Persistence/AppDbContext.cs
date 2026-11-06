@@ -706,6 +706,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.Type).HasMaxLength(60).IsRequired();
             e.Property(x => x.Commentaire).HasMaxLength(1000).IsRequired();
             e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.Property(x => x.Code).HasMaxLength(8);
             e.HasIndex(x => new { x.UserId, x.Date });
         });
 

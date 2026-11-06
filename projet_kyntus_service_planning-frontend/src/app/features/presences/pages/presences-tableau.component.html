@@ -91,7 +91,10 @@
               <tr>
                 <th class="pz-agent" scope="row">
                   <b>{{ a.nom }}</b>
-                  <small>{{ a.cellule ?? '—' }} · {{ a.type }}</small>
+                  <small>{{ a.cellule ?? (a.enFormation ? 'Formation' : '—') }} · {{ a.type }}</small>
+                  @if (a.enFormation) {
+                    <small class="pz-formation">En formation{{ a.formationDu ? ' depuis le ' + a.formationDu.slice(8, 10) + '/' + a.formationDu.slice(5, 7) : '' }} · hors paie</small>
+                  }
                 </th>
                 @for (c of l.cases; track c.jour) {
                   @let j = c.j;

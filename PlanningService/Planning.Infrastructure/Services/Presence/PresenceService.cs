@@ -37,7 +37,7 @@ public sealed class PresenceService(
         if (me is null && !viewer.Global)
             return null;
 
-        var (ids, libelle) = await AgentsVisiblesAsync(me, viewer.Global, ct);
+        var (ids, libelle) = await AgentsVisiblesAsync(me, viewer, ct);
         var agents = await ConstruireAsync(ids, du, au, ct);
         return new PresenceGrilleDto(
             libelle,
@@ -65,7 +65,7 @@ public sealed class PresenceService(
         {
             if (me is null)
                 throw new PresenceRefusException("Compte introuvable dans le Planning.", horsPerimetre: true);
-            var (ids, _) = await AgentsVisiblesAsync(me, false, ct);
+            var (ids, _) = await AgentsVisiblesAsync(me, viewer, ct);
             if (!ids.Contains(request.UserId))
                 throw new PresenceRefusException("Cet agent n'est pas dans votre périmètre.", horsPerimetre: true);
         }
@@ -120,7 +120,7 @@ public sealed class PresenceService(
             return new PresenceAuteur(me?.Id, nom, null);
         if (me is null)
             return new PresenceAuteur(null, nom, new HashSet<int>());
-        var (ids, _) = await AgentsVisiblesAsync(me, false, ct);
+        var (ids, _) = await AgentsVisiblesAsync(me, viewer, ct);
         return new PresenceAuteur(me.Id, nom, ids.ToHashSet());
     }
 
@@ -213,9 +213,10 @@ public sealed class PresenceService(
                 profil?.DateSortie,
                 jours,
                 Totaux(jours),
-                profil is { EnFormation: true } ? profil.DateDebutFormation : null,
-                profil is { EnFormation: true } ? profil.DateFinFormationPrevue : null,
-                org is null ? null : $"{(org.LastName ?? string.Empty).Trim().ToUpperInvariant()} {(org.FirstName ?? string.Empty).Trim()}".Trim()));
+                ADejaEteEnFormation(profil) ? profil!.DateDebutFormation ?? profil.DateEntree : null,
+                profil?.FinFormationEffective(),
+                org is null ? null : $"{(org.LastName ?? string.Empty).Trim().ToUpperInvariant()} {(org.FirstName ?? string.Empty).Trim()}".Trim(),
+                profil?.EnFormation ?? false));
         }
         return result
             .OrderBy(a => a.Cellule ?? "", StringComparer.CurrentCultureIgnoreCase)
@@ -240,22 +241,48 @@ public sealed class PresenceService(
             jours.Count(j => j.Auto && j.Code == PresenceCodes.AbsenceNonAutorisee));
     }
 
-    private static bool EnFormation(UserHrProfile? p, DateOnly jour) =>
-        p is not null && p.EnFormation
-        && (p.DateDebutFormation is null || p.DateDebutFormation <= jour)
-        && (p.DateFinFormationPrevue is null || p.DateFinFormationPrevue >= jour);
+    /// <summary>
+    /// v30 : jour de formation. Case cochée : formation en cours, même au-delà de la date prévue
+    /// (elle peut être prolongée). Case décochée : jusqu'à la veille de l'intégration en production.
+    /// </summary>
+    private static bool EnFormation(UserHrProfile? p, DateOnly jour) => p is not null && p.EstEnFormationLe(jour);
+
+    private static bool ADejaEteEnFormation(UserHrProfile? p) =>
+        p is not null && (p.EnFormation || p.FinFormationEffective() is not null);
+
+    /// <summary>v30 : formateurs et équipe formation suivent les agents en formation.</summary>
+    internal static bool EstFormateur(string? role)
+    {
+        var r = (role ?? string.Empty).Replace("_", string.Empty).Replace(" ", string.Empty);
+        return string.Equals(r, "Formateur", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(r, "EquipeFormation", StringComparison.OrdinalIgnoreCase);
+    }
 
     // ── Périmètre ───────────────────────────────────────────────────────────────
 
-    /// <summary>Agents visibles : tous les agents placés (RH / Admin) ou ceux du périmètre du responsable.</summary>
-    private async Task<(List<int> Ids, string Libelle)> AgentsVisiblesAsync(User? me, bool global, CancellationToken ct)
+    /// <summary>
+    /// Agents visibles :
+    /// - RH / Admin : tous les agents placés, plus les agents en formation (même sans service) ;
+    /// - formateurs et équipe formation (v30) : tous les agents dont la case « En formation » est cochée ;
+    /// - autres responsables : leur périmètre, sans les agents encore en formation.
+    /// </summary>
+    private async Task<(List<int> Ids, string Libelle)> AgentsVisiblesAsync(User? me, PresenceViewer viewer, CancellationToken ct)
     {
-        if (global)
+        var enFormation = await db.UserHrProfiles.AsNoTracking()
+            .Where(p => p.EnFormation && p.User.IsActive)
+            .Select(p => p.UserId)
+            .ToListAsync(ct);
+        if (viewer.Global)
         {
             var tous = await db.Users.AsNoTracking()
                 .Where(u => u.IsActive && u.SubServiceId != null)
                 .Select(u => u.Id).ToListAsync(ct);
-            return (tous, "Toute l'entreprise");
+            return (tous.Union(enFormation).ToList(), "Toute l'entreprise");
+        }
+        if (EstFormateur(viewer.Role))
+        {
+            var stagiaires = enFormation.Where(id => id != me!.Id).ToList();
+            return (stagiaires, $"Agents en formation ({stagiaires.Count})");
         }
         var scope = await perimeter.GetManagedSubServiceIdsAsync(me!.Id, ct);
         if (scope.Count == 0)
@@ -263,7 +290,8 @@ public sealed class PresenceService(
         var ids = await db.Users.AsNoTracking()
             .Where(u => u.IsActive && u.Id != me.Id && u.SubServiceId != null && scope.Contains(u.SubServiceId.Value))
             .Select(u => u.Id).ToListAsync(ct);
-        return (ids, $"Votre périmètre ({ids.Count} agent(s))");
+        var horsFormation = ids.Except(enFormation).ToList();
+        return (horsFormation, $"Votre périmètre ({horsFormation.Count} agent(s))");
     }
 
     private async Task<User?> FindViewerAsync(PresenceViewer viewer, CancellationToken ct)

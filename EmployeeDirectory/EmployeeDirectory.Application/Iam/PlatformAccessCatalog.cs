@@ -132,9 +132,10 @@ public static class PlatformAccessCatalog
         S("pointage.acces-sortie", "Accès Heure de sortie (compte par compte)", "Pointage", View: Admin, Configure: Admin),
 
         // Présences (périmètre du responsable ; RH / Admin : toute l'entreprise).
-        S("presences", "Tableau des présences", "Présences et paie", View: TeamLead, Act: TeamLead),
+        // v30 : formateurs et équipe formation = agents « En formation » (présences, absences, commentaires).
+        S("presences", "Tableau des présences", "Présences et paie", View: [.. TeamLead, "Formateur", "Equipe_Formation"], Act: [.. TeamLead, "Formateur", "Equipe_Formation"]),
         S("presences.retards", "Retards et autorisations", "Présences et paie", View: TeamLead),
-        S("presences.avertissements", "Avertissements", "Présences et paie", View: TeamLead, Act: TeamLead),
+        S("presences.avertissements", "Manquements (référentiel)", "Présences et paie", View: TeamLead, Act: TeamLead),
         S("presences.evp", "Éléments variables de paie", "Présences et paie", View: TeamLead, Act: TeamLead),
         S("presences.dossier", "Dossier administratif", "Présences et paie", View: RhChefProjet, Act: RhChefProjet),
         S("presences.export", "Export paie", "Présences et paie", View: RhChefProjet),

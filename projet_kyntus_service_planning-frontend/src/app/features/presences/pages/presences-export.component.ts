@@ -6,7 +6,7 @@ import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { PresenceService } from '../../../core/services/presence.service';
 import { PresenceSuiviService } from '../../../core/services/presence-suivi.service';
-import type { EvpDto, PresenceGrilleDto } from '../../../core/models/presence.models';
+import type { AvertissementDto, EvpDto, PresenceAgentDto, PresenceGrilleDto } from '../../../core/models/presence.models';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { PresencesNavComponent } from '../components/presences-nav.component';
 import {
@@ -18,6 +18,7 @@ import {
   nomsExport,
   telechargerExportPaie,
 } from '../lib/paie.util';
+import { type ContextePenalites, type PeriodeAgents, penalitesAgent } from '../lib/manquements.util';
 import { enteteJour, familleCode, periodePaie, ymd } from '../lib/presence.util';
 import { dateFr, messageErreur, montantFr, sansAccents } from '../lib/suivi.util';
 
@@ -52,14 +53,12 @@ export class PresencesExportComponent implements OnInit {
 
   readonly mode = signal<Mode>('paie');
   readonly decalage = signal(0);
-  readonly periode = computed(() => {
-    if (this.mode() === 'paie') return periodePaie(new Date(), this.decalage());
-    const now = new Date();
-    const debut = new Date(now.getFullYear(), now.getMonth() + this.decalage(), 1);
-    const fin = new Date(debut.getFullYear(), debut.getMonth() + 1, 0);
-    return { du: ymd(debut), au: ymd(fin), libelle: debut.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) };
-  });
+  readonly periode = computed(() => this.periodeDe(this.decalage()));
   readonly grille = signal<PresenceGrilleDto | null>(null);
+  /** v30 : manquements saisis (période et deux précédentes) ; null si illisibles. */
+  readonly saisies = signal<AvertissementDto[] | null>(null);
+  /** v30 : grilles des deux périodes précédentes (rang « mois consécutif » des retards). */
+  readonly precedents = signal<[PeriodeAgents | null, PeriodeAgents | null]>([null, null]);
   readonly evp = signal<EvpDto[]>([]);
   readonly evpIndisponible = signal(false);
   readonly activites = signal<Activite[]>([]);
@@ -98,7 +97,8 @@ export class PresencesExportComponent implements OnInit {
     if (!g) return [];
     const du = g.du.slice(0, 10);
     const au = g.au.slice(0, 10);
-    return g.agents.map((a) => lignePaie(a, this.evp(), du, au));
+    const ctx: ContextePenalites = { du, au, saisies: this.saisies(), precedents: this.precedents() };
+    return g.agents.map((a) => lignePaie(a, this.evp(), du, au, penalitesAgent(a, ctx)));
   });
 
   readonly options = computed(() => {
@@ -141,6 +141,8 @@ export class PresencesExportComponent implements OnInit {
       absences: somme((x) => x.totalAbsences),
       penalites: somme((x) => x.penalite),
       agentsPenalises: l.filter((x) => x.penalite < 0).length,
+      horsPaie: l.filter((x) => x.joursProduction === 0).length,
+      enFormation: l.filter((x) => x.formation > 0).length,
       evp: somme((x) => x.totalEvp),
       alertes: l.filter((x) => x.alertes.length > 0).length,
     };
@@ -155,6 +157,8 @@ export class PresencesExportComponent implements OnInit {
       { libelle: 'Pointages manquants', n: compte((x) => x.manques > 0), lien: '/presences' },
       { libelle: 'EVP « à valoriser » (montant fixé par la paie)', n: compte((x) => x.alertes.includes('EVP à valoriser')), lien: '/presences/evp' },
       { libelle: 'Sorties pendant la période', n: compte((x) => !!x.sortie), lien: null },
+      { libelle: 'Agents en formation (hors paie ou au prorata)', n: compte((x) => x.formation > 0), lien: null },
+      { libelle: 'Manquements disciplinaires (G02 / G03, sans montant)', n: compte((x) => x.alertes.some((a) => a.includes('disciplinaire'))), lien: '/presences/avertissements' },
       { libelle: 'Agents sans affectation', n: compte((x) => !x.affectation), lien: null },
     ];
   });
@@ -183,18 +187,36 @@ export class PresencesExportComponent implements OnInit {
     this.load();
   }
 
+  /** Période affichée, ou une période précédente (decalage − 1, − 2) pour le rang des manquements. */
+  private periodeDe(decalage: number): { du: string; au: string; libelle: string } {
+    if (this.mode() === 'paie') return periodePaie(new Date(), decalage);
+    const now = new Date();
+    const debut = new Date(now.getFullYear(), now.getMonth() + decalage, 1);
+    const fin = new Date(debut.getFullYear(), debut.getMonth() + 1, 0);
+    return { du: ymd(debut), au: ymd(fin), libelle: debut.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) };
+  }
+
   load(): void {
     const { du, au } = this.periode();
+    const p1 = this.periodeDe(this.decalage() - 1);
+    const p2 = this.periodeDe(this.decalage() - 2);
+    const versPeriode = (g: PresenceGrilleDto | null, p: { du: string; au: string }): PeriodeAgents | null =>
+      g ? { du: p.du, au: p.au, agents: new Map<number, PresenceAgentDto>(g.agents.map((a) => [a.userId, a])) } : null;
     this.loading.set(true);
     this.error.set(null);
     forkJoin({
       grille: this.presences.grille(du, au),
       evp: this.suivi.evp(du, au).pipe(catchError(() => of(null))),
+      saisies: this.suivi.avertissements(p2.du, au).pipe(catchError(() => of(null))),
+      prec1: this.presences.grille(p1.du, p1.au).pipe(catchError(() => of(null))),
+      prec2: this.presences.grille(p2.du, p2.au).pipe(catchError(() => of(null))),
     }).subscribe({
-      next: ({ grille, evp }) => {
+      next: ({ grille, evp, saisies, prec1, prec2 }) => {
         this.grille.set(grille);
         this.evp.set(evp ?? []);
         this.evpIndisponible.set(evp === null);
+        this.saisies.set(saisies);
+        this.precedents.set([versPeriode(prec1, p1), versPeriode(prec2, p2)]);
         this.loading.set(false);
       },
       error: (err) => {

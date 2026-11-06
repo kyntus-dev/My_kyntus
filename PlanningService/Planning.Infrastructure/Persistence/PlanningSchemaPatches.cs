@@ -1107,4 +1107,18 @@ public static class PlanningSchemaPatches
             """,
             ct);
     }
+
+    /// <summary>
+    /// v30 : date d'intégration en production (fin de formation constatée) et code du référentiel
+    /// des manquements (R01…Q13). Colonnes ajoutées seulement, aucune donnée modifiée.
+    /// </summary>
+    public static async Task EnsureFormationEtManquementsAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "FormationTermineeLe" date NULL;
+            ALTER TABLE "Avertissements" ADD COLUMN IF NOT EXISTS "Code" character varying(8) NULL;
+            """,
+            ct);
+    }
 }

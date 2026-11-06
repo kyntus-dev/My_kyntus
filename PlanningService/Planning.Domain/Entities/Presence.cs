@@ -34,6 +34,8 @@ public class Avertissement
     public int UserId { get; set; }
     public DateOnly Date { get; set; }
     public string Type { get; set; } = string.Empty;
+    /// <summary>v30 : code du référentiel des manquements (C01, Q04…) ; null pour les anciennes saisies.</summary>
+    public string? Code { get; set; }
     public string Commentaire { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int? CreatedBy { get; set; }

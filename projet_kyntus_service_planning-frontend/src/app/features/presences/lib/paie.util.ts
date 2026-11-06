@@ -1,4 +1,6 @@
 import type { EvpDto, PresenceAgentDto } from '../../../core/models/presence.models';
+import { dateIntegration, estJourFormation, estJourProduction, plageFormation } from './formation.util';
+import type { PenaliteAgent } from './manquements.util';
 import { joursDeLaPeriode } from './presence.util';
 
 /**
@@ -8,16 +10,20 @@ import { joursDeLaPeriode } from './presence.util';
  * - colonnes de jours : du lundi au samedi de la période (pas de dimanche) ;
  * - absences déduites : ABS N, AM, AR, CSS, MAT → « Total des absences » ;
  *   ABS, CP, DF et REC sont affichés mais ne sont pas déduits ;
- * - Jrs travaillés = jours lundi-samedi de la période − Formation − Total des absences ;
- * - Formation = jours calendaires de formation compris dans la période ;
- * - AR (déduit) : jours AR jusqu'à la date de sortie incluse ;
- * - Montant pénalité = −50 par heure entière de retard cumulé, plafonné à 7 h (−350) ;
- *   dans My-Kyntus, les retards autorisés sont exclus du cumul.
+ * v30 (règles validées par la direction) :
+ * - paie sur 26 jours : Jrs travaillés = 26 × jours de production ÷ jours lundi-samedi de la période
+ *   − absences déduites (mois complet : 26 − absences déduites) ;
+ * - jours de production : entre la date d'entrée et la date de sortie, hors formation ;
+ * - agent en formation : présent dans l'export, mais hors paie (0) tant qu'il n'a pas intégré la
+ *   production ; intégré en cours de période : au prorata de ses jours de production ;
+ * - Formation = jours lundi-samedi de formation compris dans la période ;
+ * - absences comptées sur les jours de production seulement (AR : jusqu'à la sortie incluse) ;
+ * - Montant pénalité = référentiel unifié des manquements (manquements.util.ts), à la place de
+ *   l'ancienne règle « −50 par heure de retard cumulé » ; « Cumul retards » reste affiché.
  */
+export const JOURS_PAIE = 26;
 export const CODES_DEDUITS = ['ABS N', 'AM', 'AR', 'CSS', 'MAT'] as const;
 export const CODES_NON_DEDUITS = ['ABS', 'CP', 'DF', 'REC'] as const;
-export const PENALITE_PAR_HEURE = -50;
-export const PENALITE_HEURES_MAX = 7;
 
 export const COLONNES_FIN = [
   'Formation',
@@ -35,6 +41,7 @@ export const COLONNES_FIN = [
   'Montant pénalité',
   'Origine pénalité',
   'Sortie (AR)',
+  'Statut paie',
 ] as const;
 
 export interface LignePaie {
@@ -63,6 +70,10 @@ export interface LignePaie {
   penalite: number;
   originePenalite: string;
   sortie: string;
+  /** v30 : Production, Prorata, En formation – hors paie, Intégré en production le… */
+  statutPaie: string;
+  /** Jours lundi-samedi de production (base du prorata sur 26 jours). */
+  joursProduction: number;
   /** Points à vérifier avant l'envoi (non exportés). */
   alertes: string[];
 }
@@ -96,41 +107,42 @@ export function hhmmss(minutes: number): string {
   return `${pad(Math.floor(m / 60))}:${pad(m % 60)}:00`;
 }
 
-export function penalite(retardMinutes: number): number {
-  const heures = Math.min(Math.floor(Math.max(0, retardMinutes) / 60), PENALITE_HEURES_MAX);
-  return heures === 0 ? 0 : heures * PENALITE_PAR_HEURE;
-}
+const arrondi2 = (n: number) => Math.round(n * 100) / 100;
 
-function joursCalendairesCommuns(du: string, au: string, debut: string, fin: string): number {
-  const a = debut > du ? debut : du;
-  const b = fin < au ? fin : au;
-  if (a > b) return 0;
-  return joursDeLaPeriode(a, b).length;
+/** 26 jours au prorata des jours de production, moins les absences déduites (jamais négatif). */
+export function joursPayes(joursProduction: number, joursPeriode: number, absencesDeduites: number): number {
+  if (joursProduction <= 0 || joursPeriode <= 0) return 0;
+  const base = joursProduction >= joursPeriode ? JOURS_PAIE : (JOURS_PAIE * joursProduction) / joursPeriode;
+  return Math.max(0, arrondi2(base - absencesDeduites));
 }
 
 export function typePaie(type: string): string {
   return type.toLowerCase().startsWith('sous') ? 'Sous-Traitant' : 'Salarié';
 }
 
-export function lignePaie(agent: PresenceAgentDto, evp: readonly EvpDto[], du: string, au: string): LignePaie {
+export function lignePaie(
+  agent: PresenceAgentDto, evp: readonly EvpDto[], du: string, au: string, penalites?: PenaliteAgent,
+): LignePaie {
   const colonnes = joursOuvres(du, au);
   const parJour = new Map(agent.jours.map((j) => [j.jour.slice(0, 10), j]));
   const codes = colonnes.map((j) => parJour.get(j)?.code ?? '');
-  const compte = (code: string, jusqua?: string) =>
-    colonnes.filter((j, i) => codes[i] === code && (!jusqua || j <= jusqua)).length;
+  const plage = plageFormation(agent);
+  const production = colonnes.map((j) => estJourProduction(agent, j, plage));
+  const joursProduction = production.filter(Boolean).length;
+  // Absences comptées sur les jours de production (la sortie borne déjà les jours AR).
+  const compte = (code: string) => colonnes.filter((_, i) => production[i] && codes[i] === code).length;
 
   const sortie = agent.dateSortie?.slice(0, 10) ?? null;
   const sortieDansPeriode = !!sortie && sortie >= du && sortie <= au;
 
-  const formationDu = agent.formationDu?.slice(0, 10);
-  const formation = formationDu
-    ? joursCalendairesCommuns(du, au, formationDu, agent.formationAu?.slice(0, 10) ?? au)
+  const formation = plage
+    ? colonnes.filter((j) => estJourFormation(agent, j, plage)).length
     : codes.filter((c) => c === 'FOR').length;
 
   const deduits = {
     'ABS N': compte('ABS N'),
     AM: compte('AM'),
-    AR: compte('AR', sortie ?? undefined),
+    AR: compte('AR'),
     CSS: compte('CSS'),
     MAT: compte('MAT'),
   };
@@ -152,12 +164,20 @@ export function lignePaie(agent: PresenceAgentDto, evp: readonly EvpDto[], du: s
   const totalEvp = Math.round(elements.reduce((s, e) => s + e.montant, 0) * 100) / 100;
 
   const retard = agent.totaux.retardRetenuMinutes;
-  const alertes: string[] = [];
+  const alertes: string[] = [...(penalites?.alertes ?? [])];
   const nonQualifiees = deduits['ABS N'];
   if (nonQualifiees > 0) alertes.push(`${nonQualifiees} ABS N à confirmer`);
   if (agent.totaux.manquesPointage > 0) alertes.push(`${agent.totaux.manquesPointage} pointage(s) manquant(s)`);
   if (sortieDansPeriode) alertes.push('Sortie pendant la période');
   if (elements.some((e) => e.type.includes('à valoriser'))) alertes.push('EVP à valoriser');
+
+  const integration = dateIntegration(agent);
+  let statutPaie = 'Production';
+  if (joursProduction === 0 && formation > 0) statutPaie = 'En formation – hors paie';
+  else if (joursProduction === 0) statutPaie = 'Hors période (entrée / sortie)';
+  else if (formation > 0 && integration && integration >= du && integration <= au)
+    statutPaie = `Intégré en production le ${ddmmyyyy(integration)} (prorata)`;
+  else if (joursProduction < colonnes.length) statutPaie = 'Prorata (entrée, sortie ou formation)';
 
   return {
     userId: agent.userId,
@@ -170,10 +190,10 @@ export function lignePaie(agent: PresenceAgentDto, evp: readonly EvpDto[], du: s
     jours: codes,
     formation,
     dateEntree: afficherEntree ? ddmmyyyy(entree!) : '',
-    absPartielle: agent.jours.filter((j) => j.absencePartielle).length,
+    absPartielle: agent.jours.filter((j) => j.absencePartielle && estJourProduction(agent, j.jour.slice(0, 10), plage)).length,
     deduits,
     nonDeduits,
-    jrsTravailles: colonnes.length - formation - totalAbsences,
+    jrsTravailles: joursPayes(joursProduction, colonnes.length, totalAbsences),
     totalAbsences,
     retardMinutes: retard,
     cumulRetards: hhmmss(retard),
@@ -181,9 +201,11 @@ export function lignePaie(agent: PresenceAgentDto, evp: readonly EvpDto[], du: s
     commentaires,
     evp: elements.map((e) => `${ddmm(e.date)} ${e.type} : ${e.commentaire}`).join(' | '),
     totalEvp,
-    penalite: penalite(retard),
-    originePenalite: 'calcul',
+    penalite: penalites?.montant ? -penalites.montant : 0,
+    originePenalite: penalites?.origine ?? '',
     sortie: sortieDansPeriode ? `Sorti le ${ddmmyyyy(sortie!)} (pendant la période) — à vérifier` : '',
+    statutPaie,
+    joursProduction,
     alertes,
   };
 }
@@ -214,6 +236,7 @@ export function valeursPaie(l: LignePaie): (string | number)[] {
     l.penalite,
     l.originePenalite,
     l.sortie,
+    l.statutPaie,
   ];
 }
 
@@ -246,7 +269,8 @@ export async function telechargerExportPaie(lignes: readonly LignePaie[], du: st
     else if (i < 3 + nbJours) { c.width = 7; c.alignment = { horizontal: 'center' }; }
     else {
       const nom = entetes[i];
-      c.width = nom.startsWith('Commentaire') || nom.startsWith('Éléments') ? 48 : nom.startsWith('Sortie') ? 40 : 13;
+      c.width = nom.startsWith('Commentaire') || nom.startsWith('Éléments') || nom.startsWith('Origine') ? 48
+        : nom.startsWith('Sortie') || nom.startsWith('Statut') ? 40 : 13;
     }
   });
   ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 1 }];
