@@ -170,11 +170,11 @@ public partial class UserService
         if (cibles.Count == 0)
             throw new ReaffectationRefusException("Choisissez au moins un périmètre.");
         var avant = (await ResponsabilitesAsync(user.Id, ct)).Noeuds;
-        var libelleNiveau = niveau.Value.Niveau switch { "Pole" => "pôle(s)", "Cellule" => "cellule(s)", _ => "service(s)" };
+        var libelleNiveau = niveau.Niveau switch { "Pole" => "pôle(s)", "Cellule" => "cellule(s)", _ => "service(s)" };
         var motifCourt = string.IsNullOrWhiteSpace(motif) ? null : motif.Trim()[..Math.Min(500, motif.Trim().Length)];
 
         var erreur = await _directoryEmployeeWrite.TryReconcileAssignmentsAsync(
-            user.Guid, niveau.Value.Kind, cibles, motifCourt ?? $"Réaffectation par {auteur.Nom}", ct);
+            user.Guid, niveau.Kind, cibles, motifCourt ?? $"Réaffectation par {auteur.Nom}", ct);
         if (erreur is not null)
             throw new ReaffectationRefusException(erreur);
 
@@ -183,8 +183,8 @@ public partial class UserService
             UserId = user.Id,
             AncienSubServiceId = user.SubServiceId,
             NouveauSubServiceId = user.SubServiceId,
-            AncienLibelle = avant.Count > 0 ? $"{user.Role?.Name} — {libelleNiveau} : {await NomsNoeudsAsync(niveau.Value.Niveau, avant, ct)}" : null,
-            NouveauLibelle = $"{user.Role?.Name} — {libelleNiveau} : {await NomsNoeudsAsync(niveau.Value.Niveau, cibles, ct)}",
+            AncienLibelle = avant.Count > 0 ? $"{user.Role?.Name} — {libelleNiveau} : {await NomsNoeudsAsync(niveau.Niveau, avant, ct)}" : null,
+            NouveauLibelle = $"{user.Role?.Name} — {libelleNiveau} : {await NomsNoeudsAsync(niveau.Niveau, cibles, ct)}",
             Motif = motifCourt,
             Origine = "Réaffectation",
             CreatedBy = auteur.UserId,
