@@ -190,6 +190,28 @@ public record UpdateEmployeeRequest(
 /// </summary>
 public record ClearOrgPlacementRequest(string? Level = null, string? NodeId = null);
 
+/// <summary>
+/// v29 : regroupe des cellules (et/ou des services isolés) dans une cellule cible, existante ou
+/// nouvelle (NomCible + PoleId). Services, agents et superviseurs suivent ; les cellules vidées
+/// sont archivées.
+/// </summary>
+public record RegrouperCellulesRequest(
+    IReadOnlyList<string>? SourceIds,
+    IReadOnlyList<string>? ServiceIds,
+    string? CibleId,
+    string? NomCible,
+    string? PoleId,
+    string? Motif);
+
+public record RegroupementCellulesResult(
+    string CibleId,
+    string CibleNom,
+    bool CibleCreee,
+    int ServicesDeplaces,
+    int Agents,
+    int Superviseurs,
+    IReadOnlyList<string> CellulesArchivees);
+
 public record OrgAssignmentAsOfDto(
     DateTime AsOf,
     IReadOnlyList<ActiveAssignmentDto> Assignments);

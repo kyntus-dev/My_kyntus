@@ -17,7 +17,7 @@ import { KyntusSessionService } from '../../../../core/session/kyntus-session.se
     <div class="ky-page-shell">
       <app-kyntus-page-header
         title="Quotas congés (cellules / services)"
-        subtitle="Nombre max d’employés absents le même jour. Configurez un quota par cellule et/ou par service. Seuls les congés validés superviseur (en attente RH) et validés RH comptent.">
+        subtitle="Nombre max d’employés absents le même jour, par cellule et/ou par service. Superviseur : ses cellules ; chef de projet : tout son département ; RH : toute l’entreprise. Seuls les congés validés superviseur (en attente RH) et validés RH comptent.">
         <div actions>
           <button type="button" class="ky-btn-secondary" (click)="load()">Actualiser</button>
         </div>

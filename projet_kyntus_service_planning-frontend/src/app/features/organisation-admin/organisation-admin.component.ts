@@ -114,8 +114,100 @@ export class OrganisationAdminComponent implements OnInit {
   readonly serviceCible = computed(() =>
     resolveServiceCible(this.index().get(this.cibleCellule()), this.cibleService() || null));
 
+  // ── Regroupement de cellules (v29) ──────────────────────────────────────────
+  readonly rgOuvert = signal(false);
+  readonly rgCellules = signal<ReadonlySet<string>>(new Set());
+  readonly rgServices = signal<ReadonlySet<string>>(new Set());
+  readonly rgMode = signal<'nouvelle' | 'existante'>('nouvelle');
+  readonly rgNom = signal('');
+  readonly rgPole = signal('');
+  readonly rgCible = signal('');
+  readonly rgMotif = signal('');
+  readonly rgRecherche = signal('');
+  /** Pôles actifs avec leur contrat, pour choisir sources et destination. */
+  readonly rgPoles = computed(() => [
+    ...this.depts().flatMap((d) => d.poles.map((p) => ({ pole: p, contrat: d.name }))),
+    ...this.unassigned().map((p) => ({ pole: p, contrat: 'Sans contrat' })),
+  ]);
+  readonly rgPolesFiltres = computed(() => {
+    const q = this.rgRecherche().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (!q) return this.rgPoles();
+    const ok = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(q);
+    return this.rgPoles()
+      .map((x) => ({ ...x, pole: { ...x.pole, cellules: x.pole.cellules.filter((c) => ok(c.name) || c.services.some((s) => ok(s.name))) } }))
+      .filter((x) => x.pole.cellules.length > 0);
+  });
+  readonly rgPret = computed(() =>
+    (this.rgCellules().size > 0 || this.rgServices().size > 0)
+    && (this.rgMode() === 'existante' ? !!this.rgCible() : !!this.rgNom().trim()));
+
   ngOnInit(): void {
     this.load();
+  }
+
+  ouvrirRegroupement(): void {
+    this.rgCellules.set(new Set());
+    this.rgServices.set(new Set());
+    this.rgMode.set('nouvelle');
+    this.rgNom.set('');
+    this.rgPole.set('');
+    this.rgCible.set('');
+    this.rgMotif.set('');
+    this.rgRecherche.set('');
+    this.rgOuvert.set(true);
+  }
+
+  basculerRg(liste: 'cellules' | 'services', id: string): void {
+    const sig = liste === 'cellules' ? this.rgCellules : this.rgServices;
+    const s = new Set(sig());
+    if (s.has(id)) s.delete(id); else s.add(id);
+    sig.set(s);
+    // Pôle de la nouvelle cellule : par défaut celui de la première cellule choisie.
+    if (liste === 'cellules' && !this.rgPole() && s.size) {
+      const p = this.rgPoles().find((x) => x.pole.cellules.some((c) => s.has(c.id)));
+      if (p) this.rgPole.set(p.pole.id);
+    }
+  }
+
+  async regrouper(): Promise<void> {
+    if (!this.rgPret() || this.busy()) return;
+    const cellules = this.rgPoles().flatMap((x) => x.pole.cellules).filter((c) => this.rgCellules().has(c.id));
+    const services = this.rgPoles().flatMap((x) => x.pole.cellules.flatMap((c) => c.services)).filter((s) => this.rgServices().has(s.id));
+    const cible = this.rgMode() === 'existante'
+      ? this.rgPoles().flatMap((x) => x.pole.cellules).find((c) => c.id === this.rgCible())?.name ?? ''
+      : this.rgNom().trim();
+    const effectif = cellules.reduce((n, c) => n + this.effectifCellule(c), 0);
+    const ok = await this.confirm.confirm({
+      title: `Regrouper dans « ${cible} »`,
+      message: [
+        cellules.length ? `Cellules regroupées : ${cellules.map((c) => c.name).join(', ')} (${effectif} personne(s)).` : '',
+        services.length ? `Services déplacés : ${services.map((s) => s.name).join(', ')}.` : '',
+        'Leurs services, agents et superviseurs passent dans la cellule de destination ; plannings, congés, présences et primes suivent.',
+        'Les cellules vidées sont archivées (restaurables, historique conservé).',
+      ].filter(Boolean).join(' '),
+      confirmLabel: 'Regrouper',
+      variant: 'warning',
+    });
+    if (!ok) return;
+    this.busy.set(true);
+    try {
+      const r = await firstValueFrom(this.api.regrouperCellules({
+        sourceIds: [...this.rgCellules()],
+        serviceIds: [...this.rgServices()],
+        cibleId: this.rgMode() === 'existante' ? this.rgCible() : null,
+        nomCible: this.rgMode() === 'nouvelle' ? this.rgNom().trim() : null,
+        poleId: this.rgMode() === 'nouvelle' ? this.rgPole() || null : null,
+        motif: this.rgMotif().trim() || null,
+      }));
+      this.toast.success(`« ${r.cibleNom} » : ${r.servicesDeplaces} service(s), ${r.agents} agent(s), ${r.superviseurs} superviseur(s) regroupés`
+        + (r.cellulesArchivees.length ? ` ; archivées : ${r.cellulesArchivees.join(', ')}.` : '.'));
+      this.rgOuvert.set(false);
+      this.load();
+    } catch (err) {
+      this.toast.error(this.message(err, 'Regroupement impossible.'));
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   load(): void {

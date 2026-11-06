@@ -32,7 +32,73 @@
     @if (onglet() === 'structure') {
       <div class="oa-toolbar">
         <button type="button" class="ky-btn-primary" (click)="nouveauContrat()" [disabled]="busy()">+ Nouveau contrat</button>
+        <button type="button" class="ky-btn-secondary" (click)="ouvrirRegroupement()" [disabled]="busy()">Regrouper des cellules</button>
       </div>
+
+      @if (rgOuvert()) {
+        <section class="ky-card oa-rg" aria-label="Regrouper des cellules">
+          <header class="oa-rg-head">
+            <div>
+              <h2 class="oa-dept-name">Regrouper des cellules</h2>
+              <p class="oa-meta">Cochez les cellules à regrouper (et, si besoin, des services d’autres cellules), puis choisissez la cellule de destination.
+                Services, agents et superviseurs suivent dans toute l’application ; les cellules vidées sont archivées.</p>
+            </div>
+            <button type="button" class="oa-link" (click)="rgOuvert.set(false)">Fermer</button>
+          </header>
+          <div class="oa-rg-grille">
+            <div class="oa-rg-sources">
+              <input class="ky-input" type="search" placeholder="Rechercher une cellule ou un service…" [ngModel]="rgRecherche()" (ngModelChange)="rgRecherche.set($event)" />
+              <div class="oa-rg-liste">
+                @for (x of rgPolesFiltres(); track x.pole.id) {
+                  <p class="oa-rg-pole">{{ x.contrat }} › {{ x.pole.name }}</p>
+                  @for (c of x.pole.cellules; track c.id) {
+                    <label class="oa-rg-cell">
+                      <input type="checkbox" [checked]="rgCellules().has(c.id)" (change)="basculerRg('cellules', c.id)" [disabled]="rgMode() === 'existante' && rgCible() === c.id" />
+                      <b>{{ c.name }}</b> <span class="oa-meta">{{ effectifCellule(c) }} pers. · {{ c.services.length }} service(s)</span>
+                    </label>
+                    @if (!rgCellules().has(c.id)) {
+                      <div class="oa-rg-svcs">
+                        @for (s of c.services; track s.id) {
+                          <label class="oa-rg-svc"><input type="checkbox" [checked]="rgServices().has(s.id)" (change)="basculerRg('services', s.id)" /> {{ s.name }}</label>
+                        }
+                      </div>
+                    }
+                  }
+                }
+              </div>
+            </div>
+            <div class="oa-rg-cible">
+              <div class="oa-rg-modes" role="radiogroup">
+                <label><input type="radio" name="rgmode" [checked]="rgMode() === 'nouvelle'" (change)="rgMode.set('nouvelle')" /> Nouvelle cellule</label>
+                <label><input type="radio" name="rgmode" [checked]="rgMode() === 'existante'" (change)="rgMode.set('existante')" /> Cellule existante</label>
+              </div>
+              @if (rgMode() === 'nouvelle') {
+                <label class="oa-rg-champ"><span>Nom</span>
+                  <input class="ky-input" placeholder="Ex. Sécurisation" [ngModel]="rgNom()" (ngModelChange)="rgNom.set($event)" /></label>
+                <label class="oa-rg-champ"><span>Pôle</span>
+                  <select class="ky-input" [ngModel]="rgPole()" (ngModelChange)="rgPole.set($event)">
+                    <option value="">Pôle de la 1re cellule cochée</option>
+                    @for (x of rgPoles(); track x.pole.id) { <option [value]="x.pole.id">{{ x.contrat }} › {{ x.pole.name }}</option> }
+                  </select></label>
+              } @else {
+                <label class="oa-rg-champ"><span>Cellule de destination</span>
+                  <select class="ky-input" [ngModel]="rgCible()" (ngModelChange)="rgCible.set($event)">
+                    <option value="">Choisir…</option>
+                    @for (x of rgPoles(); track x.pole.id) {
+                      <optgroup [label]="x.contrat + ' › ' + x.pole.name">
+                        @for (c of x.pole.cellules; track c.id) { <option [value]="c.id">{{ c.name }}</option> }
+                      </optgroup>
+                    }
+                  </select></label>
+              }
+              <label class="oa-rg-champ"><span>Motif (historique)</span>
+                <input class="ky-input" placeholder="Ex. regroupement Cible Prio, GRE et Migration" [ngModel]="rgMotif()" (ngModelChange)="rgMotif.set($event)" /></label>
+              <p class="oa-meta">{{ rgCellules().size }} cellule(s) et {{ rgServices().size }} service(s) choisis.</p>
+              <button type="button" class="ky-btn-primary" [disabled]="!rgPret() || busy()" (click)="regrouper()">Regrouper</button>
+            </div>
+          </div>
+        </section>
+      }
 
       @for (d of depts(); track d.id) {
         <section class="ky-card oa-dept">

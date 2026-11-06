@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { choixRattachement, contratDe, contratsParPole, servicesFiltres, servicesGroupes } from './reaffectations.util';
+import { choixRattachement, contratDe, contratsParPole, niveauResponsable, noeudsResponsable, servicesFiltres, servicesGroupes } from './reaffectations.util';
 
 describe('réaffectations', () => {
   const services = [
@@ -39,5 +39,32 @@ describe('rattachement complet (contrat › pôle › cellule › service)', () 
     });
     expect(servicesFiltres(services, parPole, { ...f, pole: 'Pôle réseau' }).map((s) => s.id)).toEqual([2]);
     expect(servicesFiltres(services, parPole, { contrat: 'Sans contrat', pole: '', cellule: '' }).map((s) => s.id)).toEqual([3]);
+  });
+});
+
+describe('réaffectation des responsables (pôle, cellule, service)', () => {
+  const services = [
+    { id: 1, service: 'N1', cellule: 'Satisfaction', pole: 'Pôle client', poleId: 'p-client', celluleId: 'c-sat', serviceNodeId: 's-n1' },
+    { id: 2, service: 'N2', cellule: 'Satisfaction', pole: 'Pôle client', poleId: 'p-client', celluleId: 'c-sat', serviceNodeId: 's-n2' },
+    { id: 3, service: 'FTTH', cellule: 'Malfaçons', pole: 'Pôle réseau', poleId: 'p-reseau', celluleId: 'c-mal', serviceNodeId: 's-ftth' },
+  ];
+  const parPole = contratsParPole([{ id: 'a', name: 'BYTEL', poleIds: ['p-client', 'p-reseau'] }]);
+  const tous = { contrat: '', pole: '', cellule: '' };
+  it('donne le niveau selon le poste', () => {
+    expect(niveauResponsable('Superviseur')).toBe('Cellule');
+    expect(niveauResponsable('RP')).toBe('Pole');
+    expect(niveauResponsable('Chef de projet')).toBe('Pole');
+    expect(niveauResponsable('Coach')).toBe('Service');
+    expect(niveauResponsable('Pilote')).toBeNull();
+  });
+  it('propose cellules, pôles ou services, sans doublon', () => {
+    expect(noeudsResponsable(services, 'Cellule', parPole, tous)).toEqual([
+      { titre: 'BYTEL › Pôle client', noeuds: [{ id: 'c-sat', nom: 'Satisfaction' }] },
+      { titre: 'BYTEL › Pôle réseau', noeuds: [{ id: 'c-mal', nom: 'Malfaçons' }] },
+    ]);
+    expect(noeudsResponsable(services, 'Pole', parPole, tous)).toEqual([
+      { titre: 'BYTEL', noeuds: [{ id: 'p-client', nom: 'Pôle client' }, { id: 'p-reseau', nom: 'Pôle réseau' }] },
+    ]);
+    expect(noeudsResponsable(services, 'Service', parPole, { ...tous, pole: 'Pôle réseau' })[0].noeuds).toEqual([{ id: 's-ftth', nom: 'FTTH' }]);
   });
 });

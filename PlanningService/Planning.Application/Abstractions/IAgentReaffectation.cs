@@ -20,10 +20,18 @@ public sealed record ReaffectationDto(
 /// hors production ; RoleId = nouveau poste (null : inchangé).
 /// </summary>
 /// <remarks>v28 : DepartementSupportId = structure support d'Organisation RH (ex. Formation) pour un poste hors production.</remarks>
-public sealed record ReaffectationRequest(int? SubServiceId, string? Motif, int? RoleId = null, string? DepartementSupportId = null);
+/// <remarks>v29 : Responsabilites = nouveaux pôles / cellules / services (ids Organisation RH) d'un responsable.</remarks>
+public sealed record ReaffectationRequest(
+    int? SubServiceId, string? Motif, int? RoleId = null, string? DepartementSupportId = null,
+    IReadOnlyList<string>? Responsabilites = null);
 
 /// <summary>Service de destination ; PoleId = identifiant du pôle dans Organisation RH (pour le contrat).</summary>
-public sealed record ReaffectationServiceOptionDto(int Id, string Service, string? Cellule, string? Pole, string? PoleId = null);
+/// <remarks>v29 : CelluleId / ServiceNodeId = identifiants Organisation RH (affectation des responsables).</remarks>
+public sealed record ReaffectationServiceOptionDto(
+    int Id, string Service, string? Cellule, string? Pole, string? PoleId = null, string? CelluleId = null, string? ServiceNodeId = null);
+
+/// <summary>Responsabilités actuelles d'un responsable : niveau (Pole, Cellule, Service) et nœuds (v29).</summary>
+public sealed record ResponsabilitesDto(string? Niveau, IReadOnlyList<string> Noeuds);
 
 /// <summary>ARegulariser : poste hors production encore rattaché à un service de production (v27).</summary>
 public sealed record ReaffectationAgentOptionDto(
@@ -70,4 +78,6 @@ public interface IAgentReaffectation
     Task<IReadOnlyList<CompteAgentDto>> ComptesAsync(ReaffectationAuteur auteur, CancellationToken ct = default);
     /// <summary>Désactive ou réactive le compte d'un agent du périmètre (v26).</summary>
     Task<CompteAgentDto> ActiverCompteAsync(ReaffectationAuteur auteur, int userId, ActivationCompteRequest request, CancellationToken ct = default);
+    /// <summary>Responsabilités actuelles d'un responsable dans Organisation RH (v29).</summary>
+    Task<ResponsabilitesDto> ResponsabilitesAsync(int userId, CancellationToken ct = default);
 }

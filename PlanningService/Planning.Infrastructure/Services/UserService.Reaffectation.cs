@@ -72,8 +72,11 @@ public partial class UserService
             servicesQ = servicesQ.Where(s => ids.Contains(s.Id));
             agentsQ = agentsQ.Where(u => u.SubServiceId != null && ids.Contains(u.SubServiceId.Value) && u.Id != auteur.UserId);
         }
+        // Requête EF : tous les arguments explicites (pas de valeur par défaut dans un arbre d'expression).
         var services = await servicesQ
-            .Select(s => new ReaffectationServiceOptionDto(s.Id, s.Name, s.Service.Name, s.Service.Floor.Name, s.Service.Floor.PrimePoleId))
+            .Where(s => !s.IsArchived && !s.Service.IsArchived)
+            .Select(s => new ReaffectationServiceOptionDto(
+                s.Id, s.Name, s.Service.Name, s.Service.Floor.Name, s.Service.Floor.PrimePoleId, s.Service.PrimeCelluleId, s.PrimeServiceId))
             .ToListAsync(ct);
         var agents = await agentsQ
             .Select(u => new ReaffectationAgentOptionDto(
@@ -110,6 +113,90 @@ public partial class UserService
             roles);
     }
 
+    /// <summary>Niveau de responsabilité d'un poste d'encadrement dans Organisation RH (v29).</summary>
+    private static (string Kind, string Niveau)? NiveauResponsable(string? role)
+    {
+        if (KyntusRoleNames.IsSuperviseur(role) || KyntusRoleNames.IsSupportManager(role)) return ("Superviseur", "Cellule");
+        if (KyntusRoleNames.IsChefDeProjet(role)) return ("ChefDeProjet", "Pole");
+        if (KyntusRoleNames.IsReferentTechnique(role)) return ("ReferentTechnique", "Service");
+        return null;
+    }
+
+    public async Task<ResponsabilitesDto> ResponsabilitesAsync(int userId, CancellationToken ct = default)
+    {
+        var user = await _context.Users.AsNoTracking().Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var niveau = NiveauResponsable(user?.Role?.Name);
+        if (user is null || niveau is null || user.Guid == Guid.Empty)
+            return new ResponsabilitesDto(null, []);
+        var rebac = _httpContextAccessor.HttpContext?.RequestServices.GetService(typeof(Kyntus.Iam.IRebacClient)) as Kyntus.Iam.IRebacClient;
+        if (rebac is null) return new ResponsabilitesDto(niveau.Value.Niveau, []);
+        try
+        {
+            var noeuds = await rebac.GetManagedNodeIdsAsync(user.Guid, niveau.Value.Kind, ct);
+            return new ResponsabilitesDto(niveau.Value.Niveau, noeuds.ToList());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Responsabilités de l'agent {UserId} indisponibles.", userId);
+            return new ResponsabilitesDto(niveau.Value.Niveau, []);
+        }
+    }
+
+    /// <summary>Noms (miroir Planning) des pôles, cellules ou services d'Organisation RH.</summary>
+    private async Task<string> NomsNoeudsAsync(string niveau, IReadOnlyCollection<string> ids, CancellationToken ct)
+    {
+        var liste = ids.ToList();
+        var noms = niveau switch
+        {
+            "Pole" => await _context.Floors.AsNoTracking().Where(f => f.PrimePoleId != null && liste.Contains(f.PrimePoleId)).Select(f => f.Name).ToListAsync(ct),
+            "Cellule" => await _context.Services.AsNoTracking().Where(s => s.PrimeCelluleId != null && liste.Contains(s.PrimeCelluleId)).Select(s => s.Name).ToListAsync(ct),
+            _ => await _context.SubServices.AsNoTracking().Where(s => s.PrimeServiceId != null && liste.Contains(s.PrimeServiceId)).Select(s => s.Name).ToListAsync(ct),
+        };
+        var texte = string.Join(", ", noms.OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase));
+        return texte.Length > 250 ? texte[..247] + "…" : texte;
+    }
+
+    /// <summary>
+    /// v29 : un responsable (superviseur, chef de projet, référent) change de périmètre — cellules,
+    /// pôles ou services — dans Organisation RH ; Planning, Prime et Congés suivent par l'annuaire.
+    /// </summary>
+    private async Task<ReaffectationDto> ReaffecterResponsableAsync(
+        ReaffectationAuteur auteur, User user, IReadOnlyList<string> noeuds, string? motif, CancellationToken ct)
+    {
+        var niveau = NiveauResponsable(user.Role?.Name)
+                     ?? throw new ReaffectationRefusException(
+                         $"Le poste « {user.Role?.Name} » n'a pas de périmètre de responsabilité : choisissez un service.");
+        var cibles = noeuds.Select(n => n?.Trim() ?? string.Empty).Where(n => n.Length > 0).Distinct().ToList();
+        if (cibles.Count == 0)
+            throw new ReaffectationRefusException("Choisissez au moins un périmètre.");
+        var avant = (await ResponsabilitesAsync(user.Id, ct)).Noeuds;
+        var libelleNiveau = niveau.Value.Niveau switch { "Pole" => "pôle(s)", "Cellule" => "cellule(s)", _ => "service(s)" };
+        var motifCourt = string.IsNullOrWhiteSpace(motif) ? null : motif.Trim()[..Math.Min(500, motif.Trim().Length)];
+
+        var erreur = await _directoryEmployeeWrite.TryReconcileAssignmentsAsync(
+            user.Guid, niveau.Value.Kind, cibles, motifCourt ?? $"Réaffectation par {auteur.Nom}", ct);
+        if (erreur is not null)
+            throw new ReaffectationRefusException(erreur);
+
+        var ligne = new ReaffectationAgent
+        {
+            UserId = user.Id,
+            AncienSubServiceId = user.SubServiceId,
+            NouveauSubServiceId = user.SubServiceId,
+            AncienLibelle = avant.Count > 0 ? $"{user.Role?.Name} — {libelleNiveau} : {await NomsNoeudsAsync(niveau.Value.Niveau, avant, ct)}" : null,
+            NouveauLibelle = $"{user.Role?.Name} — {libelleNiveau} : {await NomsNoeudsAsync(niveau.Value.Niveau, cibles, ct)}",
+            Motif = motifCourt,
+            Origine = "Réaffectation",
+            CreatedBy = auteur.UserId,
+            CreatedByNom = auteur.Nom,
+        };
+        _context.ReaffectationsAgents.Add(ligne);
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Réaffectation : responsable {UserId} ({Email}) → {Nouveau}, par {Auteur}.",
+            user.Id, user.Email, ligne.NouveauLibelle, auteur.Nom);
+        return VersDto(ligne, $"{(user.LastName ?? "").ToUpperInvariant()} {user.FirstName}".Trim());
+    }
+
     public async Task<ReaffectationDto> ReaffecterAsync(
         ReaffectationAuteur auteur, int userId, ReaffectationRequest request, CancellationToken ct = default)
     {
@@ -117,6 +204,8 @@ public partial class UserService
                    ?? throw new ReaffectationRefusException("Agent introuvable.");
         if (!user.IsActive)
             throw new ReaffectationRefusException("Cet agent est désactivé : réactivez son compte d'abord.");
+        if (request.Responsabilites is { Count: > 0 } responsabilites)
+            return await ReaffecterResponsableAsync(auteur, user, responsabilites, request.Motif, ct);
         if (auteur.SubServices is { } perimetre && (user.SubServiceId is not int actuel || !perimetre.Contains(actuel)))
             throw new ReaffectationRefusException("Cet agent n'est pas dans votre périmètre.", horsPerimetre: true);
 

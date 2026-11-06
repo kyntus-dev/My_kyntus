@@ -69,3 +69,47 @@ export function servicesFiltres(
     && (!f.pole || s.pole === f.pole)
     && (!f.cellule || s.cellule === f.cellule));
 }
+
+export type NiveauResponsable = 'Pole' | 'Cellule' | 'Service';
+
+/** Niveau de responsabilité d'un poste d'encadrement (null : pas un responsable). */
+export function niveauResponsable(role: string | null | undefined): NiveauResponsable | null {
+  const r = sansAccents(role ?? '').replace(/[\s_-]+/g, '');
+  if (r === 'superviseur' || r === 'manager') return 'Cellule';
+  if (r === 'chefdeprojet' || r === 'rp') return 'Pole';
+  if (r === 'referenttechnique' || r === 'coach') return 'Service';
+  return null;
+}
+
+export interface NoeudResponsable { id: string; nom: string }
+
+/**
+ * Pôles, cellules ou services proposés à un responsable, groupés (contrat › pôle pour les cellules,
+ * contrat pour les pôles, pôle › cellule pour les services), filtrés par contrat / pôle / cellule.
+ */
+export function noeudsResponsable(
+  services: readonly ReaffectationServiceOptionDto[],
+  niveau: NiveauResponsable,
+  parPole: Map<string, ContratRef[]>,
+  f: FiltresRattachement,
+): { titre: string; noeuds: NoeudResponsable[] }[] {
+  const groupes = new Map<string, Map<string, string>>();
+  for (const s of servicesFiltres(services, parPole, f)) {
+    const contrat = contratDe(s, parPole) ?? 'Sans contrat';
+    const [titre, id, nom] = niveau === 'Pole'
+      ? [contrat, s.poleId, s.pole]
+      : niveau === 'Cellule'
+        ? [[contrat, s.pole].filter(Boolean).join(' › '), s.celluleId, s.cellule]
+        : [[s.pole, s.cellule].filter(Boolean).join(' › '), s.serviceNodeId, s.service];
+    if (!id || !nom) continue;
+    const g = groupes.get(titre) ?? new Map<string, string>();
+    g.set(id, nom);
+    groupes.set(titre, g);
+  }
+  return [...groupes.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'fr'))
+    .map(([titre, g]) => ({
+      titre,
+      noeuds: [...g.entries()].map(([id, nom]) => ({ id, nom })).sort((a, b) => a.nom.localeCompare(b.nom, 'fr')),
+    }));
+}

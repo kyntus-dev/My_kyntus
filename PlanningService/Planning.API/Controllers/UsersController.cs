@@ -44,7 +44,9 @@ public class UsersController(
         var role = User.GetAuthRole() ?? "Employee";
         var admin = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
         var rh = IsHrOrAdmin(role);
-        var global = rh || await PorteeGlobaleAsync(role, droit, ct);
+        // v29 : la réaffectation est ouverte à toute l'entreprise (tous les agents, tous les périmètres)
+        // pour qui a le droit ; l'activation des comptes suit le périmètre d'« Accès par rôle ».
+        var global = rh || droit == "rh.affectations" || await PorteeGlobaleAsync(role, droit, ct);
         return await reaffectation.ResoudreAsync(User.GetAuthUserId(), User.GetEmail(), global, ct, admin, rh);
     }
 
@@ -108,6 +110,14 @@ public class UsersController(
     {
         if (!await PeutReaffecterAsync("View", ct) && !await PeutReaffecterAsync("Act", ct)) return Forbid();
         return Ok(await reaffectation.OptionsAsync(await AuteurReaffectationAsync(ct), ct));
+    }
+
+    /// <summary>Responsabilités actuelles d'un responsable (pôles, cellules ou services) — v29.</summary>
+    [HttpGet("{id:int}/reaffectation/responsabilites")]
+    public async Task<ActionResult<ResponsabilitesDto>> Responsabilites(int id, CancellationToken ct)
+    {
+        if (!await PeutReaffecterAsync("View", ct) && !await PeutReaffecterAsync("Act", ct)) return Forbid();
+        return Ok(await reaffectation.ResponsabilitesAsync(id, ct));
     }
 
     /// <summary>Historique des changements de service (périmètre du demandeur).</summary>

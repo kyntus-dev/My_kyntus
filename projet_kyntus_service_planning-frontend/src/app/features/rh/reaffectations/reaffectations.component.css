@@ -90,3 +90,6 @@
 .ra-regul-nom b { display: block; font-size: 0.84rem; }
 .ra-regul-nom small { display: block; font-size: 0.72rem; color: var(--text-muted); }
 .ra-badge { margin-left: auto; flex: 0 0 auto; padding: 1px 8px; border-radius: 999px; font-size: 0.66rem; font-weight: 700; color: #92400e; background: color-mix(in srgb, #f59e0b 18%, transparent); }
+
+/* v29 : périmètre des responsables. */
+.ra-tout { margin-left: 8px; font-size: 0.7rem; text-transform: none; letter-spacing: 0; }

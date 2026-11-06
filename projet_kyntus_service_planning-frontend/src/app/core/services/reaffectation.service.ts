@@ -22,7 +22,12 @@ export interface ReaffectationServiceOptionDto {
   id: number; service: string; cellule: string | null; pole: string | null;
   /** Identifiant du pôle dans Organisation RH (sert à retrouver le contrat). */
   poleId?: string | null;
+  /** Identifiants Organisation RH de la cellule et du service (affectation des responsables). */
+  celluleId?: string | null;
+  serviceNodeId?: string | null;
 }
+/** Responsabilités actuelles d'un responsable : niveau et nœuds d'Organisation RH. */
+export interface ResponsabilitesDto { niveau: 'Pole' | 'Cellule' | 'Service' | null; noeuds: string[] }
 export interface ReaffectationAgentOptionDto {
   id: number; nom: string; subServiceId: number | null; service: string | null; cellule: string | null; role: string | null; roleId?: number | null;
   /** Poste hors production encore rattaché à un service de production (à régulariser). */
@@ -63,8 +68,16 @@ export class ReaffectationService {
   /** subServiceId null = hors production ; roleId null = poste inchangé. */
   reaffecter(
     userId: number, subServiceId: number | null, motif: string | null, roleId: number | null = null, departementSupportId: string | null = null,
+    responsabilites: string[] | null = null,
   ): Observable<ReaffectationDto> {
-    return this.http.post<ReaffectationDto>(`${this.base}/${userId}/reaffectation`, { subServiceId, motif, roleId, departementSupportId });
+    return this.http.post<ReaffectationDto>(`${this.base}/${userId}/reaffectation`, {
+      subServiceId, motif, roleId, departementSupportId, responsabilites,
+    });
+  }
+
+  /** Pôles, cellules ou services dont un responsable a la charge (Organisation RH). */
+  responsabilites(userId: number): Observable<ResponsabilitesDto> {
+    return this.http.get<ResponsabilitesDto>(`${this.base}/${userId}/reaffectation/responsabilites`);
   }
 
   contrats(): Observable<ContratRef[]> {

@@ -312,6 +312,32 @@ public class DirectoryOrgController(
         return Ok(new { id });
     }
 
+    /// <summary>
+    /// v29 : regroupe des cellules (et des services isolés) dans une cellule existante ou nouvelle.
+    /// Services, agents et superviseurs suivent ; les cellules vidées sont archivées.
+    /// </summary>
+    [OrgWriteAccess]
+    [HttpPost("structure/cellules/regrouper")]
+    public async Task<ActionResult<RegroupementCellulesResult>> RegrouperCellules(
+        [FromBody] RegrouperCellulesRequest body, CancellationToken ct)
+    {
+        try
+        {
+            var result = await mediator.Send(new RegrouperCellulesCommand(body, User.GetSubjectId()), ct);
+            if (result.CibleCreee)
+                await PropagateScopeSafelyAsync(() => scopes.PropagateAfterCelluleCreatedAsync(result.CibleId, User.GetSubjectId(), ct), result.CibleId);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [OrgWriteAccess]
     [HttpPut("structure/poles/{nodeId}")]
     public async Task<IActionResult> RenamePole(string nodeId, [FromBody] CreateNodeRequest body, CancellationToken ct) =>

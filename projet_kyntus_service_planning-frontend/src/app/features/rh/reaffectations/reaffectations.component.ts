@@ -15,7 +15,9 @@ import {
 import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
-import { choixRattachement, contratDe, contratsParPole, dateHeure, sansAccents, servicesFiltres, servicesGroupes } from './reaffectations.util';
+import {
+  choixRattachement, contratDe, contratsParPole, dateHeure, niveauResponsable, noeudsResponsable, sansAccents, servicesFiltres, servicesGroupes,
+} from './reaffectations.util';
 
 /**
  * Réaffectations : changer le rattachement d'un agent (contrat › pôle › cellule › service, ou hors
@@ -114,6 +116,25 @@ export class ReaffectationsComponent implements OnInit {
     this.contrats().filter((c) => (c.kind ?? '').toLowerCase() === 'support' && c.isActive !== false)
       .sort((a, b) => a.name.localeCompare(b.name, 'fr')));
   readonly departementSupport = signal('');
+
+  /** Responsable (superviseur, chef de projet, référent) : niveau de son périmètre (v29). */
+  readonly niveauAgent = computed(() => niveauResponsable(this.agent()?.role));
+  readonly noeudsInitiaux = signal<ReadonlySet<string>>(new Set());
+  readonly noeudsChoisis = signal<ReadonlySet<string>>(new Set());
+  readonly chargementNoeuds = signal(false);
+  readonly groupesNoeuds = computed(() => {
+    const n = this.niveauAgent();
+    return n ? noeudsResponsable(this.options()?.services ?? [], n, this.parPole(), this.filtres()) : [];
+  });
+  readonly libelleNiveau = computed(() => ({ Pole: 'pôles', Cellule: 'cellules', Service: 'services' } as const)[this.niveauAgent() ?? 'Cellule']);
+  /** Noms des nœuds choisis (pour l'aperçu A → B). */
+  readonly nomsChoisis = computed(() => this.nomsDe(this.noeudsChoisis()));
+  readonly nomsInitiaux = computed(() => this.nomsDe(this.noeudsInitiaux()));
+  readonly changementResponsable = computed(() => {
+    const a = this.noeudsInitiaux();
+    const b = this.noeudsChoisis();
+    return b.size > 0 && (a.size !== b.size || [...b].some((x) => !a.has(x)));
+  });
   readonly choix = computed(() =>
     choixRattachement(this.options()?.services ?? [], this.parPole(), this.filtres()));
   private readonly filtres = computed(() => ({ contrat: this.filtreContrat(), pole: this.filtrePole(), cellule: this.filtreCellule() }));
@@ -122,6 +143,7 @@ export class ReaffectationsComponent implements OnInit {
   readonly changement = computed(() => {
     const a = this.agent();
     if (!a) return false;
+    if (this.niveauAgent()) return this.changementResponsable();
     const production = this.posteProduction();
     if (this.horsProduction()) return !production && (a.subServiceId !== null || this.changePoste());
     const service = this.cible() ?? a.subServiceId;
@@ -276,6 +298,49 @@ export class ReaffectationsComponent implements OnInit {
     this.rechercheAgent.set('');
     // Poste hors production encore dans un service : la sortie de production est proposée d'office.
     if (a.aRegulariser) { this.horsProduction.set(true); this.proposerStructure(a.role); }
+    this.chargerResponsabilites(a);
+  }
+
+  private nomsDe(ids: ReadonlySet<string>): string {
+    const noms = new Map<string, string>();
+    for (const g of this.niveauAgent() ? noeudsResponsable(this.options()?.services ?? [], this.niveauAgent()!, this.parPole(), { contrat: '', pole: '', cellule: '' }) : []) {
+      for (const n of g.noeuds) noms.set(n.id, n.nom);
+    }
+    return [...ids].map((i) => noms.get(i) ?? i).sort((x, y) => x.localeCompare(y, 'fr')).join(', ');
+  }
+
+  basculerNoeud(id: string): void {
+    const s = new Set(this.noeudsChoisis());
+    if (s.has(id)) s.delete(id); else s.add(id);
+    this.noeudsChoisis.set(s);
+  }
+
+  /** Chef de projet : tous les pôles d'un contrat en un clic. */
+  toutLeGroupe(ids: readonly string[]): void {
+    const s = new Set(this.noeudsChoisis());
+    const tous = ids.every((i) => s.has(i));
+    for (const i of ids) { if (tous) s.delete(i); else s.add(i); }
+    this.noeudsChoisis.set(s);
+  }
+
+  idsDe(g: { noeuds: { id: string }[] }): string[] {
+    return g.noeuds.map((n) => n.id);
+  }
+
+  private chargerResponsabilites(a: ReaffectationAgentOptionDto): void {
+    this.noeudsInitiaux.set(new Set());
+    this.noeudsChoisis.set(new Set());
+    if (!niveauResponsable(a.role)) return;
+    this.chargementNoeuds.set(true);
+    this.svc.responsabilites(a.id).subscribe({
+      next: (r) => {
+        this.chargementNoeuds.set(false);
+        if (this.agent()?.id !== a.id) return;
+        this.noeudsInitiaux.set(new Set(r.noeuds));
+        this.noeudsChoisis.set(new Set(r.noeuds));
+      },
+      error: () => this.chargementNoeuds.set(false),
+    });
   }
 
   /** Structure support proposée d'après le poste (ex. « Formation » pour l'équipe formation). */
@@ -347,6 +412,8 @@ export class ReaffectationsComponent implements OnInit {
 
   private reinitialiserChoix(): void {
     this.departementSupport.set('');
+    this.noeudsInitiaux.set(new Set());
+    this.noeudsChoisis.set(new Set());
     this.cible.set(null);
     this.horsProduction.set(false);
     this.roleCible.set(null);
@@ -355,6 +422,7 @@ export class ReaffectationsComponent implements OnInit {
   async valider(): Promise<void> {
     const a = this.agent();
     if (!a || !this.changement() || this.saving()) return;
+    if (this.niveauAgent()) { await this.validerResponsable(a); return; }
     const s = this.horsProduction() ? null : this.serviceCible() ?? this.serviceActuel();
     const poste = this.changePoste() ? this.posteCible() : null;
     const vers = this.horsProduction() ? 'hors production (aucun service)' : `« ${s?.service ?? '—'} » (${this.rattachement(s) || '—'})`;
@@ -379,6 +447,35 @@ export class ReaffectationsComponent implements OnInit {
         this.motif.set('');
         this.charger();
         this.toast.success(resume);
+      },
+      error: (err) => {
+        this.saving.set(false);
+        this.toast.error(err?.error?.message ?? 'Réaffectation impossible.');
+      },
+    });
+  }
+
+  /** Responsable : nouveau périmètre (pôles, cellules ou services) dans Organisation RH. */
+  private async validerResponsable(a: ReaffectationAgentOptionDto): Promise<void> {
+    const noeuds = [...this.noeudsChoisis()];
+    const ok = await this.confirm.confirm({
+      title: 'Confirmer le nouveau périmètre',
+      message: `${a.nom} (${a.role}) aura la charge de : ${this.nomsChoisis()}. `
+        + 'Ses anciens périmètres lui sont retirés ; équipes, plannings, congés et présences suivent dans toute l’application.',
+      confirmLabel: 'Réaffecter',
+      variant: 'warning',
+    });
+    if (!ok) return;
+    this.saving.set(true);
+    this.svc.reaffecter(a.id, null, this.motif().trim() || null, null, null, noeuds).subscribe({
+      next: (h) => {
+        this.saving.set(false);
+        this.historique.set([h, ...this.historique()]);
+        this.toast.success(`${a.nom} : ${h.nouveau}.`);
+        this.agent.set(null);
+        this.reinitialiserChoix();
+        this.motif.set('');
+        this.charger();
       },
       error: (err) => {
         this.saving.set(false);

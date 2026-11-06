@@ -48,6 +48,8 @@ public sealed class DirectoryOrgCatalog(
         var celluleCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var serviceCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var serviceParents = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var celluleParents = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var poleDepartments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // Miroir local d’abord (offline / rename events).
         try
@@ -71,7 +73,7 @@ public sealed class DirectoryOrgCatalog(
             {
                 var overview = await resp.Content.ReadFromJsonAsync<DirectoryOrgOverviewDto>(JsonOptions, ct);
                 if (overview is not null)
-                    MergeOverview(overview, names, celluleCounts, serviceCounts, serviceParents);
+                    MergeOverview(overview, names, celluleCounts, serviceCounts, serviceParents, celluleParents, poleDepartments);
             }
             else
             {
@@ -83,7 +85,7 @@ public sealed class DirectoryOrgCatalog(
             logger.LogWarning(ex, "Directory org overview unavailable — using mirror names only");
         }
 
-        return new DirectoryOrgCatalogSnapshot(names, celluleCounts, serviceCounts, serviceParents);
+        return new DirectoryOrgCatalogSnapshot(names, celluleCounts, serviceCounts, serviceParents, celluleParents, poleDepartments);
     }
 
     private static void MergeOverview(
@@ -91,7 +93,9 @@ public sealed class DirectoryOrgCatalog(
         Dictionary<string, string> names,
         Dictionary<string, int> celluleCounts,
         Dictionary<string, int> serviceCounts,
-        Dictionary<string, string> serviceParents)
+        Dictionary<string, string> serviceParents,
+        Dictionary<string, string> celluleParents,
+        Dictionary<string, string> poleDepartments)
     {
         // Flat lists (legacy shape).
         foreach (var c in overview.Services ?? [])
@@ -113,8 +117,14 @@ public sealed class DirectoryOrgCatalog(
             {
                 if (!string.IsNullOrWhiteSpace(pole.Id) && !string.IsNullOrWhiteSpace(pole.Name))
                     names[pole.Id.Trim()] = pole.Name.Trim();
+                if (!string.IsNullOrWhiteSpace(pole.Id) && !string.IsNullOrWhiteSpace(dept.Id))
+                    poleDepartments[pole.Id.Trim()] = dept.Id.Trim();
                 foreach (var cell in pole.Cellules ?? [])
+                {
                     RegisterCelluleServices(cell, names, serviceParents);
+                    if (!string.IsNullOrWhiteSpace(cell.Id) && !string.IsNullOrWhiteSpace(pole.Id))
+                        celluleParents[cell.Id.Trim()] = pole.Id.Trim();
+                }
             }
         }
 
@@ -123,7 +133,11 @@ public sealed class DirectoryOrgCatalog(
             if (!string.IsNullOrWhiteSpace(pole.Id) && !string.IsNullOrWhiteSpace(pole.Name))
                 names[pole.Id.Trim()] = pole.Name.Trim();
             foreach (var cell in pole.Cellules ?? [])
+            {
                 RegisterCelluleServices(cell, names, serviceParents);
+                if (!string.IsNullOrWhiteSpace(cell.Id) && !string.IsNullOrWhiteSpace(pole.Id))
+                    celluleParents[cell.Id.Trim()] = pole.Id.Trim();
+            }
         }
 
         foreach (var emp in overview.Employees ?? [])
@@ -196,6 +210,7 @@ public sealed class DirectoryOrgCatalog(
 
     private sealed class OperationalDeptDto
     {
+        public string? Id { get; set; }
         public List<PoleDto>? Poles { get; set; }
     }
 

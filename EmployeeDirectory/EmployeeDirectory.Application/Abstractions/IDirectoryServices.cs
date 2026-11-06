@@ -91,6 +91,8 @@ public interface IDirectoryWriteService
     Task<string> CreatePoleAsync(string name, Guid businessDepartmentId, CancellationToken ct = default);
     Task<bool> AttachPoleToBusinessDepartmentAsync(string poleId, Guid businessDepartmentId, CancellationToken ct = default);
     Task<string> CreateCelluleAsync(string poleId, string name, CancellationToken ct = default);
+    /// <summary>v29 : regroupe des cellules / services dans une cellule (existante ou nouvelle).</summary>
+    Task<RegroupementCellulesResult> RegrouperCellulesAsync(RegrouperCellulesRequest request, Guid? changedBy, CancellationToken ct = default);
     Task<string> CreateServiceAsync(string celluleId, string name, CancellationToken ct = default);
     Task<bool> RenameOrgNodeAsync(OrgNodeLevel level, string nodeId, string name, CancellationToken ct = default);
     /// <summary>v9 : archive le nœud et ses descendants (conservés en base avec leur historique).</summary>

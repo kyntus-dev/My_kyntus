@@ -292,23 +292,46 @@ public class CongesController : ControllerBase
         return ok ? NoContent() : NotFound();
     }
 
+    /// <summary>
+    /// Quotas de congés du périmètre : superviseur = ses cellules ; chef de projet = tout son
+    /// département ; RH / Admin = toute l'entreprise. v29 : le périmètre est toujours celui du compte
+    /// connecté (le paramètre superviseurId n'est retenu que pour RH / Admin).
+    /// </summary>
     [HttpGet("config/quotas-service")]
     public async Task<IActionResult> GetQuotasService([FromQuery] Guid superviseurId, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetQuotasServiceQuery(superviseurId), ct));
+        => Ok(await _mediator.Send(new GetQuotasServiceQuery(await ActeurQuotasAsync(superviseurId, ct)), ct));
 
     [HttpPut("config/quotas-service")]
-    [Authorize(Roles = "Admin,RH,Superviseur,Manager")]
+    [Authorize(Roles = "Admin,RH,Superviseur,Manager,RP,Chef de projet")]
     public async Task<IActionResult> UpsertQuotaService(
         [FromBody] UpsertQuotaServiceRequest body,
         CancellationToken ct)
     {
-        var result = await _mediator.Send(
-            new UpsertQuotaServiceCommand(
-                body.ServiceId,
-                body.MaxAbsentsSimultanes,
-                body.SuperviseurId,
-                body.ScopeKind), ct);
-        return Ok(result);
+        try
+        {
+            var result = await _mediator.Send(
+                new UpsertQuotaServiceCommand(
+                    body.ServiceId,
+                    body.MaxAbsentsSimultanes,
+                    await ActeurQuotasAsync(body.SuperviseurId, ct),
+                    body.ScopeKind), ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Compte dont on lit le périmètre : le compte connecté, sauf RH / Admin.</summary>
+    private async Task<Guid> ActeurQuotasAsync(Guid demande, CancellationToken ct)
+    {
+        if (IsPrivilegedHrOrAdmin() && demande != Guid.Empty) return demande;
+        var actorId = RequireActorId();
+        if (actorId is null) return demande;
+        // Identifiant de connexion et fiche peuvent différer : on retient la fiche du compte connecté.
+        var moi = await _employeRepo.GetByEmployeIdOrEmailAsync(actorId.Value, User.GetEmail(), ct);
+        return moi?.EmployeId ?? actorId.Value;
     }
 
     [HttpGet("config/quotas-service/{serviceId}")]

@@ -218,3 +218,13 @@ public sealed class UndoImportAssignmentWindowCommandHandler(IDirectoryWriteServ
         CancellationToken ct) =>
         write.UndoImportAssignmentWindowAsync(request.Body, request.ChangedBy, ct);
 }
+
+/// <summary>v29 : regroupement de cellules (ex. Cible Prio + GRE + Migration → Sécurisation).</summary>
+public record RegrouperCellulesCommand(RegrouperCellulesRequest Body, Guid? ChangedBy) : IRequest<RegroupementCellulesResult>;
+
+public sealed class RegrouperCellulesCommandHandler(IDirectoryWriteService write)
+    : IRequestHandler<RegrouperCellulesCommand, RegroupementCellulesResult>
+{
+    public Task<RegroupementCellulesResult> Handle(RegrouperCellulesCommand request, CancellationToken ct) =>
+        write.RegrouperCellulesAsync(request.Body, request.ChangedBy, ct);
+}

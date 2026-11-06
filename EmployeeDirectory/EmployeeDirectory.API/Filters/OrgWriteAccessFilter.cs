@@ -18,6 +18,7 @@ public sealed class OrgWriteAccessFilter(
     ILogger<OrgWriteAccessFilter> logger) : IAsyncActionFilter
 {
     public const string ManageUsersAction = "users:manage";
+    public const string ReaffecterAction = "rh.affectations.Act";
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
@@ -42,6 +43,15 @@ public sealed class OrgWriteAccessFilter(
             try
             {
                 if (await iam.EvaluateAsync(subject, role, ManageUsersAction, "users", null, http.RequestAborted))
+                {
+                    await next();
+                    return;
+                }
+
+                // v29 : un responsable autorisé à réaffecter (« Réaffecter les agents » au niveau
+                // Modifier) peut changer les affectations (pôle, cellule, service) — pas la structure.
+                if (http.Request.Path.Value?.Contains("/assignments/", StringComparison.OrdinalIgnoreCase) == true
+                    && await iam.EvaluateAsync(subject, role, ReaffecterAction, "platform", null, http.RequestAborted))
                 {
                     await next();
                     return;

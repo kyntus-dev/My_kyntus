@@ -1203,6 +1203,114 @@ public sealed class DirectoryWriteService(
         return id;
     }
 
+    /// <summary>
+    /// v29 : regroupe des cellules (et des services isolés) dans une cellule cible. Les services sont
+    /// rattachés à la cible (Planning, Prime et Congés suivent par l'événement de nœud), les agents
+    /// prennent la cellule et le pôle de la cible, les superviseurs des cellules regroupées deviennent
+    /// superviseurs de la cible, puis les cellules vidées sont archivées (historique conservé).
+    /// </summary>
+    public async Task<RegroupementCellulesResult> RegrouperCellulesAsync(
+        RegrouperCellulesRequest request, Guid? changedBy, CancellationToken ct = default)
+    {
+        static List<string> Ids(IReadOnlyList<string>? ids) =>
+            (ids ?? []).Select(i => i?.Trim() ?? string.Empty).Where(i => i.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+        var sourceIds = Ids(request.SourceIds);
+        var serviceIds = Ids(request.ServiceIds);
+        if (sourceIds.Count == 0 && serviceIds.Count == 0)
+            throw new ArgumentException("Choisissez au moins une cellule ou un service à regrouper.");
+
+        var sources = await db.OrgCellules.Where(c => sourceIds.Contains(c.Id) && !c.IsArchived).ToListAsync(ct);
+        if (sources.Count != sourceIds.Count)
+            throw new ArgumentException("Une des cellules choisies est introuvable ou archivée.");
+
+        // Cellule cible : existante, ou créée sous le pôle choisi (par défaut celui de la 1re cellule).
+        string cibleId, ciblePole, cibleNom;
+        var creee = false;
+        if (!string.IsNullOrWhiteSpace(request.CibleId))
+        {
+            var cible = await db.OrgCellules.AsNoTracking()
+                            .FirstOrDefaultAsync(c => c.Id == request.CibleId.Trim() && !c.IsArchived, ct)
+                        ?? throw new ArgumentException("Cellule de destination introuvable ou archivée.");
+            (cibleId, ciblePole, cibleNom) = (cible.Id, cible.PoleId, cible.Name);
+        }
+        else
+        {
+            var nom = request.NomCible?.Trim();
+            if (string.IsNullOrWhiteSpace(nom))
+                throw new ArgumentException("Donnez un nom à la nouvelle cellule.");
+            var pole = !string.IsNullOrWhiteSpace(request.PoleId)
+                ? request.PoleId.Trim()
+                : sources.FirstOrDefault()?.PoleId
+                  ?? await db.OrgServices.Where(sv => serviceIds.Contains(sv.Id)).Select(sv => sv.Cellule.PoleId).FirstOrDefaultAsync(ct)
+                  ?? throw new ArgumentException("Choisissez le pôle de la nouvelle cellule.");
+            if (!await db.OrgPoles.AnyAsync(p => p.Id == pole && !p.IsArchived, ct))
+                throw new ArgumentException("Pôle de destination introuvable ou archivé.");
+            cibleId = await CreateCelluleAsync(pole, nom, ct);
+            (ciblePole, cibleNom, creee) = (pole, nom, true);
+        }
+
+        var aVider = sources.Where(c => c.Id != cibleId).ToList();
+        var celluleIds = aVider.Select(c => c.Id).ToList();
+        var motif = string.IsNullOrWhiteSpace(request.Motif) ? $"Regroupement dans la cellule « {cibleNom} »" : request.Motif.Trim();
+
+        // 1. Services : ceux des cellules regroupées et ceux choisis un par un.
+        var services = await db.OrgServices
+            .Where(sv => !sv.IsArchived && sv.CelluleId != cibleId && (celluleIds.Contains(sv.CelluleId) || serviceIds.Contains(sv.Id)))
+            .ToListAsync(ct);
+        foreach (var sv in services)
+        {
+            sv.CelluleId = cibleId;
+            await outbox.EnqueueAsync(new DirectoryOrgNodeChangedMessage
+            {
+                NodeId = sv.Id,
+                Name = sv.Name,
+                Level = MessagingEnumMapper.ToMessage(DomainNodeLevel.Service),
+                ParentNodeId = cibleId,
+            }, aggregateId: sv.Id, ct: ct);
+        }
+
+        // 2. Agents : rattachés aux cellules regroupées ou aux services déplacés.
+        var servicesDeplaces = services.Select(sv => sv.Id).ToList();
+        var agents = await db.Employees
+            .Where(e => (e.CelluleId != null && celluleIds.Contains(e.CelluleId))
+                        || (e.ServiceId != null && servicesDeplaces.Contains(e.ServiceId)))
+            .ToListAsync(ct);
+        foreach (var e in agents)
+        {
+            e.CelluleId = cibleId;
+            e.PoleId = ciblePole;
+            e.UpdatedAt = DateTime.UtcNow;
+            await EnqueueEmployeeChangedAsync(e, isDeleted: false, emitLegacyCreate: false, ct);
+        }
+        await PersistAndInvalidateAsync(ct);
+
+        // 3. Superviseurs des cellules regroupées : superviseurs de la cible.
+        var superviseurs = 0;
+        foreach (var source in aVider)
+        {
+            var ids = await db.OrgAssignments.AsNoTracking()
+                .Where(a => a.Kind == DomainAssignmentKind.Superviseur && a.NodeId == source.Id && a.EffectiveTo == null)
+                .Select(a => a.EmployeeId).Distinct().ToListAsync(ct);
+            foreach (var id in ids)
+            {
+                await AssignStructureRoleAsync(DomainAssignmentKind.Superviseur.ToString(), cibleId, id, changedBy, motif, null, false, ct);
+                await RemoveStructureAssignmentAsync(DomainAssignmentKind.Superviseur.ToString(), source.Id, id, changedBy, motif, ct);
+                superviseurs++;
+            }
+        }
+
+        // 4. Cellules vidées : archivées (restaurables, historique conservé).
+        var archivees = new List<string>();
+        foreach (var source in aVider)
+        {
+            var reste = await db.OrgServices.AnyAsync(sv => sv.CelluleId == source.Id && !sv.IsArchived, ct);
+            if (!reste && await DeleteOrgNodeAsync(DomainNodeLevel.Cellule, source.Id, ct))
+                archivees.Add(source.Name);
+        }
+
+        return new RegroupementCellulesResult(cibleId, cibleNom, creee, services.Count, agents.Count, superviseurs, archivees);
+    }
+
     public async Task<string> CreateServiceAsync(string celluleId, string name, CancellationToken ct = default)
     {
         var id = NewOrgId("svc");

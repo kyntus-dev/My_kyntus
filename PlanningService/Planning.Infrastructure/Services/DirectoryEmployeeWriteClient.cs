@@ -52,6 +52,14 @@ public interface IDirectoryEmployeeWriteClient
     /// clôt ses titulatures sur ce nœud (v26 : sortie de la production lors d'une réaffectation).
     /// </summary>
     Task<bool> TryClearOrgPlacementAsync(Guid employeeGuid, string level, string? nodeId, CancellationToken ct = default);
+
+    /// <summary>
+    /// v29 : remplace les responsabilités d'un responsable dans Organisation RH (kind ChefDeProjet,
+    /// Superviseur ou ReferentTechnique ; nœuds = pôles, cellules ou services). Renvoie le message
+    /// d'erreur de l'annuaire, ou null si c'est fait.
+    /// </summary>
+    Task<string?> TryReconcileAssignmentsAsync(
+        Guid employeeGuid, string kind, IReadOnlyList<string> nodeIds, string? reason, CancellationToken ct = default);
 }
 
 public sealed class DirectoryEmployeeWriteClient(
@@ -403,6 +411,34 @@ public sealed class DirectoryEmployeeWriteClient(
             $"clear-org-placement guid={employeeGuid} {level}",
             false,
             ct);
+    }
+
+    public async Task<string?> TryReconcileAssignmentsAsync(
+        Guid employeeGuid, string kind, IReadOnlyList<string> nodeIds, string? reason, CancellationToken ct = default)
+    {
+        if (employeeGuid == Guid.Empty) return "Agent absent d'Organisation RH.";
+        if (nodeIds.Count == 0) return "Choisissez au moins un périmètre.";
+        try
+        {
+            var client = CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"api/directory/org/assignments/{kind}/employees/{employeeGuid:D}")
+            {
+                Content = JsonContent.Create(new { nodeIds, primaryNodeId = nodeIds[0], reason }),
+            };
+            AttachAuth(request);
+            var response = await client.SendAsync(request, ct);
+            if (response.IsSuccessStatusCode) return null;
+            var body = await response.Content.ReadAsStringAsync(ct);
+            logger.LogWarning("Directory responsabilités {Kind} échec {Status} pour {Guid}: {Body}", kind, response.StatusCode, employeeGuid, body);
+            return response.StatusCode == System.Net.HttpStatusCode.Forbidden
+                ? "Organisation RH a refusé le changement (droit « Réaffecter les agents » au niveau Modifier nécessaire)."
+                : "Organisation RH n'a pas accepté le changement de périmètre.";
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Directory responsabilités {Kind} indisponible pour {Guid}", kind, employeeGuid);
+            return "Organisation RH est indisponible : réessayez.";
+        }
     }
 
     private async Task<T> ExecuteWithRetriesAsync<T>(

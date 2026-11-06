@@ -132,7 +132,7 @@ export const ROLE_SETS = {
   ] as string[],
 
   /** Quotas service — Superviseur. */
-  congesSuperviseurConfig: [KyntusRoleNames.Superviseur, KyntusRoleNames.Admin] as string[],
+  congesSuperviseurConfig: [KyntusRoleNames.Superviseur, KyntusRoleNames.Admin, ...CHEF_ALIASES] as string[],
 
   formationPlanner: [
     KyntusRoleNames.Admin,

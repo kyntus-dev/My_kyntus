@@ -91,6 +91,46 @@
             <div class="ra-contenu">
               <h3>Nouveau poste et rattachement</h3>
               @if (agent(); as a) {
+                @if (niveauAgent(); as niveau) {
+                  <div class="ra-trajet">
+                    <div class="ra-bloc"><small>Actuel (A)</small>
+                      <b>{{ a.role }}</b>
+                      <span>{{ chargementNoeuds() ? 'Chargement…' : (nomsInitiaux() || 'aucun périmètre') }}</span></div>
+                    <span class="ra-fleche" aria-hidden="true">→</span>
+                    <div class="ra-bloc" [class.vide]="!changement()"><small>Nouveau (B)</small>
+                      <b>{{ noeudsChoisis().size }} {{ libelleNiveau() }}</b>
+                      <span>{{ nomsChoisis() || 'À choisir' }}</span></div>
+                  </div>
+                  <p class="ku-muted ra-vide">Choisissez les {{ libelleNiveau() }} dont {{ a.nom }} aura la charge, dans n’importe quel contrat ou pôle.</p>
+                  <div class="ra-filtres">
+                    <label class="ra-champ"><span>Contrat</span>
+                      <select class="ku-input" [ngModel]="filtreContrat()" (ngModelChange)="changerContrat($event)">
+                        <option value="">Tous</option>
+                        @for (c of choix().contrats; track c) { <option [value]="c">{{ c }}</option> }
+                      </select></label>
+                    @if (niveau !== 'Pole') {
+                      <label class="ra-champ"><span>Pôle</span>
+                        <select class="ku-input" [ngModel]="filtrePole()" (ngModelChange)="changerPole($event)">
+                          <option value="">Tous</option>
+                          @for (p of choix().poles; track p) { <option [value]="p">{{ p }}</option> }
+                        </select></label>
+                    }
+                  </div>
+                  <div class="ra-services">
+                    @for (g of groupesNoeuds(); track g.titre) {
+                      <p class="ra-groupe">{{ g.titre }}
+                        @if (niveau === 'Pole') { <button type="button" class="ra-lien ra-tout" (click)="toutLeGroupe(idsDe(g))">tout le contrat</button> }
+                      </p>
+                      <div class="ra-puces">
+                        @for (n of g.noeuds; track n.id) {
+                          <button type="button" class="ra-puce" [class.on]="noeudsChoisis().has(n.id)" (click)="basculerNoeud(n.id)">{{ n.nom }}</button>
+                        }
+                      </div>
+                    } @empty {
+                      <p class="ku-muted ra-vide">Aucun périmètre pour ces critères.</p>
+                    }
+                  </div>
+                } @else {
                 <div class="ra-trajet">
                   <div class="ra-bloc"><small>Actuel (A)</small>
                     <b>{{ a.service ?? 'Aucun service' }}</b>
@@ -161,6 +201,7 @@
                     <p class="ku-muted ra-vide">Aucun autre service pour ces critères.</p>
                   }
                 </div>
+                }
                 }
               } @else {
                 <p class="ku-muted ra-vide">Choisissez d’abord un agent.</p>

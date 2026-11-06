@@ -105,3 +105,17 @@
   .oa-cellules { margin-left: 12px; }
   .oa-search { margin-left: 0; max-width: none; width: 100%; }
 }
+
+/* v29 : regroupement de cellules. */
+.oa-rg { margin-bottom: 1rem; border-color: var(--ky-blue, #2563eb); }
+.oa-rg-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; margin-bottom: 0.75rem; }
+.oa-rg-grille { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: 1.25rem; }
+.oa-rg-liste { max-height: 420px; overflow: auto; margin-top: 0.5rem; padding-right: 0.25rem; }
+.oa-rg-pole { margin: 0.75rem 0 0.25rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.oa-rg-cell { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; font-size: 0.86rem; }
+.oa-rg-svcs { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; margin: 0 0 0.35rem 1.6rem; }
+.oa-rg-svc { font-size: 0.78rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.3rem; }
+.oa-rg-cible { display: flex; flex-direction: column; gap: 0.7rem; }
+.oa-rg-modes { display: flex; gap: 1rem; font-size: 0.86rem; }
+.oa-rg-champ { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+@media (max-width: 900px) { .oa-rg-grille { grid-template-columns: 1fr; } }

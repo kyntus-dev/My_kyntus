@@ -504,6 +504,28 @@ internal static class CongeQuotaPerimeter
 
         if (rebac is not null)
         {
+            // v29 : chef de projet — tout le périmètre de son département (pôles du contrat, leurs
+            // cellules et leurs services). Un superviseur reste limité à ses cellules (ci-dessous).
+            try
+            {
+                var poles = await rebac.GetManagedNodeIdsAsync(actorId, "ChefDeProjet", ct);
+                if (poles.Count > 0 && catalog.CelluleParents.Count > 0)
+                {
+                    var polesDuDept = catalog.PolesDuDepartement(poles);
+                    var cellulesDuDept = catalog.CellulesDesPoles(polesDuDept).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    foreach (var c in cellulesDuDept)
+                        TryAddManagedNode(map, c, QuotaScopeKinds.Cellule, team, catalog);
+                    foreach (var s in catalog.ServicesDesCellules(cellulesDuDept))
+                        TryAddManagedNode(map, s, QuotaScopeKinds.Service, team, catalog);
+                    if (map.Count > 0)
+                        return map.Values.ToList();
+                }
+            }
+            catch
+            {
+                /* soft-wire : on retombe sur les cellules et services gérés */
+            }
+
             try
             {
                 var cellules = await rebac.GetManagedNodeIdsAsync(actorId, "Superviseur", ct);

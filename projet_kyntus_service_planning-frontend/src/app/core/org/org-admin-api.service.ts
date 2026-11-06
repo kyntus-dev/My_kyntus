@@ -18,6 +18,25 @@ export interface BusinessDepartmentRow {
   poleIds: string[];
 }
 
+export interface RegrouperCellulesRequest {
+  sourceIds: string[];
+  serviceIds: string[];
+  cibleId: string | null;
+  nomCible: string | null;
+  poleId: string | null;
+  motif: string | null;
+}
+
+export interface RegroupementCellulesResult {
+  cibleId: string;
+  cibleNom: string;
+  cibleCreee: boolean;
+  servicesDeplaces: number;
+  agents: number;
+  superviseurs: number;
+  cellulesArchivees: string[];
+}
+
 /** Nœud archivé (v9) : conservé en base, restaurable. */
 export interface ArchivedOrgNode {
   id: string;
@@ -91,6 +110,14 @@ export class OrgAdminApiService {
   /** Suppression définitive : nœud archivé jamais utilisé uniquement. */
   purgeNode(level: OrgNodeLevelKey, id: string, parentId: string): Observable<void> {
     return this.http.delete<void>(this.nodeUrl(level, id, parentId), { params: { definitif: 'true' } });
+  }
+
+  /**
+   * v29 : regroupe des cellules (et des services isolés) dans une cellule existante ou nouvelle.
+   * Services, agents et superviseurs suivent ; les cellules vidées sont archivées.
+   */
+  regrouperCellules(body: RegrouperCellulesRequest): Observable<RegroupementCellulesResult> {
+    return this.http.post<RegroupementCellulesResult>(`${orgBase}/structure/cellules/regrouper`, body);
   }
 
   restoreNode(level: OrgNodeLevelKey, id: string): Observable<void> {
