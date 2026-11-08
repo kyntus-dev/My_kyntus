@@ -65,7 +65,7 @@
         <button type="button" [class.on]="filtre() === 'toutes'" (click)="filtre.set('toutes')">Toutes</button>
         <button type="button" [class.on]="filtre() === 'ouvertes'" (click)="filtre.set('ouvertes')">Ouvertes</button>
         <button type="button" [class.on]="filtre() === 'modifiees'" (click)="filtre.set('modifiees')">Modifiées @if (modifiees().length) { <b>{{ modifiees().length }}</b> }</button>
-        <button type="button" [class.on]="filtre() === 'ecarts'" (click)="filtre.set('ecarts')" title="Rubriques réglées autrement que par défaut">Hors défaut @if (!joker() && ecarts().length) { <b>{{ ecarts().length }}</b> }</button>
+        <button type="button" [class.on]="filtre() === 'ecarts'" (click)="filtre.set('ecarts')" title="Rubriques réglées autrement que le réglage d’origine du rôle">Hors réglage d’origine @if (!joker() && ecarts().length) { <b>{{ ecarts().length }}</b> }</button>
       </div>
       <div class="ar-legende" aria-hidden="true">
         <span><i class="n0"></i>Aucun</span><span><i class="n1"></i>Consulter</span><span><i class="n2"></i>Modifier</span><span><i class="n3"></i>Valider</span>
@@ -93,13 +93,13 @@
               <div class="ar-nom">
                 <b>{{ l.label }}</b>
                 @if (modifiee(l)) { <small class="ar-modif">modifié</small> }
-                @if (!joker()) { @let e = ecart(l); @if (e) { <small class="ar-ecart" [title]="e">≠ défaut</small> } }
+                @if (!joker()) { @let e = ecart(l); @if (e) { <small class="ar-ecart" title="Réglé autrement que le réglage d’origine du rôle. « Rétablir les droits par défaut » y revient.">{{ e }}</small> } }
                 @if (!joker()) {
                   @let v = verrou(l);
                   @if (v) {
                     <small class="ar-verrou" [class.alerte]="sansEffet(l)"
                            [title]="(v.niveau === 'tout' ? 'Le serveur réserve cette rubrique à : ' : 'Le serveur réserve la modification à : ') + v.roles + (sansEffet(l) ? '. Le droit enregistré est sans effet : « Rétablir les droits par défaut » le retire.' : '')">
-                      {{ sansEffet(l) ? 'sans effet' : (v.niveau === 'tout' ? 'réservé : ' + v.roles : 'consultation seule') }}
+                      {{ sansEffet(l) ? 'sans effet (réservé : ' + v.roles + ')' : (v.niveau === 'tout' ? 'réservé : ' + v.roles : 'consultation seule') }}
                     </small>
                   }
                 }

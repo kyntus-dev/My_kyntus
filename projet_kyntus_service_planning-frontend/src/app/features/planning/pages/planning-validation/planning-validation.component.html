@@ -519,7 +519,7 @@
           Aucune structure organisationnelle chargée.
         </p>
         <p class="pv-tree-empty" *ngIf="(operationalDepartments.length || unassignedPoles.length) && !hasAnyVisibleOrg">
-          Aucun service pour ce filtre.
+          {{ (list?.items?.length ?? 0) === 0 ? 'Aucun service dans votre périmètre.' : 'Aucun service pour ce filtre.' }}
         </p>
       </div>
       </div>

@@ -55,12 +55,13 @@ import { AdminUserAccessComponent } from '../user-access/admin-user-access.compo
         @default { <app-admin-overview /> }
       }
 
-      <p class="plat-hint">
-        Utilisateurs :
-        <a routerLink="/users">liste des employés</a>
-        · Organisation :
-        <a routerLink="/organisation">structure de production</a>
-      </p>
+      @if (voir('admin.users') || voir('admin.organisation')) {
+        <p class="plat-hint">
+          @if (voir('admin.users')) { Utilisateurs : <a routerLink="/users">liste des employés</a> }
+          @if (voir('admin.users') && voir('admin.organisation')) { · }
+          @if (voir('admin.organisation')) { Organisation : <a routerLink="/organisation">structure de production</a> }
+        </p>
+      }
     </section>
   `,
   styles: [`
@@ -93,10 +94,14 @@ export class AdminRootComponent {
     { id: 'access' as const, label: 'Accès par rôle', capability: 'admin.access' },
     { id: 'comptes' as const, label: 'Accès par compte', capability: 'admin.access' },
     { id: 'roles' as const, label: 'Rôles', capability: 'admin.access' },
-    { id: 'sync' as const, label: 'Organisation & sync', capability: 'admin.sync' },
-    { id: 'anomalies' as const, label: 'Anomalies', capability: 'admin.anomalies' },
-    { id: 'modules' as const, label: 'Modules', capability: 'admin.modules' },
+    { id: 'sync' as const, label: 'Synchro organisation', capability: 'admin.sync' },
+    { id: 'modules' as const, label: 'Configuration des modules', capability: 'admin.modules' },
+    { id: 'anomalies' as const, label: 'Inbox anomalies', capability: 'admin.anomalies' },
   ];
+
+  voir(capability: string): boolean {
+    return this.access.canView(capability);
+  }
 
   visibleTabs() {
     return this.tabs.filter((t) => this.access.canView(t.capability));

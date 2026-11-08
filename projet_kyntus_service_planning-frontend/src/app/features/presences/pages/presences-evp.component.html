@@ -115,6 +115,7 @@
           </select>
         </label>
       </div>
+      <app-presences-types categorie="evp" [personnalises]="typesPerso()" (typesModifies)="appliquerCatalogues($event.catalogues, $event.cree)" />
       <div class="ku-field"><span>Montant</span>
         <div class="pz-signe">
           <div class="ku-seg">

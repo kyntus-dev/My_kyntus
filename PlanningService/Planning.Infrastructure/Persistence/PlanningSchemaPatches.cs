@@ -1121,4 +1121,22 @@ public static class PlanningSchemaPatches
             """,
             ct);
     }
+
+    /// <summary>v31 : types de manquement et d'élément variable de paie ajoutés à la main.</summary>
+    public static async Task EnsurePresenceTypesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PresenceTypesPersonnalises" (
+                "Id" bigserial PRIMARY KEY,
+                "Categorie" character varying(20) NOT NULL,
+                "Libelle" character varying(60) NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" character varying(120) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_PresenceTypesPersonnalises_Categorie" ON "PresenceTypesPersonnalises" ("Categorie");
+            """,
+            ct);
+    }
 }

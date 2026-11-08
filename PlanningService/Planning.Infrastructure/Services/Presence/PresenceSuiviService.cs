@@ -11,6 +11,64 @@ namespace Planning.Infrastructure.Services.Presence;
 /// </summary>
 public sealed class PresenceSuiviService(AppDbContext db, IPresenceService presences) : IPresenceSuiviService
 {
+    // ── Listes et types ajoutés à la main (v31) ─────────────────────────────────
+
+    public async Task<SuiviCataloguesDto> CataloguesAsync(CancellationToken ct = default)
+    {
+        var perso = await db.PresenceTypesPersonnalises.AsNoTracking()
+            .OrderBy(t => t.Libelle)
+            .ToListAsync(ct);
+        IReadOnlyList<string> Fusion(IReadOnlyList<string> prevus, string categorie) =>
+            prevus.Concat(perso.Where(t => t.Categorie == categorie).Select(t => t.Libelle)
+                    .Where(l => !prevus.Contains(l, StringComparer.OrdinalIgnoreCase)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        return new SuiviCataloguesDto(
+            Fusion(SuiviCatalogues.TypesAvertissement, CategoriesType.Avertissement),
+            Fusion(SuiviCatalogues.TypesEvp, CategoriesType.Evp),
+            SuiviCatalogues.CategoriesDossier,
+            SuiviCatalogues.TailleMaxDocument,
+            Referentiel.Manquements,
+            perso.Select(t => new TypePersonnaliseDto(t.Id, t.Categorie, t.Libelle, t.CreatedByNom)).ToList());
+    }
+
+    public async Task<SuiviCataloguesDto> AjouterTypeAsync(PresenceViewer viewer, TypePersonnaliseRequest request, CancellationToken ct = default)
+    {
+        var categorie = CategoriesType.Normaliser(request.Categorie)
+                        ?? throw new PresenceRefusException("Catégorie inconnue : « avertissement » ou « evp ».");
+        var libelle = Obligatoire(request.Libelle, 60, "Le libellé du type");
+        var actuels = await CataloguesAsync(ct);
+        var liste = categorie == CategoriesType.Evp ? actuels.Evp : actuels.Avertissements;
+        if (liste.Contains(libelle, StringComparer.OrdinalIgnoreCase))
+            throw new PresenceRefusException($"Le type « {libelle} » existe déjà.");
+        var auteur = await presences.ResoudreAsync(viewer, ct);
+        db.PresenceTypesPersonnalises.Add(new PresenceTypePersonnalise
+        {
+            Categorie = categorie,
+            Libelle = libelle,
+            CreatedBy = auteur.UserId,
+            CreatedByNom = auteur.Nom,
+        });
+        await db.SaveChangesAsync(ct);
+        return await CataloguesAsync(ct);
+    }
+
+    public async Task<SuiviCataloguesDto> SupprimerTypeAsync(PresenceViewer viewer, long id, CancellationToken ct = default)
+    {
+        var ligne = await db.PresenceTypesPersonnalises.FirstOrDefaultAsync(t => t.Id == id, ct)
+                    ?? throw new PresenceRefusException("Type introuvable.");
+        // Les saisies gardent leur libellé : rien d'autre ne change.
+        db.PresenceTypesPersonnalises.Remove(ligne);
+        await db.SaveChangesAsync(ct);
+        return await CataloguesAsync(ct);
+    }
+
+    private async Task<IReadOnlyList<string>> TypesAsync(string categorie, CancellationToken ct)
+    {
+        var c = await CataloguesAsync(ct);
+        return categorie == CategoriesType.Evp ? c.Evp : c.Avertissements;
+    }
+
     // ── Agents du périmètre ─────────────────────────────────────────────────────
 
     public async Task<IReadOnlyList<PresenceAgentRefDto>> ListerAgentsAsync(PresenceViewer viewer, CancellationToken ct = default)
@@ -82,7 +140,7 @@ public sealed class PresenceSuiviService(AppDbContext db, IPresenceService prese
         }
         var type = code is not null && string.IsNullOrWhiteSpace(request.Type)
             ? SuiviCatalogues.TypesAvertissement[0]
-            : Choix(request.Type, SuiviCatalogues.TypesAvertissement, "Type d'avertissement");
+            : Choix(request.Type, await TypesAsync(CategoriesType.Avertissement, ct), "Type d'avertissement");
         var ligne = new Avertissement
         {
             UserId = request.UserId,
@@ -123,7 +181,7 @@ public sealed class PresenceSuiviService(AppDbContext db, IPresenceService prese
     {
         var auteur = await AutoriserAsync(viewer, request.UserId, ct);
         var ligne = new ElementVariablePaie { UserId = request.UserId };
-        Appliquer(ligne, request, auteur);
+        Appliquer(ligne, request, auteur, await TypesAsync(CategoriesType.Evp, ct));
         db.ElementsVariablesPaie.Add(ligne);
         await db.SaveChangesAsync(ct);
         return Map(ligne, await NomsAsync([ligne.UserId], ct));
@@ -136,7 +194,7 @@ public sealed class PresenceSuiviService(AppDbContext db, IPresenceService prese
         await AutoriserAsync(viewer, ligne.UserId, ct);
         var auteur = await AutoriserAsync(viewer, request.UserId, ct);
         ligne.UserId = request.UserId;
-        Appliquer(ligne, request, auteur);
+        Appliquer(ligne, request, auteur, await TypesAsync(CategoriesType.Evp, ct));
         await db.SaveChangesAsync(ct);
         return Map(ligne, await NomsAsync([ligne.UserId], ct));
     }
@@ -150,12 +208,12 @@ public sealed class PresenceSuiviService(AppDbContext db, IPresenceService prese
         await db.SaveChangesAsync(ct);
     }
 
-    private static void Appliquer(ElementVariablePaie ligne, EvpRequest request, PresenceAuteur auteur)
+    private static void Appliquer(ElementVariablePaie ligne, EvpRequest request, PresenceAuteur auteur, IReadOnlyList<string> types)
     {
         if (Math.Abs(request.Montant) > 1_000_000m)
             throw new PresenceRefusException("Montant hors limites.");
         ligne.Date = request.Date;
-        ligne.Type = Choix(request.Type, SuiviCatalogues.TypesEvp, "Type d'élément");
+        ligne.Type = Choix(request.Type, types, "Type d'élément");
         ligne.Montant = Math.Round(request.Montant, 2);
         ligne.Commentaire = Obligatoire(request.Commentaire, 1000, "Le commentaire");
         ligne.CreatedAt = DateTime.UtcNow;

@@ -119,6 +119,7 @@
           </select>
         </label>
       </div>
+      <app-presences-types categorie="avertissement" [personnalises]="typesPerso()" (typesModifies)="appliquerCatalogues($event.catalogues, $event.cree)" />
       <label class="ku-field"><span>Manquement (référentiel)</span>
         <select class="ku-input" required [ngModel]="form().code" (ngModelChange)="choisirCode($event)" [ngModelOptions]="{ standalone: true }">
           <option value="" disabled>Choisir un code</option>

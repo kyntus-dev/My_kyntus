@@ -4632,6 +4632,22 @@ public partial class PlanningService : IPlanningService
         if (scoped is not null)
             subServices = subServices.Where(s => scoped.Contains(s.Id)).ToList();
 
+        // v31 : services de la cellule IT (des membres Ingénieur / Support IT et aucun poste planifiable,
+        // l'encadrement éventuel mis à part) : ils ont leur propre planning (Planning IT) et ne
+        // figurent pas dans le suivi des plannings.
+        var rolesParService = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.IsActive && u.SubServiceId != null)
+            .Select(u => new { SubServiceId = u.SubServiceId!.Value, Role = u.Role != null ? u.Role.Name : null })
+            .ToListAsync();
+        var servicesIt = rolesParService
+            .GroupBy(x => x.SubServiceId)
+            .Where(g => g.Any(x => global::Kyntus.Messaging.Contracts.KyntusRoleNames.IsEquipeIt(x.Role))
+                        && g.All(x => PostesProduction.EstHorsProduction(x.Role)))
+            .Select(g => g.Key)
+            .ToHashSet();
+        subServices = subServices.Where(s => !servicesIt.Contains(s.Id)).ToList();
+
         var plannings = await _context.WeeklyPlannings
             .Where(p => p.WeekCode == weekCode)
             .ToListAsync();

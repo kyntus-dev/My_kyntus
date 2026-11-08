@@ -2,6 +2,7 @@ using System.Globalization;
 using Kyntus.Messaging.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Planning.Application.PlanningIt;
+using Planning.Application.Pointage;
 using Planning.Domain.Entities;
 using Planning.Infrastructure.Persistence;
 
@@ -47,10 +48,12 @@ public sealed class PlanningItService(AppDbContext db) : IPlanningItService
                 Enumerable.Range(0, 7).Select(i =>
                 {
                     var d = du.AddDays(i);
+                    // v31 : jours fériés français affichés d'office (une saisie reste possible).
+                    var ferie = JoursFeries.Nom(d);
                     return parCle.TryGetValue((m.Id, d), out var h)
                         ? new PlanningItJourDto(d, h.Statut, h.Arrivee?.ToString("HH:mm", CultureInfo.InvariantCulture), h.UpdatedAt,
-                            h.UpdatedBy is int by ? auteurs.GetValueOrDefault(by) : null)
-                        : new PlanningItJourDto(d, null, null, null, null);
+                            h.UpdatedBy is int by ? auteurs.GetValueOrDefault(by) : null, ferie)
+                        : new PlanningItJourDto(d, null, null, null, null, ferie);
                 }).ToList(),
                 commentaires.GetValueOrDefault(m.Id)))
             .ToList();

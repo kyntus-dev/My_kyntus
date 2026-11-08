@@ -54,13 +54,15 @@ export function casesModifiees(avant: PlanningItSemaineDto | null, apres: Planni
 export function copieSemaine(precedente: PlanningItMembreDto, actuelle: PlanningItMembreDto): PlanningItCaseRequest[] {
   return actuelle.jours
     .map((j, i) => ({ j, p: precedente.jours[i] }))
-    .filter(({ j, p }) => !j.statut && !!p?.statut)
+    // v31 : un jour férié n'est pas rempli par la recopie.
+    .filter(({ j, p }) => !j.statut && !j.ferie && !!p?.statut)
     .map(({ j, p }) => ({ userId: actuelle.userId, jour: j.jour.slice(0, 10), statut: p.statut, arrivee: p.arrivee }));
 }
 
 /** Synthèse de la semaine : membres ayant rempli toutes leurs journées affichées. */
 export function completude(s: PlanningItSemaineDto, jours: readonly string[]): { complets: number; total: number } {
   const n = jours.length;
-  const complets = s.membres.filter((m) => m.jours.slice(0, n).every((j) => !!j.statut)).length;
+  // Un jour férié sans saisie compte comme renseigné (férié d'office).
+  const complets = s.membres.filter((m) => m.jours.slice(0, n).every((j) => !!j.statut || !!j.ferie)).length;
   return { complets, total: s.membres.length };
 }

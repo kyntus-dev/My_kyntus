@@ -309,13 +309,14 @@ export class PlanningValidationComponent implements OnInit {
 
   private ensureTreeExpanded(): void {
     if (this.expandedDepts.size > 0) return;
-    const first = this.operationalDepartments[0];
+    // Premier contrat visible (périmètre du compte), puis son premier pôle et sa première cellule.
+    const first = this.operationalDepartments.find((d) => this.deptVisible(d));
     if (!first) return;
     this.expandedDepts.add(first.id);
-    const pole = first.poles[0];
+    const pole = first.poles.find((p) => this.poleVisible(p));
     if (pole) {
       this.expandedPoles.add(pole.id);
-      const cell = pole.cellules[0];
+      const cell = pole.cellules.find((c) => this.celluleVisible(c));
       if (cell) this.expandedCellules.add(cell.id);
     }
   }
@@ -570,6 +571,10 @@ export class PlanningValidationComponent implements OnInit {
 
   serviceMatchesFilters(svc: OrgServiceNode): boolean {
     const item = this.itemForPrime(svc.id);
+    // v31 : l'arbre de l'organisation ne montre que les services renvoyés par le serveur pour la
+    // semaine, c'est-à-dire ceux du périmètre du compte (RH / Admin : tous), sans la cellule IT
+    // (elle a son propre planning IT).
+    if (!item) return false;
     const q = this.search.trim().toLowerCase();
     if (q) {
       const name = (item?.orgLabel || item?.subServiceName || svc.name || '').toLowerCase();

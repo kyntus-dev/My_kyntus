@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { PresenceSuiviService } from '../../../core/services/presence-suivi.service';
-import type { EvpDto, PresenceAgentRefDto } from '../../../core/models/presence.models';
+import type { EvpDto, PresenceAgentRefDto, SuiviCatalogues, TypePersonnaliseDto } from '../../../core/models/presence.models';
 import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { PresencesNavComponent } from '../components/presences-nav.component';
+import { PresencesTypesComponent } from '../components/presences-types.component';
 import { ymd } from '../lib/presence.util';
 import { type Plage, agentsParCellule, dateFr, messageErreur, montantFr, plageDates, sansAccents } from '../lib/suivi.util';
 
@@ -28,7 +29,7 @@ interface Formulaire {
 @Component({
   selector: 'app-presences-evp',
   standalone: true,
-  imports: [FormsModule, PresencesNavComponent],
+  imports: [FormsModule, PresencesNavComponent, PresencesTypesComponent],
   templateUrl: './presences-evp.component.html',
   styleUrls: ['../presences-commun.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -48,6 +49,7 @@ export class PresencesEvpComponent implements OnInit {
   readonly lignes = signal<EvpDto[]>([]);
   readonly agents = signal<PresenceAgentRefDto[]>([]);
   readonly types = signal<string[]>([]);
+  readonly typesPerso = signal<TypePersonnaliseDto[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly saving = signal(false);
@@ -92,9 +94,17 @@ export class PresencesEvpComponent implements OnInit {
 
   readonly groupes = computed(() => agentsParCellule(this.agents(), this.form().recherche));
 
+  /** v31 : listes à jour après création / retrait d'un type ; le type créé est sélectionné. */
+  appliquerCatalogues(c: SuiviCatalogues, cree: string | null = null): void {
+    this.types.set(c.evp);
+    this.typesPerso.set(c.typesPersonnalises ?? []);
+    if (cree) this.patch({ type: cree });
+    else if (!c.evp.includes(this.form().type)) this.patch({ type: c.evp[0] ?? '' });
+  }
+
   ngOnInit(): void {
     void this.access.ensureLoaded();
-    this.svc.catalogues().subscribe({ next: (c) => this.types.set(c.evp), error: () => this.types.set([]) });
+    this.svc.catalogues().subscribe({ next: (c) => this.appliquerCatalogues(c), error: () => this.types.set([]) });
     this.svc.agents().subscribe({ next: (a) => this.agents.set(a), error: () => this.agents.set([]) });
     this.load();
   }

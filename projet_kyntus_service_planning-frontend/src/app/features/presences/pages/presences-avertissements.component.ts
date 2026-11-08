@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { PresenceSuiviService } from '../../../core/services/presence-suivi.service';
-import type { AvertissementDto, PresenceAgentRefDto } from '../../../core/models/presence.models';
+import type { AvertissementDto, PresenceAgentRefDto, SuiviCatalogues, TypePersonnaliseDto } from '../../../core/models/presence.models';
 import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { PresencesNavComponent } from '../components/presences-nav.component';
+import { PresencesTypesComponent } from '../components/presences-types.component';
 import { manquement, referentielSaisie } from '../lib/manquements.util';
 import { ymd } from '../lib/presence.util';
 import { type Plage, agentsParCellule, dateFr, messageErreur, plageDates, sansAccents } from '../lib/suivi.util';
@@ -20,7 +21,7 @@ interface Formulaire { userId: number | null; date: string; code: string; type: 
 @Component({
   selector: 'app-presences-avertissements',
   standalone: true,
-  imports: [FormsModule, PresencesNavComponent],
+  imports: [FormsModule, PresencesNavComponent, PresencesTypesComponent],
   templateUrl: './presences-avertissements.component.html',
   styleUrls: ['../presences-commun.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,6 +40,7 @@ export class PresencesAvertissementsComponent implements OnInit {
   readonly lignes = signal<AvertissementDto[]>([]);
   readonly agents = signal<PresenceAgentRefDto[]>([]);
   readonly types = signal<string[]>([]);
+  readonly typesPerso = signal<TypePersonnaliseDto[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly saving = signal(false);
@@ -83,9 +85,17 @@ export class PresencesAvertissementsComponent implements OnInit {
 
   readonly groupes = computed(() => agentsParCellule(this.agents(), this.form().recherche));
 
+  /** v31 : listes à jour après création / retrait d'un type ; le type créé est sélectionné. */
+  appliquerCatalogues(c: SuiviCatalogues, cree: string | null = null): void {
+    this.types.set(c.avertissements);
+    this.typesPerso.set(c.typesPersonnalises ?? []);
+    if (cree) this.patch({ type: cree });
+    else if (!c.avertissements.includes(this.form().type)) this.patch({ type: c.avertissements[0] ?? '' });
+  }
+
   ngOnInit(): void {
     void this.access.ensureLoaded();
-    this.svc.catalogues().subscribe({ next: (c) => this.types.set(c.avertissements), error: () => this.types.set([]) });
+    this.svc.catalogues().subscribe({ next: (c) => this.appliquerCatalogues(c), error: () => this.types.set([]) });
     this.svc.agents().subscribe({ next: (a) => this.agents.set(a), error: () => this.agents.set([]) });
     this.load();
   }

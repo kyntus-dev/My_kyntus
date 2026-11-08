@@ -99,14 +99,26 @@ export class PlanningItComponent implements OnInit {
   libelle(j: PlanningItJourDto): string {
     if (j.statut === 'Repos') return 'Repos';
     if (j.statut === 'Conge') return 'Congé';
+    if (!j.statut && j.ferie) return 'Férié';
     return j.arrivee ?? '';
   }
 
+  /** Classe de la case : statut saisi, sinon « Ferie » pour un jour férié, sinon vide. */
+  classeCase(j: PlanningItJourDto): string {
+    return 's-' + (j.statut ?? (j.ferie ? 'Ferie' : 'vide'));
+  }
+
   titre(m: PlanningItMembreDto, j: PlanningItJourDto): string {
-    const base = `${m.collaborateur} — ${enteteJour(j.jour).jour} ${enteteJour(j.jour).date}`;
+    const base = `${m.collaborateur} — ${enteteJour(j.jour).jour} ${enteteJour(j.jour).date}${j.ferie ? ` (férié : ${j.ferie})` : ''}`;
     if (!j.updatedAt) return base;
     const quand = new Date(j.updatedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
     return `${base}\nModifié le ${quand}${j.modifiePar ? ' par ' + j.modifiePar : ''}`;
+  }
+
+  /** Nom du jour férié d'une colonne (le même pour tous les membres). */
+  ferieDe(jour: string): string | null {
+    const m = this.data()?.membres[0];
+    return m?.jours.find((j) => j.jour.slice(0, 10) === jour)?.ferie ?? null;
   }
 
   cle(m: PlanningItMembreDto, j: PlanningItJourDto): string {

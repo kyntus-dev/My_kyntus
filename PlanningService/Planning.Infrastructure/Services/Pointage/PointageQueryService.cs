@@ -225,6 +225,12 @@ public sealed class PointageQueryService(
             .Select(h => new { h.UserId, h.Jour, h.Statut, h.Arrivee })
             .ToListAsync(ct);
         var itParJour = horairesIt.ToDictionary(h => (h.UserId, h.Jour), h => (h.Statut, h.Arrivee));
+        // v31 : membres IT (planning IT) — un jour férié français sans saisie est un jour férié.
+        var rolesParUser = await db.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id) && u.Role != null)
+            .Select(u => new { u.Id, Role = u.Role.Name })
+            .ToListAsync(ct);
+        var membresIt = rolesParUser.Where(u => KyntusRoleNames.IsEquipeIt(u.Role)).Select(u => u.Id).ToHashSet();
         var planningParJour = affectations
             .GroupBy(a => (a.UserId, a.AssignedDate))
             .ToDictionary(
@@ -252,6 +258,8 @@ public sealed class PointageQueryService(
                 if (itParJour.TryGetValue((user.Id, jour), out var it))
                     planning = RegimeResolver.PlanningDuJourIt(it.Statut, it.Arrivee, regime, jour,
                         O.PauseSelonShift ? O.PauseParDefautMinutes : O.PauseAutoriseeMinutes);
+                else if (membresIt.Contains(user.Id) && !planningParJour.ContainsKey((user.Id, jour)) && JoursFeries.Nom(jour) is { } nomFerie)
+                    planning = new PlanningJour(null, 0, false, true, nomFerie, null, PlanningSources.PlanningIt);
                 else if (!planningParJour.TryGetValue((user.Id, jour), out planning) && regime is not null)
                     planning = RegimeResolver.PlanningDuJour(regime, jour);
                 if (congesParUser.TryGetValue(user.Id, out var siens) && siens.Any(c => c.StartDate <= jour && c.EndDate >= jour))

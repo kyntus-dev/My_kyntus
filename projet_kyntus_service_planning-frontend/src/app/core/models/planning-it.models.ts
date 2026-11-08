@@ -10,6 +10,8 @@ export interface PlanningItJourDto {
   arrivee: string | null;
   updatedAt: string | null;
   modifiePar: string | null;
+  /** v31 : nom du jour férié français (Toussaint, Noël…), sinon null. */
+  ferie?: string | null;
 }
 
 export interface PlanningItMembreDto {

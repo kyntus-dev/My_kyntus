@@ -43,6 +43,7 @@
         <span><i class="pit-lg pit-lg--travail"></i>Heure d’arrivée</span>
         <span><i class="pit-lg pit-lg--repos"></i>Repos</span>
         <span><i class="pit-lg pit-lg--conge"></i>Congé</span>
+        <span><i class="pit-lg pit-lg--ferie"></i>Férié (calendrier français, d’office)</span>
         <span><i class="pit-lg pit-lg--flash"></i>Modifié à l’instant par un collègue</span>
         @if (d.peutModifierTout) { <span class="ku-chip ku-chip--info ku-chip--plain">Vous pouvez corriger toutes les lignes</span> }
       </div>
@@ -56,7 +57,7 @@
               <tr>
                 <th class="pit-name">Nom</th>
                 @for (jour of jours(); track jour) {
-                  <th [class.is-today]="jour === aujourdhui">{{ enteteJour(jour).jour }}<br /><b>{{ enteteJour(jour).date }}</b></th>
+                  <th [class.is-today]="jour === aujourdhui" [class.is-ferie]="!!ferieDe(jour)" [attr.title]="ferieDe(jour)">{{ enteteJour(jour).jour }}<br /><b>{{ enteteJour(jour).date }}</b>@if (ferieDe(jour); as f) {<small class="pit-ferie">{{ f }}</small>}</th>
                 }
                 <th class="pit-com">Commentaire</th>
               </tr>
@@ -70,11 +71,11 @@
                   </th>
                   @for (j of m.jours.slice(0, jours().length); track j.jour) {
                     @let k = cle(m, j);
-                    <td class="pit-cell" [ngClass]="'s-' + (j.statut ?? 'vide')" [class.is-flash]="flash().has(k)"
+                    <td class="pit-cell" [ngClass]="classeCase(j)" [class.is-flash]="flash().has(k)"
                         [class.is-saving]="enCours().has(k)" [class.is-today]="j.jour.slice(0, 10) === aujourdhui" [attr.title]="titre(m, j)">
                       @if (m.modifiable) {
                         <div class="pit-edit">
-                          @if (j.statut === 'Repos' || j.statut === 'Conge') {
+                          @if (j.statut === 'Repos' || j.statut === 'Conge' || (!j.statut && j.ferie)) {
                             <button type="button" class="pit-state" (click)="basculerMenu(m, j, $event)">{{ libelle(j) }}</button>
                           } @else {
                             <input type="time" class="pit-time" [value]="j.arrivee ?? ''" (focus)="focus(true)" (blur)="focus(false)"

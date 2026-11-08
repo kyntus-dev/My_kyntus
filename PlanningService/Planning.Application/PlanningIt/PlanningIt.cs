@@ -3,7 +3,8 @@ using Planning.Domain.Entities;
 
 namespace Planning.Application.PlanningIt;
 
-public sealed record PlanningItJourDto(DateOnly Jour, string? Statut, string? Arrivee, DateTime? UpdatedAt, string? ModifiePar);
+/// <summary>Case d'un jour. <see cref="Ferie"/> (v31) : nom du jour férié français, sinon null.</summary>
+public sealed record PlanningItJourDto(DateOnly Jour, string? Statut, string? Arrivee, DateTime? UpdatedAt, string? ModifiePar, string? Ferie = null);
 
 public sealed record PlanningItMembreDto(
     int UserId,

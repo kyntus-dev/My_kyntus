@@ -70,6 +70,7 @@ public class AppDbContext : DbContext
     /// <summary>Tableau des présences : saisies des responsables (motif, retard autorisé, commentaire).</summary>
     public DbSet<PresenceJour> PresenceJours { get; set; } = null!;
     public DbSet<Avertissement> Avertissements { get; set; } = null!;
+    public DbSet<PresenceTypePersonnalise> PresenceTypesPersonnalises { get; set; } = null!;
     public DbSet<ElementVariablePaie> ElementsVariablesPaie { get; set; } = null!;
     public DbSet<DossierDocument> DossierDocuments { get; set; } = null!;
 
@@ -708,6 +709,16 @@ public class AppDbContext : DbContext
             e.Property(x => x.CreatedByNom).HasMaxLength(120);
             e.Property(x => x.Code).HasMaxLength(8);
             e.HasIndex(x => new { x.UserId, x.Date });
+        });
+
+        modelBuilder.Entity<PresenceTypePersonnalise>(e =>
+        {
+            e.ToTable("PresenceTypesPersonnalises");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Categorie).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Libelle).HasMaxLength(60).IsRequired();
+            e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.HasIndex(x => x.Categorie);
         });
 
         modelBuilder.Entity<ElementVariablePaie>(e =>

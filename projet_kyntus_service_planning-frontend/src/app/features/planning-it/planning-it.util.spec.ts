@@ -15,6 +15,17 @@ const semaine = (membres: PlanningItMembreDto[]): PlanningItSemaineDto =>
   ({ du: jours[0], au: jours[6], peutModifierTout: false, genereLe: '', membres });
 
 describe('planning-it.util', () => {
+  it('jour férié : compté comme renseigné et jamais rempli par la recopie', () => {
+    const avecFerie = (m: PlanningItMembreDto): PlanningItMembreDto =>
+      ({ ...m, jours: m.jours.map((j) => (j.jour === '2026-11-11' || j.jour === '2026-11-02' ? { ...j, ferie: 'Armistice 1918' } : j)) });
+    const m = avecFerie(membre(1, [null, '9:00', '9:00', '9:00', '9:00', 'R']));
+    expect(completude(semaine([m]), jours.slice(0, 6))).toEqual({ complets: 1, total: 1 });
+    const precedente = membre(1, ['8:00', '8:00', '8:00', '8:00', '8:00', 'R']);
+    const vide = avecFerie(membre(1, []));
+    expect(copieSemaine(precedente, vide).map((d) => d.jour)).not.toContain('2026-11-02');
+    expect(copieSemaine(precedente, vide)).toHaveLength(5);
+  });
+
   it('semaines et en-têtes', () => {
     expect(lundiDe(0, new Date(2026, 10, 5))).toBe('2026-11-02');
     expect(lundiDe(1, new Date(2026, 10, 5))).toBe('2026-11-09');

@@ -43,6 +43,22 @@ public class Avertissement
 }
 
 /// <summary>
+/// v31 : type ajouté à la main par un responsable (« Suite donnée » des manquements ou type d'élément
+/// variable de paie), en plus des types prévus. Les saisies gardent le libellé : supprimer un type ne
+/// modifie aucune saisie existante.
+/// </summary>
+public class PresenceTypePersonnalise
+{
+    public long Id { get; set; }
+    /// <summary>« avertissement » ou « evp ».</summary>
+    public string Categorie { get; set; } = string.Empty;
+    public string Libelle { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public int? CreatedBy { get; set; }
+    public string? CreatedByNom { get; set; }
+}
+
+/// <summary>
 /// Élément variable de paie : montant positif (ajouté au salaire) ou négatif (déduit), avec son
 /// type et un commentaire. Montant 0 : élément « à valoriser » par le service paie.
 /// </summary>

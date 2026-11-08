@@ -221,7 +221,7 @@ export class AdminAccessMatrixComponent implements OnInit {
     const d = this.defautParCap().get(l.capability);
     if (!differeDuDefaut(d, l)) return null;
     const n = d ? niveauDe(d) : 'Aucun';
-    return `Par défaut : ${LIBELLE_NIVEAU[n]}${d?.verbes.has('Configure') ? ' + Configurer' : ''}`;
+    return `d’origine : ${LIBELLE_NIVEAU[n]}${d?.verbes.has('Configure') ? ' + Configurer' : ''}`;
   }
 
   /** Remet toutes les rubriques du rôle au réglage par défaut (à enregistrer ensuite). */

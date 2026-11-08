@@ -1,9 +1,10 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, shareReplay } from 'rxjs';
+import { Observable, of, shareReplay, tap } from 'rxjs';
 import type {
   AvertissementDto,
   AvertissementRequest,
+  CategorieType,
   DossierDocumentDto,
   DossierDto,
   EvpDto,
@@ -21,6 +22,18 @@ export class PresenceSuiviService {
 
   catalogues(): Observable<SuiviCatalogues> {
     return (this.catalogues$ ??= this.http.get<SuiviCatalogues>(`${this.base}/catalogues`).pipe(shareReplay(1)));
+  }
+
+  /** v31 : ajoute un type à la main ; renvoie les listes à jour (gardées en cache). */
+  ajouterType(categorie: CategorieType, libelle: string): Observable<SuiviCatalogues> {
+    return this.http.post<SuiviCatalogues>(`${this.base}/types`, { categorie, libelle })
+      .pipe(tap((c) => (this.catalogues$ = of(c))));
+  }
+
+  /** v31 : supprime un type ajouté à la main (les saisies gardent leur libellé). */
+  supprimerType(id: number): Observable<SuiviCatalogues> {
+    return this.http.delete<SuiviCatalogues>(`${this.base}/types/${id}`)
+      .pipe(tap((c) => (this.catalogues$ = of(c))));
   }
 
   /** Agents du périmètre du demandeur (listes de choix). */

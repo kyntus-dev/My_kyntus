@@ -70,3 +70,9 @@ body.theme-dark .pit-cell.s-Conge { background: #7c4a2d !important; }
   border-radius: 10px; background: color-mix(in srgb, var(--ky-blue) 10%, var(--bg-card)); color: var(--ky-blue);
   font-weight: 800; font-size: 0.95rem; letter-spacing: 0.02em;
 }
+
+/* v31 : jours fériés (calendrier français) */
+.pit-lg--ferie { background: #dbeafe; }
+.pit-cell.s-Ferie { background: #dbeafe !important; }
+body.theme-dark .pit-cell.s-Ferie { background: #1e3a5f !important; }
+.pit-ferie { display: block; font-size: 10px; font-weight: 600; color: var(--ky-blue); white-space: nowrap; }

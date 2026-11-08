@@ -58,6 +58,33 @@ public sealed record EvpDto(
 
 public sealed record EvpRequest(int UserId, DateOnly Date, string Type, decimal Montant, string Commentaire);
 
+/// <summary>v31 : catégories des types ajoutés à la main.</summary>
+public static class CategoriesType
+{
+    public const string Avertissement = "avertissement";
+    public const string Evp = "evp";
+
+    public static string? Normaliser(string? categorie)
+    {
+        var c = (categorie ?? string.Empty).Trim().ToLowerInvariant();
+        return c is Avertissement or Evp ? c : null;
+    }
+}
+
+/// <summary>v31 : type ajouté à la main (supprimable).</summary>
+public sealed record TypePersonnaliseDto(long Id, string Categorie, string Libelle, string? Auteur);
+
+public sealed record TypePersonnaliseRequest(string Categorie, string Libelle);
+
+/// <summary>Listes des formulaires : types prévus suivis des types ajoutés à la main.</summary>
+public sealed record SuiviCataloguesDto(
+    IReadOnlyList<string> Avertissements,
+    IReadOnlyList<string> Evp,
+    IReadOnlyList<string> Dossier,
+    long TailleMaxDocument,
+    IReadOnlyList<ManquementDto> Manquements,
+    IReadOnlyList<TypePersonnaliseDto> TypesPersonnalises);
+
 public sealed record DossierDocumentDto(
     long Id, string Categorie, string NomFichier, string ContentType, long Taille, string? Commentaire, string? Auteur, DateTime CreatedAt);
 
@@ -88,6 +115,10 @@ public sealed record DocumentFichier(string NomFichier, string ContentType, byte
 
 public interface IPresenceSuiviService
 {
+    Task<SuiviCataloguesDto> CataloguesAsync(CancellationToken ct = default);
+    Task<SuiviCataloguesDto> AjouterTypeAsync(PresenceViewer viewer, TypePersonnaliseRequest request, CancellationToken ct = default);
+    Task<SuiviCataloguesDto> SupprimerTypeAsync(PresenceViewer viewer, long id, CancellationToken ct = default);
+
     Task<IReadOnlyList<PresenceAgentRefDto>> ListerAgentsAsync(PresenceViewer viewer, CancellationToken ct = default);
 
     Task<IReadOnlyList<AvertissementDto>> ListerAvertissementsAsync(PresenceViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default);

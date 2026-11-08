@@ -81,6 +81,7 @@ public static class PlanningStartup
                 await TryPatch("presences", () => PlanningSchemaPatches.EnsurePresencesAsync(db));
                 await TryPatch("reaffectations", () => PlanningSchemaPatches.EnsureReaffectationsAsync(db));
                 await TryPatch("formation-manquements", () => PlanningSchemaPatches.EnsureFormationEtManquementsAsync(db));
+                await TryPatch("presence-types", () => PlanningSchemaPatches.EnsurePresenceTypesAsync(db));
                 await TryPatch("perf-indexes", () => PlanningSchemaPatches.EnsurePerfIndexesAsync(db));
                 Console.WriteLine("✅ Patches schéma Planning appliqués.");
             }

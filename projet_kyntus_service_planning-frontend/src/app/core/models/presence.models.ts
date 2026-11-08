@@ -93,6 +93,8 @@ export interface SuiviCatalogues {
   avertissements: string[];
   /** v30 : référentiel unifié des manquements. */
   manquements?: ManquementRef[];
+  /** v31 : types ajoutés à la main (supprimables). */
+  typesPersonnalises?: TypePersonnaliseDto[];
   evp: string[];
   dossier: string[];
   tailleMaxDocument: number;
@@ -127,6 +129,10 @@ export interface AvertissementRequest {
   commentaire: string;
   code?: string | null;
 }
+
+/** v31 : type ajouté à la main (« avertissement » = suite donnée d'un manquement, « evp »). */
+export type CategorieType = 'avertissement' | 'evp';
+export interface TypePersonnaliseDto { id: number; categorie: CategorieType; libelle: string; auteur: string | null }
 
 /** Ligne du référentiel unifié (montants en DH ; null = disciplinaire, sans montant). */
 export interface ManquementRef {

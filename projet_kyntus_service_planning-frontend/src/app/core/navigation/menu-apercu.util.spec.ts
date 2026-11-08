@@ -10,6 +10,18 @@ const defauts = (role: string) =>
 const groupe = (role: string, cles: string[], id: string) => apercuMenu(role, cles, MICROSERVICES).find((g) => g.id === id);
 
 describe('aperçu du menu par rôle', () => {
+  it('Administration : exactement les rubriques cochées, dans l’ordre de « Accès par rôle »', () => {
+    const cles = ['admin.organisation.View:Pole', 'admin.organisation.Act:Pole', 'admin.sync.View:Pole', 'admin.sync.Act:Pole',
+      'admin.anomalies.View:Pole', 'admin.anomalies.Act:Pole'];
+    expect(groupe('RH', cles, 'administration')!.entrees).toEqual(['Organisation', 'Synchro organisation', 'Inbox anomalies']);
+    const tout = ['admin.overview', 'admin.access', 'admin.users', 'admin.organisation', 'admin.sync', 'admin.modules', 'admin.anomalies']
+      .map((c) => `${c}.View:Global`);
+    expect(groupe('Admin', ['*:Global'], 'administration')!.entrees).toEqual([
+      'Vue d’ensemble', 'Accès par rôle', 'Accès par compte', 'Rôles', 'Utilisateurs', 'Organisation', 'Synchro organisation',
+      'Configuration des modules', 'Inbox anomalies']);
+    expect(groupe('RH', tout, 'administration')!.entrees).toContain('Utilisateurs');
+  });
+
   it('Ingénieur : seulement ses entrées par défaut (pas de pointage d’équipe ni d’administration)', () => {
     const menu = apercuMenu('Ingénieur', defauts('Ingénieur'), MICROSERVICES);
     const pointage = menu.find((g) => g.id === 'pointage')!;

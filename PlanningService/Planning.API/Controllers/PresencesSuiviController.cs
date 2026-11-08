@@ -16,16 +16,25 @@ namespace Planning.API.Controllers;
 [Route("api/planning/presences")]
 public sealed class PresencesSuiviController(IPresenceSuiviService suivi, IPolicyEvaluator policy) : ControllerBase
 {
-    /// <summary>Listes proposées dans les formulaires.</summary>
+    /// <summary>Listes proposées dans les formulaires (types prévus + types ajoutés à la main).</summary>
     [HttpGet("catalogues")]
-    public ActionResult<object> Catalogues() => Ok(new
-    {
-        avertissements = SuiviCatalogues.TypesAvertissement,
-        manquements = Referentiel.Manquements,
-        evp = SuiviCatalogues.TypesEvp,
-        dossier = SuiviCatalogues.CategoriesDossier,
-        tailleMaxDocument = SuiviCatalogues.TailleMaxDocument,
-    });
+    public async Task<ActionResult<SuiviCataloguesDto>> Catalogues(CancellationToken ct) => Ok(await suivi.CataloguesAsync(ct));
+
+    /// <summary>
+    /// v31 : ajoute un type (« avertissement » = suite donnée d'un manquement, « evp » = élément
+    /// variable de paie). Ouvert à ceux qui peuvent saisir dans la rubrique correspondante.
+    /// </summary>
+    [HttpPost("types")]
+    public Task<IActionResult> AjouterType([FromBody] TypePersonnaliseRequest body, CancellationToken ct) =>
+        Executer(
+            CategoriesType.Normaliser(body.Categorie) == CategoriesType.Evp ? "presences.evp.Act" : "presences.avertissements.Act",
+            async () => Ok(await suivi.AjouterTypeAsync(Viewer(), body, ct)), ct);
+
+    /// <summary>v31 : supprime un type ajouté à la main (les saisies existantes gardent leur libellé).</summary>
+    [HttpDelete("types/{id:long}")]
+    public Task<IActionResult> SupprimerType(long id, CancellationToken ct) =>
+        Executer("presences.avertissements.Act", async () => Ok(await suivi.SupprimerTypeAsync(Viewer(), id, ct)), ct,
+            "presences.evp.Act");
 
     /// <summary>Agents du périmètre du demandeur (listes de choix).</summary>
     [HttpGet("agents")]
