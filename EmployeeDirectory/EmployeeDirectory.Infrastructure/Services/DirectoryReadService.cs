@@ -380,13 +380,27 @@ public sealed class DirectoryReadService(
 
     public async Task<RebacManagedNodesDto> GetManagedNodesAsync(Guid employeeId, string kind, CancellationToken ct = default)
     {
+        // v32 : « ChefDeProjetAffecte » = seulement les pôles affectés explicitement (écran de
+        // réaffectation des responsables), sans l'extension à toute l'activité.
+        if (string.Equals(kind, "ChefDeProjetAffecte", StringComparison.OrdinalIgnoreCase))
+        {
+            var affectes = await db.OrgAssignments.AsNoTracking()
+                .Where(a => a.EmployeeId == employeeId && a.Kind == OrgAssignmentKind.ChefDeProjet && a.EffectiveTo == null)
+                .Select(a => a.NodeId)
+                .ToListAsync(ct);
+            return new RebacManagedNodesDto(employeeId.ToString(), OrgAssignmentKind.ChefDeProjet.ToString(), affectes);
+        }
+
         if (!Enum.TryParse<OrgAssignmentKind>(kind, true, out var k))
             k = OrgAssignmentKind.Superviseur;
 
-        var nodes = await db.OrgAssignments.AsNoTracking()
-            .Where(a => a.EmployeeId == employeeId && a.Kind == k && a.EffectiveTo == null)
-            .Select(a => a.NodeId)
-            .ToListAsync(ct);
+        // v32 : un chef de projet couvre toute son activité (ex. Bytel Kyntus + Bytel TISSEO).
+        var nodes = k == OrgAssignmentKind.ChefDeProjet
+            ? await PerimetreActivite.PolesChefDeProjetAsync(db, employeeId, ct)
+            : await db.OrgAssignments.AsNoTracking()
+                .Where(a => a.EmployeeId == employeeId && a.Kind == k && a.EffectiveTo == null)
+                .Select(a => a.NodeId)
+                .ToListAsync(ct);
 
         return new RebacManagedNodesDto(employeeId.ToString(), k.ToString(), nodes);
     }

@@ -1,0 +1,118 @@
+<div class="ku-page oh">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Organisation RH · fichier de référence</p>
+      <h1 class="ku-hero-title">Harmonisation des contrats, pôles et cellules</h1>
+      <p class="ku-hero-sub">Le fichier « Reorganisation_Cellules_Final VF2 » devient la référence unique. Vérifiez les correspondances
+        et l’aperçu, puis appliquez : les anciens noms sont archivés (historique conservé), Facturation et IT ne sont pas touchés.</p>
+    </div>
+    <div class="ku-hero-actions">
+      <button type="button" class="ku-btn" (click)="charger()" [disabled]="loading() || enCours()">Relire l’organisation</button>
+      <button type="button" class="ku-btn" (click)="exporterApercu()" [disabled]="!plan()">Exporter l’aperçu (Excel)</button>
+      <button type="button" class="ku-btn ku-btn--primary" (click)="appliquer()" [disabled]="!synthese().etapes || enCours()">
+        {{ enCours() ? 'Application en cours…' : 'Appliquer ' + synthese().etapes + ' changement(s)' }}
+      </button>
+    </div>
+  </header>
+
+  @if (erreur()) {
+    <div class="ku-alert ku-alert--danger"><div><p>{{ erreur() }}</p></div></div>
+  }
+
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Gardés / renommés</span><span class="ku-kpi-value">{{ synthese().gardes }}</span>
+      <span class="ku-kpi-sub">contrats, pôles et cellules rattachés au fichier</span></div>
+    <div class="ku-kpi"><span class="ku-kpi-label">À archiver</span><span class="ku-kpi-value">{{ synthese().archives }}</span>
+      <span class="ku-kpi-sub">absents du fichier (restaurables)</span></div>
+    <div class="ku-kpi"><span class="ku-kpi-label">Changements</span><span class="ku-kpi-value">{{ synthese().etapes }}</span>
+      <span class="ku-kpi-sub">à cette étape (d’autres suivront après les créations)</span></div>
+    <div class="ku-kpi" [class.ku-kpi--danger]="synthese().alertes + synthese().introuvables > 0"><span class="ku-kpi-label">À vérifier</span>
+      <span class="ku-kpi-value">{{ synthese().alertes + synthese().introuvables }}</span>
+      <span class="ku-kpi-sub">{{ synthese().introuvables }} collaborateur(s) du fichier introuvable(s)</span></div>
+  </div>
+
+  <section class="ku-card">
+    <h3 class="ku-card-title">1. Correspondances</h3>
+    <p class="ku-card-sub">Pour chaque contrat, pôle et cellule existant : le nom du fichier qu’il prend (il garde son historique ; s’il est sous
+      un autre pôle ou contrat, il y est déplacé ; plusieurs nœuds vers le même nom sont regroupés), ou « Archiver ».
+      Proposition d’office : même nom à l’écriture près.</p>
+    <div class="ku-seg oh-filtre" role="tablist">
+      <button type="button" [class.is-active]="filtre() === 'tout'" (click)="filtre.set('tout')">Tout</button>
+      <button type="button" [class.is-active]="filtre() === 'changer'" (click)="filtre.set('changer')">Renommés / déplacés</button>
+      <button type="button" [class.is-active]="filtre() === 'archiver'" (click)="filtre.set('archiver')">À archiver</button>
+    </div>
+    @if (loading() && !etat()) {
+      <div class="ku-skeleton"></div>
+    } @else {
+      <div class="ku-table-wrap">
+        <table class="ku-table ky-table oh-table">
+          <thead><tr><th>Niveau</th><th>Actuel</th><th>Rattachement</th><th>Agents</th><th>Devient (fichier)</th></tr></thead>
+          <tbody>
+            @for (l of lignesFiltrees(); track l.niveau + l.id) {
+              <tr [class.oh-contrat]="l.niveau === 'contrat'" [class.oh-archive]="!l.protege && decisionDe(l) === ARCHIVER">
+                <td><span class="ku-chip" [class.ku-chip--info]="l.niveau === 'contrat'">{{ l.niveau === 'contrat' ? 'Contrat' : l.niveau === 'pole' ? 'Pôle' : 'Cellule' }}</span></td>
+                <td [class.oh-ind1]="l.niveau === 'pole'" [class.oh-ind2]="l.niveau === 'cellule'"><b>{{ l.nom }}</b></td>
+                <td class="ku-muted">{{ l.parent }}</td>
+                <td class="ku-mono">{{ l.niveau === 'contrat' ? '' : l.agents }}</td>
+                <td>
+                  @if (l.protege) {
+                    <span class="ku-chip">Non modifié (Facturation / IT)</span>
+                  } @else {
+                    <select class="ku-input oh-select" [ngModel]="decisionDe(l)" (ngModelChange)="choisir(l, $event)" [disabled]="enCours()"
+                            [attr.aria-label]="'Devient pour ' + l.nom">
+                      <option [value]="ARCHIVER">Archiver</option>
+                      @for (o of options(l); track o) { <option [value]="o">{{ o }}</option> }
+                    </select>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <section class="ku-card">
+    <h3 class="ku-card-title">2. Aperçu des changements</h3>
+    <label class="ku-check"><input type="checkbox" [ngModel]="avecResponsables()" (ngModelChange)="avecResponsables.set($event)" />
+      Affecter aussi les responsables du fichier (chefs de projet, superviseurs, référents) — ajoutés, aucun n’est retiré</label>
+    @for (p of phases(); track p.phase) {
+      <div class="oh-phase">
+        <button type="button" class="oh-phase-tete" (click)="basculerPhase(p.phase)" [attr.aria-expanded]="phasesOuvertes().has(p.phase)">
+          <span>{{ phasesOuvertes().has(p.phase) ? '▾' : '▸' }} {{ p.libelle }}</span>
+          <span class="ku-chip" [class.ku-chip--info]="p.etapes.length > 0">{{ p.etapes.length }}</span>
+        </button>
+        @if (phasesOuvertes().has(p.phase)) {
+          <ul class="oh-liste">
+            @for (e of p.etapes; track $index) { <li>{{ e.libelle }}</li> } @empty { <li class="ku-muted">Rien à faire.</li> }
+          </ul>
+        }
+      </div>
+    }
+    @if (plan()?.alertes?.length) {
+      <details class="oh-details">
+        <summary>À vérifier ({{ plan()!.alertes.length }})</summary>
+        <ul class="oh-liste oh-alertes">@for (a of plan()!.alertes; track $index) { <li>{{ a }}</li> }</ul>
+      </details>
+    }
+    @if (plan()?.introuvables?.length) {
+      <details class="oh-details">
+        <summary>Collaborateurs du fichier introuvables dans l’application ({{ plan()!.introuvables.length }}) — non déplacés</summary>
+        <ul class="oh-liste oh-alertes">@for (i of plan()!.introuvables; track $index) { <li>{{ i }}</li> }</ul>
+      </details>
+    }
+    <p class="ku-card-sub oh-note">Structure support non modifiée : Formation &amp; Qualité ({{ support.length }} personnes, postes hors production).
+      Les créations (contrat, pôle, cellule) sont faites d’abord ; les collaborateurs et responsables qui en dépendent sont traités
+      dans la foulée, au passage suivant.</p>
+  </section>
+
+  @if (journal().length) {
+    <section class="ku-card">
+      <h3 class="ku-card-title">3. Journal</h3>
+      <ul class="oh-liste oh-journal">
+        @for (j of journal(); track $index) { <li [class.ko]="!j.ok">{{ j.ok ? '✓' : '✗' }} {{ j.texte }}</li> }
+      </ul>
+    </section>
+  }
+</div>

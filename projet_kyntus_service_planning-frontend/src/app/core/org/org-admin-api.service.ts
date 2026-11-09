@@ -142,6 +142,16 @@ export class OrgAdminApiService {
     });
   }
 
+  /** v32 : rattache un pôle à un contrat (il quitte son contrat actuel). */
+  attachPoleToBusinessDepartment(poleId: string, businessDepartmentId: string): Observable<unknown> {
+    return this.http.patch(`${orgBase}/structure/poles/${enc(poleId)}/business-department`, { businessDepartmentId });
+  }
+
+  /** v32 : ajoute un responsable (chef de projet → pôle, superviseur → cellule, référent → service). */
+  assignResponsable(kind: 'ChefDeProjet' | 'Superviseur' | 'ReferentTechnique', nodeId: string, employeeId: string, reason: string): Observable<unknown> {
+    return this.http.post(`${orgBase}/assignments/${kind}/${enc(nodeId)}`, { employeeId, reason });
+  }
+
   /** Retire l'agent de son rattachement (pôle, cellule et service). */
   clearPlacement(employeeId: string): Observable<unknown> {
     return this.http.post(`${directoryBase}/employees/${enc(employeeId)}/clear-org-placement`, {

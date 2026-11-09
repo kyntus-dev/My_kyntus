@@ -75,6 +75,13 @@ public sealed class OrgResponsibilityResolver(DirectoryDbContext db) : IOrgRespo
             .Select(a => new { a.Kind, a.NodeId })
             .ToListAsync(ct);
 
+        // v32 : chef de projet = tous les pôles de son activité (pas seulement ceux affectés).
+        var polesActivite = await PerimetreActivite.PolesChefDeProjetAsync(db, actorId, ct);
+        assignments = assignments
+            .Where(a => a.Kind != OrgAssignmentKind.ChefDeProjet)
+            .Concat(polesActivite.Select(p => new { Kind = OrgAssignmentKind.ChefDeProjet, NodeId = p }))
+            .ToList();
+
         if (assignments.Count == 0)
             return [];
 
@@ -157,6 +164,9 @@ public sealed class OrgResponsibilityResolver(DirectoryDbContext db) : IOrgRespo
     {
         if (!Enum.TryParse<OrgAssignmentKind>(kind, true, out var k))
             return false;
+
+        if (k == OrgAssignmentKind.ChefDeProjet)
+            return (await PerimetreActivite.PolesChefDeProjetAsync(db, actorId, ct)).Contains(nodeId.Trim());
 
         return await db.OrgAssignments.AsNoTracking()
             .AnyAsync(a =>

@@ -316,6 +316,15 @@ export const routes: Routes = [
             .then((m) => m.OrganisationAdminComponent),
       },
       {
+        // v32 : harmonisation sur le fichier de référence (Admin uniquement).
+        path: 'organisation/harmonisation',
+        canActivate: [AuthGuard],
+        data: { roles: ['Admin'] },
+        loadComponent: () =>
+          import('./features/organisation-admin/harmonisation/organisation-harmonisation.component')
+            .then((m) => m.OrganisationHarmonisationComponent),
+      },
+      {
         path: 'organisation',
         canActivate: [AuthGuard],
         data: { ouvertureIam: 'admin.organisation', roles: ROLE_SETS.adminRh },

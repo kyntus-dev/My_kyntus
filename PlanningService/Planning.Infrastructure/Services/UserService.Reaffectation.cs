@@ -132,7 +132,9 @@ public partial class UserService
         if (rebac is null) return new ResponsabilitesDto(niveau.Value.Niveau, []);
         try
         {
-            var noeuds = await rebac.GetManagedNodeIdsAsync(user.Guid, niveau.Value.Kind, ct);
+            // v32 : pôles affectés au chef de projet (pas toute son activité, ajoutée par l'annuaire).
+            var kind = niveau.Value.Kind == "ChefDeProjet" ? "ChefDeProjetAffecte" : niveau.Value.Kind;
+            var noeuds = await rebac.GetManagedNodeIdsAsync(user.Guid, kind, ct);
             return new ResponsabilitesDto(niveau.Value.Niveau, noeuds.ToList());
         }
         catch (Exception ex)
