@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { PresenceService } from '../../../core/services/presence.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { peutSaisirFormation } from '../lib/formation.util';
 import type {
   PresenceAgentDto,
   PresenceCodeDto,
@@ -57,6 +59,9 @@ export class PresencesTableauComponent implements OnInit {
   private readonly svc = inject(PresenceService);
   private readonly http = inject(HttpClient);
   private readonly toast = inject(KyntusToastService);
+  private readonly auth = inject(AuthService);
+  /** v37 : agents en formation visibles, saisie réservée à l'équipe formation, aux RH et aux Admin. */
+  readonly saisieFormation = computed(() => peutSaisirFormation(this.auth.getRole()));
 
   readonly enteteJour = enteteJour;
   readonly familleCode = familleCode;

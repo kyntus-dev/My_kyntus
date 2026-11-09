@@ -42,3 +42,12 @@ export function dateIntegration(agent: PresenceAgentDto): string | null {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${lendemain.getFullYear()}-${pad(lendemain.getMonth() + 1)}-${pad(lendemain.getDate())}`;
 }
+
+/**
+ * v37 : les responsables voient leurs agents en formation (tableau, export paie) mais la saisie de
+ * leurs présences reste à l'équipe formation, aux RH et aux Admin (le serveur le refuse aux autres).
+ */
+export function peutSaisirFormation(role: string | null | undefined): boolean {
+  const r = (role ?? '').replace(/[_\s]/g, '').toLowerCase();
+  return r === 'admin' || r === 'rh' || r === 'formateur' || r === 'equipeformation';
+}

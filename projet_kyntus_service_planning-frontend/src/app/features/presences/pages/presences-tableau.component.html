@@ -88,7 +88,7 @@
           <tbody>
             @for (l of lignes(); track l.agent.userId) {
               @let a = l.agent;
-              <tr>
+              <tr [class.pz-row-formation]="a.enFormation">
                 <th class="pz-agent" scope="row">
                   <b>{{ a.nom }}</b>
                   <small>{{ a.cellule ?? (a.enFormation ? 'Formation' : '—') }} · {{ a.type }}</small>
@@ -106,8 +106,8 @@
                               [class.pz-manuel]="!j.auto"
                               [class.pz-manque]="j.manquePointage"
                               [class.pz-partiel]="j.absencePartielle"
-                              [disabled]="!data()?.peutModifier"
-                              [title]="c.titre"
+                              [disabled]="!data()?.peutModifier || (a.enFormation && !saisieFormation())"
+                              [title]="a.enFormation && !saisieFormation() ? 'En formation : saisie réservée à l’équipe formation. ' + c.titre : c.titre"
                               (click)="ouvrir(a, j)">
                         @if (j.commentaire) { <i class="pz-dot"></i> }{{ j.code ?? '' }}
                       </button>

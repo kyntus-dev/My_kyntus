@@ -12,6 +12,7 @@ import { PresencesNavComponent } from '../components/presences-nav.component';
 import {
   CODES_DEDUITS,
   CODES_NON_DEDUITS,
+  COULEURS_FORMATION,
   type LignePaie,
   joursOuvres,
   lignePaie,
@@ -72,6 +73,9 @@ export class PresencesExportComponent implements OnInit {
   readonly cellule = signal('');
   readonly contrat = signal('');
   readonly alertesSeulement = signal(false);
+  /** v37 : '' tous ; 'formation' = en formation ou intégrés ; sinon un état précis. */
+  readonly formation = signal<'' | 'formation' | 'en-formation' | 'integre' | 'production'>('');
+  readonly couleursFormation = COULEURS_FORMATION;
   readonly voirJours = signal(true);
   readonly tri = signal<Tri>('affectation');
 
@@ -121,7 +125,8 @@ export class PresencesExportComponent implements OnInit {
       && (!this.pole() || l.pole === this.pole())
       && (!this.cellule() || l.cellule === this.cellule())
       && (!this.contrat() || l.type === this.contrat())
-      && (!this.alertesSeulement() || l.alertes.length > 0));
+      && (!this.alertesSeulement() || l.alertes.length > 0)
+      && this.correspondFormation(l));
     const cmp: Record<Tri, (a: LignePaie, b: LignePaie) => number> = {
       affectation: (a, b) => a.affectation.localeCompare(b.affectation, 'fr') || a.pilote.localeCompare(b.pilote, 'fr'),
       pilote: (a, b) => a.pilote.localeCompare(b.pilote, 'fr'),
@@ -131,6 +136,13 @@ export class PresencesExportComponent implements OnInit {
     };
     return filtrees.sort(cmp[this.tri()]);
   });
+
+  private correspondFormation(l: LignePaie): boolean {
+    const f = this.formation();
+    if (!f) return true;
+    if (f === 'formation') return l.etatFormation !== 'production';
+    return l.etatFormation === f;
+  }
 
   readonly synthese = computed(() => {
     const l = this.lignes();
@@ -143,6 +155,8 @@ export class PresencesExportComponent implements OnInit {
       agentsPenalises: l.filter((x) => x.penalite < 0).length,
       horsPaie: l.filter((x) => x.joursProduction === 0).length,
       enFormation: l.filter((x) => x.formation > 0).length,
+      horsPaieFormation: l.filter((x) => x.etatFormation === 'en-formation').length,
+      integres: l.filter((x) => x.etatFormation === 'integre').length,
       evp: somme((x) => x.totalEvp),
       alertes: l.filter((x) => x.alertes.length > 0).length,
     };
@@ -236,6 +250,7 @@ export class PresencesExportComponent implements OnInit {
     this.cellule.set('');
     this.contrat.set('');
     this.alertesSeulement.set(false);
+    this.formation.set('');
   }
 
   async exporter(): Promise<void> {

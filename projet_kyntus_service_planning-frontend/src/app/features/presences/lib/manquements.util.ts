@@ -122,10 +122,15 @@ export interface ContextePenalites {
 
 export interface DetailPenalite { code: string; libelle: string; rang: 1 | 2 | 3; nombre: number; unitaire: number | null; total: number }
 
+/** v37 : une occurrence pénalisée, pour la feuille « Détail pénalités » de l'export. */
+export interface OccurrencePenalite extends Occurrence { rang: 1 | 2 | 3; unitaire: number | null }
+
 export interface PenaliteAgent {
   /** Total en DH (positif) ; l'export l'affiche en négatif. */
   montant: number;
   details: DetailPenalite[];
+  /** v37 : chaque retard et chaque saisie, avec sa date, son rang et son montant (somme = montant). */
+  occurrences: OccurrencePenalite[];
   /** Texte de la colonne « Origine pénalité ». */
   origine: string;
   disciplinaires: number;
@@ -150,7 +155,7 @@ export function penalitesAgent(agent: PresenceAgentDto, ctx: ContextePenalites):
     ...(ctx.saisies ? occurrencesSaisies(agent, ctx.saisies, ctx.du, ctx.au) : []),
   ];
   const alertes: string[] = [];
-  if (!courant.length) return { montant: 0, details: [], origine: '', disciplinaires: 0, alertes };
+  if (!courant.length) return { montant: 0, details: [], occurrences: [], origine: '', disciplinaires: 0, alertes };
 
   const [p1, p2] = ctx.precedents;
   const m1 = codesDe(agent, p1, ctx.saisies);
@@ -174,7 +179,11 @@ export function penalitesAgent(agent: PresenceAgentDto, ctx: ContextePenalites):
       ? `${d.code} ×${d.nombre} : disciplinaire, sans montant`
       : `${d.code} ×${d.nombre} (${LIBELLES_RANG[d.rang - 1]}, ${d.unitaire} DH) = ${d.total} DH`)
     .join(' | ');
-  return { montant: details.reduce((s, d) => s + d.total, 0), details, origine, disciplinaires, alertes };
+  const rangs = new Map(details.map((d) => [d.code, d]));
+  const occurrences: OccurrencePenalite[] = courant
+    .map((o) => ({ ...o, rang: rangs.get(o.code)!.rang, unitaire: rangs.get(o.code)!.unitaire }))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.code.localeCompare(b.code));
+  return { montant: details.reduce((s, d) => s + d.total, 0), details, occurrences, origine, disciplinaires, alertes };
 }
 
 /** Référentiel groupé par catégorie (liste de choix de la saisie, sans les retards). */

@@ -45,3 +45,24 @@
 .pze-alertes .ku-chip { margin: 1px 3px 1px 0; font-size: 0.66rem; padding: 1px 7px; }
 .pze-statut { text-align: left !important; white-space: nowrap; }
 .pze-statut .ku-chip { font-size: 11px; }
+
+/* ── v37 : agents en formation (mêmes couleurs que le fichier Excel) ─────── */
+.pze-legende { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: 0.74rem; }
+.pze-legende small { color: var(--text-muted); }
+.pze-leg { padding: 3px 10px; border-radius: 6px; font-weight: 600; border: 1px solid transparent; }
+.pze-leg--en-formation { background: #bfdbfe; color: #1e3a8a; border-color: #93c5fd; }
+.pze-leg--integre { background: #ccfbf1; color: #115e59; border-color: #5eead4; }
+.pze-leg--for { background: #60a5fa; color: #fff; }
+.pze-table tbody tr.pze-formation > th,
+.pze-table tbody tr.pze-formation > td { background: color-mix(in srgb, #3b82f6 20%, var(--bg-card)) !important; }
+.pze-table tbody tr.pze-integre > th,
+.pze-table tbody tr.pze-integre > td { background: color-mix(in srgb, #14b8a6 16%, var(--bg-card)) !important; }
+.pze-table tbody tr.pze-formation > th.pz-agent { box-shadow: inset 4px 0 0 #2563eb; }
+.pze-table tbody tr.pze-integre > th.pz-agent { box-shadow: inset 4px 0 0 #0d9488; }
+.pze-badge {
+  display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 9px; font-size: 0.62rem; font-weight: 700;
+  vertical-align: middle; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.pze-badge--formation { background: #2563eb; color: #fff; }
+.pze-badge--integre { background: #0d9488; color: #fff; }
+.pze-table tbody .pz-f-formation { background: #60a5fa !important; color: #fff !important; border-color: #3b82f6 !important; }

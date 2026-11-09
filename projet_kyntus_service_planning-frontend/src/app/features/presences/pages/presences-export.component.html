@@ -90,10 +90,24 @@
         <option value="retards">Tri : retards</option>
         <option value="evp">Tri : EVP</option>
       </select>
+      <select class="ku-input" [ngModel]="formation()" (ngModelChange)="formation.set($event)" aria-label="Formation">
+        <option value="">Formation : tous</option>
+        <option value="formation">En formation ou intégrés ({{ synthese().horsPaieFormation + synthese().integres }})</option>
+        <option value="en-formation">En formation – hors paie</option>
+        <option value="integre">Formation terminée (prorata)</option>
+        <option value="production">Production seulement</option>
+      </select>
       <label class="ku-check"><input type="checkbox" [ngModel]="alertesSeulement()" (ngModelChange)="alertesSeulement.set($event)" /> À vérifier seulement</label>
       <label class="ku-check"><input type="checkbox" [ngModel]="voirJours()" (ngModelChange)="voirJours.set($event)" /> Afficher les jours</label>
       <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="reinitialiser()">Réinitialiser</button>
       <span class="pz-compte">{{ lignes().length }} / {{ toutes().length }} agents</span>
+    </div>
+
+    <div class="pze-legende" aria-label="Légende">
+      <span class="pze-leg pze-leg--en-formation">{{ couleursFormation['en-formation'].libelle }}</span>
+      <span class="pze-leg pze-leg--integre">{{ couleursFormation.integre.libelle }}</span>
+      <span class="pze-leg pze-leg--for">FOR = jour de formation</span>
+      <small>Mêmes couleurs dans le fichier Excel.</small>
     </div>
 
     @if (loading() && !grille()) {
@@ -139,9 +153,11 @@
           </thead>
           <tbody>
             @for (l of lignes(); track l.userId) {
-              <tr>
+              <tr [class.pze-formation]="l.etatFormation === 'en-formation'" [class.pze-integre]="l.etatFormation === 'integre'">
                 <th class="pz-agent" scope="row">
                   <b>{{ l.pilote }}</b>
+                  @if (l.etatFormation === 'en-formation') { <span class="pze-badge pze-badge--formation">En formation</span> }
+                  @if (l.etatFormation === 'integre') { <span class="pze-badge pze-badge--integre">Fin de formation</span> }
                   <small>{{ l.affectation || '—' }} · {{ l.type }}</small>
                 </th>
                 @if (voirJours()) {

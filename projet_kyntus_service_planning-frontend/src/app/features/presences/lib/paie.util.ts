@@ -1,6 +1,6 @@
 import type { EvpDto, PresenceAgentDto } from '../../../core/models/presence.models';
 import { dateIntegration, estJourFormation, estJourProduction, plageFormation } from './formation.util';
-import type { PenaliteAgent } from './manquements.util';
+import { LIBELLES_RANG, REFERENTIEL, manquement, type OccurrencePenalite, type PenaliteAgent } from './manquements.util';
 import { joursDeLaPeriode } from './presence.util';
 
 /**
@@ -74,8 +74,30 @@ export interface LignePaie {
   statutPaie: string;
   /** Jours lundi-samedi de production (base du prorata sur 26 jours). */
   joursProduction: number;
+  /** v37 : en formation (hors paie), formation puis production (prorata), ou production. */
+  etatFormation: EtatFormation;
+  /** v37 : retards et manquements pénalisés, un par ligne dans la feuille « Détail pénalités ». */
+  occurrences: OccurrencePenalite[];
   /** Points à vérifier avant l'envoi (non exportés). */
   alertes: string[];
+}
+
+export type EtatFormation = 'production' | 'en-formation' | 'integre';
+
+/**
+ * v37 : couleurs de l'export (aperçu et fichier Excel) pour distinguer les agents en formation.
+ * Bleu : en formation, hors paie. Vert d'eau : formation terminée pendant la période (prorata).
+ */
+export const COULEURS_FORMATION: Record<Exclude<EtatFormation, 'production'>, { fond: string; texte: string; libelle: string }> = {
+  'en-formation': { fond: 'FFBFDBFE', texte: 'FF1E3A8A', libelle: 'En formation – hors paie (0 jour payé)' },
+  integre: { fond: 'FFCCFBF1', texte: 'FF115E59', libelle: 'Formation terminée pendant la période – payé au prorata' },
+};
+/** Case « FOR » (jour de formation) dans les colonnes de jours. */
+export const COULEUR_JOUR_FORMATION = { fond: 'FF60A5FA', texte: 'FFFFFFFF' };
+
+export function etatFormation(formation: number, joursProduction: number): EtatFormation {
+  if (formation <= 0) return 'production';
+  return joursProduction === 0 ? 'en-formation' : 'integre';
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -206,6 +228,8 @@ export function lignePaie(
     sortie: sortieDansPeriode ? `Sorti le ${ddmmyyyy(sortie!)} (pendant la période) — à vérifier` : '',
     statutPaie,
     joursProduction,
+    etatFormation: etatFormation(formation, joursProduction),
+    occurrences: penalites?.occurrences ?? [],
     alertes,
   };
 }
@@ -246,21 +270,96 @@ export function nomsExport(du: string, au: string): { feuille: string; fichier: 
   return { feuille: `Récap ${court(du)} au ${court(au)}`, fichier: `recap_absences_${du}_${au}.xlsx` };
 }
 
+/** v37 : lignes de la feuille « Détail pénalités » (une par retard ou manquement pénalisé). */
+export function lignesDetailPenalites(lignes: readonly LignePaie[]): (string | number)[][] {
+  return lignes.flatMap((l) => l.occurrences.map((o) => [
+    l.pilote,
+    l.affectation,
+    ddmmyyyy(o.date),
+    o.code,
+    manquement(o.code)?.libelle ?? '',
+    o.source === 'pointage' ? `Pointage (retard de ${o.minutes ?? 0} min)` : 'Saisie Manquements',
+    LIBELLES_RANG[o.rang - 1],
+    o.unitaire === null ? 'Disciplinaire (sans montant)' : -o.unitaire,
+  ]));
+}
+
+/** v37 : totaux de contrôle (feuille « Règles et contrôle »). */
+export function totauxControle(lignes: readonly LignePaie[]): [string, number][] {
+  const somme = (f: (l: LignePaie) => number) => Math.round(lignes.reduce((s, l) => s + f(l), 0) * 100) / 100;
+  return [
+    ['Lignes exportées', lignes.length],
+    ['dont agents en formation – hors paie (bleu)', lignes.filter((l) => l.etatFormation === 'en-formation').length],
+    ['dont formation terminée pendant la période – prorata (vert d’eau)', lignes.filter((l) => l.etatFormation === 'integre').length],
+    ['Total jours travaillés', somme((l) => l.jrsTravailles)],
+    ['Total absences déduites', somme((l) => l.totalAbsences)],
+    ['Total pénalités (DH)', somme((l) => l.penalite)],
+    ['Retards et manquements pénalisés (feuille Détail pénalités)', lignes.reduce((n, l) => n + l.occurrences.length, 0)],
+    ['Total EVP (DH)', somme((l) => l.totalEvp)],
+  ];
+}
+
+/** v37 : règles appliquées, écrites dans le fichier pour pouvoir le vérifier sans l'application. */
+export function reglesExport(du: string, au: string): string[] {
+  return [
+    `Période : du ${ddmmyyyy(du)} au ${ddmmyyyy(au)}. Colonnes de jours : du lundi au samedi.`,
+    `Jrs travaillés = ${JOURS_PAIE} × jours de production ÷ jours lundi-samedi de la période − absences déduites (mois complet : ${JOURS_PAIE} − absences déduites). Jamais négatif, arrondi à 2 décimales.`,
+    'Jours de production : entre la date d’entrée et la date de sortie, hors jours de formation.',
+    `Absences déduites : ${CODES_DEDUITS.join(', ')}. Affichées sans être déduites : ${CODES_NON_DEDUITS.join(', ')}. Comptées sur les jours de production seulement.`,
+    'Agent en formation : présent dans le fichier, 0 jour payé tant qu’il n’a pas intégré la production. Intégré pendant la période : payé au prorata de ses jours de production.',
+    'Montant pénalité : référentiel unifié (feuille « Référentiel »), détail ligne par ligne dans « Détail pénalités ».',
+    'Retards R01 à R03 : calculés depuis le pointage, chaque jour de production en retard d’arrivée non autorisé (31 à 60 min : R01 ; plus de 1 h à 2 h : R02 ; plus de 2 h : R03).',
+    'Autres codes : saisis par les responsables dans Présences › Manquements.',
+    'Rang : 1er mois ; 2e mois consécutif si le même code existe la période précédente ; 3e mois consécutif et + s’il existe aussi la période d’avant.',
+    'G02 et G03 : disciplinaires, signalés sans montant. Retards autorisés et jours de formation : jamais pénalisés.',
+  ];
+}
+
 /** Génère le classeur (exceljs chargé à la demande) et le télécharge. */
 export async function telechargerExportPaie(lignes: readonly LignePaie[], du: string, au: string): Promise<void> {
+  const buffer = await classeurExportPaie(lignes, du, au);
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nomsExport(du, au).fichier;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** v37 : contenu du fichier Excel (4 feuilles : récap, détail pénalités, référentiel, règles et contrôle). */
+export async function classeurExportPaie(lignes: readonly LignePaie[], du: string, au: string): Promise<ArrayBuffer> {
   const mod = await import('exceljs');
   const ExcelJS = ((mod as unknown) as { default?: typeof import('exceljs') }).default ?? mod;
-  const { feuille, fichier } = nomsExport(du, au);
+  const { feuille } = nomsExport(du, au);
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(feuille.slice(0, 31));
   const entetes = entetesPaie(du, au);
   const nbJours = entetes.length - 3 - COLONNES_FIN.length;
+  const remplir = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
 
   const tete = ws.addRow(entetes);
   tete.font = { bold: true };
   tete.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
   tete.height = 32;
-  for (const l of lignes) ws.addRow(valeursPaie(l));
+  const colStatut = entetes.length; // « Statut paie » : dernière colonne
+  for (const l of lignes) {
+    const row = ws.addRow(valeursPaie(l));
+    // v37 : agents en formation en couleur sur toute la ligne, jours de formation en bleu soutenu.
+    if (l.etatFormation !== 'production') {
+      const c = COULEURS_FORMATION[l.etatFormation];
+      for (let i = 1; i <= entetes.length; i++) {
+        const cell = row.getCell(i);
+        cell.fill = remplir(c.fond);
+        cell.font = { color: { argb: c.texte }, bold: i <= 3 || i === colStatut };
+      }
+    }
+    l.jours.forEach((code, i) => {
+      if (code !== 'FOR') return;
+      const cell = row.getCell(4 + i);
+      cell.fill = remplir(COULEUR_JOUR_FORMATION.fond);
+      cell.font = { color: { argb: COULEUR_JOUR_FORMATION.texte }, bold: true };
+    });
+  }
 
   ws.columns.forEach((c, i) => {
     if (i === 0) c.width = 13;
@@ -276,11 +375,45 @@ export async function telechargerExportPaie(lignes: readonly LignePaie[], du: st
   ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 1 }];
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: entetes.length } };
 
-  const buffer = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = fichier;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  // v37 : détail de chaque pénalité (la somme par agent = « Montant pénalité » de la 1re feuille).
+  const det = wb.addWorksheet('Détail pénalités');
+  const enteteDet = det.addRow(['Pilote', 'Affectation', 'Date', 'Code', 'Manquement', 'Origine', 'Rang', 'Montant (DH)']);
+  enteteDet.font = { bold: true };
+  for (const r of lignesDetailPenalites(lignes)) det.addRow(r);
+  [28, 22, 12, 7, 60, 30, 24, 16].forEach((w, i) => { det.getColumn(i + 1).width = w; });
+  det.views = [{ state: 'frozen', ySplit: 1 }];
+  det.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 8 } };
+
+  // v37 : référentiel appliqué (identique au document de la direction).
+  const ref = wb.addWorksheet('Référentiel');
+  const enteteRef = ref.addRow(['Code', 'Catégorie', 'Manquement unifié', '1er mois (DH)', '2e mois consécutif (DH)', '3e mois consécutif et + (DH)', 'Gravité']);
+  enteteRef.font = { bold: true };
+  for (const m of REFERENTIEL) ref.addRow([m.code, m.categorie, m.libelle, m.mois1 ?? '—', m.mois2 ?? '—', m.mois3 ?? '—', m.gravite]);
+  [7, 34, 70, 14, 22, 26, 10].forEach((w, i) => { ref.getColumn(i + 1).width = w; });
+  ref.views = [{ state: 'frozen', ySplit: 1 }];
+
+  // v37 : règles, légende des couleurs et totaux de contrôle.
+  const reg = wb.addWorksheet('Règles et contrôle');
+  reg.getColumn(1).width = 70;
+  reg.getColumn(2).width = 18;
+  reg.addRow(['Légende des couleurs']).font = { bold: true, size: 12 };
+  for (const c of Object.values(COULEURS_FORMATION)) {
+    const r = reg.addRow([c.libelle]);
+    r.getCell(1).fill = remplir(c.fond);
+    r.getCell(1).font = { color: { argb: c.texte }, bold: true };
+  }
+  const rFor = reg.addRow(['Case « FOR » : jour de formation (non payé)']);
+  rFor.getCell(1).fill = remplir(COULEUR_JOUR_FORMATION.fond);
+  rFor.getCell(1).font = { color: { argb: COULEUR_JOUR_FORMATION.texte }, bold: true };
+  reg.addRow([]);
+  reg.addRow(['Totaux de contrôle', 'Valeur']).font = { bold: true, size: 12 };
+  for (const t of totauxControle(lignes)) reg.addRow(t);
+  reg.addRow([]);
+  reg.addRow(['Règles de calcul appliquées']).font = { bold: true, size: 12 };
+  for (const r of reglesExport(du, au)) {
+    const row = reg.addRow([r]);
+    row.getCell(1).alignment = { wrapText: true, vertical: 'top' };
+  }
+
+  return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 }

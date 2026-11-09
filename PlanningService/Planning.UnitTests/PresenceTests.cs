@@ -94,6 +94,37 @@ public class PresenceTests
     }
 
     [Fact]
+    public async Task Grille_du_superviseur_montre_ses_agents_en_formation_en_lecture_v37()
+    {
+        await using var db = await SeedAsync();
+        var sup = await db.Users.SingleAsync(u => u.Id == 1);
+        // Agent 4 : en formation, rattaché au périmètre ; agent 5 : en formation, fiche « superviseur » = sup ;
+        // agent 6 : en formation, ni périmètre ni fiche.
+        db.Users.AddRange(
+            new User { Id = 4, RoleId = 1, FirstName = "Agent", LastName = "Form1", Email = "f1@kyntus.com", SubServiceId = 10, IsActive = true },
+            new User { Id = 5, RoleId = 1, FirstName = "Agent", LastName = "Form2", Email = "f2@kyntus.com", IsActive = true },
+            new User { Id = 6, RoleId = 1, FirstName = "Agent", LastName = "Form3", Email = "f3@kyntus.com", IsActive = true });
+        db.UserHrProfiles.AddRange(
+            new UserHrProfile { UserId = 4, EnFormation = true },
+            new UserHrProfile { UserId = 5, EnFormation = true, SuperviseurId = sup.Guid },
+            new UserHrProfile { UserId = 6, EnFormation = true });
+        await db.SaveChangesAsync();
+        var svc = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()));
+        var viewer = new PresenceViewer(500, null, null, "Superviseur", false);
+
+        var grille = await svc.GetGrilleAsync(viewer, Lundi, Lundi, true);
+
+        Assert.Equal(new[] { 2, 4, 5 }, grille!.Agents.Select(a => a.UserId).OrderBy(i => i).ToArray());
+        Assert.True(grille.Agents.Single(a => a.UserId == 4).EnFormation);
+        Assert.Contains("dont 2 en formation", grille.Perimetre);
+
+        // Saisie : réservée à l'équipe formation.
+        var refus = await Assert.ThrowsAsync<PresenceRefusException>(() =>
+            svc.SaisirAsync(viewer, new PresenceSaisieRequest(4, Lundi, null, "AM", false, false, null, null), Lundi, Lundi));
+        Assert.True(refus.HorsPerimetre);
+    }
+
+    [Fact]
     public async Task Avertissements_et_evp_limites_au_perimetre()
     {
         await using var db = await SeedAsync();

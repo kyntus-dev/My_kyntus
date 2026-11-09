@@ -37,7 +37,9 @@ public sealed class PresenceService(
         if (me is null && !viewer.Global)
             return null;
 
-        var (ids, libelle) = await AgentsVisiblesAsync(me, viewer, ct);
+        // v37 : la grille (et donc l'export paie) montre aussi au responsable ses agents en formation,
+        // en lecture : la saisie de leurs présences reste à l'équipe formation.
+        var (ids, libelle) = await AgentsVisiblesAsync(me, viewer, ct, inclureFormation: true);
         var agents = await ConstruireAsync(ids, du, au, ct);
         return new PresenceGrilleDto(
             libelle,
@@ -265,8 +267,11 @@ public sealed class PresenceService(
     /// - RH / Admin : tous les agents placés, plus les agents en formation (même sans service) ;
     /// - formateurs et équipe formation (v30) : tous les agents dont la case « En formation » est cochée ;
     /// - autres responsables : leur périmètre, sans les agents encore en formation.
+    /// - v37, grille et export paie (<paramref name="inclureFormation"/>) : plus leurs agents en formation
+    ///   (dans leur périmètre, ou fiche « chef de projet / superviseur » à leur nom), en lecture seule.
     /// </summary>
-    private async Task<(List<int> Ids, string Libelle)> AgentsVisiblesAsync(User? me, PresenceViewer viewer, CancellationToken ct)
+    private async Task<(List<int> Ids, string Libelle)> AgentsVisiblesAsync(
+        User? me, PresenceViewer viewer, CancellationToken ct, bool inclureFormation = false)
     {
         var enFormation = await db.UserHrProfiles.AsNoTracking()
             .Where(p => p.EnFormation && p.User.IsActive)
@@ -285,13 +290,36 @@ public sealed class PresenceService(
             return (stagiaires, $"Agents en formation ({stagiaires.Count})");
         }
         var scope = await perimeter.GetManagedSubServiceIdsAsync(me!.Id, ct);
-        if (scope.Count == 0)
-            return ([], "Aucun périmètre rattaché à votre compte");
-        var ids = await db.Users.AsNoTracking()
-            .Where(u => u.IsActive && u.Id != me.Id && u.SubServiceId != null && scope.Contains(u.SubServiceId.Value))
-            .Select(u => u.Id).ToListAsync(ct);
+        var ids = new List<int>();
+        if (scope.Count > 0)
+        {
+            ids = await db.Users.AsNoTracking()
+                .Where(u => u.IsActive && u.Id != me.Id && u.SubServiceId != null && scope.Contains(u.SubServiceId.Value))
+                .Select(u => u.Id).ToListAsync(ct);
+        }
         var horsFormation = ids.Except(enFormation).ToList();
-        return (horsFormation, $"Votre périmètre ({horsFormation.Count} agent(s))");
+        if (!inclureFormation)
+        {
+            if (scope.Count == 0)
+                return (new List<int>(), "Aucun périmètre rattaché à votre compte");
+            return (horsFormation, $"Votre périmètre ({horsFormation.Count} agent(s))");
+        }
+
+        // v37 : agents en formation du responsable : rattachés à son périmètre, ou dont la fiche le
+        // désigne comme chef de projet ou superviseur.
+        var moi = me.Guid;
+        var rattaches = await db.UserHrProfiles.AsNoTracking()
+            .Where(p => p.EnFormation && p.User.IsActive && p.UserId != me.Id
+                        && (p.ChefDeProjetId == moi || p.SuperviseurId == moi))
+            .Select(p => p.UserId)
+            .ToListAsync(ct);
+        var formation = ids.Intersect(enFormation).Union(rattaches).Distinct().ToList();
+        if (scope.Count == 0 && formation.Count == 0)
+            return (new List<int>(), "Aucun périmètre rattaché à votre compte");
+        var tous = horsFormation.Concat(formation).Distinct().ToList();
+        return (tous, formation.Count == 0
+            ? $"Votre périmètre ({tous.Count} agent(s))"
+            : $"Votre périmètre ({tous.Count} agent(s), dont {formation.Count} en formation)");
     }
 
     private async Task<User?> FindViewerAsync(PresenceViewer viewer, CancellationToken ct)

@@ -86,3 +86,32 @@ describe('référentiel des manquements', () => {
     expect(p.details).toEqual([]);
   });
 });
+
+/**
+ * v37 : contrôle ligne à ligne contre le PDF « référentiel CA pr inspection » (Référentiel unifié –
+ * discipline, prime variable, qualité et process) : code, 1er mois, 2e mois consécutif,
+ * 3e mois consécutif et +, gravité. « - » : sans montant.
+ */
+const PDF = `R01 50 100 150 1|R02 100 150 200 2|R03 200 250 300 3|P01 50 100 200 1|P02 50 100 200 1|P03 100 200 300 2|P04 50 100 200 1|
+C01 100 150 200 2|C02 50 100 200 1|C03 50 100 200 3|C04 50 100 200 2|C05 50 100 200 1|C06 50 100 200 1|C07 30 60 100 1|
+M01 100 250 500 2|M02 500 500 500 3|M03 100 200 300 2|G01 100 200 500 2|G02 - - - 1 à 3|G03 - - - 3|G04 100 250 500 3|
+G05 500 500 500 3|Q01 50 100 200 1|Q02 50 100 200 1|Q03 50 150 250 1 à 2|Q04 250 400 500 3|Q05 100 250 500 1 à 3|
+Q06 50 100 200 1|Q07 150 300 500 2 à 3|Q08 50 100 200 1|Q09 250 400 500 3|Q10 100 200 300 2|Q11 50 100 200 1|
+Q12 50 100 200 1|Q13 50 100 200 1`;
+
+describe('référentiel identique au PDF de la direction (v37)', () => {
+  const lignes = PDF.split('|').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const [code, m1, m2, m3, ...g] = l.split(' ');
+    const n = (v: string) => (v === '-' ? null : Number(v));
+    return { code, mois1: n(m1), mois2: n(m2), mois3: n(m3), gravite: g.join(' ') };
+  });
+
+  it('35 codes, dans le même ordre', () => {
+    expect(lignes).toHaveLength(35);
+    expect(REFERENTIEL.map((m) => m.code)).toEqual(lignes.map((l) => l.code));
+  });
+
+  it.each(lignes)('$code : montants et gravité du PDF', (l) => {
+    expect(REFERENTIEL.find((m) => m.code === l.code)).toMatchObject(l);
+  });
+});

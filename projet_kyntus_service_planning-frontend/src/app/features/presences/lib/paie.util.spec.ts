@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EvpDto, PresenceAgentDto, PresenceJourDto } from '../../../core/models/presence.models';
-import { entetesPaie, hhmmss, joursOuvres, joursPayes, lignePaie, nomsExport, valeursPaie } from './paie.util';
+import { entetesPaie, hhmmss, joursOuvres, joursPayes, lignePaie, lignesDetailPenalites, nomsExport, totauxControle, valeursPaie } from './paie.util';
+import { penalitesAgent } from './manquements.util';
 import { joursDeLaPeriode } from './presence.util';
 
 function jour(date: string, code: string | null, extra: Partial<PresenceJourDto> = {}): PresenceJourDto {
@@ -126,5 +127,38 @@ describe('export paie', () => {
       feuille: 'Récap 24-10 au 23-11',
       fichier: 'recap_absences_2026-10-24_2026-11-23.xlsx',
     });
+  });
+});
+
+describe('export paie v37 : formation en couleur, détail et contrôle', () => {
+  const du = '2026-10-01';
+  const au = '2026-10-31';
+
+  it('distingue en formation, formation terminée et production', () => {
+    const tous = joursDeLaPeriode(du, au);
+    const enFormation = lignePaie(agent(tous.map((d) => jour(d, 'FOR')), { enFormation: true, formationDu: '2026-09-28', formationAu: null }), [], du, au);
+    const integre = lignePaie(agent(tous.map((d) => jour(d, 'P')), { enFormation: false, formationDu: '2026-09-28', formationAu: '2026-10-14' }), [], du, au);
+    const production = lignePaie(agent(tous.map((d) => jour(d, 'P'))), [], du, au);
+    expect([enFormation.etatFormation, integre.etatFormation, production.etatFormation]).toEqual(['en-formation', 'integre', 'production']);
+    const totaux = new Map(totauxControle([enFormation, integre, production]));
+    expect(totaux.get('dont agents en formation – hors paie (bleu)')).toBe(1);
+    expect(totaux.get('dont formation terminée pendant la période – prorata (vert d’eau)')).toBe(1);
+    expect(totaux.get('Total jours travaillés')).toBe(0 + integre.jrsTravailles + 26);
+  });
+
+  it('feuille « Détail pénalités » : une ligne par retard, somme = Montant pénalité', () => {
+    const codes: Record<string, Partial<PresenceJourDto>> = {
+      '2026-10-05': { retardEntreeMinutes: 45 },
+      '2026-10-06': { retardEntreeMinutes: 90 },
+      '2026-10-07': { retardEntreeMinutes: 40 },
+    };
+    const a = agent(joursDeLaPeriode(du, au).map((d) => jour(d, 'P', codes[d] ?? {})));
+    const pen = penalitesAgent(a, { du, au, saisies: [], precedents: [null, null] });
+    const l = lignePaie(a, [], du, au, pen);
+    const det = lignesDetailPenalites([l]);
+    expect(det.map((r) => r[3])).toEqual(['R01', 'R02', 'R01']);
+    expect(det.map((r) => r[7])).toEqual([-50, -100, -50]);
+    expect(det.reduce((s, r) => s + (r[7] as number), 0)).toBe(l.penalite);
+    expect(l.penalite).toBe(-200);
   });
 });

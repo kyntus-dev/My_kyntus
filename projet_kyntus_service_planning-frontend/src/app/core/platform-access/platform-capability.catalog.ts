@@ -197,7 +197,8 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'presences.avertissements', label: 'Manquements (référentiel)', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
   { id: 'presences.evp', label: 'Éléments variables de paie', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
   { id: 'presences.dossier', label: 'Dossier administratif', module: 'Présences et paie', view: RH_CHEF_PROJET, act: RH_CHEF_PROJET },
-  { id: 'presences.export', label: 'Export paie', module: 'Présences et paie', view: RH_CHEF_PROJET },
+  // v37 : superviseur aussi (ses agents, dont ceux en formation, en couleur).
+  { id: 'presences.export', label: 'Export paie', module: 'Présences et paie', view: [...RH_CHEF_PROJET, KyntusRoleNames.Superviseur] },
 
   { id: 'conges.self', label: 'Mes congés', module: 'Congés', view: SELF, defaultScope: 'Self' },
   { id: 'conges.equipe', label: 'Congés de l’équipe', module: 'Congés', view: TEAM_LEAD, serveur: SRV_RESPONSABLES },

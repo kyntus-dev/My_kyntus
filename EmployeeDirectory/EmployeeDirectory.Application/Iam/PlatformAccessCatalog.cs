@@ -140,7 +140,8 @@ public static class PlatformAccessCatalog
         S("presences.avertissements", "Manquements (référentiel)", "Présences et paie", View: TeamLead, Act: TeamLead),
         S("presences.evp", "Éléments variables de paie", "Présences et paie", View: TeamLead, Act: TeamLead),
         S("presences.dossier", "Dossier administratif", "Présences et paie", View: RhChefProjet, Act: RhChefProjet),
-        S("presences.export", "Export paie", "Présences et paie", View: RhChefProjet),
+        // v37 : superviseur aussi (ses agents, dont ceux en formation, en couleur).
+        S("presences.export", "Export paie", "Présences et paie", View: [.. RhChefProjet, "Superviseur"]),
 
         S("conges.self", "Mes congés", "Congés", View: Self),
         S("conges.equipe", "Congés de l'équipe", "Congés", View: TeamLead),
