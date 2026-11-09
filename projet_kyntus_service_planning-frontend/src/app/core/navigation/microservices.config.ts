@@ -202,7 +202,7 @@ export const MICROSERVICES: Microservice[] = [
       { label: 'Structure de production', route: '/organisation', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.organisation' },
       { label: 'Structure support', route: '/departements-metier', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.organisation' },
       // v32 : harmonisation sur le fichier de référence (Admin).
-      { label: 'Harmonisation (fichier de référence)', route: '/organisation/harmonisation', roles: [KyntusRoleNames.Admin], hat: 'team' },
+      { label: 'Harmonisation (fichier de référence)', route: '/organisation/harmonisation', roles: [KyntusRoleNames.Admin], hat: 'team', capability: 'admin.access' },
     ],
   },
   {

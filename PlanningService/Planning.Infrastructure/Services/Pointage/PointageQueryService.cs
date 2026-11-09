@@ -209,7 +209,11 @@ public sealed class PointageQueryService(
         var pointages = lus.Where(p => !PointageTerminaux.EstExclu(p.TerminalAlias, p.TerminalSn, motifsExclus)).ToList();
         var pointagesParJour = pointages
             .GroupBy(p => (userParCode[p.EmpCode], DateOnly.FromDateTime(p.PunchTime)))
-            .ToDictionary(g => g.Key, g => g.Select(p => p.PunchTime).ToList());
+            // v33 : la pointeuse est gardée : deux badgeages rapprochés sur deux pointeuses différentes
+            // (ex. 6e puis 5e étage) sont deux passages, pas un double badgeage.
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(p => (Heure: p.PunchTime, Pointeuse: string.IsNullOrWhiteSpace(p.TerminalSn) ? p.TerminalAlias : p.TerminalSn)).ToList());
 
         var affectations = await db.ShiftAssignments.AsNoTracking()
             .Include(a => a.SubServiceShiftConfig)
@@ -265,8 +269,11 @@ public sealed class PointageQueryService(
                 if (congesParUser.TryGetValue(user.Id, out var siens) && siens.Any(c => c.StartDate <= jour && c.EndDate >= jour))
                     planning = (planning ?? new PlanningJour(null, 0, false, false, null)) with { Conge = true };
                 pointagesParJour.TryGetValue((user.Id, jour), out var bruts);
+                var fusionnes = PointageCalculator.FusionnerDoublesBadgeages(
+                    bruts ?? new List<(DateTime Heure, string? Pointeuse)>(), O.DoubleBadgeSecondes);
+                // Doubles badgeages déjà fusionnés pointeuse par pointeuse : aucune autre fusion (0 s).
                 var r = PointageCalculator.CalculerJour(
-                    jour, bruts ?? [], planning, today, O.ToleranceMinutes, O.DoubleBadgeSecondes,
+                    jour, fusionnes, planning, today, O.ToleranceMinutes, 0,
                     O.PauseSelonShift ? O.PauseParDefautMinutes : O.PauseAutoriseeMinutes);
                 jours.Add(ToDto(r, planning?.Libelle, planning?.Source));
             }

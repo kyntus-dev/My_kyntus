@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import type { OperationalDepartmentNode, OrgPoleNode } from '../../prime/models/org-tree.types';
 import {
   SCOPE_LEVEL_LABELS,
+  type GroupeActivite,
+  groupesActivite,
   isCoveredByAncestor,
   scopeLevelOf,
   scopePathLabel,
@@ -18,6 +21,7 @@ import {
 @Component({
   selector: 'app-org-scope-tree-select',
   standalone: true,
+  imports: [NgTemplateOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="scope-tree" role="group" [attr.aria-label]="'Périmètre de responsabilité — ' + kindLabel">
@@ -25,13 +29,35 @@ import {
         {{ hint }}
       </p>
 
-      @for (dept of departments; track dept.id) {
+      @if (kind === 'ChefDeProjet') {
+        <p class="scope-tree__hint scope-tree__hint--info">Un chef de projet couvre automatiquement toute son activité
+          (ex. Bytel Kyntus et Bytel TISSEO) : congés, quotas, fiches, absences, plannings.</p>
+      }
+
+      @for (g of groupes; track g.cle) {
+        @if (g.contrats.length > 1) {
+          <div class="scope-tree__activite">
+            <label class="scope-tree__row scope-tree__row--activite">
+              <input type="checkbox" [checked]="groupeCoche(g)" (change)="toggleGroupe(g)" />
+              <span class="scope-tree__name">Activité {{ g.nom }}</span>
+              <span class="scope-tree__meta">Toute l’activité · {{ g.contrats.length }} sous-activités</span>
+            </label>
+            @for (dept of g.contrats; track dept.id) {
+              <ng-container *ngTemplateOutlet="contrat; context: { $implicit: dept, sous: true }" />
+            }
+          </div>
+        } @else {
+          <ng-container *ngTemplateOutlet="contrat; context: { $implicit: g.contrats[0], sous: false }" />
+        }
+      }
+
+      <ng-template #contrat let-dept let-sous="sous">
         <details class="scope-tree__dept" [open]="isExpanded(dept)">
           <summary>
             <label class="scope-tree__row scope-tree__row--dept" (click)="$event.stopPropagation()">
               <input type="checkbox" [checked]="isChecked(dept.id)" (change)="toggle(dept.id)" />
               <span class="scope-tree__name">{{ dept.name }}</span>
-              <span class="scope-tree__meta">Activité entière · {{ dept.poles.length }} pôle(s)</span>
+              <span class="scope-tree__meta">{{ sous ? 'Sous-activité entière' : 'Activité entière' }} · {{ dept.poles.length }} pôle(s)</span>
             </label>
             @if (countSelectedIn(dept) > 0 && !isChecked(dept.id)) {
               <span class="scope-tree__badge">{{ countSelectedIn(dept) }} sélectionné(s)</span>
@@ -62,7 +88,7 @@ import {
             }
           </ul>
         </details>
-      }
+      </ng-template>
 
       <div class="scope-tree__summary" aria-live="polite">
         <strong>{{ selected.length }}</strong> périmètre(s) sélectionné(s)
@@ -98,6 +124,10 @@ import {
     .scope-tree__row:hover { background: var(--bg-input); }
     .scope-tree__row input { width: 16px; height: 16px; flex: none; }
     .scope-tree__row--dept { font-weight: 700; }
+    .scope-tree__activite { border: 1px solid color-mix(in srgb, var(--electric-blue) 35%, var(--border-color)); border-radius: 12px;
+      padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 6px; background: color-mix(in srgb, var(--electric-blue) 4%, var(--bg-card)); }
+    .scope-tree__row--activite { font-weight: 800; }
+    .scope-tree__hint--info { color: var(--electric-blue); }
     .scope-tree__row.is-covered { opacity: .6; cursor: default; }
     .scope-tree__name { overflow-wrap: anywhere; }
     .scope-tree__meta { margin-left: auto; font-size: .75rem; color: var(--text-muted); white-space: nowrap; }
@@ -123,9 +153,27 @@ export class OrgScopeTreeSelectComponent implements OnChanges {
   @Output() primaryChange = new EventEmitter<string>();
 
   allowCellules = true;
+  /** v33 : contrats regroupés par activité (Bytel = Bytel Kyntus + Bytel TISSEO). */
+  groupes: GroupeActivite[] = [];
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['kind']) this.allowCellules = selectableLevels(this.kind).includes('cellule');
+    if (changes['departments']) this.groupes = groupesActivite(this.departments ?? []);
+  }
+
+  groupeCoche(g: GroupeActivite): boolean {
+    return g.contrats.every((d) => this.selected.includes(d.id));
+  }
+
+  /** Coche (ou décoche) toutes les sous-activités d'une activité. */
+  toggleGroupe(g: GroupeActivite): void {
+    const tout = this.groupeCoche(g);
+    let sel = this.selected;
+    for (const d of g.contrats) {
+      const coche = sel.includes(d.id);
+      if (tout ? coche : !coche) sel = toggleScope(this.departments, this.unassignedPoles, sel, d.id);
+    }
+    this.selectedChange.emit(sel);
   }
 
   get kindLabel(): string {

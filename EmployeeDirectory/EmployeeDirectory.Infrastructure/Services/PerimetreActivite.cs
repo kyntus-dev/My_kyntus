@@ -9,7 +9,8 @@ namespace EmployeeDirectory.Infrastructure.Services;
 
 /// <summary>
 /// v32 : périmètre d'un chef de projet = toute son activité. Une activité regroupe les contrats dont
-/// le nom commence par le même mot (« Bytel Kyntus » et « Bytel TISSEO » → Bytel ; « Orange » → Orange).
+/// le nom commence par le même mot (« Bytel Kyntus » et « Bytel TISSEO » → Bytel ; « Orange » → Orange ;
+/// « bouygues » et « TISSEO » sont aussi rangés dans Bytel).
 /// Un chef de projet affecté à un pôle (ou responsable d'un contrat) couvre donc tous les pôles actifs
 /// de tous les contrats de son activité, avec leurs cellules et services. Sert à toutes les
 /// vérifications de périmètre (congés, quotas, fiches, absences, plannings, présences, primes), qui
@@ -32,7 +33,9 @@ public static class PerimetreActivite
             if (char.IsLetterOrDigit(ch)) mot.Append(ch);
             else if (mot.Length > 0) break;
         }
-        return mot.ToString();
+        var cle = mot.ToString();
+        // Même activité sous un autre nom : Bouygues Telecom = Bytel ; TISSEO seul = Bytel TISSEO.
+        return cle is "bouygues" or "tisseo" ? "bytel" : cle;
     }
 
     /// <summary>Pôles couverts par un chef de projet : les siens et tous ceux de son activité.</summary>

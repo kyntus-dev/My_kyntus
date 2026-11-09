@@ -225,3 +225,27 @@ export function compressHeldNodes(
 
   return { scopeIds, partial, unmapped: [...held].filter((n) => !used.has(n)) };
 }
+
+/**
+ * v33 : activité d'un contrat (sous-activité) = premier mot de son nom, comme dans l'annuaire :
+ * « Bytel Kyntus » et « Bytel TISSEO » → Bytel ; « bouygues » et « TISSEO » sont aussi rangés dans Bytel.
+ * Un chef de projet couvre toute son activité.
+ */
+export function cleActivite(nom: string | null | undefined): string {
+  const mot = (nom ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().match(/[a-z0-9]+/)?.[0] ?? '';
+  return mot === 'bouygues' || mot === 'tisseo' ? 'bytel' : mot;
+}
+
+export interface GroupeActivite { cle: string; nom: string; contrats: OperationalDepartmentNode[] }
+
+/** Contrats regroupés par activité, dans l'ordre d'origine. */
+export function groupesActivite(depts: readonly OperationalDepartmentNode[]): GroupeActivite[] {
+  const groupes = new Map<string, GroupeActivite>();
+  for (const d of depts) {
+    const cle = cleActivite(d.name) || d.id;
+    const g = groupes.get(cle) ?? { cle, nom: cle === 'bytel' ? 'Bytel' : cle.charAt(0).toUpperCase() + cle.slice(1), contrats: [] };
+    g.contrats.push(d);
+    groupes.set(cle, g);
+  }
+  return [...groupes.values()];
+}

@@ -2700,6 +2700,20 @@ public partial class PlanningService : IPlanningService
             // Pas de modèle shifts — continuer avec le snapshot éventuel
         }
 
+        // v33 : les postes hors production (référent technique, superviseur, formation, IT…) ne
+        // s'affichent pas dans le planning des pilotes, même s'ils y avaient été placés avant :
+        // retirés de la vue seulement (lecture sans suivi, rien n'est effacé en base).
+        var idsAffectes = planning.ShiftAssignments.Select(a => a.UserId).Distinct().ToList();
+        var horsProduction = (await _context.Users.AsNoTracking()
+                .Where(u => idsAffectes.Contains(u.Id) && u.Role != null)
+                .Select(u => new { u.Id, Role = u.Role.Name })
+                .ToListAsync())
+            .Where(u => PostesProduction.EstHorsProduction(u.Role))
+            .Select(u => u.Id)
+            .ToHashSet();
+        foreach (var masquee in planning.ShiftAssignments.Where(a => horsProduction.Contains(a.UserId)).ToList())
+            planning.ShiftAssignments.Remove(masquee);
+
         var comments = await _context.PlanningComments
             .Where(c => c.WeeklyPlanningId == id)
             .ToListAsync();

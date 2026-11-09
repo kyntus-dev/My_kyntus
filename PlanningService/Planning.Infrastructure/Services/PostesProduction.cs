@@ -18,6 +18,8 @@ public static class PostesProduction
         "qualiticien", "rh", "admin", "audit", "comptabilité", "comptabilite", "comptable",
         "ingénieur", "ingenieur", "support it", "supportit",
         "superviseur", "manager", "chef de projet", "rp",
+        // v33 : le référent technique encadre les pilotes, il ne figure pas dans leur planning.
+        "référent technique", "referent technique", "referenttechnique", "referent_technique", "coach",
     ];
 
     /// <summary>Postes qui quittent leur service de production quand on les attribue.</summary>

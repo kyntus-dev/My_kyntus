@@ -87,3 +87,19 @@ describe('Périmètres des responsables (fichier Périmètre)', () => {
     expect(compressHeldNodes(depts, [], 'Superviseur', ['c-orphelin']).unmapped).toEqual(['c-orphelin']);
   });
 });
+
+describe('activités (v33)', () => {
+  it('Bytel Kyntus, Bytel TISSEO et bouygues forment l’activité Bytel ; IT et Facturation restent seuls', async () => {
+    const { cleActivite, groupesActivite } = await import('./org-scope-tree');
+    expect(cleActivite('Bytel Kyntus')).toBe('bytel');
+    expect(cleActivite('Bytel TISSEO')).toBe('bytel');
+    expect(cleActivite('bouygues')).toBe('bytel');
+    expect(cleActivite('Orange')).toBe('orange');
+    expect(cleActivite('SFR / ATS')).toBe('sfr');
+    const d = (id: string, name: string) => ({ id, code: id, name, poles: [] });
+    const g = groupesActivite([d('1', 'Bytel TISSEO'), d('2', 'Facturation'), d('3', 'IT'), d('4', 'bouygues'), d('5', 'orange')]);
+    expect(g.map((x) => [x.nom, x.contrats.map((c) => c.name)])).toEqual([
+      ['Bytel', ['Bytel TISSEO', 'bouygues']], ['Facturation', ['Facturation']], ['It', ['IT']], ['Orange', ['orange']],
+    ]);
+  });
+});

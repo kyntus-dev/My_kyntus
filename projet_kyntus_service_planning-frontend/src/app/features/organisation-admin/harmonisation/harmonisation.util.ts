@@ -69,6 +69,10 @@ export function cheminsCellules(ref: readonly RefContrat[] = REFERENTIEL_CONTRAT
 /** Noms de contrat écrits autrement dans l'application (proposés d'office). */
 const ALIAS_CONTRATS: Record<string, string> = {
   bytel: 'Bytel Kyntus',
+  bouygues: 'Bytel Kyntus',
+  'bouygues telecom': 'Bytel Kyntus',
+  'bouygues kyntus': 'Bytel Kyntus',
+  'bouygues tisseo': 'Bytel TISSEO',
   'kyntus bytel': 'Bytel Kyntus',
   'bytel kyntus': 'Bytel Kyntus',
   tisseo: 'Bytel TISSEO',
@@ -85,6 +89,24 @@ function contratRef(nom: string, ref: readonly RefContrat[]): RefContrat | undef
   return ref.find((r) => cle(r.nom) === c)
     ?? ref.find((r) => r.nom === ALIAS_CONTRATS[c]);
 }
+
+/** Comparaison souple : singulier / pluriel confondus (« Ticket CO » = « Tickets Co »). */
+export function cleSouple(nom: string | null | undefined): string {
+  return cle(nom).split(' ').map((m) => (m.length > 3 && m.endsWith('s') ? m.slice(0, -1) : m)).join(' ');
+}
+
+/**
+ * Anciennes cellules connues (Organisation RH de production) → cellule du fichier, dans le même contrat.
+ * Propositions seulement : l'Admin les valide ou les change dans « Correspondances ».
+ */
+const ALIAS_CELLULES: Record<string, string> = {
+  'satisfaction client': 'Satcli',
+  'cible prio': 'Sécurisation',
+  gre: 'Sécurisation',
+  migration: 'Sécurisation',
+  'rang 4 et plu et gre et': 'Sécurisation',
+  'preparation des rdv': 'Gestion des RDV',
+};
 
 // ── Décisions ───────────────────────────────────────────────────────────────
 
@@ -123,7 +145,7 @@ export function proposerDecisions(etat: EtatOrganisation, ref: readonly RefContr
   for (const { pole, contrat } of polesTraites(etat)) {
     const refContrat = contrat ? ref.find((r) => r.nom === d.contrats[contrat.id]) : undefined;
     // Dans son contrat : même nom, sinon nom qui commence pareil (« Sécurisation » → « Sécurisation & BO »).
-    const dansContrat = refContrat?.poles.find((p) => cle(p.nom) === cle(pole.nom))
+    const dansContrat = refContrat?.poles.find((p) => cleSouple(p.nom) === cleSouple(pole.nom))
       ?? unique(refContrat?.poles.filter((p) => proche(p.nom, pole.nom)) ?? []);
     // Ailleurs : seulement si son contrat n'est pas rattaché au fichier (jamais d'un contrat connu vers un autre).
     const ailleurs = refContrat ? undefined
@@ -136,10 +158,13 @@ export function proposerDecisions(etat: EtatOrganisation, ref: readonly RefContr
       const [rc, rp] = cheminPole ? cheminPole.split(SEP) : [refContrat?.nom, undefined];
       const refC = ref.find((r) => r.nom === rc);
       const cellulesPole = refC?.poles.find((p) => p.nom === rp)?.cellules ?? [];
-      const memePole = cellulesPole.find((x) => cle(x) === cle(cell.nom)) ?? unique(cellulesPole.filter((x) => proche(x, cell.nom)));
-      const memeContrat = refC
-        ? unique(refC.poles.flatMap((p) => p.cellules.filter((x) => cle(x) === cle(cell.nom)).map((x) => chemin(refC.nom, p.nom, x))))
-        : undefined;
+      const memePole = cellulesPole.find((x) => cleSouple(x) === cleSouple(cell.nom)) ?? unique(cellulesPole.filter((x) => proche(x, cell.nom)));
+      const dansContrat = (test: (x: string) => boolean) =>
+        refC ? unique(refC.poles.flatMap((p) => p.cellules.filter(test).map((x) => chemin(refC.nom, p.nom, x)))) : undefined;
+      const alias = ALIAS_CELLULES[cleSouple(cell.nom)];
+      const memeContrat = dansContrat((x) => cleSouple(x) === cleSouple(cell.nom))
+        ?? (alias ? dansContrat((x) => x === alias) : undefined)
+        ?? dansContrat((x) => proche(x, cell.nom));
       const partout = refC ? undefined : unique(cheminsCellules(ref).filter((x) => cle(x.split(SEP)[2]) === cle(cell.nom)));
       d.cellules[cell.id] = (memePole && rp ? chemin(rc!, rp, memePole) : memeContrat ?? partout) ?? ARCHIVER;
     }
@@ -149,8 +174,8 @@ export function proposerDecisions(etat: EtatOrganisation, ref: readonly RefContr
 
 /** Noms proches : l'un commence par l'autre, mot entier (« Prestations réseaux » / « Prestations réseaux & CV »). */
 export function proche(a: string, b: string): boolean {
-  const x = cle(a);
-  const y = cle(b);
+  const x = cleSouple(a);
+  const y = cleSouple(b);
   if (!x || !y || x === y) return x === y && !!x;
   return x.startsWith(y + ' ') || y.startsWith(x + ' ');
 }

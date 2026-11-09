@@ -71,7 +71,8 @@ describe('harmonisation : correspondances', () => {
     const d = proposerDecisions(etat(), ref);
     expect(d.contrats).toEqual({ d1: 'Bytel Kyntus' });
     expect(d.poles).toMatchObject({ p1: 'Bytel Kyntus › Pôle client', p2: 'Bytel Kyntus › Pôle technique', p3: ARCHIVER });
-    expect(d.cellules).toMatchObject({ c1: 'Bytel Kyntus › Pôle client › Gestion des RDV', c2: ARCHIVER, c3: ARCHIVER, c4: 'Bytel Kyntus › Pôle technique › Support technicien' });
+    // « Satisfaction client » est proposée vers « Satcli » (ancien nom connu), Cible Prio vers Sécurisation (absente de ce mini-référentiel).
+    expect(d.cellules).toMatchObject({ c1: 'Bytel Kyntus › Pôle client › Gestion des RDV', c2: 'Bytel Kyntus › Pôle client › Satcli', c3: ARCHIVER, c4: 'Bytel Kyntus › Pôle technique › Support technicien' });
     expect(d.poles['p9']).toBeUndefined();
   });
 });
@@ -121,6 +122,7 @@ describe('harmonisation : plan', () => {
     e.contrats[0].poles[1].cellules.push({ id: 'c5', nom: 'Satcli', services: [{ id: 's6', nom: 'Satcli' }] });
     const d = proposerDecisions(e, ref);
     expect(d.cellules['c5']).toBe('Bytel Kyntus › Pôle client › Satcli');
+    d.cellules['c2'] = ARCHIVER; // l'Admin archive « Satisfaction client » : « Satcli » du pôle technique est déplacée
     const plan = planifier(e, d, { ref, collaborateurs: [], responsables: [] });
     expect(plan.etapes).toContainEqual(expect.objectContaining({
       operation: { type: 'regrouperCellules', sourceIds: ['c5'], cibleId: null, nomCible: 'Satcli', poleId: 'p1' },
@@ -163,6 +165,47 @@ describe('harmonisation : noms proches', () => {
     const d = proposerDecisions(e, REFERENTIEL_CONTRATS);
     expect(d.poles['p1']).toBe('Bytel Kyntus › Sécurisation & BO');
     expect(d.cellules['c2']).toBe('Bytel Kyntus › Pôle technique › Prestations réseaux & CV');
-    expect(d.cellules['c1']).toBe(ARCHIVER);
+    // Les deux « Prestations réseaux » vont vers la même cellule (elles seront regroupées).
+    expect(d.cellules['c1']).toBe('Bytel Kyntus › Pôle technique › Prestations réseaux & CV');
+  });
+});
+
+describe('harmonisation : organisation actuelle (capture de production)', () => {
+  it('bouygues → Bytel Kyntus ; anciennes cellules proposées vers celles du fichier', () => {
+    const cel = (id: string, nom: string) => ({ id, nom, services: [{ id: 's' + id, nom }] });
+    const e: EtatOrganisation = {
+      contrats: [
+        { id: 'b', code: 'BOU', nom: 'bouygues', poles: [
+          { id: 'bte', nom: 'BTE', cellules: [cel('c0', 'BTE')] },
+          { id: 'pc', nom: 'Pôle client', cellules: [cel('c1', 'Cible Prio'), cel('c2', 'Expert'), cel('c3', 'Gestion des retards'), cel('c4', 'GRE'),
+            cel('c5', 'MIGRATION'), cel('c6', 'Planification PDC + Lissage'), cel('c7', 'Préparation des RDV'), cel('c8', 'Rang 4 et plus & GRE et'),
+            cel('c9', 'Satisfaction client'), cel('c10', 'Support Client'), cel('c11', 'Support VIP'), cel('c12', 'Ticket CO')] },
+          { id: 'pe', nom: 'Pôle escalade et contrôle', cellules: [cel('c13', 'CR en retard / clotures'), cel('c14', 'Malfaçons'), cel('c15', 'Ticket qualité')] },
+          { id: 'pt', nom: 'Pôle technicien', cellules: [cel('c16', 'Support Technicien RAC / SAV / PRESTA RESEAUX / Support VIP')] },
+          { id: 'pq', nom: 'Pôle technique', cellules: [cel('c17', 'Prestations réseaux & CV'), cel('c18', 'Support technicien')] }] },
+        { id: 't', code: 'TIS', nom: 'Bytel TISSEO', poles: [] },
+        { id: 'x', code: 'TST', nom: 'TEST ACTIVITE', poles: [] },
+        { id: 'i', code: 'OP-003', nom: 'IT', poles: [] },
+      ],
+      polesSansContrat: [], employes: [], affectations: [],
+    };
+    const d = proposerDecisions(e, REFERENTIEL_CONTRATS);
+    expect(d.contrats).toEqual({ b: 'Bytel Kyntus', t: 'Bytel TISSEO', x: ARCHIVER });
+    const K = 'Bytel Kyntus';
+    expect(d.poles).toMatchObject({ bte: ARCHIVER, pc: `${K} › Pôle client`, pe: ARCHIVER, pt: ARCHIVER, pq: `${K} › Pôle technique` });
+    expect(d.cellules).toMatchObject({
+      c0: ARCHIVER, c2: ARCHIVER, c3: ARCHIVER, c11: ARCHIVER, c13: ARCHIVER,
+      c1: `${K} › Sécurisation & BO › Sécurisation`, c4: `${K} › Sécurisation & BO › Sécurisation`,
+      c5: `${K} › Sécurisation & BO › Sécurisation`, c8: `${K} › Sécurisation & BO › Sécurisation`,
+      c6: `${K} › Pôle client › Planification`, c7: `${K} › Pôle client › Gestion des RDV`, c9: `${K} › Pôle client › Satcli`,
+      c10: `${K} › Pôle client › Support client`, c12: `${K} › Sécurisation & BO › Tickets Co`,
+      c14: `${K} › Sécurisation & BO › Malfaçons`, c15: `${K} › Pôle client › Tickets qualité`,
+      c16: `${K} › Pôle technique › Support technicien`,
+      c17: `${K} › Pôle technique › Prestations réseaux & CV`, c18: `${K} › Pôle technique › Support technicien`,
+    });
+    // Plan : le pôle Sécurisation & BO est créé, puis les 4 cellules regroupées sous « Sécurisation » au passage suivant.
+    const plan = planifier(e, d, { collaborateurs: [], responsables: [] });
+    expect(plan.etapes.map((x) => x.libelle)).toContain('Créer le pôle « Sécurisation & BO » dans Bytel Kyntus');
+    expect(plan.etapes.map((x) => x.libelle)).toContain('Renommer le contrat « bouygues » en « Bytel Kyntus »');
   });
 });

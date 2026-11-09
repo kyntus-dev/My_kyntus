@@ -104,6 +104,31 @@ public static class PointageCalculator
         return kept;
     }
 
+    /// <summary>
+    /// v33 : double passage du doigt = même pointeuse dans le délai. Deux pointeuses différentes
+    /// (ex. 6e étage puis 5e étage, 70 s plus tard) sont deux passages : les deux sont gardés.
+    /// Pointeuse inconnue : même règle qu'avant (délai seul).
+    /// </summary>
+    public static IReadOnlyList<DateTime> FusionnerDoublesBadgeages(
+        IEnumerable<(DateTime Heure, string? Pointeuse)> pointages, int doubleBadgeSecondes)
+    {
+        var kept = new List<(DateTime Heure, string? Pointeuse)>();
+        foreach (var p in pointages.OrderBy(x => x.Heure))
+        {
+            if (kept.Count > 0)
+            {
+                var dernier = kept[^1];
+                var memePointeuse = string.IsNullOrWhiteSpace(p.Pointeuse)
+                                    || string.IsNullOrWhiteSpace(dernier.Pointeuse)
+                                    || string.Equals(p.Pointeuse.Trim(), dernier.Pointeuse.Trim(), StringComparison.OrdinalIgnoreCase);
+                if (memePointeuse && (p.Heure - dernier.Heure).TotalSeconds < doubleBadgeSecondes)
+                    continue;
+            }
+            kept.Add(p);
+        }
+        return kept.Select(k => k.Heure).ToList();
+    }
+
     public static PointageJourResult CalculerJour(
         DateOnly jour,
         IEnumerable<DateTime> pointagesBruts,
