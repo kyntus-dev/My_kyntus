@@ -17,6 +17,7 @@ import {
   cheminsCellules,
   cheminsPoles,
   contratsTraites,
+  estDifferee,
   estProtege,
   planifier,
   proposerDecisions,
@@ -126,6 +127,7 @@ export class OrganisationHarmonisationComponent implements OnInit {
       gardes: l.filter((x) => this.decisionDe(x) !== ARCHIVER).length,
       archives: l.filter((x) => this.decisionDe(x) === ARCHIVER).length,
       etapes: this.plan()?.etapes.length ?? 0,
+      differees: this.plan()?.etapes.filter((e) => estDifferee(e.operation)).length ?? 0,
       alertes: this.plan()?.alertes.length ?? 0,
       introuvables: this.plan()?.introuvables.length ?? 0,
     };
@@ -218,7 +220,8 @@ export class OrganisationHarmonisationComponent implements OnInit {
           const etat = await this.lireEtat();
           this.etat.set(etat);
           const p = planifier(etat, this.fusion(etat, choix), { avecResponsables: this.avecResponsables() });
-          for (const e of p.etapes.filter((x) => x.phase === phase)) {
+          // Les étapes « après création » attendent l'identifiant réel : elles passent au tour suivant.
+          for (const e of p.etapes.filter((x) => x.phase === phase && !estDifferee(x.operation))) {
             faites++;
             await this.executer(e);
           }

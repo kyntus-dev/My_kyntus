@@ -221,6 +221,47 @@ export interface Plan {
   introuvables: string[];
 }
 
+/** Préfixe des identifiants provisoires (nœud du fichier pas encore créé). */
+export const NOUVEAU = 'nouveau:';
+export const estProvisoire = (id: string | null | undefined): boolean => !!id && id.startsWith(NOUVEAU);
+
+/** Étape en attente : elle vise un nœud que les étapes précédentes vont créer (exécutée au passage suivant). */
+export function estDifferee(op: Operation): boolean {
+  return Object.values(op).some((v) => (typeof v === 'string' && estProvisoire(v)) || (Array.isArray(v) && v.some((x) => estProvisoire(x))));
+}
+
+function distance(a: string, b: string): number {
+  const m = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) m[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      m[i][j] = Math.min(m[i - 1][j] + 1, m[i][j - 1] + 1, m[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return m[a.length][b.length];
+}
+
+/**
+ * Collaborateur introuvable : compte au nom proche (une ou deux lettres d'écart par mot, mot en plus
+ * ou en moins), proposé à titre indicatif seulement — personne n'est déplacé sur une ressemblance.
+ */
+export function suggestionEmploye(nom: string, employes: readonly EtatEmploye[]): EtatEmploye | null {
+  const jetons = (s: string) => cle(s).split(' ').filter((t) => t.length > 1);
+  const cible = jetons(nom);
+  if (!cible.length) return null;
+  const score = (e: EtatEmploye) => {
+    const j = jetons(`${e.prenom} ${e.nom}`);
+    let total = 0;
+    let trouves = 0;
+    for (const t of cible) {
+      const best = Math.min(...j.map((x) => distance(t, x)));
+      if (best <= (t.length >= 6 ? 2 : 1)) { trouves++; total += best; }
+    }
+    return trouves >= Math.max(2, Math.min(cible.length, j.length)) ? total : Infinity;
+  };
+  const notes = employes.map((e) => ({ e, s: score(e) })).filter((x) => Number.isFinite(x.s)).sort((a, b) => a.s - b.s);
+  if (!notes.length || (notes.length > 1 && notes[1].s === notes[0].s)) return null;
+  return notes[0].e;
+}
+
 /** Repère un collaborateur par son nom (ordre prénom / nom libre, sans accents ni majuscules). */
 export function trouverEmploye(nom: string, employes: readonly EtatEmploye[]): EtatEmploye | 'ambigu' | null {
   const jetons = (s: string) => cle(s).split(' ').filter(Boolean).sort();
@@ -289,6 +330,12 @@ export function planifier(
   const introuvables: string[] = [];
   const add = (phase: Phase, libelle: string, operation: Operation) => etapes.push({ phase, libelle, operation });
 
+  // Nœuds du fichier pas encore créés : identifiant provisoire « nouveau:… ». Les étapes qui en
+  // dépendent sont listées dans l'aperçu (rien ne manque) et exécutées une fois le nœud créé.
+  const idContrat = (nom: string) => P.contrat.get(nom)?.id ?? `${NOUVEAU}${nom}`;
+  const idPole = (ch: string) => P.pole.get(ch)?.id ?? `${NOUVEAU}${ch}`;
+  const apres = (id: string, quoi: string) => (estProvisoire(id) ? ` — après création ${quoi}` : '');
+
   // 1. Contrats.
   for (const r of ref) {
     const c = P.contrat.get(r.nom);
@@ -298,37 +345,41 @@ export function planifier(
 
   // 2. Pôles.
   for (const r of ref) {
-    const contrat = P.contrat.get(r.nom);
+    const contratId = idContrat(r.nom);
     for (const rp of r.poles) {
       const ch = chemin(r.nom, rp.nom);
       const pole = P.pole.get(ch);
       if (!pole) {
-        if (contrat) add('poles', `Créer le pôle « ${rp.nom} » dans ${r.nom}`, { type: 'creerPole', contratId: contrat.id, nom: rp.nom });
+        add('poles', `Créer le pôle « ${rp.nom} » dans ${r.nom}${apres(contratId, 'du contrat')}`, { type: 'creerPole', contratId, nom: rp.nom });
         continue;
       }
-      if (contrat && P.contratDePole.get(pole.id)?.id !== contrat.id)
-        add('poles', `Rattacher le pôle « ${pole.nom} » au contrat ${r.nom}`, { type: 'rattacherPole', poleId: pole.id, contratId: contrat.id });
+      if (!estProvisoire(contratId) && P.contratDePole.get(pole.id)?.id !== contratId)
+        add('poles', `Rattacher le pôle « ${pole.nom} » au contrat ${r.nom}`, { type: 'rattacherPole', poleId: pole.id, contratId });
+      else if (estProvisoire(contratId))
+        add('poles', `Rattacher le pôle « ${pole.nom} » au contrat ${r.nom}${apres(contratId, 'du contrat')}`, { type: 'rattacherPole', poleId: pole.id, contratId });
       if (pole.nom !== rp.nom) add('poles', `Renommer le pôle « ${pole.nom} » en « ${rp.nom} » (${r.nom})`, { type: 'renommerPole', poleId: pole.id, nom: rp.nom });
     }
   }
 
-  // 3. Cellules : création, renommage, déplacement (regroupement sous le bon pôle), fusion.
+  // 3. Cellules : création (avec son service), renommage, déplacement sous le bon pôle, fusion.
   for (const r of ref) {
     for (const rp of r.poles) {
-      const pole = P.pole.get(chemin(r.nom, rp.nom));
+      const poleId = idPole(chemin(r.nom, rp.nom));
       for (const nomCell of rp.cellules) {
         const ch = chemin(r.nom, rp.nom, nomCell);
         const porteur = P.cellule.get(ch);
         const autres = polesTraites(etat).flatMap(({ pole: po }) => po.cellules)
           .filter((c) => d.cellules[c.id] === ch && c.id !== porteur?.id);
         if (!porteur) {
-          if (pole) add('cellules', `Créer la cellule « ${nomCell} » (${r.nom} › ${rp.nom})`, { type: 'creerCellule', poleId: pole.id, nom: nomCell });
+          add('cellules', `Créer la cellule « ${nomCell} » et son service (${r.nom} › ${rp.nom})${apres(poleId, 'du pôle')}`,
+            { type: 'creerCellule', poleId, nom: nomCell });
           continue;
         }
         const poleActuel = P.poleDeCellule.get(porteur.id);
-        if (pole && poleActuel && poleActuel.id !== pole.id) {
-          add('cellules', `Déplacer la cellule « ${porteur.nom} » vers ${r.nom} › ${rp.nom} (nom : « ${nomCell} »)`,
-            { type: 'regrouperCellules', sourceIds: [porteur.id, ...autres.map((a) => a.id)], cibleId: null, nomCible: nomCell, poleId: pole.id });
+        if (poleActuel && poleActuel.id !== poleId) {
+          const noms = [porteur, ...autres].map((c) => `« ${c.nom} »`).join(', ');
+          add('cellules', `${autres.length ? 'Regrouper' : 'Déplacer'} ${noms} dans la cellule « ${nomCell} » (${r.nom} › ${rp.nom})${apres(poleId, 'du pôle')}`,
+            { type: 'regrouperCellules', sourceIds: [porteur.id, ...autres.map((a) => a.id)], cibleId: null, nomCible: nomCell, poleId });
           continue;
         }
         if (porteur.nom !== nomCell && poleActuel)
@@ -353,28 +404,40 @@ export function planifier(
       alertes.push(`Cellule « ${nomCell} » : ${cell.services.length} services (${cell.services.map((s) => s.nom).join(', ')}) — gardés tels quels, à revoir dans Contrats, pôles et cellules.`);
   }
 
+  // Cellule du fichier : existante (avec un service) ou à créer / déplacer (identifiant provisoire).
+  const serviceDe = (ch: string, nomCell: string, serviceActuel: string | null): { id: string; nom: string; existe: boolean } | 'deja' => {
+    const cell = P.cellule.get(ch);
+    const deplacee = cell && P.poleDeCellule.get(cell.id)?.id !== idPole(ch.split(SEP).slice(0, 2).join(SEP));
+    if (!cell || cell.services.length === 0 || deplacee) return { id: `${NOUVEAU}${ch}`, nom: nomCell, existe: false };
+    if (serviceActuel && cell.services.some((s) => s.id === serviceActuel)) return 'deja';
+    const service = cell.services.length === 1 ? cell.services[0] : cell.services.find((s) => cle(s.nom) === cle(nomCell)) ?? cell.services[0];
+    return { id: service.id, nom: service.nom, existe: true };
+  };
+
   // 5. Collaborateurs du fichier.
   for (const rc of collaborateurs) {
     const e = trouverEmploye(rc.nom, etat.employes);
-    if (e === null) { introuvables.push(`${rc.nom} (${rc.contrat} › ${rc.pole} › ${rc.cellule})`); continue; }
+    if (e === null) {
+      const s = suggestionEmploye(rc.nom, etat.employes);
+      introuvables.push(`${rc.nom} (${rc.contrat} › ${rc.pole} › ${rc.cellule})${s ? ` — nom proche dans l'application : ${s.nom.toUpperCase()} ${s.prenom} ?` : ''}`);
+      continue;
+    }
     if (e === 'ambigu') { alertes.push(`« ${rc.nom} » correspond à plusieurs comptes : non déplacé.`); continue; }
     if (rc.doublon?.length) alertes.push(`« ${rc.nom} » figure deux fois dans le fichier (${rc.doublon.join(' et ')}) : placé dans « ${rc.cellule} », à vérifier.`);
+    const cible = serviceDe(chemin(rc.contrat, rc.pole, rc.cellule), rc.cellule, e.serviceId);
+    if (cible === 'deja') continue;
     const cell = P.cellule.get(chemin(rc.contrat, rc.pole, rc.cellule));
-    if (!cell || cell.services.length === 0) continue; // créée à l'étape précédente : traité au passage suivant
-    if (e.serviceId && cell.services.some((s) => s.id === e.serviceId)) continue;
-    const service = cell.services.length === 1
-      ? cell.services[0]
-      : cell.services.find((s) => cle(s.nom) === cle(rc.cellule)) ?? cell.services[0];
-    if (cell.services.length > 1 && cle(service.nom) !== cle(rc.cellule))
-      alertes.push(`« ${rc.nom} » placé dans le service « ${service.nom} » (la cellule ${rc.cellule} en a plusieurs) : à vérifier.`);
-    add('collaborateurs', `Placer ${e.nom.toUpperCase()} ${e.prenom} dans ${rc.contrat} › ${rc.pole} › ${rc.cellule}`,
-      { type: 'placerAgent', employeId: e.id, serviceId: service.id });
+    if (cible.existe && cell && cell.services.length > 1 && cle(cible.nom) !== cle(rc.cellule))
+      alertes.push(`« ${rc.nom} » placé dans le service « ${cible.nom} » (la cellule ${rc.cellule} en a plusieurs) : à vérifier.`);
+    add('collaborateurs', `Placer ${e.nom.toUpperCase()} ${e.prenom} dans ${rc.contrat} › ${rc.pole} › ${rc.cellule}${apres(cible.id, 'de la cellule')}`,
+      { type: 'placerAgent', employeId: e.id, serviceId: cible.id });
   }
 
   // 6. Responsables du fichier (ajoutés, aucun n'est retiré).
   if (options.avecResponsables !== false) {
     const deja = (kind: RefTypeResponsable, emp: string, noeud: string) =>
       etat.affectations.some((a) => a.type === kind && a.employeId === emp && a.noeudId === noeud);
+    const idCellule = (ch: string) => P.cellule.get(ch)?.id ?? `${NOUVEAU}${ch}`;
     for (const r of responsables) {
       const e = trouverEmploye(r.nom, etat.employes);
       if (e === null || e === 'ambigu') { alertes.push(`Responsable « ${r.nom} » (${r.contrat}) : compte ${e === null ? 'introuvable' : 'ambigu'}, non affecté.`); continue; }
@@ -383,33 +446,38 @@ export function planifier(
       const nomE = `${e.nom.toUpperCase()} ${e.prenom}`;
       if (r.type === 'ChefDeProjet') {
         for (const rp of refC.poles) {
-          const pole = P.pole.get(chemin(refC.nom, rp.nom));
-          if (pole && !deja('ChefDeProjet', e.id, pole.id))
-            add('responsables', `${nomE} : chef de projet de ${refC.nom} › ${rp.nom}`, { type: 'affecterResponsable', kind: 'ChefDeProjet', noeudId: pole.id, employeId: e.id });
+          const poleId = idPole(chemin(refC.nom, rp.nom));
+          if (!deja('ChefDeProjet', e.id, poleId))
+            add('responsables', `${nomE} : chef de projet de ${refC.nom} › ${rp.nom}${apres(poleId, 'du pôle')}`,
+              { type: 'affecterResponsable', kind: 'ChefDeProjet', noeudId: poleId, employeId: e.id });
         }
       } else if (r.type === 'Superviseur') {
-        for (const rp of refC.poles.filter((p) => !r.pole || p.nom === r.pole)) {
+        const poles = refC.poles.filter((p) => !r.pole || p.nom === r.pole);
+        if (!poles.some((p) => p.cellules.length)) { alertes.push(`Superviseur « ${r.nom} » (${r.contrat}) : aucune cellule dans le fichier, non affecté.`); continue; }
+        for (const rp of poles) {
           for (const nomCell of rp.cellules) {
-            const cell = P.cellule.get(chemin(refC.nom, rp.nom, nomCell));
-            if (cell && !deja('Superviseur', e.id, cell.id))
-              add('responsables', `${nomE} : superviseur de ${refC.nom} › ${rp.nom} › ${nomCell}`, { type: 'affecterResponsable', kind: 'Superviseur', noeudId: cell.id, employeId: e.id });
+            const celluleId = idCellule(chemin(refC.nom, rp.nom, nomCell));
+            if (!deja('Superviseur', e.id, celluleId))
+              add('responsables', `${nomE} : superviseur de ${refC.nom} › ${rp.nom} › ${nomCell}${apres(celluleId, 'de la cellule')}`,
+                { type: 'affecterResponsable', kind: 'Superviseur', noeudId: celluleId, employeId: e.id });
           }
         }
       } else {
         if (!r.cellules?.length) { alertes.push(`Référent « ${r.nom} » (${r.contrat}) : aucune cellule dans le fichier, non affecté.`); continue; }
         for (const nomCell of r.cellules) {
           const rp = refC.poles.find((p) => p.cellules.includes(nomCell));
-          const cell = rp ? P.cellule.get(chemin(refC.nom, rp.nom, nomCell)) : undefined;
-          if (!cell || cell.services.length === 0) continue;
-          if (cell.services.some((s) => deja('ReferentTechnique', e.id, s.id))) continue;
+          if (!rp) continue;
+          const cible = serviceDe(chemin(refC.nom, rp.nom, nomCell), nomCell, null);
+          if (cible === 'deja') continue;
+          const cell = P.cellule.get(chemin(refC.nom, rp.nom, nomCell));
+          if (cible.existe && cell?.services.some((s) => deja('ReferentTechnique', e.id, s.id))) continue;
           // Organisation RH étend l'affectation d'un référent à tous les services de sa cellule.
-          add('responsables', `${nomE} : référent technique de ${refC.nom} › ${rp!.nom} › ${nomCell}`,
-            { type: 'affecterResponsable', kind: 'ReferentTechnique', noeudId: cell.services[0].id, employeId: e.id });
+          add('responsables', `${nomE} : référent technique de ${refC.nom} › ${rp.nom} › ${nomCell}${apres(cible.id, 'de la cellule')}`,
+            { type: 'affecterResponsable', kind: 'ReferentTechnique', noeudId: cible.id, employeId: e.id });
         }
       }
     }
   }
-
   // 7. Archivage : seulement les nœuds vides (aucun collaborateur actif encore rattaché).
   const actifs = (pred: (e: EtatEmploye) => boolean) => etat.employes.filter(pred);
   const nomsDe = (es: EtatEmploye[]) => es.slice(0, 5).map((e) => `${e.nom.toUpperCase()} ${e.prenom}`).join(', ') + (es.length > 5 ? '…' : '');

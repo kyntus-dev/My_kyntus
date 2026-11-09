@@ -25,7 +25,7 @@
     <div class="ku-kpi"><span class="ku-kpi-label">À archiver</span><span class="ku-kpi-value">{{ synthese().archives }}</span>
       <span class="ku-kpi-sub">absents du fichier (restaurables)</span></div>
     <div class="ku-kpi"><span class="ku-kpi-label">Changements</span><span class="ku-kpi-value">{{ synthese().etapes }}</span>
-      <span class="ku-kpi-sub">à cette étape (d’autres suivront après les créations)</span></div>
+      <span class="ku-kpi-sub">dont {{ synthese().differees }} après création de leur pôle ou cellule (faites dans la foulée)</span></div>
     <div class="ku-kpi" [class.ku-kpi--danger]="synthese().alertes + synthese().introuvables > 0"><span class="ku-kpi-label">À vérifier</span>
       <span class="ku-kpi-value">{{ synthese().alertes + synthese().introuvables }}</span>
       <span class="ku-kpi-sub">{{ synthese().introuvables }} collaborateur(s) du fichier introuvable(s)</span></div>
@@ -102,9 +102,9 @@
         <ul class="oh-liste oh-alertes">@for (i of plan()!.introuvables; track $index) { <li>{{ i }}</li> }</ul>
       </details>
     }
-    <p class="ku-card-sub oh-note">Structure support non modifiée : Formation &amp; Qualité ({{ support.length }} personnes, postes hors production).
-      Les créations (contrat, pôle, cellule) sont faites d’abord ; les collaborateurs et responsables qui en dépendent sont traités
-      dans la foulée, au passage suivant.</p>
+    <p class="ku-card-sub oh-note">Tous les contrats, pôles et cellules du fichier sont créés, même sans collaborateur.
+      Les étapes « après création » sont faites dans la foulée, dès que le pôle ou la cellule existe.
+      Formation &amp; Qualité : ses {{ support.length }} personnes (postes hors production) ne sont pas déplacées.</p>
   </section>
 
   @if (journal().length) {

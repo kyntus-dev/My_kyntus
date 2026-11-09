@@ -5,7 +5,8 @@
  * Écriture harmonisée (accents, majuscules, espaces) ; « Ticket Co » (TISSEO) écrit « Tickets Co » comme
  * pour Bytel Kyntus. SFR / ATS n'a pas de cellule dans le fichier : sa cellule porte le nom du pôle.
  * Les lignes « Chef de projet », « Superviseurs » et « Référents techniques » sont des responsabilités,
- * pas des pôles. Formation & Qualité est une structure support (postes hors production) : non modifiée.
+ * pas des pôles. Formation & Qualité (Contrôle qualité, Formation) est créé comme dans le fichier, sans
+ * cellule ; ses collaborateurs (postes hors production) ne sont pas déplacés.
  * Les contrats Facturation et IT ne sont jamais modifiés.
  */
 export interface RefPole { nom: string; cellules: readonly string[] }
@@ -33,9 +34,14 @@ export const REFERENTIEL_CONTRATS: readonly RefContrat[] = [
   { nom: "SFR / ATS", activite: "SFR", poles: [
     { nom: "Appels préalables", cellules: ["Appels préalables"] },
   ] },
+  // Postes hors production (contrôle qualité, formation) : pôles sans cellule, comme dans le fichier.
+  { nom: "Formation & Qualité", activite: "Formation", poles: [
+    { nom: "Contrôle qualité", cellules: [] },
+    { nom: "Formation", cellules: [] },
+  ] },
 ];
 
-/** Structure support du fichier, laissée telle quelle (postes Formation et Contrôle qualité hors production). */
+/** Contrat du fichier dont les collaborateurs ne sont pas déplacés (postes hors production). */
 export const STRUCTURES_SUPPORT: readonly string[] = ['Formation & Qualité'];
 
 /** Contrats jamais modifiés (consigne). */

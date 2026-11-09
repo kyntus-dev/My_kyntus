@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ARCHIVER,
+  estDifferee,
   type EtatOrganisation,
   cle,
   estProtege,
@@ -145,8 +146,10 @@ describe('harmonisation : plan', () => {
     expect(plan.etapes).toEqual([]);
   });
 
-  it('référentiel réel : 4 contrats, 35 cellules, pas de doublon de cellule dans un pôle', () => {
-    expect(REFERENTIEL_CONTRATS.map((c) => c.nom)).toEqual(['Bytel Kyntus', 'Bytel TISSEO', 'Orange', 'SFR / ATS']);
+  it('référentiel réel : 5 contrats, 12 pôles, 29 cellules, pas de doublon de cellule dans un pôle', () => {
+    expect(REFERENTIEL_CONTRATS.map((c) => c.nom)).toEqual(['Bytel Kyntus', 'Bytel TISSEO', 'Orange', 'SFR / ATS', 'Formation & Qualité']);
+    expect(REFERENTIEL_CONTRATS.flatMap((c) => c.poles)).toHaveLength(12);
+    expect(REFERENTIEL_CONTRATS.flatMap((c) => c.poles.flatMap((p) => p.cellules))).toHaveLength(29);
     for (const c of REFERENTIEL_CONTRATS) for (const p of c.poles) expect(new Set(p.cellules.map(cle)).size).toBe(p.cellules.length);
     // Chaque collaborateur du fichier vise une cellule du référentiel.
     const cellules = new Set(REFERENTIEL_CONTRATS.flatMap((c) => c.poles.flatMap((p) => p.cellules.map((x) => `${c.nom}|${p.nom}|${x}`))));
@@ -207,5 +210,43 @@ describe('harmonisation : organisation actuelle (capture de production)', () => 
     const plan = planifier(e, d, { collaborateurs: [], responsables: [] });
     expect(plan.etapes.map((x) => x.libelle)).toContain('Créer le pôle « Sécurisation & BO » dans Bytel Kyntus');
     expect(plan.etapes.map((x) => x.libelle)).toContain('Renommer le contrat « bouygues » en « Bytel Kyntus »');
+  });
+});
+
+describe('harmonisation : aucun nœud du fichier oublié', () => {
+  it('organisation vide : chaque contrat, pôle et cellule du fichier figure dans l’aperçu', () => {
+    const vide: EtatOrganisation = { contrats: [], polesSansContrat: [], employes: [], affectations: [] };
+    const plan = planifier(vide, proposerDecisions(vide), { collaborateurs: [], responsables: [] });
+    const ops = plan.etapes.map((e) => e.operation);
+    expect(ops.filter((o) => o.type === 'creerContrat')).toHaveLength(5);
+    expect(ops.filter((o) => o.type === 'creerPole')).toHaveLength(12);
+    expect(ops.filter((o) => o.type === 'creerCellule')).toHaveLength(29);
+    // Pôles et cellules attendent leur parent : exécutés dans la foulée, pas oubliés.
+    expect(plan.etapes.filter((e) => e.phase === 'cellules').every((e) => estDifferee(e.operation))).toBe(true);
+    expect(plan.etapes.map((e) => e.libelle)).toContain(
+      'Créer la cellule « Sécurisation » et son service (Bytel Kyntus › Sécurisation & BO) — après création du pôle');
+  });
+
+  it('bouygues : la cellule Sécurisation apparaît (regroupement de Cible Prio, GRE, MIGRATION) avant même la création du pôle', () => {
+    const cel = (id: string, nom: string) => ({ id, nom, services: [{ id: 's' + id, nom }] });
+    const e: EtatOrganisation = {
+      contrats: [{ id: 'b', code: 'BOU', nom: 'bouygues', poles: [
+        { id: 'pc', nom: 'Pôle client', cellules: [cel('c1', 'Cible Prio'), cel('c4', 'GRE'), cel('c5', 'MIGRATION')] }] }],
+      polesSansContrat: [], employes: [], affectations: [],
+    };
+    const plan = planifier(e, proposerDecisions(e), { collaborateurs: [], responsables: [] });
+    const libelles = plan.etapes.map((x) => x.libelle);
+    expect(libelles).toContain('Créer le pôle « Sécurisation & BO » dans Bytel Kyntus');
+    expect(libelles).toContain('Regrouper « Cible Prio », « GRE », « MIGRATION » dans la cellule « Sécurisation » (Bytel Kyntus › Sécurisation & BO) — après création du pôle');
+    expect(libelles).toContain('Créer la cellule « Support Sécu » et son service (Bytel Kyntus › Sécurisation & BO) — après création du pôle');
+  });
+
+  it('nom proche proposé pour un collaborateur introuvable, sans déplacement', () => {
+    const e: EtatOrganisation = { contrats: [], polesSansContrat: [], affectations: [],
+      employes: [{ id: 'x', prenom: 'Safae', nom: 'MALHAOUI', role: 'Pilote', poleId: null, celluleId: null, serviceId: null }] };
+    const plan = planifier(e, proposerDecisions(e), {
+      collaborateurs: [{ nom: 'MELHAOUI Safae', contrat: 'Bytel Kyntus', pole: 'Sécurisation & BO', cellule: 'Malfaçons' }], responsables: [] });
+    expect(plan.introuvables[0]).toContain('nom proche dans l\'application : MALHAOUI Safae ?');
+    expect(plan.etapes.some((x) => x.operation.type === 'placerAgent')).toBe(false);
   });
 });
