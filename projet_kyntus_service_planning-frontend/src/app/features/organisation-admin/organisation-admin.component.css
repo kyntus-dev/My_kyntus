@@ -119,3 +119,9 @@
 .oa-rg-modes { display: flex; gap: 1rem; font-size: 0.86rem; }
 .oa-rg-champ { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
 @media (max-width: 900px) { .oa-rg-grille { grid-template-columns: 1fr; } }
+
+/* v36 : archiver avec réaffectation */
+.oa-ar { border-color: var(--ky-orange, #d97706); }
+.oa-ar-liste { margin: 0 0 0.75rem; padding-left: 1.1rem; max-height: 260px; overflow: auto; font-size: 0.86rem; columns: 2; }
+.oa-ar-liste--warn li { color: var(--ky-orange, #b45309); }
+@media (max-width: 720px) { .oa-ar-liste { columns: 1; } }

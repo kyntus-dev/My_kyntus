@@ -28,6 +28,58 @@
     <div class="ky-card oa-state oa-state--error">{{ error() }}</div>
   } @else {
 
+    <!-- ═══════════ ARCHIVER AVEC SES COLLABORATEURS (v36) ═══════════ -->
+    @if (arCible(); as ar) {
+      <section class="ky-card oa-rg oa-ar" aria-label="Réaffecter les collaborateurs">
+        <header class="oa-rg-head">
+          <div>
+            <h2 class="oa-dept-name">
+              {{ ar.dejaArchive ? 'Réaffecter les collaborateurs de' : 'Archiver' }} « {{ ar.nom }} »
+            </h2>
+            <p class="oa-meta">
+              {{ arAgents().pilotes.length + arAgents().encadrement.length }} collaborateur(s) y sont encore rattachés.
+              Choisissez où ils vont{{ ar.dejaArchive ? '.' : ' : ils y sont affectés, puis « ' + ar.nom + ' » est archivé et disparaît de partout (structure, périmètres, quotas de congés…).' }}
+            </p>
+          </div>
+          <button type="button" class="oa-link" (click)="fermerArchivage()">Annuler</button>
+        </header>
+        <div class="oa-rg-grille">
+          <div>
+            @if (arAgents().pilotes.length) {
+              <p class="oa-rg-pole">À réaffecter ({{ arAgents().pilotes.length }})</p>
+              <ul class="oa-ar-liste">
+                @for (a of arAgents().pilotes; track a.id) { <li>{{ a.lastName }} {{ a.firstName }}</li> }
+              </ul>
+            }
+            @if (arAgents().encadrement.length) {
+              <p class="oa-rg-pole">Responsables : non déplacés, à corriger dans leur fiche ({{ arAgents().encadrement.length }})</p>
+              <ul class="oa-ar-liste oa-ar-liste--warn">
+                @for (a of arAgents().encadrement; track a.id) { <li>{{ a.lastName }} {{ a.firstName }} <span class="oa-meta">{{ a.role }}</span></li> }
+              </ul>
+            }
+          </div>
+          <div class="oa-rg-cible">
+            @if (arAgents().pilotes.length) {
+              <input class="ky-input" type="search" placeholder="Filtrer : contrat, pôle, cellule, service…"
+                [ngModel]="arRecherche()" (ngModelChange)="arRecherche.set($event)" />
+              <label class="oa-rg-champ"><span>Service de destination</span>
+                <select class="ky-input" [ngModel]="arDest()" (ngModelChange)="arDest.set($event)">
+                  <option value="">Choisir…</option>
+                  @for (g of arGroupes(); track g.groupe) {
+                    <optgroup [label]="g.groupe">
+                      @for (s of g.services; track s.id) { <option [value]="s.id">{{ s.nom }}</option> }
+                    </optgroup>
+                  }
+                </select></label>
+            }
+            <button type="button" class="ky-btn-primary" [disabled]="!arPret() || busy()" (click)="confirmerArchivage()">
+              {{ ar.dejaArchive ? 'Réaffecter' : (arAgents().pilotes.length ? 'Réaffecter et archiver' : 'Archiver') }}
+            </button>
+          </div>
+        </div>
+      </section>
+    }
+
     <!-- ═══════════════════ STRUCTURE ═══════════════════ -->
     @if (onglet() === 'structure') {
       <div class="oa-toolbar">
@@ -291,6 +343,9 @@
                   <td>{{ n.collaborateurs }}</td>
                   <td class="oa-col-actions">
                     <button type="button" class="oa-link" (click)="restaurer(n)" [disabled]="busy()">Restaurer</button>
+                    @if (n.collaborateurs > 0) {
+                      <button type="button" class="oa-link" (click)="reaffecterArchive(n)" [disabled]="busy()">Réaffecter les {{ n.collaborateurs }}</button>
+                    }
                     <button type="button" class="oa-link oa-link--danger" (click)="supprimerDefinitivement(n)"
                       [disabled]="busy() || !n.suppressionDefinitivePossible" [attr.title]="purgeTitle(n)">
                       Supprimer définitivement

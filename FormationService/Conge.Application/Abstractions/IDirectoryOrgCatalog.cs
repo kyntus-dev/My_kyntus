@@ -13,8 +13,24 @@ public sealed record DirectoryOrgCatalogSnapshot(
     IReadOnlyDictionary<string, int> ServiceHeadcounts,
     IReadOnlyDictionary<string, string>? ServiceParentCelluleIds = null,
     IReadOnlyDictionary<string, string>? CelluleParentPoleIds = null,
-    IReadOnlyDictionary<string, string>? PoleDepartmentIds = null)
+    IReadOnlyDictionary<string, string>? PoleDepartmentIds = null,
+    IReadOnlySet<string>? ActiveOrgNodeIds = null)
 {
+    /// <summary>
+    /// v36 : pôles, cellules et services actifs de l'arbre Directory (les archivés n'y sont pas).
+    /// Vide = arbre inconnu (Directory injoignable) : rien n'est écarté.
+    /// </summary>
+    public IReadOnlySet<string> ActiveNodes { get; } =
+        ActiveOrgNodeIds ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>v36 : nœud absent de l'arbre actif alors que l'arbre est connu (archivé ou supprimé).</summary>
+    public bool EstHorsArbre(string? nodeId)
+    {
+        if (ActiveNodes.Count == 0) return false;
+        var id = nodeId?.Trim() ?? "";
+        return id.Length > 0 && !ActiveNodes.Contains(id);
+    }
+
     public static DirectoryOrgCatalogSnapshot Empty { get; } = new(
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),

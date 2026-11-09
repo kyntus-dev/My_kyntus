@@ -28,6 +28,13 @@ import {
   resolveServiceCible,
   type OrgAgent,
 } from '../../core/org/org-admin.util';
+import {
+  agentsDuNoeud,
+  destinationParDefaut,
+  destinationsArchivage,
+  repartirAgents,
+  type CibleArchivage,
+} from './archivage.util';
 
 type Onglet = 'structure' | 'agents' | 'archives';
 
@@ -141,8 +148,115 @@ export class OrganisationAdminComponent implements OnInit {
     (this.rgCellules().size > 0 || this.rgServices().size > 0)
     && (this.rgMode() === 'existante' ? !!this.rgCible() : !!this.rgNom().trim()));
 
+  // ── Archivage avec réaffectation des collaborateurs (v36) ──────────────────
+  readonly arCible = signal<CibleArchivage | null>(null);
+  readonly arDest = signal('');
+  readonly arRecherche = signal('');
+  readonly arDestinations = computed(() => {
+    const c = this.arCible();
+    return c ? destinationsArchivage(this.depts(), this.unassigned(), c) : [];
+  });
+  readonly arDestFiltrees = computed(() => {
+    const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const q = norm(this.arRecherche().trim());
+    const liste = this.arDestinations();
+    const filtrees = q ? liste.filter((d) => norm(`${d.groupe} ${d.nom}`).includes(q)) : liste;
+    // La destination choisie reste visible même si elle ne correspond plus à la recherche.
+    const choisie = liste.find((d) => d.id === this.arDest());
+    return choisie && !filtrees.includes(choisie) ? [choisie, ...filtrees] : filtrees;
+  });
+  readonly arGroupes = computed(() => {
+    const m = new Map<string, { groupe: string; services: { id: string; nom: string }[] }>();
+    for (const d of this.arDestFiltrees()) {
+      const g = m.get(d.groupe) ?? { groupe: d.groupe, services: [] };
+      g.services.push({ id: d.id, nom: d.nom });
+      m.set(d.groupe, g);
+    }
+    return [...m.values()];
+  });
+  readonly arAgents = computed(() => {
+    const c = this.arCible();
+    return c ? repartirAgents(agentsDuNoeud(this.agents(), c)) : { pilotes: [], encadrement: [] };
+  });
+  readonly arPret = computed(() => !!this.arCible() && (this.arAgents().pilotes.length === 0 || !!this.arDest()));
+
   ngOnInit(): void {
     this.load();
+  }
+
+  private ouvrirArchivage(cible: CibleArchivage, parentCelluleId: string | null, parentPoleId: string | null): void {
+    this.rgOuvert.set(false);
+    this.arRecherche.set('');
+    this.arCible.set(cible);
+    this.arDest.set(destinationParDefaut(this.arDestinations(), cible, parentCelluleId, parentPoleId));
+    setTimeout(() => document.querySelector('.oa-ar')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  fermerArchivage(): void {
+    this.arCible.set(null);
+  }
+
+  /** Onglet Archives : un nœud archivé qui garde des collaborateurs. */
+  reaffecterArchive(n: ArchivedOrgNode): void {
+    this.ouvrirArchivage({
+      niveau: this.levelKey(n), id: n.id, nom: n.name, parentId: n.parentId ?? '', cellules: [], dejaArchive: true,
+    }, null, null);
+  }
+
+  async confirmerArchivage(): Promise<void> {
+    const cible = this.arCible();
+    if (!cible || !this.arPret() || this.busy()) return;
+    const { pilotes, encadrement } = this.arAgents();
+    const dest = this.arDestinations().find((d) => d.id === this.arDest());
+    const libelle = cible.niveau === 'pole' ? 'le pôle' : cible.niveau === 'cellule' ? 'la cellule' : 'le service';
+    const ok = await this.confirm.confirm({
+      title: cible.dejaArchive ? `Réaffecter les collaborateurs de « ${cible.nom} »` : `Archiver ${libelle} « ${cible.nom} »`,
+      message: [
+        pilotes.length && dest ? `${pilotes.length} collaborateur(s) passent dans ${dest.groupe} › ${dest.nom} (affectation actuelle clôturée, historique conservé).` : '',
+        encadrement.length ? `${encadrement.length} responsable(s) (${encadrement.map((a) => `${a.lastName} ${a.firstName}`.trim()).join(', ')}) ne sont pas déplacés comme pilotes : corrigez leur fiche.` : '',
+        cible.dejaArchive ? '' : `Puis ${libelle} est archivé(e) et disparaît des listes, des choix de périmètre et des quotas. Restaurable depuis Archives.`,
+      ].filter(Boolean).join(' '),
+      confirmLabel: cible.dejaArchive ? 'Réaffecter' : 'Réaffecter et archiver',
+      variant: 'warning',
+    });
+    if (!ok) return;
+
+    this.busy.set(true);
+    const echecs: string[] = [];
+    let deplaces = 0;
+    for (const a of pilotes) {
+      try {
+        await firstValueFrom(this.api.moveAgent(a.id, dest!.id, {
+          force: this.isAdmin(),
+          reason: `Archivage de « ${cible.nom} »`,
+        }));
+        deplaces++;
+      } catch (err) {
+        const motif = (err as { status?: number })?.status === 422
+          ? 'durée minimale de rotation non atteinte (un Admin peut forcer)'
+          : this.message(err, 'échec');
+        echecs.push(`${a.lastName} ${a.firstName} : ${motif}`);
+      }
+    }
+
+    if (echecs.length) {
+      this.busy.set(false);
+      this.toast.error(`${echecs.length} collaborateur(s) non déplacé(s), rien n’est archivé : ${echecs.slice(0, 3).join(' — ')}`);
+      this.load();
+      return;
+    }
+
+    try {
+      if (!cible.dejaArchive) await firstValueFrom(this.api.archiveNode(cible.niveau, cible.id, cible.parentId));
+      this.toast.success((deplaces ? `${deplaces} collaborateur(s) réaffecté(s). ` : '')
+        + (cible.dejaArchive ? '' : `« ${cible.nom} » archivé(e).`));
+      this.arCible.set(null);
+    } catch (err) {
+      this.toast.error(this.message(err, 'Archivage impossible.'));
+    } finally {
+      this.busy.set(false);
+      this.load();
+    }
   }
 
   ouvrirRegroupement(): void {
@@ -211,6 +325,8 @@ export class OrganisationAdminComponent implements OnInit {
   }
 
   load(): void {
+    // Données fraîches après chaque modification (le cache de l'annuaire garde 30 s).
+    this.orgApi.invalidateOverviewCache();
     this.loading.set(true);
     this.error.set(null);
     forkJoin({
@@ -336,12 +452,17 @@ export class OrganisationAdminComponent implements OnInit {
   }
 
   async archiverPole(p: OrgPoleNode): Promise<void> {
+    const cible: CibleArchivage = {
+      niveau: 'pole', id: p.id, nom: p.name, parentId: '', cellules: (p.cellules ?? []).map((c) => c.id), dejaArchive: false,
+    };
+    if (agentsDuNoeud(this.agents(), cible).length) {
+      this.ouvrirArchivage(cible, null, null);
+      return;
+    }
     const { cellules, services } = contenuDuPole(p);
-    const effectif = this.effectifPole(p);
     const ok = await this.confirm.confirm({
       title: 'Archiver le pôle',
       message: `« ${p.name} » et ses ${cellules} cellule(s) / ${services} service(s) seront archivés. `
-        + (effectif ? `${effectif} collaborateur(s) y sont rattachés : déplacez-les avant si besoin. ` : '')
         + 'Rien n’est supprimé : l’historique est conservé et le pôle peut être restauré.',
       confirmLabel: 'Archiver',
     });
@@ -350,11 +471,14 @@ export class OrganisationAdminComponent implements OnInit {
   }
 
   async archiverCellule(p: OrgPoleNode, c: OrgCelluleNode): Promise<void> {
-    const effectif = this.effectifCellule(c);
+    const cible: CibleArchivage = { niveau: 'cellule', id: c.id, nom: c.name, parentId: p.id, cellules: [], dejaArchive: false };
+    if (agentsDuNoeud(this.agents(), cible).length) {
+      this.ouvrirArchivage(cible, null, p.id);
+      return;
+    }
     const ok = await this.confirm.confirm({
       title: 'Archiver la cellule',
       message: `« ${c.name} » sera archivée avec ses services. `
-        + (effectif ? `${effectif} collaborateur(s) y sont rattachés : déplacez-les avant si besoin. ` : '')
         + 'Rien n’est supprimé : l’historique est conservé et la cellule peut être restaurée.',
       confirmLabel: 'Archiver',
     });
@@ -363,6 +487,11 @@ export class OrganisationAdminComponent implements OnInit {
   }
 
   async archiverService(c: OrgCelluleNode, s: OrgServiceNode): Promise<void> {
+    const cible: CibleArchivage = { niveau: 'service', id: s.id, nom: s.name, parentId: c.id, cellules: [], dejaArchive: false };
+    if (agentsDuNoeud(this.agents(), cible).length) {
+      this.ouvrirArchivage(cible, c.id, null);
+      return;
+    }
     const ok = await this.confirm.confirm({
       title: 'Archiver le service',
       message: `« ${s.name} » ne sera plus proposé. L’historique est conservé et le service peut être restauré.`,

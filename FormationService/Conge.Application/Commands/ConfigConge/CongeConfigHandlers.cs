@@ -492,6 +492,20 @@ internal static class CongeQuotaPerimeter
         DirectoryOrgCatalogSnapshot catalog,
         CancellationToken ct)
     {
+        // v36 : un pôle, une cellule ou un service archivé dans Directory disparaît des quotas,
+        // même si un agent y est encore rattaché.
+        var nodes = await ResolveQuotaNodesBrutsAsync(employeRepo, rebac, actorId, team, catalog, ct);
+        return nodes.Where(n => !catalog.EstHorsArbre(n.NodeId)).ToList();
+    }
+
+    private static async Task<IReadOnlyList<QuotaNode>> ResolveQuotaNodesBrutsAsync(
+        IEmployeSnapshotRepository employeRepo,
+        IRebacClient? rebac,
+        Guid actorId,
+        IReadOnlyList<EmployeSnapshot> team,
+        DirectoryOrgCatalogSnapshot catalog,
+        CancellationToken ct)
+    {
         var actor = await employeRepo.GetByEmployeIdAsync(actorId, ct);
         var map = new Dictionary<string, QuotaNode>(StringComparer.OrdinalIgnoreCase);
 

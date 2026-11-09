@@ -199,6 +199,19 @@ public class CongeQuotaCatalogTests
         Assert.Equal("Cellule Nord", nice);
     }
 
+    [Fact]
+    public void Noeud_archive_hors_arbre_actif_v36()
+    {
+        var catalog = new DirectoryOrgCatalogSnapshot(
+            new Dictionary<string, string>(),
+            new Dictionary<string, int>(),
+            new Dictionary<string, int>(),
+            ActiveOrgNodeIds: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "cell-actif" });
+        Assert.False(catalog.EstHorsArbre("cell-actif"));
+        Assert.True(catalog.EstHorsArbre("cell-archivee"));
+        Assert.False(DirectoryOrgCatalogSnapshot.Empty.EstHorsArbre("cell-archivee"));
+    }
+
     private sealed class FakeRebac : IRebacClient
     {
         private readonly IReadOnlyDictionary<string, IReadOnlyList<string>> _byRelation;

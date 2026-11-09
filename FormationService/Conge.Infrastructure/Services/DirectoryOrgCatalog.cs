@@ -50,6 +50,7 @@ public sealed class DirectoryOrgCatalog(
         var serviceParents = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var celluleParents = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var poleDepartments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var actifs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Miroir local d’abord (offline / rename events).
         try
@@ -73,7 +74,7 @@ public sealed class DirectoryOrgCatalog(
             {
                 var overview = await resp.Content.ReadFromJsonAsync<DirectoryOrgOverviewDto>(JsonOptions, ct);
                 if (overview is not null)
-                    MergeOverview(overview, names, celluleCounts, serviceCounts, serviceParents, celluleParents, poleDepartments);
+                    MergeOverview(overview, names, celluleCounts, serviceCounts, serviceParents, celluleParents, poleDepartments, actifs);
             }
             else
             {
@@ -85,7 +86,7 @@ public sealed class DirectoryOrgCatalog(
             logger.LogWarning(ex, "Directory org overview unavailable — using mirror names only");
         }
 
-        return new DirectoryOrgCatalogSnapshot(names, celluleCounts, serviceCounts, serviceParents, celluleParents, poleDepartments);
+        return new DirectoryOrgCatalogSnapshot(names, celluleCounts, serviceCounts, serviceParents, celluleParents, poleDepartments, actifs);
     }
 
     private static void MergeOverview(
@@ -95,7 +96,8 @@ public sealed class DirectoryOrgCatalog(
         Dictionary<string, int> serviceCounts,
         Dictionary<string, string> serviceParents,
         Dictionary<string, string> celluleParents,
-        Dictionary<string, string> poleDepartments)
+        Dictionary<string, string> poleDepartments,
+        HashSet<string> actifs)
     {
         // Flat lists (legacy shape).
         foreach (var c in overview.Services ?? [])
@@ -115,13 +117,15 @@ public sealed class DirectoryOrgCatalog(
         {
             foreach (var pole in dept.Poles ?? [])
             {
+                if (!string.IsNullOrWhiteSpace(pole.Id))
+                    actifs.Add(pole.Id.Trim());
                 if (!string.IsNullOrWhiteSpace(pole.Id) && !string.IsNullOrWhiteSpace(pole.Name))
                     names[pole.Id.Trim()] = pole.Name.Trim();
                 if (!string.IsNullOrWhiteSpace(pole.Id) && !string.IsNullOrWhiteSpace(dept.Id))
                     poleDepartments[pole.Id.Trim()] = dept.Id.Trim();
                 foreach (var cell in pole.Cellules ?? [])
                 {
-                    RegisterCelluleServices(cell, names, serviceParents);
+                    RegisterCelluleServices(cell, names, serviceParents, actifs);
                     if (!string.IsNullOrWhiteSpace(cell.Id) && !string.IsNullOrWhiteSpace(pole.Id))
                         celluleParents[cell.Id.Trim()] = pole.Id.Trim();
                 }
@@ -130,11 +134,13 @@ public sealed class DirectoryOrgCatalog(
 
         foreach (var pole in overview.UnassignedPoles ?? [])
         {
+            if (!string.IsNullOrWhiteSpace(pole.Id))
+                actifs.Add(pole.Id.Trim());
             if (!string.IsNullOrWhiteSpace(pole.Id) && !string.IsNullOrWhiteSpace(pole.Name))
                 names[pole.Id.Trim()] = pole.Name.Trim();
             foreach (var cell in pole.Cellules ?? [])
             {
-                RegisterCelluleServices(cell, names, serviceParents);
+                RegisterCelluleServices(cell, names, serviceParents, actifs);
                 if (!string.IsNullOrWhiteSpace(cell.Id) && !string.IsNullOrWhiteSpace(pole.Id))
                     celluleParents[cell.Id.Trim()] = pole.Id.Trim();
             }
@@ -161,9 +167,12 @@ public sealed class DirectoryOrgCatalog(
     private static void RegisterCelluleServices(
         CelluleDto cell,
         Dictionary<string, string> names,
-        Dictionary<string, string> serviceParents)
+        Dictionary<string, string> serviceParents,
+        HashSet<string> actifs)
     {
         var cellId = cell.Id?.Trim();
+        if (!string.IsNullOrWhiteSpace(cellId))
+            actifs.Add(cellId);
         if (!string.IsNullOrWhiteSpace(cellId) && !string.IsNullOrWhiteSpace(cell.Name))
             names[cellId] = cell.Name.Trim();
 
@@ -171,6 +180,7 @@ public sealed class DirectoryOrgCatalog(
         {
             var svcId = svc.Id?.Trim();
             if (string.IsNullOrWhiteSpace(svcId)) continue;
+            actifs.Add(svcId);
             if (!string.IsNullOrWhiteSpace(svc.Name))
                 names[svcId] = svc.Name.Trim();
             if (!string.IsNullOrWhiteSpace(cellId))
