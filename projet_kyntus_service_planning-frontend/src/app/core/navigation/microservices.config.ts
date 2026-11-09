@@ -138,7 +138,7 @@ export const MICROSERVICES: Microservice[] = [
       { label: 'Vue d’ensemble', route: '/admin?section=overview', platformAdminSection: 'overview', roles: ADMIN_RH, hat: 'both', capability: 'admin.overview' },
       { label: 'Accès par rôle', route: '/admin?section=access', platformAdminSection: 'access', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
       { label: 'Accès par compte', route: '/admin?section=comptes', platformAdminSection: 'comptes', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
-      { label: 'Rôles', route: '/admin?section=roles', platformAdminSection: 'roles', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
+      { label: 'Rôles', route: '/admin?section=roles', platformAdminSection: 'roles', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.roles' },
       // v31 : une entrée par rubrique « Administration » de « Accès par rôle », dans le même ordre.
       { label: 'Utilisateurs', route: '/users', roles: ADMIN_RH, hat: 'both', capability: 'admin.users' },
       { label: 'Organisation', route: '/organisation/administrative', roles: ADMIN_RH, hat: 'both', capability: 'admin.organisation' },

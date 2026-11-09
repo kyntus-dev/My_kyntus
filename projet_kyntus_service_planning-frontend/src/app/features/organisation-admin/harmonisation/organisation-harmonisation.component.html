@@ -40,7 +40,12 @@
       <button type="button" [class.is-active]="filtre() === 'tout'" (click)="filtre.set('tout')">Tout</button>
       <button type="button" [class.is-active]="filtre() === 'changer'" (click)="filtre.set('changer')">Renommés / déplacés</button>
       <button type="button" [class.is-active]="filtre() === 'archiver'" (click)="filtre.set('archiver')">À archiver</button>
+      <button type="button" [class.is-active]="filtre() === 'bloques'" (click)="filtre.set('bloques')">À archiver avec des agents ({{ synthese().bloques }})</button>
     </div>
+    @if (synthese().bloques > 0) {
+      <p class="ku-alert ku-alert--warning oh-bloques">{{ synthese().bloques }} ancien(s) pôle(s) ou cellule(s) sans équivalent dans le fichier ont encore des agents :
+        ils ne seront pas archivés. Choisissez dans « Devient » la cellule du fichier où ils vont (leurs agents y seront placés).</p>
+    }
     @if (loading() && !etat()) {
       <div class="ku-skeleton"></div>
     } @else {
@@ -49,7 +54,8 @@
           <thead><tr><th>Niveau</th><th>Actuel</th><th>Rattachement</th><th>Agents</th><th>Devient (fichier)</th></tr></thead>
           <tbody>
             @for (l of lignesFiltrees(); track l.niveau + l.id) {
-              <tr [class.oh-contrat]="l.niveau === 'contrat'" [class.oh-archive]="!l.protege && decisionDe(l) === ARCHIVER">
+              <tr [class.oh-contrat]="l.niveau === 'contrat'" [class.oh-archive]="!l.protege && decisionDe(l) === ARCHIVER"
+                  [class.oh-bloque]="!l.protege && decisionDe(l) === ARCHIVER && l.agents > 0">
                 <td><span class="ku-chip" [class.ku-chip--info]="l.niveau === 'contrat'">{{ l.niveau === 'contrat' ? 'Contrat' : l.niveau === 'pole' ? 'Pôle' : 'Cellule' }}</span></td>
                 <td [class.oh-ind1]="l.niveau === 'pole'" [class.oh-ind2]="l.niveau === 'cellule'"><b>{{ l.nom }}</b></td>
                 <td class="ku-muted">{{ l.parent }}</td>

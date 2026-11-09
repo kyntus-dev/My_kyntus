@@ -93,7 +93,7 @@ export class AdminRootComponent {
     { id: 'overview' as const, label: 'Vue d’ensemble', capability: 'admin.overview' },
     { id: 'access' as const, label: 'Accès par rôle', capability: 'admin.access' },
     { id: 'comptes' as const, label: 'Accès par compte', capability: 'admin.access' },
-    { id: 'roles' as const, label: 'Rôles', capability: 'admin.access' },
+    { id: 'roles' as const, label: 'Rôles', capability: 'admin.roles' },
     { id: 'sync' as const, label: 'Synchro organisation', capability: 'admin.sync' },
     { id: 'modules' as const, label: 'Configuration des modules', capability: 'admin.modules' },
     { id: 'anomalies' as const, label: 'Inbox anomalies', capability: 'admin.anomalies' },

@@ -68,7 +68,7 @@ export class OrganisationHarmonisationComponent implements OnInit {
   readonly enCours = signal(false);
   readonly journal = signal<Journal[]>([]);
   readonly phasesOuvertes = signal<Set<Phase>>(new Set());
-  readonly filtre = signal<'tout' | 'archiver' | 'changer'>('tout');
+  readonly filtre = signal<'tout' | 'archiver' | 'changer' | 'bloques'>('tout');
 
   readonly decisions = computed<Decisions>(() => {
     const e = this.etat();
@@ -117,6 +117,7 @@ export class OrganisationHarmonisationComponent implements OnInit {
       if (l.protege) return false;
       const d = this.decisionDe(l);
       if (f === 'archiver') return d === ARCHIVER;
+      if (f === 'bloques') return d === ARCHIVER && l.agents > 0;
       return d !== ARCHIVER && d.split(' › ').pop() !== l.nom;
     });
   });
@@ -126,6 +127,7 @@ export class OrganisationHarmonisationComponent implements OnInit {
     return {
       gardes: l.filter((x) => this.decisionDe(x) !== ARCHIVER).length,
       archives: l.filter((x) => this.decisionDe(x) === ARCHIVER).length,
+      bloques: l.filter((x) => this.decisionDe(x) === ARCHIVER && x.agents > 0).length,
       etapes: this.plan()?.etapes.length ?? 0,
       differees: this.plan()?.etapes.filter((e) => estDifferee(e.operation)).length ?? 0,
       alertes: this.plan()?.alertes.length ?? 0,
@@ -269,6 +271,7 @@ export class OrganisationHarmonisationComponent implements OnInit {
       case 'regrouperCellules':
         return this.api.regrouperCellules({ sourceIds: o.sourceIds, serviceIds: [], cibleId: o.cibleId, nomCible: o.nomCible, poleId: o.poleId, motif: MOTIF });
       case 'archiverCellule': return this.api.archiveNode('cellule', o.celluleId, o.poleId);
+      case 'archiverService': return this.api.archiveNode('service', o.serviceId, o.celluleId);
       case 'creerService': return this.api.createService(o.celluleId, o.nom);
       case 'renommerService': return this.api.renameNode('service', o.serviceId, o.celluleId, o.nom);
       case 'placerAgent': return this.api.moveAgent(o.employeId, o.serviceId, { force: true, reason: MOTIF });

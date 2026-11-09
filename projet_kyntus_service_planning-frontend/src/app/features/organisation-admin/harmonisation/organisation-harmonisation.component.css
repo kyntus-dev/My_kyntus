@@ -16,3 +16,5 @@
 .oh-note { margin-top: 4px; }
 .oh-details { border: 1px solid var(--border-color); border-radius: 10px; padding: 8px 14px; }
 .oh-details summary { cursor: pointer; font-weight: 600; }
+.oh-bloque td { background: color-mix(in srgb, #f59e0b 12%, var(--bg-card)); }
+.oh-bloques { margin: 0; padding: 10px 14px; }

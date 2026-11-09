@@ -133,6 +133,8 @@ const PARRAINAGE_MODULE = [
 const R = KyntusRoleNames;
 const SRV_ADMIN = [R.Admin] as const;
 const SRV_ADMIN_RH = [R.Admin, R.RH] as const;
+const SRV_ADMIN_RH_AUDIT = [R.Admin, R.RH, R.Audit] as const;
+const SRV_ADMIN_AUDIT = [R.Admin, R.Audit] as const;
 /** PointageRoles.PeutVoirEquipe et API congés « équipe ». */
 const SRV_RESPONSABLES = [R.Admin, R.RH, R.Superviseur, R.Manager, R.ReferentTechnique, R.Coach, R.ChefDeProjet, R.Rp] as const;
 const SRV_VALIDATION_CONGES = [R.Admin, R.RH, R.Superviseur, R.Manager] as const;
@@ -153,21 +155,23 @@ const SRV_FORMATION_INITIALE = [R.Admin, R.Formateur, R.EquipeFormation] as cons
 
 export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'admin.overview', label: 'Vue d’ensemble', module: 'Administration', view: ADMIN_RH },
-  { id: 'admin.access', label: 'Accès par rôle', module: 'Administration', view: ADMIN, configure: ADMIN },
+  // v35 : les API d'accès par rôle / par compte n'acceptent que Admin et RH (modification : Admin).
+  { id: 'admin.access', label: 'Accès par rôle', module: 'Administration', view: ADMIN, configure: ADMIN, serveur: SRV_ADMIN_RH, serveurAgir: SRV_ADMIN },
+  { id: 'admin.roles', label: 'Rôles (création, suppression)', module: 'Administration', view: ADMIN, act: ADMIN, serveur: SRV_ADMIN },
   { id: 'admin.users', label: 'Utilisateurs', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH, serveurAgir: SRV_ADMIN_RH },
   { id: 'rh.contrats', label: 'Contrats', module: 'Ressources humaines', view: TEAM_LEAD },
   { id: 'rh.affectations', label: 'Réaffecter les agents (service, pôle, contrat, poste)', module: 'Ressources humaines', view: ADMIN_RH, act: ADMIN_RH, defaultScope: 'Global' },
   { id: 'rh.activation', label: 'Activer / désactiver les comptes', module: 'Ressources humaines', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'admin.organisation', label: 'Organisation', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },
-  { id: 'admin.sync', label: 'Synchro organisation', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },
+  { id: 'admin.sync', label: 'Synchro organisation', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH, serveur: SRV_ADMIN_RH },
   { id: 'admin.modules', label: 'Configuration des modules', module: 'Administration', view: ADMIN_RH },
-  { id: 'admin.anomalies', label: 'Inbox anomalies', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH },
+  { id: 'admin.anomalies', label: 'Inbox anomalies', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH, serveur: SRV_ADMIN_RH_AUDIT },
 
-  { id: 'audit.dashboard', label: 'Tableau de bord conformité', module: 'Audit', view: ADMIN_AUDIT },
-  { id: 'audit.journal', label: 'Journal unifié', module: 'Audit', view: ADMIN_AUDIT },
-  { id: 'audit.access-history', label: 'Historique d’accès', module: 'Audit', view: ADMIN_AUDIT },
-  { id: 'audit.anomalies', label: 'Anomalies', module: 'Audit', view: ADMIN_AUDIT },
-  { id: 'audit.reporting', label: 'Reporting', module: 'Audit', view: ADMIN_AUDIT },
+  { id: 'audit.dashboard', label: 'Tableau de bord conformité', module: 'Audit', view: ADMIN_AUDIT, serveur: SRV_ADMIN_AUDIT },
+  { id: 'audit.journal', label: 'Journal unifié', module: 'Audit', view: ADMIN_AUDIT, serveur: SRV_ADMIN_AUDIT },
+  { id: 'audit.access-history', label: 'Historique d’accès', module: 'Audit', view: ADMIN_AUDIT, serveur: SRV_ADMIN_AUDIT },
+  { id: 'audit.anomalies', label: 'Anomalies', module: 'Audit', view: ADMIN_AUDIT, serveur: SRV_ADMIN_AUDIT },
+  { id: 'audit.reporting', label: 'Reporting', module: 'Audit', view: ADMIN_AUDIT, serveur: SRV_ADMIN_AUDIT },
 
   { id: 'planning.self', label: 'Mes plannings', module: 'Planification', view: SELF, defaultScope: 'Self' },
   { id: 'planning.renforts-self', label: 'Mes renforts samedi', module: 'Planification', view: SELF, defaultScope: 'Self' },

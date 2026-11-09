@@ -67,7 +67,7 @@ export const routes: Routes = [
         canActivate: [AuthGuard],
         data: {
           roles: ROLE_SETS.adminRh,
-          capabilities: ['admin.overview', 'admin.access', 'admin.users', 'admin.organisation', 'admin.sync', 'admin.modules', 'admin.anomalies'],
+          capabilities: ['admin.overview', 'admin.access', 'admin.roles', 'admin.users', 'admin.organisation', 'admin.sync', 'admin.modules', 'admin.anomalies'],
         },
         loadComponent: () =>
           import('./features/platform/pages/admin-root.component')
@@ -156,7 +156,7 @@ export const routes: Routes = [
       {
         path: 'formations/passage-production',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh },
+        data: { roles: ROLE_SETS.adminRh, ouvertureIam: 'formation.passage' },
         loadComponent: () =>
           import('./features/formation/rh/formation-rh-prod-queue.component')
             .then(m => m.FormationRhProdQueueComponent),
@@ -177,7 +177,7 @@ export const routes: Routes = [
       {
         path: 'formations/documents-checklist-config',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh },
+        data: { roles: ROLE_SETS.adminRh, ouvertureIam: 'formation.checklist' },
         loadComponent: () =>
           import('./features/formation/rh/formation-documents-config.component')
             .then(m => m.FormationDocumentsConfigComponent),
@@ -194,7 +194,7 @@ export const routes: Routes = [
         path: 'formations',
         pathMatch: 'full',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh },
+        data: { roles: ROLE_SETS.adminRh, ouvertureIam: 'formation.admin' },
         loadComponent: () =>
           import('./features/formation/admin/formation-admin.component')
             .then(m => m.FormationAdminComponent),
@@ -310,7 +310,7 @@ export const routes: Routes = [
         // des agents et archives. « Supprimer » archive : rien n'est effacé.
         path: 'organisation/administrative',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh },
+        data: { roles: ROLE_SETS.adminRh, ouvertureIam: 'admin.organisation' },
         loadComponent: () =>
           import('./features/organisation-admin/organisation-admin.component')
             .then((m) => m.OrganisationAdminComponent),

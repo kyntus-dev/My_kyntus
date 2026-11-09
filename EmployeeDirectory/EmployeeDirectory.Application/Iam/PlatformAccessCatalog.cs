@@ -91,6 +91,8 @@ public static class PlatformAccessCatalog
     [
         S("admin.overview", "Vue d'ensemble", "Administration", View: AdminRh),
         S("admin.access", "Accès par rôle", "Administration", View: Admin, Configure: Admin),
+        // v35 : gestion des rôles (création, suppression) — l'API est réservée à l'Admin.
+        S("admin.roles", "Rôles (création, suppression)", "Administration", View: Admin, Act: Admin),
         S("admin.users", "Utilisateurs", "Administration", View: AdminRh, Act: AdminRh),
         // v21 : changement de service d'un agent (de A vers B). Modifier = réaffecter.
         S("rh.contrats", "Contrats", "Ressources humaines", View: TeamLead),

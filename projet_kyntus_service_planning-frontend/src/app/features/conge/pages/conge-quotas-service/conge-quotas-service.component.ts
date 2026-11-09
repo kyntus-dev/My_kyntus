@@ -8,6 +8,8 @@ import { UserService } from '../../../users/services/user.service';
 import { QuotaCongeServiceDto } from '../../../../core/models/conge.models';
 import { resolveCurrentUserGuid, resolveUserGuid } from '../../../../core/lib/user-guid.util';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
+import { PrimeOrgApiService } from '../../../prime/services/prime-org-api.service';
+import { cheminsNoeuds } from './quota-chemins.util';
 
 @Component({
   selector: 'app-conge-quotas-service',
@@ -49,7 +51,7 @@ import { KyntusSessionService } from '../../../../core/session/kyntus-session.se
                   <td>
                     <span class="scope-chip" data-scope="Cellule">Cellule</span>
                   </td>
-                  <td>{{ r.serviceNom }}</td>
+                  <td><b>{{ r.serviceNom }}</b><small class="chemin" *ngIf="chemins[r.serviceId] as c">{{ c }}</small></td>
                   <td>{{ r.effectif }}</td>
                   <td>
                     <input class="ky-input" type="number" min="1" [(ngModel)]="edits[r.serviceId]"
@@ -83,7 +85,7 @@ import { KyntusSessionService } from '../../../../core/session/kyntus-session.se
                   <td>
                     <span class="scope-chip" data-scope="Service">Service</span>
                   </td>
-                  <td>{{ r.serviceNom }}</td>
+                  <td><b>{{ r.serviceNom }}</b><small class="chemin" *ngIf="chemins[r.serviceId] as c">{{ c }}</small></td>
                   <td>{{ r.effectif }}</td>
                   <td>
                     <input class="ky-input" type="number" min="1" [(ngModel)]="edits[r.serviceId]"
@@ -106,6 +108,7 @@ import { KyntusSessionService } from '../../../../core/session/kyntus-session.se
   `,
   styles: [`
     .hint { color: var(--text-muted); margin-top: 1rem; font-size: 0.9rem; line-height: 1.45; }
+    .chemin { display: block; font-size: 0.75rem; color: var(--text-muted); }
     .quota-section { margin-top: 1.5rem; }
     .quota-section-title {
       margin: 0;
@@ -147,6 +150,9 @@ export class CongeQuotasServiceComponent implements OnInit {
   private readonly userSvc = inject(UserService);
   private readonly session = inject(KyntusSessionService);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly org = inject(PrimeOrgApiService);
+  /** v35 : « Contrat › Pôle (› Cellule) » de chaque ligne : deux cellules du même nom (ex. INEO) se distinguent. */
+  chemins: Record<string, string> = {};
 
   rows: QuotaCongeServiceDto[] = [];
   edits: Record<string, number | null> = {};
@@ -154,14 +160,23 @@ export class CongeQuotasServiceComponent implements OnInit {
   private superviseurId = '';
 
   get celluleRows(): QuotaCongeServiceDto[] {
-    return this.rows.filter((r) => (r.scopeKind || '').toLowerCase() === 'cellule');
+    return this.trier(this.rows.filter((r) => (r.scopeKind || '').toLowerCase() === 'cellule'));
   }
 
   get serviceRows(): QuotaCongeServiceDto[] {
-    return this.rows.filter((r) => (r.scopeKind || '').toLowerCase() !== 'cellule');
+    return this.trier(this.rows.filter((r) => (r.scopeKind || '').toLowerCase() !== 'cellule'));
+  }
+
+  private trier(rows: QuotaCongeServiceDto[]): QuotaCongeServiceDto[] {
+    const cle = (r: QuotaCongeServiceDto) => `${this.chemins[r.serviceId] ?? ''} ${r.serviceNom}`;
+    return [...rows].sort((a, b) => cle(a).localeCompare(cle(b), 'fr', { sensitivity: 'base' }));
   }
 
   ngOnInit(): void {
+    this.org.loadOverview().subscribe({
+      next: (o) => { this.chemins = cheminsNoeuds(o.operationalDepartments ?? [], o.unassignedPoles ?? []); this.cdr.detectChanges(); },
+      error: () => undefined,
+    });
     this.userSvc.getCurrentUser().subscribe({
       next: (u) => {
         this.superviseurId =

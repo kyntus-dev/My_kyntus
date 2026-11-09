@@ -102,8 +102,9 @@ describe('harmonisation : plan', () => {
     expect(libelles).toContain('Renommer la cellule « gestion des rdv » en « Gestion des RDV » (Bytel Kyntus › Pôle client)');
     expect(libelles).toContain('Renommer la cellule « Satisfaction client » en « Satcli » (Bytel Kyntus › Pôle client)');
     expect(libelles).toContain('Renommer le service « RDV » en « Gestion des RDV »');
-    // Satisfaction client a deux services : gardés, signalés.
-    expect(plan.alertes.some((a) => a.includes('Satcli') && a.includes('2 services'))).toBe(true);
+    // Satisfaction client a deux services : un seul gardé (renommé Satcli), l'autre archivé (doublon vide).
+    expect(libelles).toContain('Renommer le service « N1 » en « Satcli »');
+    expect(libelles).toContain('Archiver le service en double « N2 » (cellule Satcli)');
     // Agent de Cible Prio placé dans Gestion des RDV ; l'agent de TISSEO attend la création de BTB.
     expect(plan.etapes).toContainEqual(expect.objectContaining({ operation: { type: 'placerAgent', employeId: 'e1', serviceId: 's1' } }));
     expect(plan.introuvables).toEqual(['Fantôme Absent (Bytel Kyntus › Pôle client › Satcli)']);
@@ -248,5 +249,29 @@ describe('harmonisation : aucun nœud du fichier oublié', () => {
       collaborateurs: [{ nom: 'MELHAOUI Safae', contrat: 'Bytel Kyntus', pole: 'Sécurisation & BO', cellule: 'Malfaçons' }], responsables: [] });
     expect(plan.introuvables[0]).toContain('nom proche dans l\'application : MALHAOUI Safae ?');
     expect(plan.etapes.some((x) => x.operation.type === 'placerAgent')).toBe(false);
+  });
+});
+
+describe('harmonisation : services en double', () => {
+  it('un seul service par cellule : agents des doublons placés dans le service gardé, doublons vides archivés', () => {
+    const e: EtatOrganisation = {
+      contrats: [{ id: 'd', code: 'B', nom: 'Bytel Kyntus', poles: [{ id: 'p', nom: 'Pôle technique', cellules: [
+        { id: 'c', nom: 'Support technicien', services: [
+          { id: 'a', nom: 'Support technicien' }, { id: 'b', nom: 'Support technicien' }, { id: 'z', nom: 'Support technicien' }] }] }] }],
+      polesSansContrat: [], affectations: [],
+      employes: [
+        ...Array.from({ length: 3 }, (_, i) => ({ id: 'x' + i, prenom: 'P' + i, nom: 'AGENT' + i, role: 'Pilote', poleId: 'p', celluleId: 'c', serviceId: 'b' })),
+        { id: 'y', prenom: 'Q', nom: 'SEUL', role: 'Pilote', poleId: 'p', celluleId: 'c', serviceId: 'a' },
+        { id: 'r', prenom: 'Ref', nom: 'TECH', role: 'Référent technique', poleId: 'p', celluleId: 'c', serviceId: 'z' },
+      ],
+    };
+    const ref: RefContrat[] = [{ nom: 'Bytel Kyntus', activite: 'Bytel', poles: [{ nom: 'Pôle technique', cellules: ['Support technicien'] }] }];
+    const plan = planifier(e, proposerDecisions(e, ref), { ref, collaborateurs: [], responsables: [] });
+    // Gardé : même nom et le plus d'agents (b, 3 agents) ; le seul agent de « a » y est placé, puis « a » est archivé au passage suivant.
+    expect(plan.etapes.filter((x) => x.operation.type === 'placerAgent').map((x) => x.operation)).toEqual([
+      { type: 'placerAgent', employeId: 'y', serviceId: 'b' }]);
+    // « z » garde un référent technique : jamais replacé comme pilote, signalé.
+    expect(plan.alertes.some((a) => a.includes('TECH Ref'))).toBe(true);
+    expect(plan.etapes.some((x) => x.operation.type === 'archiverService')).toBe(false);
   });
 });

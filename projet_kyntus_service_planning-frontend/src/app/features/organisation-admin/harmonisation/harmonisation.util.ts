@@ -206,6 +206,7 @@ export type Operation =
   | { type: 'renommerCellule'; poleId: string; celluleId: string; nom: string }
   | { type: 'regrouperCellules'; sourceIds: string[]; cibleId: string | null; nomCible: string | null; poleId: string | null }
   | { type: 'archiverCellule'; poleId: string; celluleId: string }
+  | { type: 'archiverService'; celluleId: string; serviceId: string }
   | { type: 'creerService'; celluleId: string; nom: string }
   | { type: 'renommerService'; celluleId: string; serviceId: string; nom: string }
   | { type: 'placerAgent'; employeId: string; serviceId: string }
@@ -219,6 +220,12 @@ export interface Plan {
   alertes: string[];
   /** Collaborateurs du fichier introuvables dans l'application. */
   introuvables: string[];
+}
+
+/** Poste de production (pilote) : seuls ces comptes sont placés automatiquement dans un service. */
+export function estPilote(role: string | null | undefined): boolean {
+  const r = cle(role);
+  return r === '' || r === 'pilote' || r === 'employee' || r === 'agent' || r === 'pilote expert';
 }
 
 /** Préfixe des identifiants provisoires (nœud du fichier pas encore créé). */
@@ -392,16 +399,32 @@ export function planifier(
     }
   }
 
-  // 4. Services : chaque cellule du fichier en a au moins un ; un service unique prend le nom de la cellule.
+  // 4. Services : un seul service par cellule du fichier, au nom de la cellule. Plusieurs services
+  // (doublons, anciens services venus d'un regroupement) : le service gardé est celui qui porte le nom
+  // de la cellule, sinon celui qui a le plus d'agents ; les agents des autres y sont placés, puis les
+  // autres services sont archivés (étape Archivage, une fois vides).
+  const agentsDuService = (sid: string) => etat.employes.filter((e) => e.serviceId === sid);
+  const garde = (cell: EtatCellule, nomCell: string): EtatService =>
+    [...cell.services].sort((a, b) =>
+      Number(cle(b.nom) === cle(nomCell)) - Number(cle(a.nom) === cle(nomCell))
+      || agentsDuService(b.id).length - agentsDuService(a.id).length
+      || a.nom.localeCompare(b.nom))[0];
   for (const [ch, cell] of P.cellule) {
     const nomCell = nomDe(ch);
-    if (cell.services.length === 0)
+    if (cell.services.length === 0) {
       add('services', `Créer le service « ${nomCell} » dans la cellule ${nomCell}`, { type: 'creerService', celluleId: cell.id, nom: nomCell });
-    else if (cell.services.length === 1 && cell.services[0].nom !== nomCell)
-      add('services', `Renommer le service « ${cell.services[0].nom} » en « ${nomCell} »`,
-        { type: 'renommerService', celluleId: cell.id, serviceId: cell.services[0].id, nom: nomCell });
-    else if (cell.services.length > 1)
-      alertes.push(`Cellule « ${nomCell} » : ${cell.services.length} services (${cell.services.map((s) => s.nom).join(', ')}) — gardés tels quels, à revoir dans Contrats, pôles et cellules.`);
+      continue;
+    }
+    const g = garde(cell, nomCell);
+    if (g.nom !== nomCell)
+      add('services', `Renommer le service « ${g.nom} » en « ${nomCell} »`, { type: 'renommerService', celluleId: cell.id, serviceId: g.id, nom: nomCell });
+    for (const autre of cell.services.filter((sv) => sv.id !== g.id)) {
+      for (const e of agentsDuService(autre.id)) {
+        if (!estPilote(e.role)) continue; // signalé à l'archivage : un responsable n'est jamais replacé comme pilote
+        add('services', `Fusion du service « ${autre.nom} » dans « ${nomCell} » : placer ${e.nom.toUpperCase()} ${e.prenom}`,
+          { type: 'placerAgent', employeId: e.id, serviceId: g.id });
+      }
+    }
   }
 
   // Cellule du fichier : existante (avec un service) ou à créer / déplacer (identifiant provisoire).
@@ -410,7 +433,7 @@ export function planifier(
     const deplacee = cell && P.poleDeCellule.get(cell.id)?.id !== idPole(ch.split(SEP).slice(0, 2).join(SEP));
     if (!cell || cell.services.length === 0 || deplacee) return { id: `${NOUVEAU}${ch}`, nom: nomCell, existe: false };
     if (serviceActuel && cell.services.some((s) => s.id === serviceActuel)) return 'deja';
-    const service = cell.services.length === 1 ? cell.services[0] : cell.services.find((s) => cle(s.nom) === cle(nomCell)) ?? cell.services[0];
+    const service = garde(cell, nomCell);
     return { id: service.id, nom: service.nom, existe: true };
   };
 
@@ -426,9 +449,10 @@ export function planifier(
     if (rc.doublon?.length) alertes.push(`« ${rc.nom} » figure deux fois dans le fichier (${rc.doublon.join(' et ')}) : placé dans « ${rc.cellule} », à vérifier.`);
     const cible = serviceDe(chemin(rc.contrat, rc.pole, rc.cellule), rc.cellule, e.serviceId);
     if (cible === 'deja') continue;
-    const cell = P.cellule.get(chemin(rc.contrat, rc.pole, rc.cellule));
-    if (cible.existe && cell && cell.services.length > 1 && cle(cible.nom) !== cle(rc.cellule))
-      alertes.push(`« ${rc.nom} » placé dans le service « ${cible.nom} » (la cellule ${rc.cellule} en a plusieurs) : à vérifier.`);
+    if (!estPilote(e.role)) {
+      alertes.push(`« ${rc.nom} » a le poste ${e.role} : il n'est pas replacé comme pilote (à faire dans sa fiche si besoin).`);
+      continue;
+    }
     add('collaborateurs', `Placer ${e.nom.toUpperCase()} ${e.prenom} dans ${rc.contrat} › ${rc.pole} › ${rc.cellule}${apres(cible.id, 'de la cellule')}`,
       { type: 'placerAgent', employeId: e.id, serviceId: cible.id });
   }
@@ -482,6 +506,19 @@ export function planifier(
   const actifs = (pred: (e: EtatEmploye) => boolean) => etat.employes.filter(pred);
   const nomsDe = (es: EtatEmploye[]) => es.slice(0, 5).map((e) => `${e.nom.toUpperCase()} ${e.prenom}`).join(', ') + (es.length > 5 ? '…' : '');
   const porteursCellules = new Set([...P.cellule.values()].map((c) => c.id));
+  for (const [ch, cell] of P.cellule) {
+    if (cell.services.length < 2) continue;
+    const g = garde(cell, nomDe(ch));
+    for (const autre of cell.services.filter((sv) => sv.id !== g.id)) {
+      const restent = agentsDuService(autre.id);
+      const responsables = restent.filter((e) => !estPilote(e.role));
+      if (responsables.length)
+        alertes.push(`Service « ${autre.nom} » (cellule ${nomDe(ch)}) non archivé : ${nomsDe(responsables)} y est rattaché (poste d'encadrement, à replacer dans sa fiche).`);
+      else if (!restent.length)
+        add('archives', `Archiver le service en double « ${autre.nom} » (cellule ${nomDe(ch)})`, { type: 'archiverService', celluleId: cell.id, serviceId: autre.id });
+      // sinon : ses pilotes sont placés à l'étape Services, il est archivé au passage suivant
+    }
+  }
   const porteursPoles = new Set([...P.pole.values()].map((p) => p.id));
   for (const { pole } of polesTraites(etat)) {
     for (const cell of pole.cellules) {
