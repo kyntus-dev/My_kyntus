@@ -316,10 +316,10 @@ public sealed class PresenceService(
         var formation = ids.Intersect(enFormation).Union(rattaches).Distinct().ToList();
         if (scope.Count == 0 && formation.Count == 0)
             return (new List<int>(), "Aucun périmètre rattaché à votre compte");
-        var tous = horsFormation.Concat(formation).Distinct().ToList();
-        return (tous, formation.Count == 0
-            ? $"Votre périmètre ({tous.Count} agent(s))"
-            : $"Votre périmètre ({tous.Count} agent(s), dont {formation.Count} en formation)");
+        var visibles = horsFormation.Concat(formation).Distinct().ToList();
+        return (visibles, formation.Count == 0
+            ? $"Votre périmètre ({visibles.Count} agent(s))"
+            : $"Votre périmètre ({visibles.Count} agent(s), dont {formation.Count} en formation)");
     }
 
     private async Task<User?> FindViewerAsync(PresenceViewer viewer, CancellationToken ct)
