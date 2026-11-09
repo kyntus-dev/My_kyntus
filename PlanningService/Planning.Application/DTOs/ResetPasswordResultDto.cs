@@ -7,6 +7,9 @@ public class ResetPasswordResultDto
     public string TemporaryPassword { get; set; } = string.Empty;
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
+
+    /// <summary>v38 : corrections faites sur le compte de connexion (réactivé, déverrouillé, e-mail corrigé…).</summary>
+    public List<string> Corrections { get; set; } = [];
 }
 
 public class ResetPasswordsByGroupRequest

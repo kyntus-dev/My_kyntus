@@ -14,4 +14,13 @@ public class AdminResetPasswordDto
 
     [Required]
     public required string NewPassword { get; set; }
+
+    /// <summary>
+    /// v38 : collaborateur actif dans l'application. Vrai : un compte de connexion désactivé est réactivé,
+    /// sinon la personne ne pourrait pas se connecter avec le nouveau mot de passe.
+    /// </summary>
+    public bool? Activer { get; set; }
 }
+
+/// <summary>v38 : compte réinitialisé et ce qui a été corrigé pour que la connexion fonctionne.</summary>
+public sealed record AdminResetPasswordResult(int Id, string Email, Guid SubjectId, IReadOnlyList<string> Corrections);

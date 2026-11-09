@@ -289,8 +289,8 @@ public class AuthController : ControllerBase
     {
         try
         {
-            await _mediator.Send(new AdminResetPasswordCommand(dto));
-            return Ok(new { message = "Mot de passe réinitialisé." });
+            var r = await _mediator.Send(new AdminResetPasswordCommand(dto));
+            return Ok(new { message = "Mot de passe réinitialisé.", id = r.Id, email = r.Email, subjectId = r.SubjectId, corrections = r.Corrections });
         }
         catch (ArgumentException ex)
         {

@@ -940,6 +940,12 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         if (user is null)
             return null;
 
+        // v38 : un collaborateur désactivé (sortie) ne peut pas se connecter : le dire tout de suite
+        // plutôt que de donner un mot de passe qui échouera avec « e-mail ou mot de passe incorrect ».
+        if (!user.IsActive)
+            throw new InvalidOperationException(
+                "Ce collaborateur est désactivé dans l'application : réactivez son compte avant de réinitialiser son mot de passe.");
+
         var password = PasswordGenerator.Generate();
 
         // Le mot de passe Planning n'est changé qu'une fois le compte de connexion (Auth) à jour :
@@ -959,6 +965,13 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
                 $"La réinitialisation du compte de connexion a échoué : {auth.Message} Réessayez ou contactez l'administrateur.");
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
+        // v38 : lien vers le compte de connexion enregistré. Sans lui, une synchronisation suivante
+        // (rôle, affectation) pouvait recréer un compte et rendre le nouveau mot de passe inutilisable.
+        if (auth.AuthUserId is int authId && user.AuthUserId != authId)
+        {
+            _logger.LogInformation("PasswordReset: AuthUserId {Old} -> {New} pour {Email}", user.AuthUserId, authId, user.Email);
+            user.AuthUserId = authId;
+        }
         await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation(
@@ -974,6 +987,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             TemporaryPassword = password,
             FirstName = user.FirstName,
             LastName = user.LastName,
+            Corrections = auth.Corrections.ToList(),
         };
     }
 
@@ -1075,7 +1089,18 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         return result;
     }
 
-    private sealed record ResultatAuth(bool Ok, bool Introuvable, string Message);
+    private sealed record ResultatAuth(bool Ok, bool Introuvable, string Message)
+    {
+        /// <summary>v38 : compte Auth réinitialisé et corrections faites (réactivation, e-mail…).</summary>
+        public int? AuthUserId { get; init; }
+        public IReadOnlyList<string> Corrections { get; init; } = [];
+    }
+
+    private sealed class AuthResetReponse
+    {
+        public int Id { get; set; }
+        public List<string>? Corrections { get; set; }
+    }
 
     private async Task<ResultatAuth> ResetAuthPasswordAsync(User user, string newPassword, CancellationToken ct)
     {
@@ -1089,11 +1114,27 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
                     AuthUserId = user.AuthUserId,
                     Email = user.Email,
                     NewPassword = newPassword,
+                    Activer = user.IsActive,
                 },
                 ct);
 
             if (response.IsSuccessStatusCode)
-                return new ResultatAuth(true, false, string.Empty);
+            {
+                AuthResetReponse? lu = null;
+                try
+                {
+                    lu = await response.Content.ReadFromJsonAsync<AuthResetReponse>(cancellationToken: ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Réponse de réinitialisation Auth illisible pour {Email}", user.Email);
+                }
+                return new ResultatAuth(true, false, string.Empty)
+                {
+                    AuthUserId = lu is { Id: > 0 } ? lu.Id : null,
+                    Corrections = lu?.Corrections ?? new List<string>(),
+                };
+            }
 
             var body = await response.Content.ReadAsStringAsync(ct);
             _logger.LogWarning(
@@ -1128,6 +1169,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
                     DefaultPassword = password,
                     RoleName = user.Role?.Name,
                     EmployeeId = user.Guid,
+                    ImposerMotDePasse = true,
                 },
                 ct);
             if (response.IsSuccessStatusCode
@@ -1379,6 +1421,9 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
                         DefaultPassword = password,
                         RoleName = user.Role?.Name,
                         EmployeeId = user.Guid,
+                        // v38 : mot de passe généré (aucun choisi) : il ne sert qu'à créer un compte
+                        // absent, jamais à remplacer le mot de passe d'un compte existant.
+                        ImposerMotDePasse = !string.IsNullOrWhiteSpace(defaultPassword),
                     });
 
                 if (response.IsSuccessStatusCode)
@@ -1436,6 +1481,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
                         DefaultPassword = ResolveOrGeneratePassword(i.DefaultPassword),
                         RoleName = i.User.Role?.Name,
                         EmployeeId = i.User.Guid,
+                        ImposerMotDePasse = true,
                     }).ToList(),
                 };
 

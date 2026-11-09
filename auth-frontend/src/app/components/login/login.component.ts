@@ -79,13 +79,18 @@ export class LoginComponent implements OnInit {
   onSubmit(): void {
     this.errorMessage = '';
 
+    // v38 : espaces autour de l'e-mail (copier-coller, clavier de téléphone) retirés avant la vérification.
+    const emailCtrl = this.loginForm.get('email');
+    const brut = String(emailCtrl?.value ?? '');
+    if (brut !== brut.trim()) emailCtrl?.setValue(brut.trim());
+
     if (this.loginForm.invalid) {
       this.markFormGroupTouched(this.loginForm);
       return;
     }
 
     this.loading = true;
-    const loginData = this.loginForm.value;
+    const loginData = { ...this.loginForm.value, email: String(this.loginForm.value.email ?? '').trim() };
 
     this.authService.login(loginData).subscribe({
      next: (response: any) => {
@@ -133,7 +138,8 @@ export class LoginComponent implements OnInit {
         this.loading = false;
 
         if (error.status === 401) {
-          this.errorMessage = 'Email ou mot de passe incorrect';
+          // v38 : message du serveur (compte verrouillé, compte désactivé…), sinon le message habituel.
+          this.errorMessage = error.error?.message || 'Email ou mot de passe incorrect';
         } else if (error.status === 0) {
           this.errorMessage = 'Impossible de contacter le serveur';
         } else {

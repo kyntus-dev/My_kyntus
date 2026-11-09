@@ -13,6 +13,12 @@ public class RegisterFromPlanningDto
 
     /// <summary>Identifiant employé Planning / Directory (aligne JWT sub et annuaire documentation).</summary>
     public Guid EmployeeId { get; set; }
+
+    /// <summary>
+    /// v38 : faux = mot de passe généré automatiquement (simple synchronisation) : il ne remplace jamais
+    /// celui d'un compte existant. Vrai ou absent = mot de passe choisi (import, création, réinitialisation).
+    /// </summary>
+    public bool? ImposerMotDePasse { get; set; }
 }
 
 public class RegisterFromPlanningResponseDto

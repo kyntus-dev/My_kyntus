@@ -37,6 +37,8 @@ public class RegisterFromPlanningCommandHandler
         CancellationToken ct)
     {
         var dto = request.Dto;
+        // v38 : jamais d'e-mail de connexion enregistré avec des espaces autour.
+        dto.Email = (dto.Email ?? string.Empty).Trim();
         var role = await ResolveAuthRoleAsync(dto, ct)
             ?? throw new RegisterFromPlanningRoleNotFoundException();
 
@@ -64,7 +66,10 @@ public class RegisterFromPlanningCommandHandler
             }
 
             // Import / ré-provision : si un MDP est fourni, l'aligner (évite MDP inconnu après projection Directory).
-            if (!string.IsNullOrWhiteSpace(dto.DefaultPassword)
+            // v38 : jamais un mot de passe généré par une simple synchronisation (ImposerMotDePasse = false) :
+            // il écrasait le mot de passe que la personne venait de recevoir.
+            if (dto.ImposerMotDePasse != false
+                && !string.IsNullOrWhiteSpace(dto.DefaultPassword)
                 && PasswordPolicy.TryValidate(dto.DefaultPassword, out _))
             {
                 existing.PasswordHash = _passwordHasher.HashPassword(dto.DefaultPassword!.Trim());
@@ -79,6 +84,35 @@ public class RegisterFromPlanningCommandHandler
                 Id = existing.Id,
                 Email = existing.Email,
                 SubjectId = existing.SubjectId,
+            };
+        }
+
+        // v38 : pas de compte à cet e-mail, mais un compte existe pour ce collaborateur (même GUID) avec
+        // un ancien e-mail : on corrige son e-mail au lieu de créer un second compte. Sinon la personne
+        // se connectait sur un compte au mot de passe inconnu (« e-mail ou mot de passe incorrect »).
+        if (dto.EmployeeId != Guid.Empty
+            && await _userRepository.GetBySubjectIdAsync(dto.EmployeeId, ct) is { } memeEmploye
+            && !string.IsNullOrWhiteSpace(dto.Email) && dto.Email.Trim().Length <= 100)
+        {
+            var nouvelEmail = dto.Email.Trim();
+            _logger.LogInformation(
+                "Email realigned instead of duplicate: AuthUserId={UserId} {Old} -> {New}",
+                memeEmploye.Id, memeEmploye.Email, nouvelEmail);
+            if (string.Equals(memeEmploye.Username, memeEmploye.Email, StringComparison.OrdinalIgnoreCase) && nouvelEmail.Length <= 50)
+                memeEmploye.Username = nouvelEmail;
+            memeEmploye.Email = nouvelEmail;
+            memeEmploye.RoleId = role.Id;
+            if (dto.ImposerMotDePasse != false
+                && !string.IsNullOrWhiteSpace(dto.DefaultPassword)
+                && PasswordPolicy.TryValidate(dto.DefaultPassword, out _))
+                memeEmploye.PasswordHash = _passwordHasher.HashPassword(dto.DefaultPassword!.Trim());
+            memeEmploye.UpdatedAt = DateTime.UtcNow;
+            await _userRepository.UpdateAsync(memeEmploye, ct);
+            return new RegisterFromPlanningResponseDto
+            {
+                Id = memeEmploye.Id,
+                Email = memeEmploye.Email,
+                SubjectId = memeEmploye.SubjectId,
             };
         }
 

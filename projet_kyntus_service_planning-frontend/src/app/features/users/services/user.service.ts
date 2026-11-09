@@ -20,6 +20,8 @@ export interface ResetPasswordResult {
   temporaryPassword: string;
   firstName?: string;
   lastName?: string;
+  /** v38 : corrections faites sur le compte de connexion (réactivé, déverrouillé, e-mail corrigé…). */
+  corrections?: string[];
 }
 
 export interface ResetPasswordsByGroupRequest {

@@ -487,6 +487,8 @@ export class UserListComponent implements OnInit, OnDestroy {
         this.resetCredentialErrors = [];
         this.showResetPassword = true;
         this.resettingUserId = null;
+        // v38 : ce qui empêchait la connexion et a été corrigé (compte réactivé, e-mail, verrouillage).
+        if (result.corrections?.length) this.toastService.info(`Compte de connexion corrigé : ${result.corrections.join(' ')}`, 9000);
         this.cdr.detectChanges();
       },
       error: (err) => {
