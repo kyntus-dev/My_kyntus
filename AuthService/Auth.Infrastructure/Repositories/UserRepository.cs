@@ -14,9 +14,13 @@ public class UserRepository : IUserRepository
     public async Task<User?> GetByIdAsync(int id, CancellationToken ct = default) =>
         await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == id, ct);
 
-    public async Task<User?> GetByEmailAsync(string email, CancellationToken ct = default) =>
-        await _context.Users.Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower(), ct);
+    // v38 : espaces autour de l'e-mail ignorés des deux côtés (saisie, comptes créés avec un espace).
+    public async Task<User?> GetByEmailAsync(string email, CancellationToken ct = default)
+    {
+        var cle = (email ?? string.Empty).Trim().ToLower();
+        return await _context.Users.Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Email.Trim().ToLower() == cle, ct);
+    }
 
     public async Task<User?> GetBySubjectIdAsync(Guid subjectId, CancellationToken ct = default) =>
         await _context.Users.Include(u => u.Role)

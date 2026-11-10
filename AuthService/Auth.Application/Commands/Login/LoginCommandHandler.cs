@@ -35,10 +35,12 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResponseDto
     public async Task<AuthResponseDto> Handle(LoginCommand request, CancellationToken ct)
     {
         var loginDto = request.Dto;
-        var user = await _userRepository.GetByEmailAsync(loginDto.Email, ct);
+        // v38 : espaces autour de l'e-mail (copier-coller, clavier de téléphone) ignorés.
+        var email = (loginDto.Email ?? string.Empty).Trim();
+        var user = await _userRepository.GetByEmailAsync(email, ct);
         if (user is null)
         {
-            await _accessAudit.WriteAsync("LoginFailed", loginDto.Email, null, "unknown-email", ct);
+            await _accessAudit.WriteAsync("LoginFailed", email, null, "unknown-email", ct);
             throw new UnauthorizedAccessException("Email ou mot de passe incorrect");
         }
 
@@ -46,6 +48,10 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResponseDto
         {
             _logger.LogWarning("LoginFailed: inactive account Email={Email}", user.Email);
             await _accessAudit.WriteAsync("LoginFailed", user.Email, user.Id, "inactive", ct);
+            // v38 : avec le bon mot de passe, la personne apprend que son compte est désactivé (au lieu
+            // d'un « mot de passe incorrect » trompeur) ; sans, le message reste le même pour tous.
+            if (MotDePasseValide(user.PasswordHash, loginDto.Password))
+                throw new UnauthorizedAccessException("Votre compte est désactivé. Contactez votre responsable.");
             throw new UnauthorizedAccessException("Email ou mot de passe incorrect");
         }
 
@@ -56,7 +62,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResponseDto
             throw new UnauthorizedAccessException("Compte temporairement verrouillé. Réessayez plus tard.");
         }
 
-        if (!_passwordHasher.VerifyPassword(user.PasswordHash, loginDto.Password))
+        if (!MotDePasseValide(user.PasswordHash, loginDto.Password))
         {
             user.AccessFailedCount++;
             if (user.AccessFailedCount >= MaxFailedAttempts)
@@ -90,5 +96,17 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResponseDto
             user,
             _jwtService.GenerateAccessToken(user),
             _jwtService.AccessTokenExpiresInSeconds);
+    }
+
+    /// <summary>
+    /// v38 : les mots de passe sont enregistrés sans espaces autour (réinitialisation, import). Un espace
+    /// ajouté au début ou à la fin (copier-coller, clavier de téléphone) ne fait donc plus échouer la connexion.
+    /// </summary>
+    private bool MotDePasseValide(string hash, string? saisi)
+    {
+        if (string.IsNullOrEmpty(saisi)) return false;
+        if (_passwordHasher.VerifyPassword(hash, saisi)) return true;
+        var nettoye = saisi.Trim();
+        return nettoye.Length > 0 && nettoye != saisi && _passwordHasher.VerifyPassword(hash, nettoye);
     }
 }

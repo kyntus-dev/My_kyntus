@@ -1,0 +1,13 @@
+.my-team { display: flex; flex-direction: column; gap: 12px; }
+[actions] a.ky-btn-secondary { display: inline-flex; align-items: center; text-decoration: none; }
+.team-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; }
+.team-filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text-muted); flex: 1 1 180px; min-width: 150px; }
+.team-filters select, .team-filters input { font-weight: 500; color: var(--text-primary); }
+.team-filters .team-search { flex: 2 1 220px; }
+.team-counts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.team-counts li { padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 999px; font-size: 12px; background: var(--bg-card); }
+.team-table-card { padding: 0; overflow: hidden; }
+.team-table-wrapper { overflow-x: auto; }
+.team-state { padding: 16px; color: var(--text-muted); }
+.team-state--error { color: var(--danger-text, #b91c1c); }
+@media (max-width: 640px) { .team-filters label { flex: 1 1 100%; } }

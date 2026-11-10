@@ -183,6 +183,26 @@ public class PilotRotationTenureServiceTests : IDisposable
         Assert.Equal(expected, PilotRotationTenureService.IsOverrideReason(reason));
     }
 
+    [Theory]
+    [InlineData("Ingénieur", true)]
+    [InlineData("Support IT", true)]
+    [InlineData("Admin", true)]
+    [InlineData("Pilote", false)]
+    public async Task ValidateRotationAsync_regle_des_6_mois_hors_cellule_IT_et_Admin(string role, bool passe)
+    {
+        var employeeId = Guid.NewGuid();
+        _db.Employees.Add(new Employee { Id = employeeId, Email = $"{Guid.NewGuid():N}@k.com", Role = role, IsActive = true });
+        _db.SaveChanges();
+        SeedService("svc-old", "Ancien service");
+        SeedService("svc-new", "Nouveau service");
+        SeedPilotAssignment(employeeId, "svc-old", DateTime.UtcNow.AddMonths(-1));
+
+        var ex = await Record.ExceptionAsync(() => _service.ValidateRotationAsync(employeeId, "svc-new", false, null));
+
+        if (passe) Assert.Null(ex);
+        else Assert.IsType<PilotRotationTenureException>(ex);
+    }
+
     private void SeedService(string id, string name)
     {
         if (_db.OrgServices.Any(s => s.Id == id)) return;

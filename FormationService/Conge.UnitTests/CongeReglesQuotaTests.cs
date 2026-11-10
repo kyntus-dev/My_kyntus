@@ -8,6 +8,9 @@ namespace Conge.UnitTests;
 
 public class CongeReglesQuotaTests
 {
+    /// <summary>Année des congés de test : toujours dans le futur, quel que soit le jour d'exécution.</summary>
+    private static readonly int An = DateTime.Today.Year + 1;
+
     private sealed class FakePeriodeRepo : IPeriodeInterditeRepository
     {
         public PeriodeInterditeConge Row { get; } = PeriodeInterditeConge.CreerParDefaut();
@@ -152,9 +155,9 @@ public class CongeReglesQuotaTests
         var e2 = EmployeSnapshot.Creer(Guid.NewGuid(), "B", "B", "b@t.com", managerId, serviceId, "S", DateTime.UtcNow.AddYears(-2));
         empRepo.Employees.AddRange([e1, e2]);
 
-        var debut = new DateTime(2026, 11, 9); // lundi futur hors mois interdits
-        var fin = new DateTime(2026, 11, 11);
-        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, 2026);
+        var debut = new DateTime(An, 11, 9); // futur, hors mois interdits
+        var fin = new DateTime(An, 11, 11);
+        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, An);
         var existing = DemandeConge.CreerCongeAnnuel(
             e1.EmployeId, managerId, debut, fin, solde, e1,
             statutInitial: StatutDemande.EnAttenteRh);
@@ -166,8 +169,37 @@ public class CongeReglesQuotaTests
             regles.AssertQuotaServiceDisponibleAsync(serviceId, debut, fin));
     }
 
+    /// <summary>v11.4 : sans quota configuré, un jour déjà pris par un collègue n'est plus disponible.</summary>
     [Fact]
-    public async Task EnAttente_ne_compte_pas_dans_quota()
+    public async Task Sans_quota_un_jour_pris_est_bloque_pour_les_autres()
+    {
+        var serviceId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var empRepo = new FakeEmployeRepo();
+        var demandeRepo = new FakeDemandeRepo();
+        var quotaRepo = new FakeQuotaRepo();
+
+        var e1 = EmployeSnapshot.Creer(Guid.NewGuid(), "A", "A", "a@t.com", managerId, serviceId, "S", DateTime.UtcNow.AddYears(-2));
+        var e2 = EmployeSnapshot.Creer(Guid.NewGuid(), "B", "B", "b@t.com", managerId, serviceId, "S", DateTime.UtcNow.AddYears(-2));
+        empRepo.Employees.AddRange([e1, e2]);
+
+        var debut = new DateTime(An, 11, 23);
+        var fin = new DateTime(An, 11, 25);
+        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, An);
+        demandeRepo.Occupying.Add(DemandeConge.CreerCongeAnnuel(e1.EmployeId, managerId, debut, fin, solde, e1));
+
+        var regles = new CongeReglesService(new FakePeriodeRepo(), quotaRepo, demandeRepo, empRepo);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => regles.AssertQuotaForEmployeAsync(e2, debut, fin));
+
+        var mois = await regles.EvaluerMoisAsync(e2.EmployeId, An, 11);
+        Assert.Equal(CongeReglesService.QuotaParDefaut, mois.Quota);
+        Assert.True(mois.Jours.Single(j => j.Jour.Day == 24).Sature);
+        Assert.False(mois.Jours.Single(j => j.Jour.Day == 20).Sature);
+    }
+
+    /// <summary>v9 : « déjà posé ou obtenu » — une demande en attente occupe sa place.</summary>
+    [Fact]
+    public async Task EnAttente_compte_dans_quota()
     {
         var serviceId = Guid.NewGuid();
         var managerId = Guid.NewGuid();
@@ -178,15 +210,50 @@ public class CongeReglesQuotaTests
         var e1 = EmployeSnapshot.Creer(Guid.NewGuid(), "A", "A", "a@t.com", managerId, serviceId, "S", DateTime.UtcNow.AddYears(-2));
         empRepo.Employees.Add(e1);
 
-        var debut = new DateTime(2026, 11, 16);
-        var fin = new DateTime(2026, 11, 18);
-        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, 2026);
+        var debut = new DateTime(An, 11, 16);
+        var fin = new DateTime(An, 11, 18);
+        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, An);
         var pending = DemandeConge.CreerCongeAnnuel(e1.EmployeId, managerId, debut, fin, solde, e1);
         Assert.Equal(StatutDemande.EnAttente, pending.Statut);
         demandeRepo.Occupying.Add(pending);
 
         var regles = new CongeReglesService(new FakePeriodeRepo(), quotaRepo, demandeRepo, empRepo);
-        await regles.AssertQuotaServiceDisponibleAsync(serviceId, debut, fin); // ne throw pas
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            regles.AssertQuotaServiceDisponibleAsync(serviceId, debut, fin));
+    }
+
+    /// <summary>Calendrier : jours saturés du mois, pour les griser avant la sélection.</summary>
+    [Fact]
+    public async Task Mois_signale_les_jours_satures()
+    {
+        var celluleId = "cell-ats";
+        var managerId = Guid.NewGuid();
+        var empRepo = new FakeEmployeRepo();
+        var demandeRepo = new FakeDemandeRepo();
+        var quotaRepo = new FakeQuotaRepo { Quota = QuotaCongeService.Creer(celluleId, 1, scopeKind: QuotaScopeKinds.Cellule) };
+
+        var e1 = EmployeSnapshot.Creer(
+            Guid.NewGuid(), "A", "A", "a@t.com", managerId, Guid.Empty, "S",
+            DateTime.UtcNow.AddYears(-2), celluleId: celluleId);
+        var e2 = EmployeSnapshot.Creer(
+            Guid.NewGuid(), "B", "B", "b@t.com", managerId, Guid.Empty, "S",
+            DateTime.UtcNow.AddYears(-2), celluleId: celluleId);
+        empRepo.Employees.AddRange([e1, e2]);
+
+        var debut = new DateTime(An, 11, 9);
+        var fin = new DateTime(An, 11, 11);
+        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, An);
+        demandeRepo.Occupying.Add(DemandeConge.CreerCongeAnnuel(e1.EmployeId, managerId, debut, fin, solde, e1));
+
+        var regles = new CongeReglesService(new FakePeriodeRepo(), quotaRepo, demandeRepo, empRepo);
+        var mois = await regles.EvaluerMoisAsync(e2.EmployeId, An, 11);
+
+        Assert.Equal(1, mois.Quota);
+        Assert.Equal(2, mois.Effectif);
+        Assert.Equal(30, mois.Jours.Count);
+        var satures = mois.Jours.Where(j => j.Sature).Select(j => j.Jour.Day).ToList();
+        Assert.Equal(new[] { 9, 10, 11 }, satures);
+        Assert.All(mois.Jours, j => Assert.False(j.DejaDemande));
     }
 
     [Fact]
@@ -218,9 +285,9 @@ public class CongeReglesQuotaTests
             DateTime.UtcNow.AddYears(-2), false, "Employee", null, celluleId, null);
         empRepo.Employees.AddRange([e1, e2]);
 
-        var debut = new DateTime(2026, 11, 9);
-        var fin = new DateTime(2026, 11, 11);
-        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, 2026);
+        var debut = new DateTime(An, 11, 9);
+        var fin = new DateTime(An, 11, 11);
+        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, An);
         var existing = DemandeConge.CreerCongeAnnuel(
             e1.EmployeId, managerId, debut, fin, solde, e1,
             statutInitial: StatutDemande.EnAttenteRh);
@@ -230,7 +297,7 @@ public class CongeReglesQuotaTests
         var result = await regles.EvaluerDisponibiliteAsync(e2.EmployeId, debut, fin);
 
         Assert.False(result.Ok);
-        Assert.Contains("2026-11-09", result.JoursSatures);
+        Assert.Contains($"{An}-11-09", result.JoursSatures);
         Assert.Contains("cellule", result.Motif ?? "", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -254,9 +321,9 @@ public class CongeReglesQuotaTests
             DateTime.UtcNow.AddYears(-2), false, "Employee", null, celluleId, null);
         empRepo.Employees.AddRange([e1, e2]);
 
-        var debut = new DateTime(2026, 11, 23);
-        var fin = new DateTime(2026, 11, 24);
-        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, 2026);
+        var debut = new DateTime(An, 11, 23);
+        var fin = new DateTime(An, 11, 24);
+        var solde = SoldeConge.Initialiser(e1.EmployeId, 20, An);
         demandeRepo.Occupying.Add(DemandeConge.CreerCongeAnnuel(
             e1.EmployeId, managerId, debut, fin, solde, e1,
             statutInitial: StatutDemande.EnAttenteRh));

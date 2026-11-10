@@ -19,13 +19,14 @@ public class FloorService : IFloorService
     {
         return await _context.Floors
             .Include(f => f.Services)
+            .Where(f => !f.IsArchived)
             .Select(f => new FloorDto
             {
                 Id = f.Id,
                 Name = f.Name,
                 FloorNumber = f.FloorNumber,
                 Description = f.Description,
-                ServicesCount = f.Services.Count
+                ServicesCount = f.Services.Count(s => !s.IsArchived)
             })
             .OrderBy(f => f.FloorNumber)
             .ToListAsync();
@@ -66,14 +67,14 @@ public class FloorService : IFloorService
             Name = floor.Name,
             FloorNumber = floor.FloorNumber,
             Description = floor.Description,
-            Services = floor.Services.Select(s => new ServiceDto
+            Services = floor.Services.Where(s => !s.IsArchived).Select(s => new ServiceDto
             {
                 Id = s.Id,
                 FloorId = s.FloorId,
                 FloorName = floor.Name,
                 Name = s.Name,
                 Code = s.Code,
-                SubServicesCount = s.SubServices.Count
+                SubServicesCount = s.SubServices.Count(ss => !ss.IsArchived)
             }).ToList()
         };
     }

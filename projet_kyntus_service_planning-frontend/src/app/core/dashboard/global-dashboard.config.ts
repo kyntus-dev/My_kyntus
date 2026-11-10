@@ -15,7 +15,8 @@ export function resolveRoleCluster(role: string): RoleCluster {
     return 'manager';
   }
   if (r === 'superviseur') return 'superviseur';
-  if (r === 'pilote' || r === 'employee') return 'employee';
+  // Cellule IT : accueil « Mon espace », comme un collaborateur.
+  if (r === 'pilote' || r === 'employee' || r === 'ingenieur' || r === 'supportit') return 'employee';
   if (r === 'audit') return 'audit';
   return 'unknown';
 }

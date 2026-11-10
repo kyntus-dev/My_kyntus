@@ -1,6 +1,6 @@
 import { registerLocaleData } from '@angular/common';
 import localeFr from '@angular/common/locales/fr';
-import { APP_INITIALIZER, ApplicationConfig, LOCALE_ID } from '@angular/core';
+import { APP_INITIALIZER, ApplicationConfig, LOCALE_ID, provideZoneChangeDetection } from '@angular/core';
 import {
   KyntusThemeService,
   kyntusThemeInitFactory,
@@ -34,6 +34,10 @@ registerLocaleData(localeFr);
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    // Détection des changements automatique (Zone.js) : de nombreux écrans mettent à jour
+    // leurs données après un appel HTTP ou un minuteur sans signal. Sans Zone.js (mode par
+    // défaut d'Angular 21), ces écrans ne se rafraîchissaient qu'au clic suivant.
+    provideZoneChangeDetection({ eventCoalescing: true }),
     { provide: LOCALE_ID, useValue: 'fr-FR' },
     provideRouter(routes),
     DirectoryFacadeService,

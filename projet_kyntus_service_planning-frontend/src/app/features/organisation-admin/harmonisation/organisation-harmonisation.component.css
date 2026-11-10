@@ -1,0 +1,20 @@
+.oh .ku-card { display: flex; flex-direction: column; gap: 10px; }
+.oh-filtre { align-self: flex-start; }
+.oh-table td { vertical-align: middle; }
+.oh-contrat td { background: color-mix(in srgb, var(--ky-blue) 6%, var(--bg-card)); }
+.oh-archive td b { text-decoration: line-through; color: var(--text-muted); }
+.oh-ind1 { padding-left: 24px !important; }
+.oh-ind2 { padding-left: 44px !important; }
+.oh-select { min-width: 320px; }
+.oh-phase { border: 1px solid var(--border-color); border-radius: 10px; }
+.oh-phase-tete { width: 100%; display: flex; justify-content: space-between; align-items: center; background: none; border: 0;
+  padding: 10px 14px; font-weight: 600; color: var(--text-primary); cursor: pointer; }
+.oh-liste { margin: 0; padding: 4px 16px 12px 32px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.oh-alertes li { color: var(--warning-text, #b45309); }
+.oh-journal li.ko { color: var(--danger, #dc2626); }
+.oh-h4 { margin: 8px 0 0; font-size: 14px; }
+.oh-note { margin-top: 4px; }
+.oh-details { border: 1px solid var(--border-color); border-radius: 10px; padding: 8px 14px; }
+.oh-details summary { cursor: pointer; font-weight: 600; }
+.oh-bloque td { background: color-mix(in srgb, #f59e0b 12%, var(--bg-card)); }
+.oh-bloques { margin: 0; padding: 10px 14px; }

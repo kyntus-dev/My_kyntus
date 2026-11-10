@@ -90,6 +90,16 @@ public static class AuthDatabaseInitializer
 
         try
         {
+            EnsureRole(db, "Ingénieur", "Ingénieur — cellule IT");
+            EnsureRole(db, "Support IT", "Support IT — cellule IT");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WARNING: rôles IT non ajoutés : {ex.Message}");
+        }
+
+        try
+        {
             EnsureComptabiliteRole(db);
         }
         catch (Exception ex)
@@ -397,6 +407,17 @@ public static class AuthDatabaseInitializer
             throw new InvalidOperationException(
                 $"DemoSeed:Passwords:{roleKey} est requis pour le seed démo (appsettings ou KYNTUS_DEMO_SEED_*).");
         return password;
+    }
+
+    /// <summary>Ajoute un rôle s'il n'existe pas (aucune autre donnée modifiée).</summary>
+    static void EnsureRole(AuthDbContext db, string name, string description)
+    {
+        if (db.Roles.Any(r => r.Name == name))
+            return;
+        var nextId = (db.Roles.Max(r => (int?)r.Id) ?? 0) + 1;
+        db.Roles.Add(new Role { Id = nextId, Name = name, Description = description, CreatedAt = DateTime.UtcNow });
+        db.SaveChanges();
+        Console.WriteLine($"Auth role {name} added.");
     }
 
     static void EnsureComptabiliteRole(AuthDbContext db)

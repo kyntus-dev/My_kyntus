@@ -21,6 +21,12 @@ public class Service
     [MaxLength(64)]
     public string? PrimeCelluleId { get; set; }
 
+    /// <summary>
+    /// Nœud supprimé dans l'Organisation RH : masqué des listes Planning, mais conservé
+    /// (avec ses plannings) pour l'historique.
+    /// </summary>
+    public bool IsArchived { get; set; }
+
     public ICollection<SubService> SubServices { get; set; }
     // 🆕 AJOUTER cette ligne dans Service.cs
     public ICollection<UserManagedService> ManagedByUsers { get; set; } = new List<UserManagedService>();

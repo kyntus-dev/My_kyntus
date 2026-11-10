@@ -11,6 +11,7 @@ public static class DirectorySchemaPatches
         // empêcher les suivants (HTEL, colonnes HR, etc.).
         await EnsureOutboxTableAsync(db, ct);
         await EnsureIamPermissionsTableAsync(db, ct);
+        await EnsureIamUserPermissionsTableAsync(db, ct);
         await EnsureEmployeeRowVersionDefaultAsync(db, ct);
         await EnsureBusinessDepartmentSchemaAsync(db, ct);
         await EnsureOrgPoleBusinessDepartmentAsync(db, ct);
@@ -20,6 +21,7 @@ public static class DirectorySchemaPatches
         await EnsureEmailPersonnelColumnAsync(db, ct);
         await EnsureEmployeeHtelColumnsAsync(db, ct);
         await EnsureOrgAssignmentNodeUniquenessAsync(db, ct);
+        await EnsureOrgNodeArchiveColumnsAsync(db, ct);
         await EnsurePerfIndexesAsync(db, ct);
     }
 
@@ -34,6 +36,7 @@ public static class DirectorySchemaPatches
     {
         await RunPatchAsync(nameof(EnsureOutboxTableAsync), () => EnsureOutboxTableAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureIamPermissionsTableAsync), () => EnsureIamPermissionsTableAsync(db, ct), log);
+        await RunPatchAsync(nameof(EnsureIamUserPermissionsTableAsync), () => EnsureIamUserPermissionsTableAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureEmployeeRowVersionDefaultAsync), () => EnsureEmployeeRowVersionDefaultAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureBusinessDepartmentSchemaAsync), () => EnsureBusinessDepartmentSchemaAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureOrgPoleBusinessDepartmentAsync), () => EnsureOrgPoleBusinessDepartmentAsync(db, ct), log);
@@ -43,6 +46,7 @@ public static class DirectorySchemaPatches
         await RunPatchAsync(nameof(EnsureEmailPersonnelColumnAsync), () => EnsureEmailPersonnelColumnAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureEmployeeHtelColumnsAsync), () => EnsureEmployeeHtelColumnsAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureOrgAssignmentNodeUniquenessAsync), () => EnsureOrgAssignmentNodeUniquenessAsync(db, ct), log);
+        await RunPatchAsync(nameof(EnsureOrgNodeArchiveColumnsAsync), () => EnsureOrgNodeArchiveColumnsAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsurePerfIndexesAsync), () => EnsurePerfIndexesAsync(db, ct), log);
     }
 
@@ -131,6 +135,25 @@ public static class DirectorySchemaPatches
             ct);
     }
 
+    /// <summary>Exceptions de droits par compte (v19) : table nouvelle, vide au départ.</summary>
+    public static async Task EnsureIamUserPermissionsTableAsync(DirectoryDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS iam_user_permissions (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "SubjectId" uuid NOT NULL,
+                "Action" character varying(128) NOT NULL,
+                "IsAllowed" boolean NOT NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" character varying(160) NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_iam_user_permissions_SubjectId_Action"
+                ON iam_user_permissions ("SubjectId", "Action");
+            """,
+            ct);
+    }
+
     public static async Task EnsureOutboxTableAsync(DirectoryDbContext db, CancellationToken ct = default)
     {
         await db.Database.ExecuteSqlRawAsync(
@@ -194,6 +217,27 @@ public static class DirectorySchemaPatches
 
             ALTER TABLE employees ADD COLUMN IF NOT EXISTS "BusinessDepartmentId" uuid NULL;
             CREATE INDEX IF NOT EXISTS "IX_employees_BusinessDepartmentId" ON employees ("BusinessDepartmentId");
+            """,
+            ct);
+    }
+
+    /// <summary>
+    /// v9 : archivage des nœuds d'organisation (pôle, cellule, service). Un nœud archivé
+    /// reste en base avec son historique mais disparaît des listes et des choix.
+    /// </summary>
+    public static async Task EnsureOrgNodeArchiveColumnsAsync(DirectoryDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE org_poles ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            ALTER TABLE org_poles ADD COLUMN IF NOT EXISTS "ArchivedAt" timestamp with time zone NULL;
+            ALTER TABLE org_cellules ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            ALTER TABLE org_cellules ADD COLUMN IF NOT EXISTS "ArchivedAt" timestamp with time zone NULL;
+            ALTER TABLE org_services ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            ALTER TABLE org_services ADD COLUMN IF NOT EXISTS "ArchivedAt" timestamp with time zone NULL;
+            CREATE INDEX IF NOT EXISTS "IX_org_poles_IsArchived" ON org_poles ("IsArchived");
+            CREATE INDEX IF NOT EXISTS "IX_org_cellules_IsArchived" ON org_cellules ("IsArchived");
+            CREATE INDEX IF NOT EXISTS "IX_org_services_IsArchived" ON org_services ("IsArchived");
             """,
             ct);
     }

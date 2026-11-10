@@ -3,15 +3,22 @@ using Microsoft.Extensions.Logging;
 using Planning.Application.Abstractions;
 using Planning.Application.PilotPlanning;
 using Planning.Infrastructure.Persistence;
-using Planning.Infrastructure.Services.EmployeeImport;
 
 namespace Planning.Infrastructure.Services;
 
+/// <summary>
+/// À la publication (ou republication) d'un planning, chaque agent actif affecté reçoit son planning
+/// de la semaine sur son adresse professionnelle. L'e-mail passe par la file d'envoi
+/// (cadence limitée, nouvelles tentatives) ; il est toujours envoyé, indépendamment de la préférence
+/// « notifications par e-mail ».
+/// </summary>
 public sealed class PilotPlanningPersonalEmailService(
     AppDbContext db,
-    IPlanningEmailSender emailSender,
+    INotificationEmailQueue emailQueue,
     ILogger<PilotPlanningPersonalEmailService> logger) : IPilotPlanningPersonalEmailService
 {
+    public const string Category = "planning";
+
     public async Task SendToAssignedPilotsAsync(int planningId, bool updated, CancellationToken ct = default)
     {
         try
@@ -20,12 +27,18 @@ public sealed class PilotPlanningPersonalEmailService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Envoi email planning pilotes échoué (planningId={PlanningId}).", planningId);
+            logger.LogWarning(ex, "Mise en file des e-mails planning échouée (planningId={PlanningId}).", planningId);
         }
     }
 
     private async Task SendCoreAsync(int planningId, bool updated, CancellationToken ct)
     {
+        if (!await emailQueue.IsEnabledAsync(ct))
+        {
+            logger.LogInformation("Envoi e-mail non configuré : planning {PlanningId} non envoyé par e-mail.", planningId);
+            return;
+        }
+
         var planning = await db.WeeklyPlannings
             .AsNoTracking()
             .Include(p => p.SubService)
@@ -41,29 +54,22 @@ public sealed class PilotPlanningPersonalEmailService(
         if (userIds.Count == 0)
             return;
 
-        var pilots = await db.Users
+        var agents = await db.Users
             .AsNoTracking()
-            .Include(u => u.Role)
             .Where(u => userIds.Contains(u.Id) && u.IsActive)
             .ToListAsync(ct);
 
-        var personalEmails = await db.UserHrProfiles
-            .AsNoTracking()
-            .Where(p => userIds.Contains(p.UserId))
-            .Select(p => new { p.UserId, p.EmailPersonnel })
-            .ToListAsync(ct);
-        var emailByUser = personalEmails.ToDictionary(x => x.UserId, x => x.EmailPersonnel);
+        // Un double clic sur « Publier » ne produit qu'un e-mail ; une nouvelle publication plus tard, si.
+        var stamp = DateTime.UtcNow.ToString("yyyyMMddHHmm");
+        var subject = PilotPlanningEmailComposer.Subject(planning.WeekCode, updated);
+        var queued = 0;
 
-        foreach (var user in pilots)
+        foreach (var user in agents)
         {
-            if (!EmployeeImportRoleNames.IsPilote(user.Role?.Name))
-                continue;
-
-            emailByUser.TryGetValue(user.Id, out var personal);
-            if (!PilotPlanningEmailComposer.IsValidPersonalEmail(personal))
+            if (!PilotPlanningEmailComposer.IsValidPersonalEmail(user.Email))
             {
                 logger.LogWarning(
-                    "Pilote {UserId} sans email personnel — planning {WeekCode} non envoyé.",
+                    "Agent {UserId} sans adresse professionnelle valide — planning {WeekCode} non envoyé.",
                     user.Id,
                     planning.WeekCode);
                 continue;
@@ -90,8 +96,16 @@ public sealed class PilotPlanningPersonalEmailService(
                 days,
                 user.HtelTechnicienName,
                 user.IdTechnicien);
-            var subject = PilotPlanningEmailComposer.Subject(planning.WeekCode, updated);
-            await emailSender.SendHtmlAsync(personal!.Trim(), subject, html, ct);
+
+            var key = $"planning:{planning.Id}:{(updated ? "maj" : "pub")}:{stamp}:u{user.Id}";
+            if (await emailQueue.EnqueueDirectAsync(user.Id, user.Email, Category, subject, html, key, ct))
+                queued++;
         }
+
+        logger.LogInformation(
+            "Planning {WeekCode} : {Queued} e-mail(s) agent mis en file ({Agents} agent(s) affecté(s)).",
+            planning.WeekCode,
+            queued,
+            agents.Count);
     }
 }

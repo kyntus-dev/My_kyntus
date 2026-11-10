@@ -1,6 +1,8 @@
 ﻿import { Injectable, inject } from '@angular/core';
 
-import { MICROSERVICES, Microservice, MenuItem } from './microservices.config';
+import { APP_GUIDE_ROUTE, MICROSERVICES, Microservice, MenuItem } from './microservices.config';
+import { AppGuideService } from '../help/app-guide.service';
+import { ecransDe } from './menu-apercu.util';
 import { buildPrimeMenuItemsForRole } from './prime-menu.config';
 import { buildParrainageMenuItemsForRole } from './parrainage-menu.config';
 import {
@@ -20,6 +22,7 @@ import { WorkspaceHatService } from './workspace-hat.service';
 import { filterItemsByHat } from './workspace-hat.util';
 import { PlatformAccessService } from '../platform-access/platform-access.service';
 import { mapJwtRoleToParrainageRole } from '../session/kyntus-role-ui.config';
+import { HEURE_SORTIE_ROUTE, HeureSortieAccessService } from '../services/heure-sortie-access.service';
 
 @Injectable({ providedIn: 'root' })
 export class NavigationMenuService {
@@ -30,17 +33,25 @@ export class NavigationMenuService {
   private readonly inboxBadge = inject(AllowanceInboxBadgeService);
   private readonly workspace = inject(WorkspaceHatService);
   private readonly access = inject(PlatformAccessService);
+  private readonly appGuides = inject(AppGuideService);
+  private readonly heureSortie = inject(HeureSortieAccessService);
 
   buildVisibleGroups(jwtRole: string): Microservice[] {
     void this.access.ensureLoaded();
     const dualHat = this.workspace.canSwitch();
     const hat = this.workspace.hat();
-    return MICROSERVICES.map((g) => this.resolveGroup(g, jwtRole))
+    const catalogue = this.access.hasCatalog();
+    return MICROSERVICES
+      // Module retiré dans « Accès par rôle » : le groupe entier disparaît.
+      .filter((g) => !(catalogue && g.ouvertureIam && !this.access.canView(g.ouvertureIam)))
+      .map((g) => this.resolveGroup(g, jwtRole))
       .map((g) => ({
         ...g,
         children: filterItemsByHat(g.children, hat, dualHat),
       }))
-      .filter((g) => this.jwtRoleAllowed(g.roles, jwtRole) && g.children.length > 0);
+      .filter((g) => g.children.some((c) => !c.isSectionHeader)
+        && (this.jwtRoleAllowed(g.roles, jwtRole)
+          || (catalogue && g.children.some((c) => ecransDe(c).length > 0))));
   }
 
   private resolveGroup(group: Microservice, jwtRole: string): Microservice {
@@ -52,6 +63,23 @@ export class NavigationMenuService {
     }
     if (group.id === 'documentation' && group.dynamicChildren) {
       return { ...group, children: this.filterDocumentationChildren(jwtRole) };
+    }
+    if (group.id === 'aide') {
+      const pending = this.appGuides.pendingCount();
+      return {
+        ...group,
+        children: group.children
+          .filter((c) => this.itemAllowed(c, jwtRole))
+          .map((c) => (c.route === APP_GUIDE_ROUTE && pending > 0 ? { ...c, menuBadge: pending } : c)),
+      };
+    }
+    if (group.id === 'pointage') {
+      // « Heure de sortie » : visible seulement si l'Admin a donné l'accès (régime horaire).
+      return {
+        ...group,
+        children: group.children.filter((c) =>
+          this.itemAllowed(c, jwtRole) && (c.route !== HEURE_SORTIE_ROUTE || this.heureSortie.acces() === true)),
+      };
     }
     return {
       ...group,
@@ -126,9 +154,20 @@ export class NavigationMenuService {
     return buildDocumentationMenuItemsForRole(mapped);
   }
 
+  /**
+   * « Accès par rôle » (et « Accès par compte ») décide dès que les droits sont chargés : une entrée
+   * liée à un écran IAM (capability ou ouvertureIam) n'est affichée que si ce droit est accordé,
+   * dans un sens comme dans l'autre. La liste de rôles ne sert qu'avant le chargement des droits
+   * et pour les entrées sans écran IAM.
+   */
   private itemAllowed(item: MenuItem, jwtRole: string): boolean {
-    if (item.capability && this.access.hasCatalog()) {
-      return this.access.canView(item.capability);
+    if (this.access.hasCatalog()) {
+      // Titres de section : gardés seulement s'ils précèdent une entrée affichée (filterItemsByHat).
+      if (item.isSectionHeader) return true;
+      const ecrans = ecransDe(item);
+      if (ecrans.length) {
+        return ecrans.some((e) => (item.capabilityVerb === 'Act' ? this.access.canAct(e) : this.access.canView(e)));
+      }
     }
     return this.jwtRoleAllowed(item.roles, jwtRole);
   }

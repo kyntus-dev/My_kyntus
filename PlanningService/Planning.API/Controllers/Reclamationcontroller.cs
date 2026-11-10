@@ -22,7 +22,7 @@ namespace Planning.API.Controllers
         // POST /api/reclamation ó Soumettre (tous les rÙles)
         // --------------------------------------------------------------
         [HttpPost]
-        [Authorize(Roles = "Employee,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
+        [Authorize(Roles = "Employee,Ing√©nieur,Support IT,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
         public async Task<ActionResult<ReclamationDto>> Soumettre([FromBody] CreateReclamationDto dto)
         {
             // ? AJOUTEZ CES DEUX LIGNES
@@ -37,7 +37,7 @@ namespace Planning.API.Controllers
         // GET /api/reclamation/mes-demandes ó Suivre ses demandes (tous)
         // --------------------------------------------------------------
         [HttpGet("mes-demandes")]
-        [Authorize(Roles = "Employee,RH,Manager,Coach,RP,Admin,Audit,Equipe_Formation")]
+        [Authorize(Roles = "Employee,Ing√©nieur,Support IT,RH,Manager,Coach,RP,Admin,Audit,Equipe_Formation")]
         public async Task<ActionResult<PaginatedResult<ReclamationDto>>> MesDemandes(
             [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
@@ -49,7 +49,7 @@ namespace Planning.API.Controllers
         // GET /api/reclamation/{id}
         // --------------------------------------------------------------
         [HttpGet("{id:int}")]
-        [Authorize(Roles = "Employee,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
+        [Authorize(Roles = "Employee,Ing√©nieur,Support IT,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
         public async Task<ActionResult<ReclamationDetailDto>> GetById(int id)
         {
             var result = await _service.GetByIdAsync(id, UserId);
@@ -137,7 +137,7 @@ namespace Planning.API.Controllers
         // POST /api/reclamation/{id}/satisfaction (auteur uniquement)
         // --------------------------------------------------------------
         [HttpPost("{id:int}/satisfaction")]
-        [Authorize(Roles = "Employee,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
+        [Authorize(Roles = "Employee,Ing√©nieur,Support IT,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
         public async Task<IActionResult> NoteSatisfaction(int id, [FromBody] SatisfactionDto dto)
         {
             try

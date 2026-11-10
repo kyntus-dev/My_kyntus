@@ -18,8 +18,137 @@ public class UsersController(
     IMediator mediator,
     IUserService userService,
     IEmployeeDocumentFieldQueryService documentFieldQuery,
-    IPolicyEvaluator policyEvaluator) : ControllerBase
+    IPolicyEvaluator policyEvaluator,
+    IAgentReaffectation reaffectation) : ControllerBase
 {
+    private const string MessageReaffectation =
+        "Le changement de service est réservé aux rôles autorisés (« Réaffecter les agents » dans Accès par rôle).";
+
+    /// <summary>Droit « rh.affectations » (Accès par rôle / par compte) ; l'Admin l'a toujours.</summary>
+    private async Task<bool> PeutReaffecterAsync(string verbe, CancellationToken ct)
+    {
+        var role = User.GetAuthRole() ?? "Employee";
+        if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)) return true;
+        var decision = await policyEvaluator.EvaluateAsync(
+            new PolicyRequest(User.GetSubjectId() ?? Guid.Empty, role, $"rh.affectations.{verbe}", "platform"), ct);
+        return decision.Allowed;
+    }
+
+    /// <summary>
+    /// Auteur d'une réaffectation / activation. Admin et RH : toute l'entreprise. Autres rôles : selon
+    /// le périmètre réglé dans « Accès par rôle » — « Toute l'entreprise » (Global) = n'importe quel agent
+    /// vers n'importe quel service ; Pôle / Cellule / Service = son périmètre d'Organisation RH (v28).
+    /// </summary>
+    private async Task<ReaffectationAuteur> AuteurReaffectationAsync(CancellationToken ct, string droit = "rh.affectations")
+    {
+        var role = User.GetAuthRole() ?? "Employee";
+        var admin = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
+        var rh = IsHrOrAdmin(role);
+        // v29 : la réaffectation est ouverte à toute l'entreprise (tous les agents, tous les périmètres)
+        // pour qui a le droit ; l'activation des comptes suit le périmètre d'« Accès par rôle ».
+        var global = rh || droit == "rh.affectations" || await PorteeGlobaleAsync(role, droit, ct);
+        return await reaffectation.ResoudreAsync(User.GetAuthUserId(), User.GetEmail(), global, ct, admin, rh);
+    }
+
+    /// <summary>Le droit est accordé au rôle avec le périmètre « Toute l'entreprise ».</summary>
+    private async Task<bool> PorteeGlobaleAsync(string role, string droit, CancellationToken ct)
+    {
+        // Ressource fictive : seul le périmètre Global l'accepte (Pôle / Cellule / Service / Soi-même la refusent).
+        foreach (var verbe in new[] { "Act", "View" })
+        {
+            var decision = await policyEvaluator.EvaluateAsync(
+                new PolicyRequest(User.GetSubjectId() ?? Guid.Empty, role, $"{droit}.{verbe}", "platform", "toute-l-entreprise"), ct);
+            if (decision.Allowed) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Droit « rh.activation » (v26) : désactiver / réactiver les comptes de son périmètre.</summary>
+    private async Task<bool> PeutActiverAsync(string verbe, CancellationToken ct)
+    {
+        var role = User.GetAuthRole() ?? "Employee";
+        if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)) return true;
+        var decision = await policyEvaluator.EvaluateAsync(
+            new PolicyRequest(User.GetSubjectId() ?? Guid.Empty, role, $"rh.activation.{verbe}", "platform"), ct);
+        return decision.Allowed;
+    }
+
+    /// <summary>Comptes des agents du périmètre, actifs et désactivés.</summary>
+    [HttpGet("reaffectations/comptes")]
+    public async Task<ActionResult<IReadOnlyList<CompteAgentDto>>> ComptesPerimetre(CancellationToken ct)
+    {
+        if (!await PeutActiverAsync("View", ct) && !await PeutActiverAsync("Act", ct)) return Forbid();
+        return Ok(await reaffectation.ComptesAsync(await AuteurReaffectationAsync(ct, "rh.activation"), ct));
+    }
+
+    /// <summary>Désactive (avec date de sortie) ou réactive le compte d'un agent du périmètre.</summary>
+    [HttpPost("{id:int}/activation")]
+    public async Task<ActionResult<CompteAgentDto>> ActiverCompte(int id, [FromBody] ActivationCompteRequest body, CancellationToken ct)
+    {
+        if (!await PeutActiverAsync("Act", ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = "L'activation des comptes est réservée aux rôles autorisés (« Activer / désactiver les comptes » dans Accès par rôle).",
+            });
+        try
+        {
+            return Ok(await reaffectation.ActiverCompteAsync(await AuteurReaffectationAsync(ct, "rh.activation"), id, body, ct));
+        }
+        catch (ReaffectationRefusException ex) when (ex.HorsPerimetre)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+        catch (ReaffectationRefusException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Agents et services entre lesquels le demandeur peut réaffecter (son périmètre).</summary>
+    [HttpGet("reaffectations/options")]
+    public async Task<ActionResult<ReaffectationOptionsDto>> ReaffectationOptions(CancellationToken ct)
+    {
+        if (!await PeutReaffecterAsync("View", ct) && !await PeutReaffecterAsync("Act", ct)) return Forbid();
+        return Ok(await reaffectation.OptionsAsync(await AuteurReaffectationAsync(ct), ct));
+    }
+
+    /// <summary>Responsabilités actuelles d'un responsable (pôles, cellules ou services) — v29.</summary>
+    [HttpGet("{id:int}/reaffectation/responsabilites")]
+    public async Task<ActionResult<ResponsabilitesDto>> Responsabilites(int id, CancellationToken ct)
+    {
+        if (!await PeutReaffecterAsync("View", ct) && !await PeutReaffecterAsync("Act", ct)) return Forbid();
+        return Ok(await reaffectation.ResponsabilitesAsync(id, ct));
+    }
+
+    /// <summary>Historique des changements de service (périmètre du demandeur).</summary>
+    [HttpGet("reaffectations")]
+    public async Task<ActionResult<IReadOnlyList<ReaffectationDto>>> Reaffectations(
+        [FromQuery] int? userId, [FromQuery] int? max, CancellationToken ct)
+    {
+        if (!await PeutReaffecterAsync("View", ct) && !await PeutReaffecterAsync("Act", ct)) return Forbid();
+        return Ok(await reaffectation.HistoriqueAsync(await AuteurReaffectationAsync(ct), userId, max ?? 200, ct));
+    }
+
+    /// <summary>Réaffecte un agent dans un autre service (de A vers B), avec un motif.</summary>
+    [HttpPost("{id:int}/reaffectation")]
+    public async Task<ActionResult<ReaffectationDto>> Reaffecter(int id, [FromBody] ReaffectationRequest body, CancellationToken ct)
+    {
+        if (!await PeutReaffecterAsync("Act", ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = MessageReaffectation });
+        try
+        {
+            return Ok(await reaffectation.ReaffecterAsync(await AuteurReaffectationAsync(ct), id, body, ct));
+        }
+        catch (ReaffectationRefusException ex) when (ex.HorsPerimetre)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+        catch (ReaffectationRefusException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     private async Task<ActionResult?> DenyUnlessCanManageUsersAsync()
     {
         var role = User.GetAuthRole() ?? "Employee";
@@ -228,6 +357,10 @@ public class UsersController(
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
         if (!await CanAccessUserAsync(id, ct)) return Forbid();
         if (!ModelState.IsValid) return BadRequest(ModelState);
+        // Changer le service depuis la fiche demande le même droit que l'écran « Réaffectations ».
+        var actuel = await userService.GetUserByIdAsync(id);
+        if (actuel is not null && actuel.SubServiceId != dto.SubServiceId && !await PeutReaffecterAsync("Act", ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = MessageReaffectation });
         try
         {
             var user = await userService.UpdateUserAsync(id, dto);
@@ -241,13 +374,55 @@ public class UsersController(
         }
     }
 
+    /// <summary>
+    /// Ancienne « suppression » : désormais une désactivation (sortie). Rien n'est supprimé,
+    /// pour garder plannings, congés, primes et historique.
+    /// </summary>
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    public Task<IActionResult> Delete(int id, CancellationToken ct) =>
+        SetActive(id, isActive: false, dateSortie: null, ct);
+
+    /// <summary>Sortie d'un collaborateur : compte bloqué, données conservées.</summary>
+    [HttpPost("{id}/deactivate")]
+    public Task<IActionResult> Deactivate(int id, [FromBody] DeactivateUserRequest? body, CancellationToken ct) =>
+        SetActive(id, isActive: false, body?.DateSortie, ct);
+
+    /// <summary>Réintégration d'un collaborateur désactivé.</summary>
+    [HttpPost("{id}/reactivate")]
+    public Task<IActionResult> Reactivate(int id, CancellationToken ct) =>
+        SetActive(id, isActive: true, dateSortie: null, ct);
+
+    /// <summary>Annule une création incomplète (étape suivante en échec). Refusé après 30 minutes.</summary>
+    [HttpPost("{id}/rollback-creation")]
+    public async Task<IActionResult> RollbackCreation(int id, CancellationToken ct)
+    {
+        if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
+        try
+        {
+            return await userService.RollbackFailedCreationAsync(id, ct)
+                ? NoContent()
+                : NotFound(new { message = $"Utilisateur {id} introuvable." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private async Task<IActionResult> SetActive(int id, bool isActive, DateOnly? dateSortie, CancellationToken ct)
     {
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
         if (!await CanAccessUserAsync(id, ct)) return Forbid();
-        var result = await userService.DeleteUserAsync(id);
-        if (!result)
+        if (!isActive)
+        {
+            var target = await userService.GetUserByIdAsync(id);
+            if (target is null)
+                return NotFound(new { message = $"Utilisateur {id} introuvable." });
+            if (target.AuthUserId is int targetAuth && targetAuth == User.GetAuthUserId())
+                return BadRequest(new { message = "Vous ne pouvez pas désactiver votre propre compte." });
+        }
+        var found = await userService.SetUserActiveAsync(id, isActive, dateSortie, ct);
+        if (!found)
             return NotFound(new { message = $"Utilisateur {id} introuvable." });
         return NoContent();
     }
@@ -344,3 +519,5 @@ public class UsersController(
         }
     }
 }
+
+public sealed record DeactivateUserRequest(DateOnly? DateSortie);

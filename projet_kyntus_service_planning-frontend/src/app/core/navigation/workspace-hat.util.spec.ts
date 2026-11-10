@@ -18,6 +18,9 @@ describe('workspace-hat.util', () => {
     expect(isDualHatRole('Admin')).toBe(true);
     expect(isDualHatRole('Audit')).toBe(true);
     expect(isDualHatRole('Qualiticien')).toBe(true);
+    // Cellule IT : seulement « Mon espace ».
+    expect(isDualHatRole('Ingénieur')).toBe(false);
+    expect(isDualHatRole('Support IT')).toBe(false);
     expect(isDualHatRole('Formateur')).toBe(true);
     expect(isDualHatRole('Pilote')).toBe(false);
     expect(isDualHatRole('Employee')).toBe(false);

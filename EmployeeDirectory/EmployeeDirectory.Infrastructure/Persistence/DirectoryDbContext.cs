@@ -15,6 +15,7 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
     public DbSet<OrgAssignment> OrgAssignments => Set<OrgAssignment>();
     public DbSet<OrgAssignmentHistory> OrgAssignmentHistories => Set<OrgAssignmentHistory>();
     public DbSet<IamPermission> IamPermissions => Set<IamPermission>();
+    public DbSet<IamUserPermission> IamUserPermissions => Set<IamUserPermission>();
     public DbSet<BusinessDepartment> BusinessDepartments => Set<BusinessDepartment>();
     public DbSet<DepartmentPoleAssignment> DepartmentPoleAssignments => Set<DepartmentPoleAssignment>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
@@ -97,6 +98,7 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
             e.Property(x => x.Id).HasMaxLength(64);
             e.Property(x => x.Name).HasMaxLength(256);
             e.HasIndex(x => x.BusinessDepartmentId);
+            e.HasIndex(x => x.IsArchived);
             e.HasOne(x => x.BusinessDepartment).WithMany().HasForeignKey(x => x.BusinessDepartmentId);
         });
 
@@ -107,6 +109,7 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
             e.Property(x => x.Id).HasMaxLength(64);
             e.Property(x => x.PoleId).HasMaxLength(64);
             e.Property(x => x.Name).HasMaxLength(256);
+            e.HasIndex(x => x.IsArchived);
             e.HasOne(x => x.Pole).WithMany(x => x.Cellules).HasForeignKey(x => x.PoleId);
         });
 
@@ -117,6 +120,7 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
             e.Property(x => x.Id).HasMaxLength(64);
             e.Property(x => x.CelluleId).HasMaxLength(64);
             e.Property(x => x.Name).HasMaxLength(256);
+            e.HasIndex(x => x.IsArchived);
             e.HasOne(x => x.Cellule).WithMany(x => x.Services).HasForeignKey(x => x.CelluleId);
         });
 
@@ -151,6 +155,15 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
             e.Property(x => x.Action).HasMaxLength(128);
             e.Property(x => x.Scope).HasMaxLength(32);
             e.HasIndex(x => new { x.Role, x.Action, x.Scope }).IsUnique();
+        });
+
+        modelBuilder.Entity<IamUserPermission>(e =>
+        {
+            e.ToTable("iam_user_permissions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Action).HasMaxLength(128);
+            e.Property(x => x.UpdatedBy).HasMaxLength(160);
+            e.HasIndex(x => new { x.SubjectId, x.Action }).IsUnique();
         });
 
         modelBuilder.Entity<OutboxMessage>(e =>

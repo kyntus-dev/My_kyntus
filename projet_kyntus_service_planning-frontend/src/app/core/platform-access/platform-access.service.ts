@@ -6,6 +6,7 @@ import {
   type PlatformVerb,
   defaultScopeForRole,
   permissionKey,
+  plafondAutorise,
 } from './platform-capability.catalog';
 import { PlatformIamApiService } from './platform-iam-api.service';
 
@@ -59,9 +60,13 @@ export class PlatformAccessService {
 
   can(capability: string, verb: PlatformVerb, scope?: string): boolean {
     const perms = this.keys();
-    if (perms.includes('*:Global')) return true;
     const role = this.session.getRole() || '';
-    const sc = scope || defaultScopeForRole(role, PLATFORM_SCREENS.find((s) => s.id === capability));
+    const ecran = PLATFORM_SCREENS.find((s) => s.id === capability);
+    // Écran que le serveur réserve à d'autres rôles : jamais affiché, quel que soit le droit
+    // enregistré (la page répondrait « accès refusé »).
+    if (!plafondAutorise(ecran, role, verb)) return false;
+    if (perms.includes('*:Global')) return true;
+    const sc = scope || defaultScopeForRole(role, ecran);
     const prefix = `${capability}.${verb}:`;
     if (perms.some((p) => p === permissionKey(capability, verb, sc as 'Global') || p.startsWith(prefix))) {
       return true;
@@ -79,6 +84,16 @@ export class PlatformAccessService {
   canView(capability: string): boolean {
     if (!this.seeded()) return true;
     return this.can(capability, 'View');
+  }
+
+  /**
+   * Écran ouvert à ce rôle par « Accès par rôle » (hors joker Admin) : sert à ouvrir aux rôles IT
+   * et aux rôles créés par l'Admin les pages encore réservées par défaut à une liste de rôles.
+   */
+  accordeExplicitement(capabilities: string | readonly string[] | null | undefined): boolean {
+    if (!capabilities || !this.seeded() || this.keys().includes('*:Global')) return false;
+    const liste = typeof capabilities === 'string' ? [capabilities] : capabilities;
+    return liste.some((c) => this.can(c, 'View'));
   }
 
   canAct(capability: string): boolean {

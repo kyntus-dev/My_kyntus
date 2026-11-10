@@ -8,6 +8,8 @@ import { UserService } from '../../../users/services/user.service';
 import { QuotaCongeServiceDto } from '../../../../core/models/conge.models';
 import { resolveCurrentUserGuid, resolveUserGuid } from '../../../../core/lib/user-guid.util';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
+import { PrimeOrgApiService } from '../../../prime/services/prime-org-api.service';
+import { FILTRES_VIDES, cheminsNoeuds, filtrerQuotas, optionsFiltres, positionsNoeuds, type FiltresQuota, type PositionNoeud } from './quota-chemins.util';
 
 @Component({
   selector: 'app-conge-quotas-service',
@@ -17,7 +19,7 @@ import { KyntusSessionService } from '../../../../core/session/kyntus-session.se
     <div class="ky-page-shell">
       <app-kyntus-page-header
         title="Quotas congés (cellules / services)"
-        subtitle="Nombre max d’employés absents le même jour. Configurez un quota par cellule et/ou par service. Seuls les congés validés superviseur (en attente RH) et validés RH comptent.">
+        subtitle="Nombre max d’employés absents le même jour, par cellule et/ou par service. Superviseur : ses cellules ; chef de projet : tout son département ; RH : toute l’entreprise. Seuls les congés validés superviseur (en attente RH) et validés RH comptent.">
         <div actions>
           <button type="button" class="ky-btn-secondary" (click)="load()">Actualiser</button>
         </div>
@@ -30,6 +32,43 @@ import { KyntusSessionService } from '../../../../core/session/kyntus-session.se
       </p>
 
       <ng-container *ngIf="!loading && rows.length > 0">
+        <section class="filtres" aria-label="Filtres">
+          <label><span>Contrat</span>
+            <select class="ky-input" [ngModel]="filtres.contrat" (ngModelChange)="choisir('contrat', $event)">
+              <option value="">Tous</option>
+              <option *ngFor="let o of options.contrats" [value]="o.id">{{ o.nom }}</option>
+            </select></label>
+          <label><span>Pôle</span>
+            <select class="ky-input" [ngModel]="filtres.pole" (ngModelChange)="choisir('pole', $event)">
+              <option value="">Tous</option>
+              <option *ngFor="let o of options.poles" [value]="o.id">{{ o.nom }}</option>
+            </select></label>
+          <label><span>Cellule</span>
+            <select class="ky-input" [ngModel]="filtres.cellule" (ngModelChange)="choisir('cellule', $event)">
+              <option value="">Toutes</option>
+              <option *ngFor="let o of options.cellules" [value]="o.id">{{ o.nom }}</option>
+            </select></label>
+          <label><span>Type</span>
+            <select class="ky-input" [ngModel]="filtres.type" (ngModelChange)="choisir('type', $event)">
+              <option value="">Cellules et services</option>
+              <option value="cellule">Cellules</option>
+              <option value="service">Services</option>
+            </select></label>
+          <label><span>Quota</span>
+            <select class="ky-input" [ngModel]="filtres.quota" (ngModelChange)="choisir('quota', $event)">
+              <option value="">Tous</option>
+              <option value="defini">Défini</option>
+              <option value="non-defini">Non défini</option>
+            </select></label>
+          <label class="filtres-recherche"><span>Recherche</span>
+            <input class="ky-input" type="search" placeholder="Nom, contrat, pôle…" [ngModel]="filtres.recherche" (ngModelChange)="choisir('recherche', $event)" /></label>
+          <div class="filtres-fin">
+            <span class="filtres-compte">{{ visibles.length }} / {{ total }} ligne(s)</span>
+            <button type="button" class="ky-btn-secondary" (click)="reinitialiser()" [disabled]="!filtreActif">Réinitialiser</button>
+          </div>
+        </section>
+        <p class="hint" *ngIf="visibles.length === 0">Aucune ligne ne correspond aux filtres.</p>
+
         <section class="quota-section" *ngIf="celluleRows.length > 0">
           <h2 class="quota-section-title">Par cellule</h2>
           <p class="quota-section-sub">Plafond global pour toute la cellule (tous services confondus).</p>
@@ -49,7 +88,7 @@ import { KyntusSessionService } from '../../../../core/session/kyntus-session.se
                   <td>
                     <span class="scope-chip" data-scope="Cellule">Cellule</span>
                   </td>
-                  <td>{{ r.serviceNom }}</td>
+                  <td><b>{{ r.serviceNom }}</b><small class="chemin" *ngIf="chemins[r.serviceId] as c">{{ c }}</small></td>
                   <td>{{ r.effectif }}</td>
                   <td>
                     <input class="ky-input" type="number" min="1" [(ngModel)]="edits[r.serviceId]"
@@ -83,7 +122,7 @@ import { KyntusSessionService } from '../../../../core/session/kyntus-session.se
                   <td>
                     <span class="scope-chip" data-scope="Service">Service</span>
                   </td>
-                  <td>{{ r.serviceNom }}</td>
+                  <td><b>{{ r.serviceNom }}</b><small class="chemin" *ngIf="chemins[r.serviceId] as c">{{ c }}</small></td>
                   <td>{{ r.effectif }}</td>
                   <td>
                     <input class="ky-input" type="number" min="1" [(ngModel)]="edits[r.serviceId]"
@@ -98,7 +137,7 @@ import { KyntusSessionService } from '../../../../core/session/kyntus-session.se
           </div>
         </section>
 
-        <p class="hint" *ngIf="celluleRows.length > 0 && serviceRows.length === 0">
+        <p class="hint" *ngIf="!filtreActif && celluleRows.length > 0 && serviceRows.length === 0">
           Aucun service listé sous vos cellules. Vérifiez que les agents ont un service renseigné dans l’organisation RH.
         </p>
       </ng-container>
@@ -106,6 +145,17 @@ import { KyntusSessionService } from '../../../../core/session/kyntus-session.se
   `,
   styles: [`
     .hint { color: var(--text-muted); margin-top: 1rem; font-size: 0.9rem; line-height: 1.45; }
+    .filtres {
+      display: flex; flex-wrap: wrap; gap: 0.6rem 0.9rem; align-items: flex-end;
+      margin-top: 1rem; padding: 0.75rem 0.9rem;
+      border: 1px solid var(--border-color); border-radius: var(--radius-card, 0.875rem); background: var(--bg-card, transparent);
+    }
+    .filtres label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); }
+    .filtres select.ky-input { min-width: 150px; max-width: 240px; }
+    .filtres .filtres-recherche input.ky-input { max-width: none; width: 220px; }
+    .filtres-fin { display: flex; align-items: center; gap: 0.6rem; margin-left: auto; }
+    .filtres-compte { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
+    .chemin { display: block; font-size: 0.75rem; color: var(--text-muted); }
     .quota-section { margin-top: 1.5rem; }
     .quota-section-title {
       margin: 0;
@@ -147,21 +197,72 @@ export class CongeQuotasServiceComponent implements OnInit {
   private readonly userSvc = inject(UserService);
   private readonly session = inject(KyntusSessionService);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly org = inject(PrimeOrgApiService);
+  /** v35 : « Contrat › Pôle (› Cellule) » de chaque ligne : deux cellules du même nom (ex. INEO) se distinguent. */
+  chemins: Record<string, string> = {};
+
+  /** v36 : contrat / pôle / cellule de chaque ligne, pour les filtres. */
+  positions: Record<string, PositionNoeud> = {};
+  filtres: FiltresQuota = { ...FILTRES_VIDES };
 
   rows: QuotaCongeServiceDto[] = [];
   edits: Record<string, number | null> = {};
   loading = true;
   private superviseurId = '';
 
+  /** Lignes du périmètre encore actives (une cellule archivée n'apparaît plus). */
+  get total(): number {
+    return filtrerQuotas(this.rows, this.positions, FILTRES_VIDES).length;
+  }
+
+  get visibles(): QuotaCongeServiceDto[] {
+    return filtrerQuotas(this.rows, this.positions, this.filtres);
+  }
+
+  get options() {
+    return optionsFiltres(filtrerQuotas(this.rows, this.positions, FILTRES_VIDES), this.positions, this.filtres);
+  }
+
+  get filtreActif(): boolean {
+    const f = this.filtres;
+    return !!(f.contrat || f.pole || f.cellule || f.type || f.quota || f.recherche.trim());
+  }
+
+  choisir(cle: keyof FiltresQuota, valeur: string): void {
+    const f = { ...this.filtres, [cle]: valeur ?? '' } as FiltresQuota;
+    // Cascade : changer de contrat vide pôle et cellule, changer de pôle vide la cellule.
+    if (cle === 'contrat') { f.pole = ''; f.cellule = ''; }
+    if (cle === 'pole') f.cellule = '';
+    this.filtres = f;
+  }
+
+  reinitialiser(): void {
+    this.filtres = { ...FILTRES_VIDES };
+  }
+
   get celluleRows(): QuotaCongeServiceDto[] {
-    return this.rows.filter((r) => (r.scopeKind || '').toLowerCase() === 'cellule');
+    return this.trier(this.visibles.filter((r) => (r.scopeKind || '').toLowerCase() === 'cellule'));
   }
 
   get serviceRows(): QuotaCongeServiceDto[] {
-    return this.rows.filter((r) => (r.scopeKind || '').toLowerCase() !== 'cellule');
+    return this.trier(this.visibles.filter((r) => (r.scopeKind || '').toLowerCase() !== 'cellule'));
+  }
+
+  private trier(rows: QuotaCongeServiceDto[]): QuotaCongeServiceDto[] {
+    const cle = (r: QuotaCongeServiceDto) => `${this.chemins[r.serviceId] ?? ''} ${r.serviceNom}`;
+    return [...rows].sort((a, b) => cle(a).localeCompare(cle(b), 'fr', { sensitivity: 'base' }));
   }
 
   ngOnInit(): void {
+    this.org.invalidateOverviewCache();
+    this.org.loadOverview().subscribe({
+      next: (o) => {
+        this.chemins = cheminsNoeuds(o.operationalDepartments ?? [], o.unassignedPoles ?? []);
+        this.positions = positionsNoeuds(o.operationalDepartments ?? [], o.unassignedPoles ?? []);
+        this.cdr.detectChanges();
+      },
+      error: () => undefined,
+    });
     this.userSvc.getCurrentUser().subscribe({
       next: (u) => {
         this.superviseurId =

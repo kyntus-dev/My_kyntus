@@ -743,8 +743,10 @@ public partial class PlanningService : IPlanningService
         if (!shiftConfigs.Any())
             throw new Exception("Aucune config de shifts trouvée.");
 
+        // v27 : un poste hors production (équipe formation, RH, IT…) n'est jamais planifié ici.
         var employees = await _context.Users
             .Where(u => u.SubServiceId == planning.SubServiceId && u.IsActive)
+            .Where(PostesProduction.Planifiable)
             .OrderBy(u => u.Id)
             .ToListAsync();
 
@@ -1534,6 +1536,7 @@ public partial class PlanningService : IPlanningService
 
         var employees = await _context.Users
             .Where(u => u.SubServiceId == planning.SubServiceId && u.IsActive)
+            .Where(PostesProduction.Planifiable)
             .OrderBy(u => u.EarlyShiftCount)
             .ToListAsync();
 
@@ -1978,8 +1981,9 @@ public partial class PlanningService : IPlanningService
                 deepLink));
         }
 
+        // Seul envoi aux agents : à la validation (premier envoi ou mise à jour d'un planning déjà diffusé).
         if (_pilotEmails is not null)
-            await _pilotEmails.SendToAssignedPilotsAsync(planning.Id, updated: false);
+            await _pilotEmails.SendToAssignedPilotsAsync(planning.Id, updated: alreadyNotified);
 
         return await GetPlanningByIdAsync(planning.Id)
             ?? throw new Exception("Erreur publication planning.");
@@ -1995,11 +1999,13 @@ public partial class PlanningService : IPlanningService
         if (planning == null)
             return;
 
-        if (_pilotEmails is not null)
-            await _pilotEmails.SendToAssignedPilotsAsync(planning.Id, updated: true);
-
+        // Planning repassé en brouillon : aucun e-mail aux agents tant que le superviseur
+        // (ou RH / Admin) ne l'a pas validé à nouveau ; la validation enverra la mise à jour.
         if (planning.Status != PlanningStatus.Published)
             return;
+
+        if (_pilotEmails is not null)
+            await _pilotEmails.SendToAssignedPilotsAsync(planning.Id, updated: true);
 
         var subServiceName = planning.SubService?.Name ?? "";
         var reasonText = string.IsNullOrWhiteSpace(reason)
@@ -2693,6 +2699,20 @@ public partial class PlanningService : IPlanningService
         {
             // Pas de modèle shifts — continuer avec le snapshot éventuel
         }
+
+        // v33 : les postes hors production (référent technique, superviseur, formation, IT…) ne
+        // s'affichent pas dans le planning des pilotes, même s'ils y avaient été placés avant :
+        // retirés de la vue seulement (lecture sans suivi, rien n'est effacé en base).
+        var idsAffectes = planning.ShiftAssignments.Select(a => a.UserId).Distinct().ToList();
+        var horsProduction = (await _context.Users.AsNoTracking()
+                .Where(u => idsAffectes.Contains(u.Id) && u.Role != null)
+                .Select(u => new { u.Id, Role = u.Role.Name })
+                .ToListAsync())
+            .Where(u => PostesProduction.EstHorsProduction(u.Role))
+            .Select(u => u.Id)
+            .ToHashSet();
+        foreach (var masquee in planning.ShiftAssignments.Where(a => horsProduction.Contains(a.UserId)).ToList())
+            planning.ShiftAssignments.Remove(masquee);
 
         var comments = await _context.PlanningComments
             .Where(c => c.WeeklyPlanningId == id)
@@ -4625,6 +4645,22 @@ public partial class PlanningService : IPlanningService
         var scoped = explicitScope ?? await ResolveViewerSubServiceScopeAsync(viewerUserId);
         if (scoped is not null)
             subServices = subServices.Where(s => scoped.Contains(s.Id)).ToList();
+
+        // v31 : services de la cellule IT (des membres Ingénieur / Support IT et aucun poste planifiable,
+        // l'encadrement éventuel mis à part) : ils ont leur propre planning (Planning IT) et ne
+        // figurent pas dans le suivi des plannings.
+        var rolesParService = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.IsActive && u.SubServiceId != null)
+            .Select(u => new { SubServiceId = u.SubServiceId!.Value, Role = u.Role != null ? u.Role.Name : null })
+            .ToListAsync();
+        var servicesIt = rolesParService
+            .GroupBy(x => x.SubServiceId)
+            .Where(g => g.Any(x => global::Kyntus.Messaging.Contracts.KyntusRoleNames.IsEquipeIt(x.Role))
+                        && g.All(x => PostesProduction.EstHorsProduction(x.Role)))
+            .Select(g => g.Key)
+            .ToHashSet();
+        subServices = subServices.Where(s => !servicesIt.Contains(s.Id)).ToList();
 
         var plannings = await _context.WeeklyPlannings
             .Where(p => p.WeekCode == weekCode)

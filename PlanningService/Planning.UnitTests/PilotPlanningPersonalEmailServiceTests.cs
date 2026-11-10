@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Planning.Application.Abstractions;
+using Planning.Application.NotificationEmail;
 using Planning.Domain.Entities;
 using Planning.Domain.Enums;
 using Planning.Infrastructure.Hubs;
@@ -21,28 +22,62 @@ public class PilotPlanningPersonalEmailServiceTests
     }
 
     [Fact]
-    public async Task Sends_only_to_pilots_with_personal_email()
+    public async Task Queues_planning_to_every_active_agent_work_email()
     {
         await using var db = await SeedAsync();
-        var sender = new RecordingEmailSender();
-        var svc = new PilotPlanningPersonalEmailService(db, sender, NullLogger<PilotPlanningPersonalEmailService>.Instance);
+        var queue = new RecordingQueue();
+        var svc = new PilotPlanningPersonalEmailService(db, queue, NullLogger<PilotPlanningPersonalEmailService>.Instance);
 
         await svc.SendToAssignedPilotsAsync(1, updated: false);
 
-        Assert.Single(sender.Sent);
-        Assert.Equal("yasmine.perso@gmail.com", sender.Sent[0].To);
-        Assert.Equal("Planning 2026-W36 disponible", sender.Sent[0].Subject);
-        Assert.DoesNotContain("href", sender.Sent[0].Html, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("/mes-plannings", sender.Sent[0].Html);
-        Assert.Contains("08:00", sender.Sent[0].Html);
-        Assert.Contains("EL IDRISSI Yasmine", sender.Sent[0].Html);
-        Assert.Contains("31-Aug", sender.Sent[0].Html);
-        Assert.DoesNotContain("Chraibi", sender.Sent[0].Html);
-        Assert.DoesNotContain("17:00", sender.Sent[0].Html);
+        Assert.Equal(
+            new[] { "mehdi@kyntus.ma", "sara@kyntus.ma", "yasmine@kyntus.ma" },
+            queue.Direct.Select(d => d.To).Order().ToArray());
+        Assert.All(queue.Direct, d => Assert.Equal("planning", d.Category));
+        Assert.All(queue.Direct, d => Assert.Equal("Planning 2026-W36 disponible", d.Subject));
+        Assert.All(queue.Direct, d => Assert.StartsWith("planning:1:pub:", d.DedupKey));
+
+        var yasmine = queue.Direct.Single(d => d.To == "yasmine@kyntus.ma").Html;
+        Assert.DoesNotContain("href", yasmine, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("/mes-plannings", yasmine);
+        Assert.Contains("08:00", yasmine);
+        Assert.Contains("EL IDRISSI Yasmine", yasmine);
+        Assert.Contains("31-Aug", yasmine);
+        Assert.DoesNotContain("Chraibi", yasmine);
+        Assert.DoesNotContain("17:00", yasmine);
     }
 
     [Fact]
-    public async Task Notify_republish_sends_update_mail_even_when_draft()
+    public async Task Skips_inactive_agents_and_invalid_addresses()
+    {
+        await using var db = await SeedAsync();
+        (await db.Users.SingleAsync(u => u.Id == 20)).IsActive = false;
+        (await db.Users.SingleAsync(u => u.Id == 30)).Email = "pas-une-adresse";
+        await db.SaveChangesAsync();
+        var queue = new RecordingQueue();
+        var svc = new PilotPlanningPersonalEmailService(db, queue, NullLogger<PilotPlanningPersonalEmailService>.Instance);
+
+        await svc.SendToAssignedPilotsAsync(1, updated: true);
+
+        var only = Assert.Single(queue.Direct);
+        Assert.Equal("yasmine@kyntus.ma", only.To);
+        Assert.Equal("Planning 2026-W36 mis à jour", only.Subject);
+    }
+
+    [Fact]
+    public async Task Queues_nothing_when_mail_is_not_configured()
+    {
+        await using var db = await SeedAsync();
+        var queue = new RecordingQueue { Enabled = false };
+        var svc = new PilotPlanningPersonalEmailService(db, queue, NullLogger<PilotPlanningPersonalEmailService>.Instance);
+
+        await svc.SendToAssignedPilotsAsync(1, updated: false);
+
+        Assert.Empty(queue.Direct);
+    }
+
+    [Fact]
+    public async Task Notify_republish_ne_mail_pas_les_agents_tant_que_brouillon()
     {
         await using var db = await SeedAsync();
         var planning = await db.WeeklyPlannings.SingleAsync();
@@ -58,8 +93,28 @@ public class PilotPlanningPersonalEmailServiceTests
 
         await svc.NotifyPlanningRepublishedAsync(1, "regen congés");
 
-        Assert.Single(recorder.Calls);
-        Assert.Equal((1, true), recorder.Calls[0]);
+        // L'e-mail partira à la validation du superviseur (publication), pas avant.
+        Assert.Empty(recorder.Calls);
+    }
+
+    [Fact]
+    public async Task Notify_republish_planning_publie_envoie_la_mise_a_jour()
+    {
+        await using var db = await SeedAsync();
+        var planning = await db.WeeklyPlannings.SingleAsync();
+        planning.Status = PlanningStatus.Published;
+        await db.SaveChangesAsync();
+
+        var recorder = new RecordingPilotEmailService();
+        var svc = new PlanningService(
+            db,
+            new FakePlanningHubContext(),
+            new PlanningPerimeterResolver(db),
+            pilotEmails: recorder);
+
+        await svc.NotifyPlanningRepublishedAsync(1, "modification");
+
+        Assert.Equal((1, true), Assert.Single(recorder.Calls));
     }
 
     private static async Task<AppDbContext> SeedAsync()
@@ -152,19 +207,30 @@ public class PilotPlanningPersonalEmailServiceTests
         return db;
     }
 
-    private sealed class RecordingEmailSender : IPlanningEmailSender
+    private sealed class RecordingQueue : INotificationEmailQueue
     {
-        public bool IsConfigured => true;
-        public List<(string To, string Subject, string Html)> Sent { get; } = [];
+        public bool Enabled { get; init; } = true;
+        public List<(int UserId, string To, string Category, string Subject, string Html, string? DedupKey)> Direct { get; } = [];
 
-        public Task SendHtmlAsync(string to, string subject, string htmlBody, CancellationToken ct = default)
+        public Task<bool> IsEnabledAsync(CancellationToken ct = default) => Task.FromResult(Enabled);
+
+        public Task<int> EnqueueNotificationAsync(
+            NotificationEmailRecipients recipients,
+            NotificationEmailContent content,
+            CancellationToken ct = default) => Task.FromResult(0);
+
+        public Task<bool> EnqueueDirectAsync(
+            int recipientUserId,
+            string toEmail,
+            string category,
+            string subject,
+            string htmlBody,
+            string? dedupKey = null,
+            CancellationToken ct = default)
         {
-            Sent.Add((to, subject, htmlBody));
-            return Task.CompletedTask;
+            Direct.Add((recipientUserId, toEmail, category, subject, htmlBody, dedupKey));
+            return Task.FromResult(true);
         }
-
-        public Task SendRequiredHtmlAsync(string to, string subject, string htmlBody, CancellationToken ct = default) =>
-            SendHtmlAsync(to, subject, htmlBody, ct);
     }
 
     private sealed class RecordingPilotEmailService : IPilotPlanningPersonalEmailService

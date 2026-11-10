@@ -1,0 +1,88 @@
+<div class="ku-page pz">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Présences et paie · {{ data()?.perimetre ?? 'Votre périmètre' }}</p>
+      <h1 class="ku-hero-title">Retards et autorisations</h1>
+      <p class="ku-hero-sub">Chaque journée de retard (arrivée ou pauses) avec son statut. Pour autoriser un retard, ouvrez la journée dans le tableau des présences.</p>
+    </div>
+    <div class="ku-hero-actions">
+      <button type="button" class="ku-btn" (click)="changerPeriode(-1)" aria-label="Période précédente">‹</button>
+      <button type="button" class="ku-btn pz-periode" (click)="changerPeriode(0)" [title]="decalage() === 0 ? 'Période en cours' : 'Revenir à la période en cours'">Paie de {{ periode().libelle }}</button>
+      <button type="button" class="ku-btn" (click)="changerPeriode(1)" aria-label="Période suivante">›</button>
+      <button type="button" class="ku-btn ku-btn--primary" (click)="exporter()" [disabled]="!lignes().length">Exporter (Excel)</button>
+    </div>
+  </header>
+
+  <app-presences-nav />
+
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Journées de retard</span><span class="ku-kpi-value">{{ synthese().journees }}</span>
+      <span class="ku-kpi-sub">{{ synthese().agents }} agent(s)</span></div>
+    <div class="ku-kpi ku-kpi--danger"><span class="ku-kpi-label">Non autorisées</span><span class="ku-kpi-value">{{ synthese().nonAutorise }}</span>
+      <span class="ku-kpi-sub">comptent dans le cumul des retards</span></div>
+    <div class="ku-kpi ku-kpi--ok"><span class="ku-kpi-label">Autorisées</span><span class="ku-kpi-value">{{ synthese().autorise }}</span>
+      <span class="ku-kpi-sub">prévenues ou validées par le responsable</span></div>
+    <div class="ku-kpi"><span class="ku-kpi-label">Durée totale</span><span class="ku-kpi-value">{{ formatMinutes(synthese().total) }}</span>
+      <span class="ku-kpi-sub">autorisées comprises</span></div>
+  </div>
+
+  <section class="ku-card">
+    <div class="pz-filtres pz-filtres--grille">
+      <input class="ku-input pz-search" type="search" placeholder="Rechercher un agent…" [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+      <select class="ku-input" [ngModel]="activite()" (ngModelChange)="choisirActivite($event)" aria-label="Activité">
+        <option value="">Toutes les activités</option>
+        @for (o of options().activites; track o) { <option [value]="o">{{ o }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="pole()" (ngModelChange)="choisirPole($event)" aria-label="Pôle">
+        <option value="">Tous les pôles</option>
+        @for (o of options().poles; track o) { <option [value]="o">{{ o }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="cellule()" (ngModelChange)="cellule.set($event)" aria-label="Cellule">
+        <option value="">Toutes les cellules</option>
+        @for (o of options().cellules; track o) { <option [value]="o">{{ o }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="statut()" (ngModelChange)="statut.set($event)" aria-label="Statut">
+        <option value="">Tous les statuts</option>
+        <option value="Non autorisé">Non autorisés</option>
+        <option value="Autorisé">Autorisés</option>
+      </select>
+      <span class="pz-compte">{{ lignes().length }} journée(s)</span>
+    </div>
+
+    @if (loading() && !data()) {
+      <div class="ku-skeleton"></div>
+    } @else if (error()) {
+      <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
+    } @else if (!lignes().length) {
+      <div class="ku-empty"><strong>Aucun retard</strong>sur cette période avec ces filtres.</div>
+    } @else {
+      <div class="ku-table-wrap pz-wrap" [class.pz-loading]="loading()">
+        <table class="ku-table ky-table pz-retards">
+          <thead>
+            <tr>
+              <th>Agent</th><th>Activité · pôle</th><th>Cellule</th><th>Date</th><th>Prévu</th><th>Pointé</th>
+              <th>Retard arrivée</th><th>Retard pauses</th><th>Total</th><th>Statut</th><th>Motif</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of lignes(); track l.userId + l.jour) {
+              <tr>
+                <td><b>{{ l.agent }}</b></td>
+                <td>{{ l.activite || '—' }}<small class="ku-muted"> · {{ l.pole || '—' }}</small></td>
+                <td>{{ l.cellule || '—' }}</td>
+                <td>{{ dateLongue(l.jour) }}</td>
+                <td class="ku-mono">{{ l.prevu || '—' }}</td>
+                <td class="ku-mono">{{ l.arrivee || '—' }}</td>
+                <td class="ku-mono" [class.ku-neg]="l.retardEntree > 0">{{ l.retardEntree ? formatMinutes(l.retardEntree) : '' }}</td>
+                <td class="ku-mono" [class.ku-neg]="l.retardPause > 0">{{ l.retardPause ? formatMinutes(l.retardPause) : '' }}</td>
+                <td class="ku-mono"><b>{{ formatMinutes(l.total) }}</b></td>
+                <td><span class="ku-chip" [ngClass]="classeStatut(l)">{{ l.statut }}</span></td>
+                <td class="ku-muted">{{ l.motif }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>

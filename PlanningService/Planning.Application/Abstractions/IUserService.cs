@@ -34,7 +34,17 @@ public interface IUserService
         CancellationToken ct = default);
 
     Task<UserDto?> UpdateUserAsync(int id, UpdateUserDto dto);
-    Task<bool> DeleteUserAsync(int id);
+    /// <summary>
+    /// Désactive (sortie) ou réactive un collaborateur. Aucune suppression : le compte ne peut plus
+    /// se connecter, il disparaît des listes de travail, et tout son historique reste en base.
+    /// </summary>
+    Task<bool> SetUserActiveAsync(int id, bool isActive, DateOnly? dateSortie = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Annule une création qui a échoué à mi-parcours (seul cas de suppression réelle) :
+    /// refusé si le compte a été créé il y a plus de 30 minutes.
+    /// </summary>
+    Task<bool> RollbackFailedCreationAsync(int id, CancellationToken ct = default);
     Task SyncMissingAuthUsersAsync();
 
     /// <summary>
@@ -42,6 +52,12 @@ public interface IUserService
     /// À appeler après une projection d'affectation structurelle Directory → Planning.
     /// </summary>
     Task SyncUserRoleToAuthAsync(int userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Change le rôle d'un compte et le propage partout (connexion sans mot de passe, annuaire).
+    /// Utilisé pour réaffecter les comptes d'un rôle supprimé.
+    /// </summary>
+    Task<bool> ChangerRoleAsync(int userId, int roleId, CancellationToken ct = default);
 
     Task<UserDto?> GetUserByAuthIdAsync(int authUserId);
     Task<UserDto?> GetUserByEmailAsync(string email);

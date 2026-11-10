@@ -1,0 +1,129 @@
+<div class="ku-page pz">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Présences et paie · Réservé RH et chefs de projet</p>
+      <h1 class="ku-hero-title">Dossiers administratifs</h1>
+      <p class="ku-hero-sub">Fiche RH de l’agent et ses documents : contrat, avenants, pièce d’identité, justificatifs, courriers.</p>
+    </div>
+  </header>
+
+  <app-presences-nav />
+
+  <div class="pzd">
+    <aside class="ku-card pzd-liste">
+      <input class="ku-input" type="search" placeholder="Rechercher un agent ou une cellule…"
+             [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+      <p class="pz-compte pzd-compte">{{ agents().length }} agent(s) dans votre périmètre</p>
+      <div class="pzd-scroll">
+        @if (chargementAgents()) {
+          <div class="ku-skeleton"></div>
+        } @else {
+          @for (g of groupes(); track g.cellule) {
+            <p class="pzd-groupe">{{ g.cellule }} <span>{{ g.agents.length }}</span></p>
+            @for (a of g.agents; track a.userId) {
+              <button type="button" class="pzd-agent" [class.on]="selection() === a.userId" (click)="choisir(a.userId)">
+                <span class="pzd-avatar">{{ initiales(a.nom) }}</span>
+                <span><b>{{ a.nom }}</b><small>{{ a.type }}</small></span>
+              </button>
+            }
+          } @empty {
+            <div class="ku-empty"><strong>Aucun agent</strong>Modifiez la recherche.</div>
+          }
+        }
+      </div>
+    </aside>
+
+    <section class="pzd-detail">
+      @if (!selection()) {
+        <div class="ku-card ku-empty pzd-vide"><strong>Choisissez un agent</strong>Sa fiche RH et ses documents s’afficheront ici.</div>
+      } @else if (loading()) {
+        <div class="ku-card"><div class="ku-skeleton"></div></div>
+      } @else if (error()) {
+        <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
+      } @else if (dossier(); as d) {
+        <div class="ku-card">
+          <div class="pzd-tete">
+            <span class="pzd-avatar pzd-avatar--lg">{{ initiales(d.fiche.nom) }}</span>
+            <div>
+              <h2>{{ d.fiche.nom }}</h2>
+              <p class="ku-muted">{{ d.fiche.role ?? '—' }} · {{ d.fiche.cellule ?? 'Sans cellule' }} · {{ d.fiche.email }}</p>
+            </div>
+            <div class="pzd-badges">
+              <span class="ku-chip ku-chip--plain">{{ d.fiche.type }}</span>
+              @if (d.fiche.enFormation) { <span class="ku-chip ku-chip--info">En formation</span> }
+              @if (d.fiche.dateSortie) { <span class="ku-chip ku-chip--danger">Sorti le {{ dateFr(d.fiche.dateSortie) }}</span> }
+            </div>
+          </div>
+          <dl class="pzd-fiche">
+            <div><dt>Matricule</dt><dd>{{ d.fiche.matricule || '—' }}</dd></div>
+            <div><dt>CIN</dt><dd>{{ d.fiche.cin || '—' }}</dd></div>
+            <div><dt>CNSS</dt><dd>{{ d.fiche.cnss || '—' }}</dd></div>
+            <div><dt>Téléphone</dt><dd>{{ d.fiche.telephone || '—' }}</dd></div>
+            <div><dt>Date d’entrée</dt><dd>{{ dateFr(d.fiche.dateEntree) }}</dd></div>
+            <div><dt>Date d’embauche</dt><dd>{{ dateFr(d.fiche.dateEmbauche) }}</dd></div>
+            <div><dt>RIB</dt><dd class="ku-mono">{{ d.fiche.rib || '—' }}</dd></div>
+            <div class="pzd-large"><dt>Adresse</dt><dd>{{ d.fiche.adresse || '—' }}</dd></div>
+          </dl>
+          <p class="ku-card-sub">Fiche en lecture : elle se modifie dans « Utilisateurs ». Le RIB est masqué sauf les 4 derniers chiffres.</p>
+        </div>
+
+        <div class="ku-card">
+          <div class="ku-card-head">
+            <div>
+              <h3 class="ku-card-title">Documents <span class="ku-muted">({{ d.documents.length }})</span></h3>
+              @if (manquantes().length) {
+                <p class="ku-card-sub">Pièces non déposées : {{ manquantes().join(', ') }}</p>
+              }
+            </div>
+            <select class="ku-input pzd-filtre" [ngModel]="filtreCategorie()" (ngModelChange)="filtreCategorie.set($event)" aria-label="Catégorie">
+              <option value="">Toutes les catégories</option>
+              @for (c of categories(); track c) {
+                <option [value]="c">{{ c }}@if (parCategorie().get(c)) { ({{ parCategorie().get(c) }}) }</option>
+              }
+            </select>
+          </div>
+
+          @if (peutAgir()) {
+            <div class="pzd-envoi">
+              <label class="pzd-drop" [class.on]="fichier()">
+                <input #input type="file" (change)="choisirFichier($event)" />
+                <b>{{ fichier()?.name ?? 'Choisir un fichier' }}</b>
+                <small>{{ fichier() ? tailleFr(fichier()!.size) : 'PDF, image, Word… ' + tailleFr(tailleMax()) + ' au plus' }}</small>
+              </label>
+              <select class="ku-input" [ngModel]="categorie()" (ngModelChange)="categorie.set($event)" aria-label="Catégorie du document">
+                @for (c of categories(); track c) { <option [value]="c">{{ c }}</option> }
+              </select>
+              <input class="ku-input" maxlength="500" placeholder="Commentaire (facultatif)" [ngModel]="commentaire()" (ngModelChange)="commentaire.set($event)" />
+              <button type="button" class="ku-btn ku-btn--primary" [disabled]="!fichier() || envoi()" (click)="envoyer(input)">
+                {{ envoi() ? 'Envoi…' : 'Ajouter' }}
+              </button>
+            </div>
+          }
+
+          @if (documents().length) {
+            <ul class="pzd-docs">
+              @for (doc of documents(); track doc.id) {
+                <li>
+                  <span class="pzd-ext">{{ icone(doc) }}</span>
+                  <div class="pzd-doc">
+                    <b>{{ doc.nomFichier }}</b>
+                    <small>{{ doc.categorie }} · {{ tailleFr(doc.taille) }} · {{ doc.auteur ?? '—' }}, le {{ dateFr(doc.createdAt) }}</small>
+                    @if (doc.commentaire) { <small class="pzd-com">« {{ doc.commentaire }} »</small> }
+                  </div>
+                  <div class="pz-actions">
+                    <button type="button" class="ku-btn ku-btn--sm" (click)="telecharger(doc)">Télécharger</button>
+                    @if (peutAgir()) {
+                      <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="supprimer(doc)">Supprimer</button>
+                    }
+                  </div>
+                </li>
+              }
+            </ul>
+          } @else {
+            <div class="ku-empty"><strong>Aucun document</strong>{{ filtreCategorie() ? 'dans cette catégorie.' : 'dans ce dossier pour l’instant.' }}</div>
+          }
+        </div>
+      }
+    </section>
+  </div>
+</div>

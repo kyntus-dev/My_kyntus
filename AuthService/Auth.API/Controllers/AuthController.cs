@@ -6,11 +6,13 @@ using Auth.Application.Commands.Logout;
 using Auth.Application.Commands.RefreshToken;
 using Auth.Application.Commands.RegisterFromPlanning;
 using Auth.Application.Commands.RegisterFromPlanningBatch;
+using Auth.Application.Commands.SetActiveFromPlanning;
 using Auth.Application.DTOs;
 using Auth.Application.Queries.AccessAudit;
 using Auth.Application.Queries.CheckEmail;
 using Auth.Application.Queries.CheckUsername;
 using Auth.API.Filters;
+using Auth.Domain.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -116,6 +118,36 @@ public class AuthController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Rôle actuel en base (et non celui du jeton). L'application le consulte régulièrement :
+    /// quand un Admin change le rôle d'un compte, la session se met à jour sans reconnexion.
+    /// </summary>
+    [HttpGet("me/role")]
+    [Authorize]
+    public async Task<IActionResult> RoleActuel([FromServices] IUserRepository users, CancellationToken ct)
+    {
+        var sub = User.FindFirstValue("sub")
+                  ?? User.FindAll(ClaimTypes.NameIdentifier)
+                      .Select(c => c.Value)
+                      .FirstOrDefault(v => v.Contains('-', StringComparison.Ordinal));
+        var user = Guid.TryParse(sub, out var subjectId) && subjectId != Guid.Empty
+            ? await users.GetBySubjectIdAsync(subjectId, ct)
+            : null;
+        if (user is null)
+        {
+            var authUserId = User.FindAll(ClaimTypes.NameIdentifier)
+                                 .Select(c => c.Value)
+                                 .FirstOrDefault(v => int.TryParse(v, out _))
+                             ?? User.FindFirstValue("nameid");
+            if (int.TryParse(authUserId, out var id))
+                user = await users.GetByIdAsync(id, ct);
+        }
+        if (user is null)
+            return NotFound(new { message = "Compte introuvable." });
+
+        return Ok(new { role = user.Role?.Name ?? "User", isActive = user.IsActive });
+    }
+
     [HttpGet("audit/access")]
     [Authorize(Roles = "Admin,Audit")]
     public async Task<IActionResult> AccessAudit([FromQuery] int take = 200, CancellationToken ct = default)
@@ -219,6 +251,18 @@ public class AuthController : ControllerBase
         }
     }
 
+    /// <summary>Active / désactive un compte (sortie d'un collaborateur) sans le supprimer.</summary>
+    [HttpPut("users/from-planning/{authUserId:int}/active")]
+    [RequireInternalService]
+    public async Task<IActionResult> SetActiveFromPlanning(int authUserId, [FromBody] SetActiveFromPlanningRequest body)
+    {
+        var found = await _mediator.Send(new SetActiveFromPlanningCommand(authUserId, body.IsActive));
+        if (!found)
+            return NotFound(new { message = $"Utilisateur Auth {authUserId} introuvable." });
+        _logger.LogInformation("Compte Auth {Id} {Etat} depuis Planning.", authUserId, body.IsActive ? "réactivé" : "désactivé");
+        return NoContent();
+    }
+
     [HttpDelete("users/from-planning/{authUserId:int}")]
     [RequireInternalService]
     public async Task<IActionResult> DeleteFromPlanning(int authUserId)
@@ -245,8 +289,8 @@ public class AuthController : ControllerBase
     {
         try
         {
-            await _mediator.Send(new AdminResetPasswordCommand(dto));
-            return Ok(new { message = "Mot de passe réinitialisé." });
+            var r = await _mediator.Send(new AdminResetPasswordCommand(dto));
+            return Ok(new { message = "Mot de passe réinitialisé.", id = r.Id, email = r.Email, subjectId = r.SubjectId, corrections = r.Corrections });
         }
         catch (ArgumentException ex)
         {
@@ -263,3 +307,5 @@ public class AuthController : ControllerBase
         }
     }
 }
+
+public sealed record SetActiveFromPlanningRequest(bool IsActive);

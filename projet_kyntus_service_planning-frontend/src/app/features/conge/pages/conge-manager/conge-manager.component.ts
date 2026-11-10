@@ -11,9 +11,12 @@ import {
   DemandeCongeDto, StatutDemande, TypeConge,
   TypeCongeLabels, StatutDemandeLabels, TypeCongeExceptionnelLabels,
   RefuserCongeRequest, ValiderCongeRequest, normalizeStatutDemande,
+  type CongeWorkflowDto,
 } from '../../../../core/models/conge.models';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
+import type { EquipeMembreDto } from '../../../../core/models/conge.models';
+import { SANS_CELLULE, buildCelluleOptions, type CelluleOption } from '../../lib/conge-equipe.util';
 
 @Component({
   selector: 'app-conge-manager',
@@ -50,15 +53,40 @@ export class CongeManagerComponent implements OnInit {
 
   filtreStatut: StatutDemande | '' = '';
   filtreSearch  = '';
+  /** Filtre par cellule : rattachement des collaborateurs d'après l'organisation RH. */
+  filtreCellule = '';
+  celluleOptions: CelluleOption[] = [];
+  private membreParId = new Map<string, EquipeMembreDto>();
+
+  /** Circuit en vigueur : v9 = superviseur seul décideur, RH en suivi. */
+  workflow: CongeWorkflowDto | null = null;
+  isAdmin = false;
+
+  get etapeRhRequise(): boolean {
+    return this.workflow?.etapeRhRequise ?? false;
+  }
 
   get pageTitle(): string {
-    return this.isRhFlow ? 'Validation RH des congés' : 'Validation superviseur des congés';
+    if (!this.isRhFlow) return 'Validation superviseur des congés';
+    return this.etapeRhRequise ? 'Validation RH des congés' : 'Suivi des congés (RH)';
   }
 
   get pageSubtitle(): string {
-    return this.isRhFlow
+    if (!this.isRhFlow) {
+      return this.etapeRhRequise
+        ? 'Validez ou refusez les demandes de votre équipe (ensuite RH)'
+        : 'Votre décision est définitive : la demande est validée ou refusée immédiatement';
+    }
+    return this.etapeRhRequise
       ? 'Validez définitivement les demandes déjà approuvées par le superviseur'
-      : 'Validez ou refusez les demandes de votre équipe (ensuite RH)';
+      : 'Vous suivez toutes les demandes ; la décision appartient au superviseur de la cellule';
+  }
+
+  /** Demandes adressées au service RH : congé d'un responsable, cellule sans superviseur actif. */
+  get rhExplication(): string {
+    return this.etapeRhRequise
+      ? 'Circuit à deux étapes : chaque demande validée par un superviseur attend votre validation.'
+      : 'Vous pouvez valider uniquement les demandes qui vous sont adressées : congé d’un superviseur ou d’un chef de projet, et cellule sans superviseur actif. Les autres sont décidées par le superviseur de la cellule.';
   }
 
   get nbActionnable(): number {
@@ -76,7 +104,9 @@ export class CongeManagerComponent implements OnInit {
   ngOnInit(): void {
     const role = (this.authSvc.getRole() || '').toLowerCase();
     this.isRhFlow = role === 'rh' || role === 'admin';
+    this.isAdmin = role === 'admin';
     this.filtreStatut = this.isRhFlow ? StatutDemande.EnAttenteRh : StatutDemande.EnAttente;
+    this.loadWorkflow();
 
     this.userSvc.getCurrentUser().subscribe({
       next: (user) => {
@@ -93,7 +123,56 @@ export class CongeManagerComponent implements OnInit {
     });
   }
 
+  private loadWorkflow(): void {
+    this.svc.getWorkflow().subscribe({
+      next: (w) => {
+        this.workflow = w;
+        this.cdr.detectChanges();
+      },
+      error: () => { /* circuit par défaut : superviseur seul */ },
+    });
+  }
+
+  /** Bascule du circuit (Admin) : superviseur seul ou superviseur puis RH. */
+  async basculerCircuit(etapeRhRequise: boolean): Promise<void> {
+    if (!this.isAdmin) return;
+    const ok = await this.confirmService.confirm({
+      title: 'Changer le circuit de validation',
+      message: etapeRhRequise
+        ? 'Rétablir le circuit à deux étapes : chaque validation superviseur devra ensuite être validée par la RH.'
+        : 'Passer au circuit à une étape : le superviseur décide seul. Les demandes déjà validées par un superviseur et en attente RH seront validées automatiquement.',
+      confirmLabel: 'Confirmer',
+    });
+    if (!ok) return;
+    this.svc.updateWorkflow(etapeRhRequise).subscribe({
+      next: (w) => {
+        this.workflow = w;
+        this.loadDemandes();
+        this.showToast('Circuit de validation mis à jour.', 'success');
+      },
+      error: (err) => this.showToast(err?.error?.message || 'Impossible de changer le circuit.', 'error'),
+    });
+  }
+
+  /** Rattachement (cellule) des collaborateurs du périmètre, pour le filtre par cellule. */
+  private loadMembres(): void {
+    this.svc.getCongesEquipe(new Date().getFullYear()).subscribe({
+      next: (eq) => {
+        this.membreParId = new Map(eq.membres.map((m) => [m.employeId.toLowerCase(), m]));
+        this.celluleOptions = buildCelluleOptions(eq.membres);
+        this.appliquerFiltres();
+        this.cdr.detectChanges();
+      },
+      error: () => { /* filtre cellule indisponible : la liste reste utilisable */ },
+    });
+  }
+
+  celluleNom(d: DemandeCongeDto): string | null {
+    return this.membreParId.get(d.employeId.toLowerCase())?.celluleNom ?? null;
+  }
+
   loadDemandes(): void {
+    if (this.membreParId.size === 0) this.loadMembres();
     this.loading = true;
     this.cdr.detectChanges();
     this.svc.getDemandesByManager(this.managerId).subscribe({
@@ -115,6 +194,12 @@ export class CongeManagerComponent implements OnInit {
     let result = [...this.demandes];
     if (this.filtreStatut !== '') {
       result = result.filter(d => normalizeStatutDemande(d.statut) === +this.filtreStatut);
+    }
+    if (this.filtreCellule) {
+      result = result.filter(d => {
+        const celluleId = this.membreParId.get(d.employeId.toLowerCase())?.celluleId ?? null;
+        return this.filtreCellule === SANS_CELLULE ? !celluleId : celluleId === this.filtreCellule;
+      });
     }
     if (this.filtreSearch.trim()) {
       const q = this.filtreSearch.trim().toLowerCase();
@@ -146,7 +231,9 @@ export class CongeManagerComponent implements OnInit {
       this.showToast('La validation des congés n’est pas autorisée pour votre rôle.', 'error');
       return;
     }
-    const label = this.isRhFlow ? 'validation RH finale' : 'validation superviseur';
+    const label = this.isRhFlow
+      ? 'validation RH'
+      : (this.etapeRhRequise ? 'validation superviseur' : 'validation définitive');
     const ok = await this.confirmService.confirm({
       title: 'Confirmer la validation',
       message: `Confirmer la ${label} (${d.nombreJours} jours) ?`,
@@ -160,7 +247,11 @@ export class CongeManagerComponent implements OnInit {
     call$.subscribe({
       next: () => {
         this.loadDemandes();
-        this.showToast(this.isRhFlow ? 'Congé validé (RH).' : 'Transmis à la RH.', 'success');
+        this.showToast(
+          this.isRhFlow
+            ? 'Congé validé (RH).'
+            : (this.etapeRhRequise ? 'Transmis à la RH.' : 'Congé validé.'),
+          'success');
       },
       error: (err) => this.showToast(err?.error?.message || 'Impossible de valider.', 'error')
     });

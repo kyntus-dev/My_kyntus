@@ -1,0 +1,139 @@
+<div class="ar">
+  <aside class="ar-roles" aria-label="Rôles">
+    <p class="ar-titre">Rôles</p>
+    @for (r of roles(); track r) {
+      <button type="button" class="ar-role" [class.on]="role() === r" (click)="choisirRole(r)">
+        <span>{{ libelleRole(r) }}</span>
+        @let n = compteParRole().get(r);
+        <small>{{ n === -1 ? 'tout' : n }}</small>
+      </button>
+    }
+  </aside>
+
+  <section class="ar-main">
+    <header class="ar-tete">
+      <div>
+        <h2>{{ libelleRole(role()) }} <span>· {{ joker() ? 'accès complet' : ouvertes() + ' rubrique(s) ouverte(s)' }}</span></h2>
+        <p>Le niveau s’applique à tous les comptes du rôle. Pour un seul compte, utilisez « Accès par compte ».</p>
+      </div>
+      <div class="ar-actions">
+        <button type="button" class="ar-act" [class.on]="apercuOuvert()" [attr.aria-expanded]="apercuOuvert()" (click)="apercuOuvert.set(!apercuOuvert())">
+          Menu de ce rôle <b>{{ entreesApercu() }}</b>
+        </button>
+        @if (peutModifier()) {
+          <button type="button" class="ar-act" [disabled]="!ecarts().length" (click)="retablirDefauts()"
+                  title="Remettre les rubriques du rôle au réglage d’origine">Rétablir les droits par défaut</button>
+        }
+      </div>
+    </header>
+
+    @if (apercuOuvert()) {
+      <section class="ar-apercu" aria-label="Aperçu du menu">
+        <header>
+          <div>
+            <h3>Ce que voient les comptes {{ libelleRole(role()) }} dans le menu</h3>
+            <p>Avec les réglages affichés ci-dessous{{ modifiees().length ? ', modifications non enregistrées comprises' : '' }}. Un compte peut avoir en plus ses exceptions (« Accès par compte »).</p>
+          </div>
+          <button type="button" class="ar-fermer" (click)="apercuOuvert.set(false)" aria-label="Fermer l’aperçu">×</button>
+        </header>
+        <div class="ar-apercu-grille">
+          @for (g of apercu(); track g.id) {
+            <div class="ar-apercu-groupe">
+              <b>{{ g.label }}</b>
+              @if (g.module) {
+                <small>Entrées selon les réglages du module</small>
+              } @else {
+                <ul>@for (e of g.entrees; track e) { <li>{{ e }}</li> }</ul>
+              }
+            </div>
+          } @empty {
+            <p class="ar-vide">Aucune entrée : ce rôle ne voit que l’accueil.</p>
+          }
+        </div>
+      </section>
+    }
+
+    @if (joker()) {
+      <div class="ar-info">Ce rôle a l’accès complet à toutes les rubriques (Admin) : rien à régler ici.</div>
+    } @else if (!canWrite()) {
+      <div class="ar-info">Lecture seule : seul l’Admin modifie les droits des rôles.</div>
+    }
+
+    <div class="ar-outils">
+      <input class="ar-input" type="search" placeholder="Rechercher une rubrique…" [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+      <div class="ar-seg" role="tablist">
+        <button type="button" [class.on]="filtre() === 'toutes'" (click)="filtre.set('toutes')">Toutes</button>
+        <button type="button" [class.on]="filtre() === 'ouvertes'" (click)="filtre.set('ouvertes')">Ouvertes</button>
+        <button type="button" [class.on]="filtre() === 'modifiees'" (click)="filtre.set('modifiees')">Modifiées @if (modifiees().length) { <b>{{ modifiees().length }}</b> }</button>
+        <button type="button" [class.on]="filtre() === 'ecarts'" (click)="filtre.set('ecarts')" title="Rubriques réglées autrement que le réglage d’origine du rôle">Hors réglage d’origine @if (!joker() && ecarts().length) { <b>{{ ecarts().length }}</b> }</button>
+      </div>
+      <div class="ar-legende" aria-hidden="true">
+        <span><i class="n0"></i>Aucun</span><span><i class="n1"></i>Consulter</span><span><i class="n2"></i>Modifier</span><span><i class="n3"></i>Valider</span>
+      </div>
+    </div>
+
+    @if (loading()) {
+      <div class="ar-squelette"></div><div class="ar-squelette"></div>
+    } @else if (error()) {
+      <div class="ar-erreur">{{ error() }} <button type="button" (click)="charger()">Réessayer</button></div>
+    } @else {
+      @for (m of modules(); track m.module) {
+        <article class="ar-module">
+          <header>
+            <h3>{{ m.module }} <span>{{ m.ouvertes }} / {{ m.lignes.length }}</span></h3>
+            @if (peutModifier()) {
+              <div class="ar-tout">
+                <button type="button" (click)="toutModule(m.module, 'View')">Tout en « Consulter »</button>
+                <button type="button" (click)="toutModule(m.module, 'Aucun')">Tout fermer</button>
+              </div>
+            }
+          </header>
+          @for (l of m.lignes; track l.capability) {
+            <div class="ar-ligne" [class.modif]="modifiee(l)">
+              <div class="ar-nom">
+                <b>{{ l.label }}</b>
+                @if (modifiee(l)) { <small class="ar-modif">modifié</small> }
+                @if (!joker()) { @let e = ecart(l); @if (e) { <small class="ar-ecart" title="Réglé autrement que le réglage d’origine du rôle. « Rétablir les droits par défaut » y revient.">{{ e }}</small> } }
+                @if (!joker()) {
+                  @let v = verrou(l);
+                  @if (v) {
+                    <small class="ar-verrou" [class.alerte]="sansEffet(l)"
+                           [title]="(v.niveau === 'tout' ? 'Le serveur réserve cette rubrique à : ' : 'Le serveur réserve la modification à : ') + v.roles + (sansEffet(l) ? '. Le droit enregistré est sans effet : « Rétablir les droits par défaut » le retire.' : '')">
+                      {{ sansEffet(l) ? 'sans effet (réservé : ' + v.roles + ')' : (v.niveau === 'tout' ? 'réservé : ' + v.roles : 'consultation seule') }}
+                    </small>
+                  }
+                }
+              </div>
+              <div class="ar-niveaux" [class.ferme]="niveauDe(l) === 'Aucun'" [style.--n]="l.niveaux.length" role="radiogroup" [attr.aria-label]="'Niveau pour ' + l.label">
+                <span class="ar-jauge" [class.vide]="niveauDe(l) === 'Aucun'" [style.width]="'calc(' + jauge(l) + '% - 6px)'"></span>
+                @for (n of l.niveaux; track n) {
+                  <button type="button" role="radio" [attr.aria-checked]="niveauDe(l) === n"
+                          [class.on]="rang(l, n)" [disabled]="!peutModifier() || niveauBloque(l, n)" (click)="niveau(l, n)">{{ libelleNiveau[n] }}</button>
+                }
+              </div>
+              <button type="button" class="ar-switch" [class.on]="l.verbes.has('Configure')" [class.cache]="!l.configurable"
+                      [disabled]="!peutModifier() || !l.configurable || (!l.verbes.has('Configure') && !!verrou(l))" [attr.aria-pressed]="l.verbes.has('Configure')"
+                      (click)="configurer(l)" title="Configurer : réglages de la rubrique">
+                <i></i>Configurer
+              </button>
+              <select class="ar-perimetre" [disabled]="!peutModifier() || niveauDe(l) === 'Aucun'" [ngModel]="l.perimetre"
+                      (ngModelChange)="perimetre(l, $event)" aria-label="Périmètre" title="Périmètre des données">
+                @for (p of perimetres; track p) { <option [value]="p">{{ libellePerimetre[p] }}</option> }
+              </select>
+            </div>
+          }
+        </article>
+      } @empty {
+        <div class="ar-vide">Aucune rubrique pour ce filtre.</div>
+      }
+    }
+
+    @if (modifiees().length) {
+      <div class="ar-barre">
+        <span><b>{{ modifiees().length }}</b> rubrique(s) modifiée(s) pour le rôle {{ libelleRole(role()) }}</span>
+        <button type="button" class="ar-btn" (click)="annuler()">Annuler</button>
+        <button type="button" class="ar-btn pri" [disabled]="saving()" (click)="enregistrer()">{{ saving() ? 'Enregistrement…' : 'Enregistrer' }}</button>
+      </div>
+    }
+  </section>
+</div>

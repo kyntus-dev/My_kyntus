@@ -71,6 +71,17 @@ public static class PlanningStartup
                 await TryPatch("shift-mode-profiles", () => PlanningSchemaPatches.EnsureShiftModeProfilesSchemaAsync(db));
                 await TryPatch("saturday-shift-config", () => PlanningSchemaPatches.EnsureSaturdayShiftConfigColumnAsync(db));
                 await TryPatch("media-ticket-comments", () => PlanningSchemaPatches.EnsureMediaAndTicketCommentsAsync(db));
+                await TryPatch("app-guides", () => PlanningSchemaPatches.EnsureAppGuidesAsync(db));
+                await TryPatch("org-mirror-archive", () => PlanningSchemaPatches.EnsureOrgMirrorArchiveColumnsAsync(db));
+                await TryPatch("notification-emails", () => PlanningSchemaPatches.EnsureNotificationEmailTablesAsync(db));
+                await TryPatch("pointage-biotime", () => PlanningSchemaPatches.EnsurePointageTablesAsync(db));
+                await TryPatch("regimes-horaires", () => PlanningSchemaPatches.EnsureRegimesHorairesAsync(db));
+                await TryPatch("heure-sortie-acces", () => PlanningSchemaPatches.EnsureHeureSortieAccesAsync(db));
+                await TryPatch("planning-it", () => PlanningSchemaPatches.EnsurePlanningItAsync(db));
+                await TryPatch("presences", () => PlanningSchemaPatches.EnsurePresencesAsync(db));
+                await TryPatch("reaffectations", () => PlanningSchemaPatches.EnsureReaffectationsAsync(db));
+                await TryPatch("formation-manquements", () => PlanningSchemaPatches.EnsureFormationEtManquementsAsync(db));
+                await TryPatch("presence-types", () => PlanningSchemaPatches.EnsurePresenceTypesAsync(db));
                 await TryPatch("perf-indexes", () => PlanningSchemaPatches.EnsurePerfIndexesAsync(db));
                 Console.WriteLine("✅ Patches schéma Planning appliqués.");
             }

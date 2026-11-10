@@ -1,0 +1,125 @@
+<div class="ky-page-shell">
+  <app-kyntus-page-header
+    title="Congés de l'équipe"
+    [subtitle]="(data()?.perimetre ?? 'Votre périmètre') + ' — ' + affichees().length + ' demande(s) affichée(s)'">
+    <div actions>
+      @if (canValidate()) {
+        <a routerLink="/conges/validation" class="ky-btn-secondary">Valider les congés</a>
+      }
+      <button type="button" class="ky-btn-secondary btn-refresh" (click)="load()" [disabled]="loading()">
+        <app-lucide-icon [icon]="icons.refresh" className="w-4 h-4" />
+        Actualiser
+      </button>
+    </div>
+  </app-kyntus-page-header>
+
+  <div class="kpi-row">
+    <div class="kpi-card ky-card kc-blue">
+      <span class="kpi-label">Effectif {{ filtres().cellule ? 'de la cellule' : 'de l’équipe' }}</span>
+      <span class="kpi-value">{{ effectif() }}</span>
+    </div>
+    <div class="kpi-card ky-card kc-rose">
+      <span class="kpi-label">Absents aujourd'hui</span>
+      <span class="kpi-value">{{ kpi().absentsAujourdhui }}</span>
+    </div>
+    <div class="kpi-card ky-card kc-amber">
+      <span class="kpi-label">Absents dans les 7 jours</span>
+      <span class="kpi-value">{{ kpi().absents7Jours }}</span>
+    </div>
+    <div class="kpi-card ky-card kc-green">
+      <span class="kpi-label">Demandes en attente</span>
+      <span class="kpi-value">{{ kpi().enAttente }}</span>
+    </div>
+  </div>
+
+  <div class="filters-panel ky-card">
+    <div class="filters-toolbar">
+      <select class="filter-ctl ky-input filter-ctl--year" aria-label="Année"
+        [ngModel]="annee()" (ngModelChange)="changeAnnee($event)">
+        @for (y of yearOptions; track y) {
+          <option [ngValue]="y">{{ y }}</option>
+        }
+      </select>
+
+      <select class="filter-ctl ky-input filter-ctl--org" aria-label="Cellule"
+        [ngModel]="filtres().cellule" (ngModelChange)="patch({ cellule: $event })">
+        <option value="">Toutes les cellules</option>
+        @for (c of cellules(); track c.value) {
+          <option [value]="c.value">{{ c.label }} ({{ c.effectif }})</option>
+        }
+      </select>
+
+      <select class="filter-ctl ky-input" aria-label="Statut"
+        [ngModel]="filtres().statut" (ngModelChange)="patch({ statut: $event })">
+        <option value="actifs">En attente + validées</option>
+        <option value="en-attente">En attente de validation</option>
+        <option value="validees">Validées</option>
+        <option value="refusees">Refusées / annulées</option>
+        <option value="toutes">Toutes</option>
+      </select>
+
+      <select class="filter-ctl ky-input" aria-label="Période"
+        [ngModel]="filtres().periode" (ngModelChange)="patch({ periode: $event })">
+        <option value="a-venir">En cours et à venir</option>
+        <option value="en-cours">Absents aujourd'hui</option>
+        <option value="annee">Toute l'année</option>
+      </select>
+
+      <div class="filter-search">
+        <app-lucide-icon [icon]="icons.search" className="w-4 h-4" />
+        <input class="filter-search-input" type="search" placeholder="Collaborateur, motif…" aria-label="Rechercher"
+          [ngModel]="filtres().recherche" (ngModelChange)="patch({ recherche: $event })" />
+      </div>
+
+      <button type="button" class="filter-reset ky-btn-secondary" (click)="reset()">Réinitialiser</button>
+    </div>
+  </div>
+
+  <div class="table-card ky-card">
+    @if (loading()) {
+      <div class="state-loading">
+        <div class="spinner"></div>
+        <span>Chargement des congés de l'équipe…</span>
+      </div>
+    } @else if (error()) {
+      <div class="state-error">{{ error() }}</div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="prime-table">
+          <thead>
+            <tr>
+              <th>Collaborateur</th>
+              <th>Cellule</th>
+              <th>Type</th>
+              <th>Période</th>
+              <th>Jours</th>
+              <th>Statut</th>
+              <th>Décidé par</th>
+              <th>Motif</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of affichees(); track l.id) {
+              <tr>
+                <td class="td-user"><span class="user-name">{{ l.collaborateur }}</span></td>
+                <td class="td-org">{{ l.celluleNom || '—' }}</td>
+                <td><span class="type-badge">{{ typeLabel(l) }}</span></td>
+                <td class="td-dates">{{ formatDate(l.dateDebut) }} → {{ formatDate(l.dateFin) }}</td>
+                <td class="td-days">{{ l.nombreJours }}j</td>
+                <td><span class="statut-badge" [ngClass]="statutClass(l.statut)">{{ statutLabels[l.statut] }}</span></td>
+                <td class="td-decideur">{{ l.rhDecideurNom || l.superviseurDecideurNom || '—' }}</td>
+                <td class="td-motif">{{ l.motif || l.commentaireManager || '—' }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="8">
+                  <div class="empty-state">Aucune demande de congé avec ces filtres.</div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</div>

@@ -154,8 +154,9 @@ public sealed class PlanningOrgMirrorService(
         {
             if (string.IsNullOrWhiteSpace(pole.Id)) continue;
 
-            var floor = await db.Floors.FirstOrDefaultAsync(
-                f => f.PrimePoleId == pole.Id || f.Name == pole.Name, ct);
+            // Correspondance par identifiant d'abord ; par nom seulement parmi les étages non archivés.
+            var floor = await db.Floors.FirstOrDefaultAsync(f => f.PrimePoleId == pole.Id, ct)
+                ?? await db.Floors.FirstOrDefaultAsync(f => !f.IsArchived && f.Name == pole.Name, ct);
             if (floor is null)
             {
                 floor = new Floor
@@ -179,8 +180,9 @@ public sealed class PlanningOrgMirrorService(
             {
                 if (string.IsNullOrWhiteSpace(cellule.Id)) continue;
 
-                var service = await db.Services.FirstOrDefaultAsync(
-                    s => s.PrimeCelluleId == cellule.Id || (s.FloorId == floor.Id && s.Name == cellule.Name), ct);
+                var service = await db.Services.FirstOrDefaultAsync(s => s.PrimeCelluleId == cellule.Id, ct)
+                    ?? await db.Services.FirstOrDefaultAsync(
+                        s => !s.IsArchived && s.FloorId == floor.Id && s.Name == cellule.Name, ct);
                 if (service is null)
                 {
                     service = new Service
@@ -213,8 +215,9 @@ public sealed class PlanningOrgMirrorService(
                 {
                     if (string.IsNullOrWhiteSpace(leaf.Id)) continue;
 
-                    var sub = await db.SubServices.FirstOrDefaultAsync(
-                        s => s.PrimeServiceId == leaf.Id || (s.ServiceId == service.Id && s.Name == leaf.Name), ct);
+                    var sub = await db.SubServices.FirstOrDefaultAsync(s => s.PrimeServiceId == leaf.Id, ct)
+                        ?? await db.SubServices.FirstOrDefaultAsync(
+                            s => !s.IsArchived && s.ServiceId == service.Id && s.Name == leaf.Name, ct);
                     if (sub is null)
                     {
                         sub = new SubService

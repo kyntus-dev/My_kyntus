@@ -1,0 +1,119 @@
+<div class="ku-page pit" (click)="menuOuvert.set(null)">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Planification · Cellule IT</p>
+      <h1 class="ku-hero-title">Planning IT</h1>
+      <p class="ku-hero-sub">
+        Chacun renseigne son heure d’arrivée, et tout le monde voit les horaires de ses collègues, actualisés automatiquement.
+        Ces horaires sont la référence du pointage.
+      </p>
+    </div>
+    <div class="ku-hero-actions">
+      <button type="button" class="ku-btn" (click)="changerSemaine(-1)" aria-label="Semaine précédente">‹</button>
+      <span class="pit-sem" [attr.aria-label]="'Semaine ' + semaine().numero + ' de ' + semaine().annee">{{ semaine().libelle }}</span>
+      <button type="button" class="ku-btn" (click)="changerSemaine(0)" [disabled]="decalage() === 0">Cette semaine</button>
+      <button type="button" class="ku-btn" (click)="changerSemaine(1)" aria-label="Semaine suivante">›</button>
+      <app-planning-export-button type="it" />
+      @if (moi()) {
+        <button type="button" class="ku-btn ku-btn--primary" (click)="copierSemainePrecedente()">Recopier ma semaine précédente</button>
+      }
+    </div>
+  </header>
+
+  @if (error()) {
+    <div class="ku-alert ku-alert--danger"><div><strong>Planning IT indisponible</strong><p>{{ error() }}</p></div></div>
+  } @else if (loading() && !data()) {
+    <div class="ku-skeleton pit-sk"></div>
+  } @else if (data(); as d) {
+    <div class="ku-kpis">
+      <div class="ku-kpi"><span class="ku-kpi-label">Semaine {{ semaine().annee }}</span>
+        <span class="ku-kpi-value">{{ semaine().libelle }}</span>
+        <span class="ku-kpi-sub">du {{ enteteJour(d.du).date }} au {{ enteteJour(d.au).date }} · {{ d.membres.length }} membre(s) de la cellule IT</span></div>
+      <div class="ku-kpi" [class.ku-kpi--ok]="synthese().complets === synthese().total" [class.ku-kpi--warn]="synthese().complets < synthese().total">
+        <span class="ku-kpi-label">Plannings complets</span>
+        <span class="ku-kpi-value">{{ synthese().complets }} / {{ synthese().total }}</span>
+        <span class="ku-kpi-sub">toutes les journées renseignées</span></div>
+      <div class="ku-kpi"><span class="ku-kpi-label">Mise à jour</span>
+        <span class="ku-kpi-value pit-kpi-sm">{{ actualiseLe() | date: 'HH:mm:ss' }}</span>
+        <span class="ku-kpi-sub">actualisation automatique toutes les 15 s</span></div>
+    </div>
+
+    <section class="ku-card">
+      <div class="pit-legend" aria-hidden="true">
+        <span><i class="pit-lg pit-lg--travail"></i>Heure d’arrivée</span>
+        <span><i class="pit-lg pit-lg--repos"></i>Repos</span>
+        <span><i class="pit-lg pit-lg--conge"></i>Congé</span>
+        <span><i class="pit-lg pit-lg--ferie"></i>Férié (calendrier français, d’office)</span>
+        <span><i class="pit-lg pit-lg--flash"></i>Modifié à l’instant par un collègue</span>
+        @if (d.peutModifierTout) { <span class="ku-chip ku-chip--info ku-chip--plain">Vous pouvez corriger toutes les lignes</span> }
+      </div>
+
+      @if (!d.membres.length) {
+        <div class="ku-empty"><strong>Aucun membre IT</strong>Attribuez le rôle « Ingénieur » ou « Support IT » aux membres de la cellule.</div>
+      } @else {
+        <div class="ku-table-wrap">
+          <table class="pit-table">
+            <thead>
+              <tr>
+                <th class="pit-name">Nom</th>
+                @for (jour of jours(); track jour) {
+                  <th [class.is-today]="jour === aujourdhui" [class.is-ferie]="!!ferieDe(jour)" [attr.title]="ferieDe(jour)">{{ enteteJour(jour).jour }}<br /><b>{{ enteteJour(jour).date }}</b>@if (ferieDe(jour); as f) {<small class="pit-ferie">{{ f }}</small>}</th>
+                }
+                <th class="pit-com">Commentaire</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (m of d.membres; track m.userId) {
+                <tr [class.is-me]="m.estMoi">
+                  <th class="pit-name" scope="row">
+                    {{ m.collaborateur }}
+                    <small>{{ m.role }}@if (m.estMoi) { · vous }</small>
+                  </th>
+                  @for (j of m.jours.slice(0, jours().length); track j.jour) {
+                    @let k = cle(m, j);
+                    <td class="pit-cell" [ngClass]="classeCase(j)" [class.is-flash]="flash().has(k)"
+                        [class.is-saving]="enCours().has(k)" [class.is-today]="j.jour.slice(0, 10) === aujourdhui" [attr.title]="titre(m, j)">
+                      @if (m.modifiable) {
+                        <div class="pit-edit">
+                          @if (j.statut === 'Repos' || j.statut === 'Conge' || (!j.statut && j.ferie)) {
+                            <button type="button" class="pit-state" (click)="basculerMenu(m, j, $event)">{{ libelle(j) }}</button>
+                          } @else {
+                            <input type="time" class="pit-time" [value]="j.arrivee ?? ''" (focus)="focus(true)" (blur)="focus(false)"
+                                   (change)="saisirHeure(m, j, $any($event.target).value)" [attr.aria-label]="titre(m, j)" />
+                          }
+                          <button type="button" class="pit-more" (click)="basculerMenu(m, j, $event)" aria-label="Autres choix">▾</button>
+                          @if (menuOuvert() === k) {
+                            <div class="pit-menu" (click)="$event.stopPropagation()">
+                              <button type="button" (click)="choisir(m, j, 'Travail')">Heure d’arrivée</button>
+                              <button type="button" (click)="choisir(m, j, 'Repos')">Repos</button>
+                              <button type="button" (click)="choisir(m, j, 'Conge')">Congé</button>
+                              @if (j.statut) { <button type="button" class="is-danger" (click)="choisir(m, j, null)">Effacer</button> }
+                            </div>
+                          }
+                        </div>
+                      } @else {
+                        <span class="pit-ro">{{ libelle(j) || '—' }}</span>
+                      }
+                    </td>
+                  }
+                  <td class="pit-com">
+                    @if (m.modifiable) {
+                      <input class="ku-input pit-com-input" maxlength="500" placeholder="Commentaire…" [value]="m.commentaire ?? ''"
+                             (focus)="focus(true)" (blur)="commenter(m, $any($event.target).value)" />
+                    } @else {
+                      <span class="pit-ro pit-ro--com">{{ m.commentaire ?? '' }}</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      <p class="ku-card-sub pit-note">
+        Saisissez l’heure d’arrivée : elle est enregistrée aussitôt et reste modifiable à tout moment. Le bouton ▾ propose Repos, Congé ou Effacer.
+        Au pointage, cette heure sert de référence pour le retard ; la production prévue reste celle de votre régime horaire (8 h 40, 7 h 40 le vendredi).
+      </p>
+    </section>
+  }
+</div>

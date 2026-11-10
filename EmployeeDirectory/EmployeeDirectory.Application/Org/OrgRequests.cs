@@ -14,6 +14,16 @@ public sealed class GetOrgOverviewQueryHandler(IDirectoryReadService read)
         read.GetOrgOverviewAsync(ct);
 }
 
+/// <summary>v9 : nœuds archivés (écran d'organisation Admin / RH).</summary>
+public record ListArchivedOrgNodesQuery : IRequest<IReadOnlyList<ArchivedOrgNodeDto>>;
+
+public sealed class ListArchivedOrgNodesQueryHandler(IDirectoryReadService read)
+    : IRequestHandler<ListArchivedOrgNodesQuery, IReadOnlyList<ArchivedOrgNodeDto>>
+{
+    public Task<IReadOnlyList<ArchivedOrgNodeDto>> Handle(ListArchivedOrgNodesQuery request, CancellationToken ct) =>
+        read.GetArchivedOrgNodesAsync(ct);
+}
+
 public record GetAssignmentsAsOfQuery(DateTime Date) : IRequest<OrgAssignmentAsOfDto>;
 
 public sealed class GetAssignmentsAsOfQueryHandler(IDirectoryReadService read)
@@ -68,6 +78,7 @@ public sealed class RenameOrgNodeCommandHandler(IDirectoryWriteService write)
         write.RenameOrgNodeAsync(request.Level, request.NodeId, request.Name, ct);
 }
 
+/// <summary>v9 : archive le nœud et ses descendants (rien n'est supprimé).</summary>
 public record DeleteOrgNodeCommand(OrgNodeLevel Level, string NodeId) : IRequest<bool>;
 
 public sealed class DeleteOrgNodeCommandHandler(IDirectoryWriteService write)
@@ -75,6 +86,25 @@ public sealed class DeleteOrgNodeCommandHandler(IDirectoryWriteService write)
 {
     public Task<bool> Handle(DeleteOrgNodeCommand request, CancellationToken ct) =>
         write.DeleteOrgNodeAsync(request.Level, request.NodeId, ct);
+}
+
+public record RestoreOrgNodeCommand(OrgNodeLevel Level, string NodeId) : IRequest<bool>;
+
+public sealed class RestoreOrgNodeCommandHandler(IDirectoryWriteService write)
+    : IRequestHandler<RestoreOrgNodeCommand, bool>
+{
+    public Task<bool> Handle(RestoreOrgNodeCommand request, CancellationToken ct) =>
+        write.RestoreOrgNodeAsync(request.Level, request.NodeId, ct);
+}
+
+/// <summary>Suppression définitive d'un nœud archivé qui n'a jamais servi.</summary>
+public record PurgeOrgNodeCommand(OrgNodeLevel Level, string NodeId) : IRequest<bool>;
+
+public sealed class PurgeOrgNodeCommandHandler(IDirectoryWriteService write)
+    : IRequestHandler<PurgeOrgNodeCommand, bool>
+{
+    public Task<bool> Handle(PurgeOrgNodeCommand request, CancellationToken ct) =>
+        write.PurgeOrgNodeAsync(request.Level, request.NodeId, ct);
 }
 
 public record AssignStructureRoleCommand(
@@ -187,4 +217,14 @@ public sealed class UndoImportAssignmentWindowCommandHandler(IDirectoryWriteServ
         UndoImportAssignmentWindowCommand request,
         CancellationToken ct) =>
         write.UndoImportAssignmentWindowAsync(request.Body, request.ChangedBy, ct);
+}
+
+/// <summary>v29 : regroupement de cellules (ex. Cible Prio + GRE + Migration → Sécurisation).</summary>
+public record RegrouperCellulesCommand(RegrouperCellulesRequest Body, Guid? ChangedBy) : IRequest<RegroupementCellulesResult>;
+
+public sealed class RegrouperCellulesCommandHandler(IDirectoryWriteService write)
+    : IRequestHandler<RegrouperCellulesCommand, RegroupementCellulesResult>
+{
+    public Task<RegroupementCellulesResult> Handle(RegrouperCellulesCommand request, CancellationToken ct) =>
+        write.RegrouperCellulesAsync(request.Body, request.ChangedBy, ct);
 }

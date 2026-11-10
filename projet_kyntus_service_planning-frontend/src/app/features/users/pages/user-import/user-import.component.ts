@@ -5,6 +5,9 @@ import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../../environments/environment';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
+import { firstValueFrom } from 'rxjs';
+import { EmployeeRosterService } from '../../services/employee-roster.service';
+import { EMPLOYEE_STATUS_SCOPES, type EmployeeStatusScope } from '../../lib/employee-list-filters';
 
 interface ImportResult {
   totalLignes: number;
@@ -26,6 +29,8 @@ export class UserImportComponent {
   importing    = false;
   isDragOver   = false;
   importResult: ImportResult | null = null;
+  exporting: EmployeeStatusScope | null = null;
+  readonly exportScopes = EMPLOYEE_STATUS_SCOPES;
 
   private base = `${environment.apiUrl}/Users`;
 
@@ -33,6 +38,7 @@ export class UserImportComponent {
     private http: HttpClient,
     private cdr: ChangeDetectorRef,
     private toastService: KyntusToastService,
+    private roster: EmployeeRosterService,
   ) {}
 
   // ── Template ──
@@ -40,9 +46,22 @@ export class UserImportComponent {
     window.open(`${this.base}/template`, '_blank');
   }
 
-  // ── Export ──
-  exportUsers(): void {
-    window.open(`${this.base}/export`, '_blank');
+  // ── Export : tous, actifs ou inactifs, avec l'organisation telle qu'affichée dans Employés ──
+  async exportUsers(scope: EmployeeStatusScope): Promise<void> {
+    if (this.exporting) return;
+    this.exporting = scope;
+    this.cdr.detectChanges();
+    try {
+      const roster = await firstValueFrom(this.roster.load());
+      const count = await this.roster.exportExcel(roster, scope);
+      if (count === 0) this.toastService.error('Aucun employé à exporter pour ce statut.');
+      else this.toastService.success(`${count} employé(s) exporté(s).`);
+    } catch {
+      this.toastService.error("Échec de l'export Excel.");
+    } finally {
+      this.exporting = null;
+      this.cdr.detectChanges();
+    }
   }
 
   // ── Drag & Drop ──

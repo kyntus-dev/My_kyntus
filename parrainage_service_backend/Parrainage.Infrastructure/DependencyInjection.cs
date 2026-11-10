@@ -33,7 +33,13 @@ public static class DependencyInjection
             if (isTesting)
                 services.AddDbContext<ParrainageDbContext>(o => o.UseSqlite(conn ?? "DataSource=parrainage_characterization_test.db"));
             else
-                services.AddDbContext<ParrainageDbContext>(o => o.UseNpgsql(conn!));
+            {
+                // Notifications de parrainage doublées par e-mail (envoi par Planning).
+                services.AddScoped<ReferralNotificationEmailInterceptor>();
+                services.AddDbContext<ParrainageDbContext>((sp, o) => o
+                    .UseNpgsql(conn!)
+                    .AddInterceptors(sp.GetRequiredService<ReferralNotificationEmailInterceptor>()));
+            }
 
             services.AddScoped<ReferralRuleResolver>();
             services.AddHttpClient<IPlanningEmploymentCheckClient, PlanningEmploymentCheckClient>();

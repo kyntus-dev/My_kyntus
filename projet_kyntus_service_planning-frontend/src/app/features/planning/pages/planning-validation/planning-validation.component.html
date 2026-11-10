@@ -3,6 +3,7 @@
     title="Validation plannings"
     subtitle="Consultez les brouillons générés automatiquement par service (plus petite entité organisationnelle), modifiez si besoin, puis validez (Admin / RH).">
     <div actions class="pv-actions">
+      <app-planning-export-button type="rh" />
       <button
         type="button"
         class="ky-btn-secondary"
@@ -518,7 +519,7 @@
           Aucune structure organisationnelle chargée.
         </p>
         <p class="pv-tree-empty" *ngIf="(operationalDepartments.length || unassignedPoles.length) && !hasAnyVisibleOrg">
-          Aucun service pour ce filtre.
+          {{ (list?.items?.length ?? 0) === 0 ? 'Aucun service dans votre périmètre.' : 'Aucun service pour ce filtre.' }}
         </p>
       </div>
       </div>

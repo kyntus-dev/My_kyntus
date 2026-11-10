@@ -26,17 +26,44 @@
             <app-lucide-icon [icon]="icons.edit" className="w-4 h-4" />
             Modifier
           </button>
+          @if (peutReaffecter() && user.isActive !== false) {
+            <button type="button" class="ky-btn-secondary" (click)="changerService()" title="Réaffecter l’agent dans un autre service">
+              <app-lucide-icon [icon]="icons.service" className="w-4 h-4" />
+              Changer de service
+            </button>
+          }
+          @if (peutGererDroits && user.guid) {
+            <button type="button" class="ky-btn-secondary" (click)="gererDroits()" title="Rubriques accessibles à ce compte (rôle + exceptions)">
+              <app-lucide-icon [icon]="icons.droits" className="w-4 h-4" />
+              Droits d’accès
+            </button>
+          }
           <button type="button" class="ky-btn-secondary" (click)="resetPassword()" [disabled]="resettingPassword">
             <app-lucide-icon [icon]="icons.key" className="w-4 h-4" />
             {{ resettingPassword ? 'Réinitialisation…' : 'Réinitialiser le mot de passe' }}
           </button>
-          <button type="button" class="ky-btn-danger" (click)="deleteUser()">
-            <app-lucide-icon [icon]="icons.trash" className="w-4 h-4" />
-            Supprimer
-          </button>
+          @if (user.isActive !== false) {
+            <button type="button" class="ky-btn-danger" (click)="deactivateOpen = true">
+              <app-lucide-icon [icon]="icons.deactivate" className="w-4 h-4" />
+              Désactiver (sortie)
+            </button>
+          } @else {
+            <button type="button" class="ky-btn-secondary" (click)="reactivateUser()">
+              <app-lucide-icon [icon]="icons.reactivate" className="w-4 h-4" />
+              Réactiver
+            </button>
+          }
         }
       </div>
     </app-kyntus-page-header>
+
+    <app-employee-deactivate-dialog
+      [open]="deactivateOpen"
+      [employeeName]="user ? user.lastName + ' ' + user.firstName : ''"
+      [busy]="deactivating"
+      (confirmed)="confirmDeactivate($event)"
+      (cancel)="deactivateOpen = false"
+    />
 
     @if (resetCredentials) {
       <div class="ky-card credentials-oneshot-panel" style="margin-bottom: 1rem; padding: 1rem;">
@@ -153,7 +180,7 @@
             }
           </div>
           <div class="org-breadcrumb">{{ perimeterSummary }}</div>
-          <dl class="field-grid field-grid--org">
+          <dl class="field-grid field-grid--org" [class.field-grid--org-3]="serviceIsCelluleMirror">
             <div class="field">
               <dt>Département</dt>
               <dd class="field__value field__value--accent">{{ orgCellLabel(orgDepartmentLabel(perimeter)) }}</dd>
@@ -166,10 +193,12 @@
               <dt>Cellule</dt>
               <dd class="field__value">{{ orgCellLabel(perimeter.cellule) }}</dd>
             </div>
-            <div class="field">
-              <dt>Service</dt>
-              <dd class="field__value field__value--accent">{{ orgCellLabel(perimeter.service) }}</dd>
-            </div>
+            @if (!serviceIsCelluleMirror) {
+              <div class="field">
+                <dt>Service</dt>
+                <dd class="field__value field__value--accent">{{ orgCellLabel(perimeter.service) }}</dd>
+              </div>
+            }
           </dl>
         </section>
 

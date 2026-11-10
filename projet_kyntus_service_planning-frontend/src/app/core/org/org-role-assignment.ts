@@ -1,5 +1,8 @@
-/** Niveau d’affectation Organisation RH requis selon le rôle métier. */
-export type OrgRoleAssignmentDepth = 'none' | 'pole' | 'cellule' | 'service';
+/**
+ * Niveau d’affectation Organisation RH requis selon le rôle métier.
+ * 'activite' = département de production (réorganisation 2026 : superviseur / chef de projet).
+ */
+export type OrgRoleAssignmentDepth = 'none' | 'activite' | 'pole' | 'cellule' | 'service';
 
 function normalizeRoleToken(name: string): string {
   return name
@@ -50,6 +53,12 @@ export function isPiloteRole(roleName: string): boolean {
   return canonicalizeRole(roleName) === 'pilote';
 }
 
+/** Cellule IT (Ingénieur, Support IT) : affectation facultative à une activité / pôle / cellule / service. */
+export function isEquipeItRole(roleName: string): boolean {
+  const r = canonicalizeRole(roleName);
+  return r === 'ingenieur' || r === 'supportit';
+}
+
 export function isEquipeFormationRole(roleName: string): boolean {
   return canonicalizeRole(roleName) === 'equipeformation';
 }
@@ -67,7 +76,27 @@ export function isOrgNeutralRole(roleName: string): boolean {
   );
 }
 
+/**
+ * Réorganisation 2026 — périmètre de responsabilité par rôle :
+ * - Chef de projet : une ou plusieurs activités (tous leurs pôles) ;
+ * - Superviseur : une ou plusieurs activités (tous leurs pôles et cellules) ;
+ * - Référent technique : une ou plusieurs cellules ;
+ * - Pilote : une cellule (son service technique est sélectionné automatiquement).
+ */
 export function orgRoleAssignmentDepth(roleName: string): OrgRoleAssignmentDepth {
+  if (!roleName.trim() || isOrgNeutralRole(roleName)) return 'none';
+  if (isChefDeProjetRole(roleName)) return 'activite';
+  if (isSuperviseurRole(roleName)) return 'activite';
+  if (isReferentTechniqueRole(roleName)) return 'cellule';
+  if (isPiloteRole(roleName) || isEquipeItRole(roleName)) return 'service';
+  return 'none';
+}
+
+/**
+ * Profondeur historique (avant réorganisation 2026) : conservée pour la saisie de l’« ancien poste »,
+ * qui décrit une affectation passée au niveau où elle a été vécue.
+ */
+export function orgRoleHistoricalDepth(roleName: string): OrgRoleAssignmentDepth {
   if (!roleName.trim() || isOrgNeutralRole(roleName)) return 'none';
   if (isChefDeProjetRole(roleName)) return 'pole';
   if (isSuperviseurRole(roleName)) return 'cellule';
@@ -75,12 +104,19 @@ export function orgRoleAssignmentDepth(roleName: string): OrgRoleAssignmentDepth
   return 'none';
 }
 
+/** Niveau du périmètre multi-sélection : activité (chef / superviseur) ou cellule (référent). */
+export function orgScopeLevelForRole(roleName: string): 'activite' | 'cellule' | null {
+  if (isChefDeProjetRole(roleName) || isSuperviseurRole(roleName)) return 'activite';
+  if (isReferentTechniqueRole(roleName)) return 'cellule';
+  return null;
+}
+
 export function orgAssignmentRequiresOperationalDept(depth: OrgRoleAssignmentDepth): boolean {
   return depth !== 'none';
 }
 
 export function orgAssignmentRequiresPole(depth: OrgRoleAssignmentDepth): boolean {
-  return depth !== 'none';
+  return depth === 'pole' || depth === 'cellule' || depth === 'service';
 }
 
 export function orgAssignmentRequiresCellule(depth: OrgRoleAssignmentDepth): boolean {
@@ -96,6 +132,16 @@ export function orgAssignmentIsRequired(depth: OrgRoleAssignmentDepth): boolean 
 }
 
 export function orgAssignmentHint(roleName: string, depth: OrgRoleAssignmentDepth): string {
+  // Responsables : périmètre exact du fichier « Périmètre », sélection multiple.
+  if (isSuperviseurRole(roleName)) {
+    return 'Superviseur : cochez son périmètre du fichier Périmètre — activité(s), pôle(s) et/ou cellule(s). Il voit et gère les collaborateurs de ces cellules.';
+  }
+  if (isChefDeProjetRole(roleName)) {
+    return 'Chef de projet : cochez une ou plusieurs activités, ou seulement certains pôles.';
+  }
+  if (isReferentTechniqueRole(roleName)) {
+    return 'Référent technique : cochez ses cellules (ou un pôle entier) — il voit les collaborateurs de ces cellules.';
+  }
   if (depth === 'pole') {
     return 'Chef de projet : sélectionnez un ou plusieurs pôles (un principal obligatoire).';
   }
@@ -106,7 +152,10 @@ export function orgAssignmentHint(roleName: string, depth: OrgRoleAssignmentDept
     if (isReferentTechniqueRole(roleName)) {
       return 'Référent technique : sélectionnez un ou plusieurs services (un principal obligatoire).';
     }
-    return 'Pilote : département, pôle, cellule et service d’affectation.';
+    if (isEquipeItRole(roleName)) {
+      return 'Cellule IT : activité, pôle, cellule et service de rattachement (facultatif).';
+    }
+    return 'Pilote : activité, pôle et cellule d’affectation (le service est sélectionné automatiquement lorsqu’il est unique).';
   }
   return '';
 }
@@ -114,6 +163,7 @@ export function orgAssignmentHint(roleName: string, depth: OrgRoleAssignmentDept
 /** Appel Prime structure/* après création employé (pas pour pilote — sync RabbitMQ). */
 export function needsPrimeStructureAssignment(roleName: string): boolean {
   const depth = orgRoleAssignmentDepth(roleName);
-  if (depth === 'none' || isPiloteRole(roleName)) return false;
+  // Pilote : affectation « Pilote » dédiée ; cellule IT : simple rattachement (pas de titulature).
+  if (depth === 'none' || isPiloteRole(roleName) || isEquipeItRole(roleName)) return false;
   return true;
 }

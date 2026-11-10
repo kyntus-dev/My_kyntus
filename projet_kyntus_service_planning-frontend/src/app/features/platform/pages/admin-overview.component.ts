@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@ang
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { PlatformSectionService } from '../platform-section.service';
+import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 import { PlatformAuditService, type ServiceHealthRow } from '../services/platform-audit.service';
 
 @Component({
@@ -21,7 +22,7 @@ import { PlatformAuditService, type ServiceHealthRow } from '../services/platfor
       </div>
     </div>
     <div class="ov-grid">
-      @for (card of cards; track card.title) {
+      @for (card of cartesVisibles(); track card.title) {
         <button type="button" class="ov-card" (click)="open(card)">
           <strong>{{ card.title }}</strong>
           <span>{{ card.text }}</span>
@@ -58,13 +59,22 @@ export class AdminOverviewComponent implements OnInit {
   private readonly audit = inject(PlatformAuditService);
   readonly health = signal<ServiceHealthRow[]>([]);
 
+  private readonly access = inject(PlatformAccessService);
+
+  /** v31 : chaque carte suit sa rubrique de « Accès par rôle » (rien d'affiché sans le droit). */
   readonly cards = [
-    { title: 'Accès par rôle', text: 'Quelles interfaces chaque rôle peut voir et quelles actions il peut faire.', section: 'access' as const },
-    { title: 'Organisation & sync', text: 'Santé du miroir Planning ↔ Directory et actions de réconciliation.', section: 'sync' as const },
-    { title: 'Inbox anomalies', text: 'Clôturer ou ignorer les anomalies Prime depuis la console globale.', section: 'anomalies' as const },
-    { title: 'Configuration modules', text: 'Liens vers les réglages métier (types de documents, horaires, barèmes…).', section: 'modules' as const },
-    { title: 'Utilisateurs', text: 'Fiches employés, rôles JWT, import et champs personnalisés.', route: '/users' },
+    { title: 'Accès par rôle', text: 'Quelles interfaces chaque rôle peut voir et quelles actions il peut faire.', section: 'access' as const, capability: 'admin.access' },
+    { title: 'Utilisateurs', text: 'Fiches employés, rôles JWT, import et champs personnalisés.', route: '/users', capability: 'admin.users' },
+    { title: 'Organisation', text: 'Contrats, pôles, cellules et services.', route: '/organisation/administrative', capability: 'admin.organisation' },
+    { title: 'Synchro organisation', text: 'Santé du miroir Planning ↔ Directory et actions de réconciliation.', section: 'sync' as const, capability: 'admin.sync' },
+    { title: 'Configuration des modules', text: 'Liens vers les réglages métier (types de documents, horaires, barèmes…).', section: 'modules' as const, capability: 'admin.modules' },
+    { title: 'Inbox anomalies', text: 'Clôturer ou ignorer les anomalies Prime depuis la console globale.', section: 'anomalies' as const, capability: 'admin.anomalies' },
   ];
+
+  cartesVisibles() {
+    this.access.permissionKeys();
+    return this.cards.filter((c) => this.access.canView(c.capability));
+  }
 
   ngOnInit(): void {
     void firstValueFrom(this.audit.loadServiceHealth()).then((rows) => this.health.set(rows));

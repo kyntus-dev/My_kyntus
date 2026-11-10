@@ -13,6 +13,11 @@ using Planning.Infrastructure.Persistence;
 using Planning.Infrastructure.Services;
 using Planning.Infrastructure.Services.EmployeeImport;
 using Shared.Kernel.Push;
+using Planning.Application.NotificationEmail;
+using Planning.Infrastructure.Services.NotificationEmail;
+using Planning.Application.Pointage;
+using Planning.Infrastructure.Services.Pointage;
+using Microsoft.Extensions.Options;
 using PlanningServiceImpl = Planning.Infrastructure.Services.PlanningService;
 
 namespace Planning.Infrastructure;
@@ -52,8 +57,34 @@ public static class DependencyInjection
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
-        services.AddScoped<IPlanningEmailSender, MailKitPlanningEmailSender>();
+        services.AddScoped<MailKitPlanningEmailSender>();
+        services.AddScoped<IPlanningEmailSender>(sp => sp.GetRequiredService<MailKitPlanningEmailSender>());
+        services.AddScoped<IPlanningEmailReadiness>(sp => sp.GetRequiredService<MailKitPlanningEmailSender>());
         services.AddScoped<IPilotPlanningPersonalEmailService, PilotPlanningPersonalEmailService>();
+        // E-mails des plannings et des notifications : file d'envoi + boucle d'envoi à cadence limitée.
+        services.Configure<NotificationEmailOptions>(configuration.GetSection(NotificationEmailOptions.SectionName));
+        services.AddScoped<INotificationEmailQueue, NotificationEmailQueue>();
+        services.AddScoped<EmailOutboxProcessor>();
+        services.AddScoped<INotificationEmailSettingsService, NotificationEmailSettingsService>();
+        if (!isTesting)
+            services.AddHostedService<NotificationEmailHostedService>();
+
+        // Pointages ZKBio Time (lecture seule) : désactivé tant que Pointage__Enabled n'est pas à true.
+        services.Configure<PointageOptions>(configuration.GetSection(PointageOptions.SectionName));
+        services.AddHttpClient(BioTimeClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(120))
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+                BioTimeClient.CreateHandler(sp.GetRequiredService<IOptions<PointageOptions>>().Value));
+        services.AddSingleton<BioTimeClient>();
+        services.AddScoped<IPointageSyncService, PointageSyncService>();
+        services.AddScoped<IPointageQueryService, PointageQueryService>();
+        services.AddScoped<IRegimeHoraireService, RegimeHoraireService>();
+        services.AddScoped<Planning.Application.PlanningIt.IPlanningItService, Planning.Infrastructure.Services.PlanningIt.PlanningItService>();
+        services.AddMemoryCache();
+        services.AddScoped<Planning.Application.Presence.IPresenceService, Planning.Infrastructure.Services.Presence.PresenceService>();
+        services.AddScoped<Planning.Application.Presence.IPresenceSuiviService, Planning.Infrastructure.Services.Presence.PresenceSuiviService>();
+        services.AddScoped<Planning.Application.Presence.IPlanningExportService, Planning.Infrastructure.Services.PlanningExport.PlanningExportService>();
+        if (!isTesting)
+            services.AddHostedService<PointageSyncHostedService>();
 
         services.AddScoped<IFloorService, FloorService>();
         services.AddScoped<IRoleService, RoleService>();
@@ -67,6 +98,19 @@ public static class DependencyInjection
         services.AddScoped<IDirectoryEmployeeWriteClient, DirectoryEmployeeWriteClient>();
         services.AddScoped<IFormationInitialTrainingClient, FormationInitialTrainingClient>();
         services.AddScoped<IDirectoryHierarchyClient, DirectoryHierarchyClient>();
+        // Client interne vers Auth pour la gestion des rôles (même adresse et même clé que UserService).
+        services.AddHttpClient(RoleService.AuthClient, (sp, client) =>
+        {
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var baseUrl = configuration["Auth:BaseUrl"] ?? "http://kyntus_auth_backend:8080/";
+            client.BaseAddress = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+            var apiKey = configuration["InternalServices:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+                client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Service-Key", apiKey);
+        });
+        // Réaffectations (v21) : implémentées par UserService (mêmes synchronisations que la fiche).
+        services.AddScoped<IAgentReaffectation>(sp => (IAgentReaffectation)sp.GetRequiredService<IUserService>());
         services.AddHttpClient<IUserService, UserService>((sp, client) =>
         {
             var configuration = sp.GetRequiredService<IConfiguration>();
@@ -119,6 +163,7 @@ public static class DependencyInjection
         services.AddScoped<IReclamationNotificationService, ReclamationNotificationService>();
         services.AddScoped<INewsletterService, NewsletterService>();
         services.AddScoped<IMediaAssetService, MediaAssetService>();
+        services.AddScoped<IAppGuideService, AppGuideService>();
         services.AddScoped<ITicketCommentService, TicketCommentService>();
         services.AddScoped<IEmployePublisher, EmployePublisher>();
 
@@ -132,6 +177,8 @@ public static class DependencyInjection
             {
                 x.AddConsumer<CongeValideConsumer>();
                 x.AddConsumer<CongeRefuseConsumer>();
+                x.AddConsumer<CongeNotificationEmailConsumer>();
+                x.AddConsumer<NotificationEmailRequestedConsumer>();
                 x.AddConsumer<OrgStructureConsumer>();
                 x.AddConsumer<DirectoryEmployeeProjectionConsumer>();
                 x.AddConsumer<DirectoryEmployeeHrProfileProjectionConsumer>();
@@ -163,6 +210,17 @@ public static class DependencyInjection
                         e.ConfigureConsumer<CongeValideConsumer>(ctx));
                     cfg.ReceiveEndpoint("planning-conge-refuse", e =>
                         e.ConfigureConsumer<CongeRefuseConsumer>(ctx));
+                    // E-mails : files dédiées, indépendantes des traitements métier ci-dessus.
+                    cfg.ReceiveEndpoint("planning-conge-email", e =>
+                    {
+                        e.UseMessageRetry(r => r.Intervals(1000, 5000, 15000));
+                        e.ConfigureConsumer<CongeNotificationEmailConsumer>(ctx);
+                    });
+                    cfg.ReceiveEndpoint("planning-notification-email", e =>
+                    {
+                        e.UseMessageRetry(r => r.Intervals(1000, 5000, 15000));
+                        e.ConfigureConsumer<NotificationEmailRequestedConsumer>(ctx);
+                    });
                     cfg.ReceiveEndpoint("planning-org-structure", e =>
                         e.ConfigureConsumer<OrgStructureConsumer>(ctx));
                     cfg.ReceiveEndpoint("planning-directory-employee", e =>
@@ -170,7 +228,15 @@ public static class DependencyInjection
                     cfg.ReceiveEndpoint("planning-directory-hr-profile", e =>
                         e.ConfigureConsumer<DirectoryEmployeeHrProfileProjectionConsumer>(ctx));
                     cfg.ReceiveEndpoint("planning-directory-org", e =>
-                        e.ConfigureConsumer<PlanningDirectoryOrgProjectionConsumer>(ctx));
+                    {
+                        // Les événements pôle → cellule → service arrivent en rafale : un traitement
+                        // séquentiel respecte leur ordre, et les nouvelles tentatives couvrent le cas
+                        // où un parent n'est pas encore projeté (sinon le message part en erreur et
+                        // le service n'existe pas dans Planning).
+                        e.ConcurrentMessageLimit = 1;
+                        e.UseMessageRetry(r => r.Intervals(500, 2000, 5000, 15000, 30000));
+                        e.ConfigureConsumer<PlanningDirectoryOrgProjectionConsumer>(ctx);
+                    });
                     cfg.ReceiveEndpoint("planning-initial-training-rejected", e =>
                         e.ConfigureConsumer<InitialTrainingRejectedConsumer>(ctx));
                     cfg.ReceiveEndpoint("planning-initial-training-completed", e =>

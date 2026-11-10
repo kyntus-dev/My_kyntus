@@ -22,8 +22,16 @@ import type {
  * Rôles : voir core/org/kyntus-role-names.ts (aligné Messaging.Contracts/KyntusRoleNames).
  */
 
+/** Route de l'espace Aide › Guide de l'application. */
+export const APP_GUIDE_ROUTE = '/aide/guide';
+
 export interface MenuItem {
   label: string;
+  /**
+   * Verbe exigé sur l'écran IAM (capability / ouvertureIam) pour afficher l'entrée : « View » par
+   * défaut, « Act » pour les entrées de création ou d'import.
+   */
+  capabilityVerb?: 'View' | 'Act';
   /** Lien interne (routerLink) au sein de la SPA. */
   route?: string;
   /** Lien externe (module non encore fusionné en lazy-loading) — ouvert dans un nouvel onglet. */
@@ -48,6 +56,11 @@ export interface MenuItem {
   organisationTab?: OrganisationMenuEntry;
   /** Console Admin / Audit globale. */
   platformAdminSection?: AdminSectionId;
+  /**
+   * Écran(s) IAM de l'entrée : dès que les droits sont chargés, l'entrée s'affiche seulement si
+   * l'un d'eux est accordé (« Accès par rôle » / « Accès par compte »).
+   */
+  ouvertureIam?: string | readonly string[];
   platformAuditSection?: PlatformAuditSectionId;
   /** Clé IAM (catalogue d’interfaces). */
   capability?: string;
@@ -71,6 +84,11 @@ export interface Microservice {
   roles?: string[];
   /** Enfants générés dynamiquement par NavigationMenuService (Prime, Parrainage). */
   dynamicChildren?: boolean;
+  /**
+   * Rubrique « module » d'« Accès par rôle » : retirée, le groupe entier disparaît du menu (les
+   * entrées du module suivent ensuite leurs propres réglages).
+   */
+  ouvertureIam?: string;
   children: MenuItem[];
 }
 
@@ -94,6 +112,7 @@ const ICONS = {
   building: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
   users: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>',
   calendar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  clock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   leave: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 117-7v1"/><path d="M17 9l4-4-4-4M21 5H9"/></svg>',
   graduation: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
   mail: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
@@ -103,6 +122,7 @@ const ICONS = {
   award: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>',
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
   shield: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+  help: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
   eye: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
 };
 
@@ -117,9 +137,14 @@ export const MICROSERVICES: Microservice[] = [
     children: [
       { label: 'Vue d’ensemble', route: '/admin?section=overview', platformAdminSection: 'overview', roles: ADMIN_RH, hat: 'both', capability: 'admin.overview' },
       { label: 'Accès par rôle', route: '/admin?section=access', platformAdminSection: 'access', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
-      { label: 'Organisation & sync', route: '/admin?section=sync', platformAdminSection: 'sync', roles: ADMIN_RH, hat: 'both', capability: 'admin.sync' },
+      { label: 'Accès par compte', route: '/admin?section=comptes', platformAdminSection: 'comptes', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
+      { label: 'Rôles', route: '/admin?section=roles', platformAdminSection: 'roles', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.roles' },
+      // v31 : une entrée par rubrique « Administration » de « Accès par rôle », dans le même ordre.
+      { label: 'Utilisateurs', route: '/users', roles: ADMIN_RH, hat: 'both', capability: 'admin.users' },
+      { label: 'Organisation', route: '/organisation/administrative', roles: ADMIN_RH, hat: 'both', capability: 'admin.organisation' },
+      { label: 'Synchro organisation', route: '/admin?section=sync', platformAdminSection: 'sync', roles: ADMIN_RH, hat: 'both', capability: 'admin.sync' },
+      { label: 'Configuration des modules', route: '/admin?section=modules', platformAdminSection: 'modules', roles: ADMIN_RH, hat: 'both', capability: 'admin.modules' },
       { label: 'Inbox anomalies', route: '/admin?section=anomalies', platformAdminSection: 'anomalies', roles: ADMIN_RH, hat: 'both', capability: 'admin.anomalies' },
-      { label: 'Configuration modules', route: '/admin?section=modules', platformAdminSection: 'modules', roles: ADMIN_RH, hat: 'both', capability: 'admin.modules' },
     ],
   },
   {
@@ -139,6 +164,7 @@ export const MICROSERVICES: Microservice[] = [
     id: 'perimetre-superviseur',
     label: 'Périmètre superviseur',
     icon: ICONS.users,
+    ouvertureIam: 'prime.module',
     roles: ['Superviseur'],
     children: [
       {
@@ -154,6 +180,7 @@ export const MICROSERVICES: Microservice[] = [
     id: 'perimetre-referent-technique',
     label: 'Périmètre référent technique',
     icon: ICONS.users,
+    ouvertureIam: 'prime.module',
     roles: REFERENT_TECHNIQUE_ROLES,
     children: [
       {
@@ -171,8 +198,11 @@ export const MICROSERVICES: Microservice[] = [
     icon: ICONS.building,
     roles: ADMIN_RH,
     children: [
-      { label: 'Structure de production', route: '/organisation', roles: ADMIN_RH, hat: 'team' },
-      { label: 'Structure support', route: '/departements-metier', roles: ADMIN_RH, hat: 'team' },
+      { label: 'Contrats, pôles et cellules', route: '/organisation/administrative', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.organisation' },
+      { label: 'Structure de production', route: '/organisation', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.organisation' },
+      { label: 'Structure support', route: '/departements-metier', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.organisation' },
+      // v32 : harmonisation sur le fichier de référence (Admin).
+      { label: 'Harmonisation (fichier de référence)', route: '/organisation/harmonisation', roles: [KyntusRoleNames.Admin], hat: 'team', capability: 'admin.access' },
     ],
   },
   {
@@ -180,13 +210,14 @@ export const MICROSERVICES: Microservice[] = [
     label: 'Ressources humaines',
     icon: ICONS.users,
     children: [
-      { label: 'Employés', route: '/users', roles: ADMIN_RH, hat: 'team' },
-      { label: 'Nouvel employé', route: '/users/create', roles: ADMIN_RH, hat: 'team' },
-      { label: 'Import employés', route: '/import', roles: ADMIN_RH, hat: 'team' },
-      { label: 'Contrats', route: '/contracts', roles: MANAGER_ROLES, hat: 'team' },
-      { label: 'Liaisons HTEL', route: '/users/htel-liaisons', roles: ADMIN_RH, hat: 'team' },
-      { label: 'Historique des rotations', route: '/pilotage-rh', roles: ADMIN_RH, hat: 'team' },
-      { label: 'Champs personnalisés', route: '/users/fields', roles: ADMIN_RH, hat: 'team' },
+      { label: 'Employés', route: '/users', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.users' },
+      { label: 'Nouvel employé', route: '/users/create', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.users', capabilityVerb: 'Act' },
+      { label: 'Import employés', route: '/import', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.users', capabilityVerb: 'Act' },
+      { label: 'Contrats', route: '/contracts', roles: MANAGER_ROLES, hat: 'team', ouvertureIam: 'rh.contrats' },
+      { label: 'Liaisons HTEL', route: '/users/htel-liaisons', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.users', capabilityVerb: 'Act' },
+      { label: 'Réaffectations et comptes', route: '/reaffectations', roles: ROLE_SETS.congesEquipe, hat: 'team', ouvertureIam: ['rh.affectations', 'rh.activation'] },
+      { label: 'Historique des rotations', route: '/pilotage-rh', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.users' },
+      { label: 'Champs personnalisés', route: '/users/fields', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.users', capabilityVerb: 'Act' },
     ],
   },
   {
@@ -197,14 +228,16 @@ export const MICROSERVICES: Microservice[] = [
     icon: ICONS.calendar,
     roles: ALL_ROLES,
     children: [
-      { label: 'Mes plannings', route: '/mes-plannings', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
-      { label: 'Mes changements d’horaire', route: '/mes-demandes-changement', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
-      { label: 'Mes demandes exceptionnelles', route: '/mes-demandes-exceptionnelles', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
-      { label: 'Mes renforts samedi', route: '/mes-renforts', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self' },
-      { label: 'Planning de l’équipe', route: '/planning/equipe', roles: ['Manager', 'Coach', 'Référent technique', 'Superviseur'], hat: 'team' },
-      { label: 'Traiter les changements', route: '/planning/change-requests', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team' },
-      { label: 'Traiter les demandes exceptionnelles', route: '/planning/exceptional-requests', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team' },
-      { label: 'Traiter les renforts samedi', route: '/planning/demandes-renfort', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team' },
+      { label: 'Mes plannings', route: '/mes-plannings', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self', ouvertureIam: 'planning.self' },
+      { label: 'Mes changements d’horaire', route: '/mes-demandes-changement', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self', ouvertureIam: 'planning.self' },
+      { label: 'Mes demandes exceptionnelles', route: '/mes-demandes-exceptionnelles', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self', ouvertureIam: 'planning.self' },
+      { label: 'Mes renforts samedi', route: '/mes-renforts', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self', ouvertureIam: 'planning.renforts-self' },
+      { label: 'Planning IT', route: '/planning-it', roles: ROLE_SETS.planningIt, hat: 'both', capability: 'planning-it' },
+      { label: 'Membres de mon équipe', route: '/mon-equipe', roles: ROLE_SETS.congesEquipe.filter((r) => r !== 'Admin' && r !== 'RH'), hat: 'team', ouvertureIam: 'planning.equipe' },
+      { label: 'Planning de l’équipe', route: '/planning/equipe', roles: ['Manager', 'Coach', 'Référent technique', 'Superviseur'], hat: 'team', ouvertureIam: 'planning.equipe' },
+      { label: 'Traiter les changements', route: '/planning/change-requests', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team', ouvertureIam: 'planning.change-requests' },
+      { label: 'Traiter les demandes exceptionnelles', route: '/planning/exceptional-requests', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team', ouvertureIam: 'planning.exceptional-requests' },
+      { label: 'Traiter les renforts samedi', route: '/planning/demandes-renfort', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team', ouvertureIam: 'planning.reinforcement' },
       { label: 'Valider les plannings', route: '/planning/validation', roles: [...ADMIN_RH, KyntusRoleNames.Superviseur], hat: 'team', capability: 'planning.validation' },
       { label: 'Configuration des horaires', route: '/planning/shift-config', roles: [...ADMIN_RH, KyntusRoleNames.Superviseur], hat: 'team', capability: 'planning.shift-config' },
     ],
@@ -213,6 +246,7 @@ export const MICROSERVICES: Microservice[] = [
     id: 'documentation',
     label: 'Documentation',
     icon: ICONS.doc,
+    ouvertureIam: 'documentation.module',
     dynamicChildren: true,
     children: [],
   },
@@ -221,8 +255,38 @@ export const MICROSERVICES: Microservice[] = [
     label: 'Prime',
     icon: ICONS.award,
     roles: ROLE_SETS.prime,
+    ouvertureIam: 'prime.module',
     dynamicChildren: true,
     children: [],
+  },
+  {
+    // Pointages ZKBio Time calculés dans My-Kyntus (retards, pauses, pointages manquants).
+    id: 'pointage',
+    label: 'Pointage',
+    icon: ICONS.clock,
+    children: [
+      { label: 'Mon suivi', route: '/pointage/mon-suivi', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'pointage.self' },
+      { label: 'Heure de sortie', route: '/pointage/heure-de-sortie', roles: EMPLOYEE_ROLES, hat: 'self', ouvertureIam: 'pointage.self' },
+      { label: 'Pointages de l’équipe', route: '/pointage/equipe', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'pointage.equipe' },
+      { label: 'Planning prévu / réalisé', route: '/pointage/prevu-realise', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'pointage.equipe' },
+      { label: 'Régimes horaires', route: '/pointage/regimes', roles: ADMIN_RH, hat: 'team', capability: 'pointage.regimes' },
+      { label: 'Accès Heure de sortie', route: '/pointage/acces-heure-sortie', roles: [KyntusRoleNames.Admin], hat: 'team', capability: 'pointage.acces-sortie' },
+      { label: 'Correspondance pointeuses', route: '/pointage/correspondances', roles: ADMIN_RH, hat: 'team', capability: 'pointage.correspondances' },
+    ],
+  },
+  {
+    // Présences et paie (lot A) : responsables de leur périmètre, RH et Admin.
+    id: 'presences',
+    label: 'Présences et paie',
+    icon: ICONS.calendar,
+    children: [
+      { label: 'Tableau des présences', route: '/presences', roles: [...ROLE_SETS.congesEquipe, KyntusRoleNames.Formateur, KyntusRoleNames.EquipeFormation], hat: 'team', capability: 'presences' },
+      { label: 'Retards et autorisations', route: '/presences/retards', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences.retards' },
+      { label: 'Manquements', route: '/presences/avertissements', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences.avertissements' },
+      { label: 'Éléments variables de paie', route: '/presences/evp', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences.evp' },
+      { label: 'Dossiers administratifs', route: '/presences/dossiers', roles: [...ADMIN_RH, 'RP', 'Chef de projet'], hat: 'team', capability: 'presences.dossier' },
+      { label: 'Export paie', route: '/presences/export', roles: [...ADMIN_RH, 'RP', 'Chef de projet', 'Superviseur'], hat: 'team', capability: 'presences.export' },
+    ],
   },
   {
     id: 'conges',
@@ -230,10 +294,12 @@ export const MICROSERVICES: Microservice[] = [
     icon: ICONS.leave,
     children: [
       { label: 'Mes congés', route: '/mes-conges', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'conges.self' },
+      { label: 'Congés de ma cellule', route: '/conges/ma-cellule', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'conges.self' },
       { label: 'Valider les congés', route: '/conges/validation', roles: [...MANAGER_ROLES, 'Superviseur'], hat: 'team', capability: 'conges.validation' },
+      { label: "Congés de l'équipe", route: '/conges/equipe', roles: ROLE_SETS.congesEquipe, hat: 'team', ouvertureIam: 'conges.equipe' },
       { label: 'Absences', route: '/absences-planning', roles: MANAGER_ROLES, hat: 'team', capability: 'conges.validation' },
       { label: 'Historique des congés', route: '/conges/historique', roles: MANAGER_ROLES, hat: 'team', capability: 'conges.history' },
-      { label: 'Quotas cellule / service', route: '/conges/quotas-service', roles: ['Superviseur', 'Admin'], hat: 'team', capability: 'conges.quotas' },
+      { label: 'Quotas cellule / service', route: '/conges/quotas-service', roles: ['Superviseur', 'Admin', 'RP', 'Chef de projet'], hat: 'team', capability: 'conges.quotas' },
       { label: 'Périodes interdites', route: '/conges/periodes-interdites', roles: ADMIN_RH, hat: 'team', capability: 'conges.periodes' },
     ],
   },
@@ -242,6 +308,7 @@ export const MICROSERVICES: Microservice[] = [
     label: 'Parrainage',
     icon: ICONS.share,
     roles: ['Admin', 'RH', 'Manager', 'Pilote', 'Audit', 'Coach', 'RP', 'Employee', 'Superviseur'],
+    ouvertureIam: 'parrainage.module',
     dynamicChildren: true,
     children: [],
   },
@@ -250,27 +317,27 @@ export const MICROSERVICES: Microservice[] = [
     label: 'Formation',
     icon: ICONS.graduation,
     children: [
-      { label: 'Mes formations', route: '/mes-formations', roles: EMPLOYEE_ROLES, hat: 'self' },
-      { label: 'Mes sessions', route: '/mes-sessions', roles: MES_SESSIONS_ROLES, hat: 'self' },
+      { label: 'Mes formations', route: '/mes-formations', roles: EMPLOYEE_ROLES, hat: 'self', ouvertureIam: 'formation.self' },
+      { label: 'Mes sessions', route: '/mes-sessions', roles: MES_SESSIONS_ROLES, hat: 'self', ouvertureIam: 'formation.self' },
       {
         label: 'Formation initiale',
         isSectionHeader: true,
         roles: [...new Set([...FORMATION_PLANNER_ROLES, ...FORMATION_GESTION_ROLES, ...FORMATION_FORMATEUR_ROLES, ...ADMIN_RH])],
         hat: 'team',
       },
-      { label: 'Tableau de bord', route: '/formations/dashboard', roles: FORMATION_PLANNER_ROLES, hat: 'team' },
-      { label: 'Gérer les formations', route: '/formations', roles: FORMATION_GESTION_ROLES, hat: 'team' },
-      { label: 'Suivi formation initiale', route: '/formations/initiales', roles: FORMATION_FORMATEUR_ROLES, hat: 'team' },
-      { label: 'Passage en production', route: '/formations/passage-production', roles: ADMIN_RH, hat: 'team' },
-      { label: 'Checklist documents', route: '/formations/documents-checklist-config', roles: ADMIN_RH, hat: 'team' },
+      { label: 'Tableau de bord', route: '/formations/dashboard', roles: FORMATION_PLANNER_ROLES, hat: 'team', ouvertureIam: 'formation.planification' },
+      { label: 'Gérer les formations', route: '/formations', roles: FORMATION_GESTION_ROLES, hat: 'team', ouvertureIam: 'formation.admin' },
+      { label: 'Suivi formation initiale', route: '/formations/initiales', roles: FORMATION_FORMATEUR_ROLES, hat: 'team', ouvertureIam: 'formation.suivi-initiale' },
+      { label: 'Passage en production', route: '/formations/passage-production', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'formation.passage' },
+      { label: 'Checklist documents', route: '/formations/documents-checklist-config', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'formation.checklist' },
       {
         label: 'Formation continue',
         isSectionHeader: true,
         roles: FORMATION_PLANNER_ROLES,
         hat: 'team',
       },
-      { label: 'Bibliothèque', route: '/formations/bibliotheque', roles: FORMATION_PLANNER_ROLES, hat: 'team' },
-      { label: 'Planifier une formation continue', route: '/formations/planifier', roles: FORMATION_PLANNER_ROLES, hat: 'team' },
+      { label: 'Bibliothèque', route: '/formations/bibliotheque', roles: FORMATION_PLANNER_ROLES, hat: 'team', ouvertureIam: 'formation.planification' },
+      { label: 'Planifier une formation continue', route: '/formations/planifier', roles: FORMATION_PLANNER_ROLES, hat: 'team', ouvertureIam: 'formation.planification', capabilityVerb: 'Act' },
     ],
   },
   {
@@ -278,8 +345,8 @@ export const MICROSERVICES: Microservice[] = [
     label: 'Communication',
     icon: ICONS.mail,
     children: [
-      { label: 'Fil d\'actualités', route: '/mes-newsletters', roles: ALL_ROLES, hat: 'both' },
-      { label: 'Nouvelle publication', route: '/newsletter', roles: ADMIN_RH, hat: 'team' },
+      { label: 'Fil d\'actualités', route: '/mes-newsletters', roles: ALL_ROLES, hat: 'both', ouvertureIam: 'communication.fil' },
+      { label: 'Nouvelle publication', route: '/newsletter', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'communication.newsletter' },
     ],
   },
   {
@@ -292,8 +359,9 @@ export const MICROSERVICES: Microservice[] = [
         route: '/reclamations',
         roles: ['Employee', 'RH', 'Manager', 'Coach', 'RP', 'Admin', 'Audit', 'Equipe_Formation', 'Equipe formation', 'Superviseur', 'Pilote', 'Formateur'],
         hat: 'self',
+        ouvertureIam: 'qualite.self',
       },
-      { label: 'Traiter les demandes', route: '/reclamations-admin', roles: ['RH', 'Manager', 'RP', 'Admin', 'Audit'], hat: 'team' },
+      { label: 'Traiter les demandes', route: '/reclamations-admin', roles: ['RH', 'Manager', 'RP', 'Admin', 'Audit'], hat: 'team', ouvertureIam: 'qualite.admin' },
     ],
   },
   {
@@ -302,21 +370,31 @@ export const MICROSERVICES: Microservice[] = [
     icon: ICONS.headphones,
     children: [
       { label: 'Pilotage', isSectionHeader: true, roles: QUALITE_CQ_DASHBOARD_ROLES, hat: 'team' },
-      { label: 'Tableau de bord', route: '/qualite/cq?view=dashboard', roles: QUALITE_CQ_DASHBOARD_ROLES, hat: 'team' },
-      { label: 'Évaluations CQ', route: '/qualite/cq', roles: QUALITE_CQ_ROLES, hat: 'team' },
-      { label: 'Nouvelle évaluation', route: '/qualite/cq?view=new', roles: QUALITE_CQ_ROLES, hat: 'team' },
-      { label: 'Grilles', route: '/qualite/cq?view=grids', roles: QUALITE_CQ_ROLES, hat: 'team' },
-      { label: 'Coaching', route: '/qualite/cq?view=coaching', roles: QUALITE_CQ_COACHING_ROLES, hat: 'team' },
-      { label: 'Appels à évaluer', route: '/qualite/cq?view=picking', roles: QUALITE_CQ_ROLES, hat: 'team' },
+      { label: 'Tableau de bord', route: '/qualite/cq?view=dashboard', roles: QUALITE_CQ_DASHBOARD_ROLES, hat: 'team', ouvertureIam: ['cq.evaluations', 'cq.self'] },
+      { label: 'Évaluations CQ', route: '/qualite/cq', roles: QUALITE_CQ_ROLES, hat: 'team', ouvertureIam: 'cq.evaluations' },
+      { label: 'Nouvelle évaluation', route: '/qualite/cq?view=new', roles: QUALITE_CQ_ROLES, hat: 'team', ouvertureIam: 'cq.evaluations', capabilityVerb: 'Act' },
+      { label: 'Grilles', route: '/qualite/cq?view=grids', roles: QUALITE_CQ_ROLES, hat: 'team', ouvertureIam: 'cq.evaluations' },
+      { label: 'Coaching', route: '/qualite/cq?view=coaching', roles: QUALITE_CQ_COACHING_ROLES, hat: 'team', ouvertureIam: 'cq.coaching' },
+      { label: 'Appels à évaluer', route: '/qualite/cq?view=picking', roles: QUALITE_CQ_ROLES, hat: 'team', ouvertureIam: 'cq.evaluations' },
       { label: 'Administration', isSectionHeader: true, roles: ADMIN_RH, hat: 'team' },
-      { label: 'Notifications CQ', route: '/qualite/cq?view=notifications', roles: ADMIN_RH, hat: 'team' },
-      { label: 'État du service', route: '/qualite/cq?view=health', roles: ADMIN_RH, hat: 'team' },
+      { label: 'Notifications CQ', route: '/qualite/cq?view=notifications', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'cq.admin' },
+      { label: 'État du service', route: '/qualite/cq?view=health', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'cq.admin' },
       { label: 'Journal d\'audit', route: '/audit?section=journal', platformAuditSection: 'journal', roles: ADMIN_AUDIT, hat: 'team', capability: 'audit.journal' },
       { label: 'Préférences', isSectionHeader: true, roles: [KyntusRoleNames.Qualiticien], hat: 'team' },
-      { label: 'Paramètres CQ', route: '/qualite/cq?view=settings', roles: [KyntusRoleNames.Qualiticien], hat: 'team' },
+      { label: 'Paramètres CQ', route: '/qualite/cq?view=settings', roles: [KyntusRoleNames.Qualiticien], hat: 'team', ouvertureIam: 'cq.parametres' },
       { label: 'Mon espace', isSectionHeader: true, roles: QUALITE_CQ_PILOT_ROLES, hat: 'self' },
-      { label: 'Mes évaluations', route: '/qualite/cq?view=mine', roles: QUALITE_CQ_PILOT_ROLES, hat: 'self' },
-      { label: 'Mes coachings', route: '/qualite/cq?view=coachings-me', roles: QUALITE_CQ_PILOT_ROLES, hat: 'self' },
+      { label: 'Mes évaluations', route: '/qualite/cq?view=mine', roles: QUALITE_CQ_PILOT_ROLES, hat: 'self', ouvertureIam: 'cq.self' },
+      { label: 'Mes coachings', route: '/qualite/cq?view=coachings-me', roles: QUALITE_CQ_PILOT_ROLES, hat: 'self', ouvertureIam: 'cq.self' },
+    ],
+  },
+  {
+    // Espace Aide : visible par tous les utilisateurs connectés, dans les deux casquettes.
+    id: 'aide',
+    label: 'Aide',
+    icon: ICONS.help,
+    children: [
+      { label: 'Guide de l\'application', route: APP_GUIDE_ROUTE, hat: 'both' },
+      { label: 'Assistance', route: '/assistance', hat: 'both' },
     ],
   },
 ];

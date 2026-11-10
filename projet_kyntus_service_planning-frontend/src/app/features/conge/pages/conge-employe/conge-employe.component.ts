@@ -19,6 +19,23 @@ import {
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { formatHttpErrorMessage } from '../../../../core/lib/http-error-message.util';
 
+/** Case du calendrier de demande, avec l'occupation de la cellule ce jour-là. */
+type CalendarCell = {
+  date: string | null;
+  day: number | null;
+  blocked: boolean;
+  selected: boolean;
+  inRange: boolean;
+  absents: number;
+  dejaDemande: boolean;
+  /** Pourquoi le jour n'est pas sélectionnable (couleur et légende distinctes). */
+  raison: 'avant' | 'interdit' | 'sature' | 'passe' | null;
+  weekend: boolean;
+  today: boolean;
+  /** 0 = libre, 1 = occupé sous le quota, 2 = quota atteint. */
+  niveau: 0 | 1 | 2;
+};
+
 @Component({
   selector: 'app-conge-employe',
   standalone: true,
@@ -48,6 +65,12 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
   disponibiliteMotif: string | null = null;
   /** Jours yyyy-MM-dd saturés (quota) ou interdits pour le mois affiché. */
   blockedDays = new Set<string>();
+  /** Occupation par jour du mois affiché (absents, saturation, demande déjà posée). */
+  joursInfo = new Map<string, { absents: number; sature: boolean; dejaDemande: boolean }>();
+  /** Quota d'absents simultanés de la cellule (null = aucun quota défini). */
+  quotaCellule: number | null = null;
+  celluleNom: string | null = null;
+  effectifCellule = 0;
   calendarMonth = new Date();
   selectingEnd = false;
 
@@ -253,6 +276,9 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
     this.disponibiliteMotif = null;
     this.selectingEnd = false;
     this.calendarMonth = new Date();
+    // Ouvre directement sur le premier mois où le congé annuel est possible.
+    const premier = this.moisEligibilite;
+    if (premier) this.calendarMonth = premier;
     this.showModal = true;
     this.loadMonthBlockedDays();
     this.touchDraft();
@@ -273,39 +299,74 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
     return `${this.moisLabels[m] ?? m} ${y}`;
   }
 
-  get calendarCells(): {
-    date: string | null;
-    day: number | null;
-    blocked: boolean;
-    selected: boolean;
-    inRange: boolean;
-  }[] {
+  get calendarCells(): CalendarCell[] {
     const y = this.calendarMonth.getFullYear();
     const m = this.calendarMonth.getMonth();
     const first = new Date(y, m, 1);
     const daysInMonth = new Date(y, m + 1, 0).getDate();
     const startPad = (first.getDay() + 6) % 7;
-    const cells: {
-      date: string | null;
-      day: number | null;
-      blocked: boolean;
-      selected: boolean;
-      inRange: boolean;
-    }[] = [];
+    const cells: CalendarCell[] = [];
     for (let i = 0; i < startPad; i++) {
-      cells.push({ date: null, day: null, blocked: false, selected: false, inRange: false });
+      cells.push({
+        date: null, day: null, blocked: false, selected: false,
+        inRange: false, absents: 0, dejaDemande: false,
+        raison: null, weekend: false, today: false, niveau: 0,
+      });
     }
     for (let day = 1; day <= daysInMonth; day++) {
       const date = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const info = this.joursInfo.get(date);
+      const absents = info?.absents ?? 0;
+      const dow = new Date(y, m, day).getDay();
       cells.push({
         date,
         day,
         blocked: this.isDayBlocked(date),
         selected: date === this.form.dateDebut || date === this.form.dateFin,
         inRange: this.isDateInSelectedRange(date),
+        absents,
+        dejaDemande: info?.dejaDemande ?? false,
+        raison: this.raisonBlocage(date),
+        weekend: dow === 0 || dow === 6,
+        today: date === this.todayYmd(),
+        niveau: info?.sature ? 2 : absents > 0 ? 1 : 0,
       });
     }
     return cells;
+  }
+
+
+  /** Motif d'indisponibilité d'un jour (null : sélectionnable). */
+  raisonBlocage(date: string): CalendarCell['raison'] {
+    if (this.moisInterdits.includes(Number(date.slice(5, 7)))) return 'interdit';
+    if (this.form.typeConge === TypeConge.Annuel && this.dateEligibiliteYmd && date < this.dateEligibiliteYmd) return 'avant';
+    if (this.joursInfo.get(date)?.sature || this.blockedDays.has(date)) return 'sature';
+    return null;
+  }
+
+  /** Premier mois où le congé annuel est possible, s'il est après le mois affiché. */
+  get moisEligibilite(): Date | null {
+    if (this.form.typeConge !== TypeConge.Annuel || !this.dateEligibiliteYmd) return null;
+    const [y, m] = this.dateEligibiliteYmd.split('-').map(Number);
+    const cible = new Date(y, m - 1, 1);
+    const affiche = new Date(this.calendarMonth.getFullYear(), this.calendarMonth.getMonth(), 1);
+    return cible > affiche ? cible : null;
+  }
+
+  allerAuMoisEligible(): void {
+    const cible = this.moisEligibilite;
+    if (!cible) return;
+    this.calendarMonth = cible;
+    this.loadMonthBlockedDays();
+  }
+
+  /** « Du lun. 03 mai au ven. 07 mai 2027 · 5 jour(s) calendaires ». */
+  get resumeSelection(): string | null {
+    if (!this.form.dateDebut) return null;
+    const fin = this.form.dateFin || this.form.dateDebut;
+    const f = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'long' });
+    const jours = Math.round((new Date(`${fin}T00:00:00`).getTime() - new Date(`${this.form.dateDebut}T00:00:00`).getTime()) / 86400000) + 1;
+    return fin === this.form.dateDebut ? `Le ${f(fin)}` : `Du ${f(this.form.dateDebut)} au ${f(fin)} · ${jours} jour(s) calendaires`;
   }
 
   isDayBlocked(date: string): boolean {
@@ -357,36 +418,68 @@ export class CongeEmployeComponent implements OnInit, OnDestroy {
     this.checkDisponibilite();
   }
 
+  /**
+   * Occupation du mois affiché : absents par jour, jours saturés par le quota de la
+   * cellule et mois interdits. Les jours saturés sont grisés et non sélectionnables.
+   */
   private loadMonthBlockedDays(): void {
     if (!this.employeId) return;
     const y = this.calendarMonth.getFullYear();
     const m = this.calendarMonth.getMonth();
     const lastDay = new Date(y, m + 1, 0).getDate();
-    const debut = `${y}-${String(m + 1).padStart(2, '0')}-01`;
-    const fin = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    this.svc.getDisponibilite(this.employeId, debut + 'T00:00:00Z', fin + 'T00:00:00Z').subscribe({
+    const moisInterditDays = (): Set<string> => {
+      const next = new Set<string>();
+      if (this.moisInterdits.includes(m + 1)) {
+        for (let day = 1; day <= lastDay; day++) {
+          next.add(`${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+        }
+      }
+      return next;
+    };
+
+    this.svc.getDisponibiliteMois(this.employeId, y, m + 1).subscribe({
       next: (r) => {
         this.moisInterdits = r.moisInterdits?.length ? r.moisInterdits : this.moisInterdits;
-        const next = new Set<string>(r.joursSatures ?? []);
-        if (this.moisInterdits.includes(m + 1)) {
-          for (let day = 1; day <= lastDay; day++) {
-            next.add(`${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
-          }
+        this.quotaCellule = r.quota;
+        this.celluleNom = r.nodeNom;
+        this.effectifCellule = r.effectif;
+        const next = moisInterditDays();
+        const info = new Map<string, { absents: number; sature: boolean; dejaDemande: boolean }>();
+        for (const j of r.jours ?? []) {
+          info.set(j.jour, { absents: j.absents, sature: j.sature, dejaDemande: j.dejaDemande });
+          if (j.sature || j.moisInterdit) next.add(j.jour);
         }
+        this.joursInfo = info;
         this.blockedDays = next;
         this.cdr.detectChanges();
       },
       error: () => {
-        const next = new Set<string>();
-        if (this.moisInterdits.includes(m + 1)) {
-          for (let day = 1; day <= lastDay; day++) {
-            next.add(`${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
-          }
-        }
-        this.blockedDays = next;
+        this.joursInfo = new Map();
+        this.blockedDays = moisInterditDays();
         this.cdr.detectChanges();
       },
     });
+  }
+
+  /** Infobulle d'un jour du calendrier : occupation ou motif du blocage. */
+  dayTitle(date: string | null): string {
+    if (!date) return '';
+    const month = Number(date.slice(5, 7));
+    if (this.moisInterdits.includes(month)) return 'Mois interdit aux congés';
+    if (
+      this.form.typeConge === TypeConge.Annuel
+      && this.dateEligibiliteYmd
+      && date < this.dateEligibiliteYmd
+    ) {
+      return `Congé annuel possible à partir du ${this.dateEligibiliteLabel}`;
+    }
+    const info = this.joursInfo.get(date);
+    if (!info) return '';
+    const cellule = this.celluleNom ? ` — ${this.celluleNom}` : '';
+    if (info.dejaDemande) return `Vous avez déjà une demande ce jour${cellule}`;
+    if (this.quotaCellule === null) return `${info.absents} absent(s)${cellule}`;
+    const etat = info.sature ? 'complet' : 'disponible';
+    return `${info.absents}/${this.quotaCellule} absent(s) — ${etat}${cellule}`;
   }
 
   onTypeCongeChange(): void {

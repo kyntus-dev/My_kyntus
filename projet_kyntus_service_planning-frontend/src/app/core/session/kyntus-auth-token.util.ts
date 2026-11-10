@@ -16,7 +16,10 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
     if (!part) return null;
     const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
     const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
-    const json = atob(b64 + pad);
+    // Le contenu du jeton est en UTF-8 : sans ce décodage, « Ingénieur » devenait « IngÃ©nieur »
+    // et le rôle n'était plus reconnu (menus, bascule « Mon équipe », accès).
+    const octets = Uint8Array.from(atob(b64 + pad), (c) => c.charCodeAt(0));
+    const json = new TextDecoder('utf-8').decode(octets);
     const payload = JSON.parse(json) as unknown;
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
     return payload as Record<string, unknown>;

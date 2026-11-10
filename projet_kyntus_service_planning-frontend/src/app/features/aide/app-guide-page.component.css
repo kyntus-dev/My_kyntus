@@ -1,0 +1,369 @@
+.guide-page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+}
+
+:host ::ng-deep .guide-page .ky-page-title {
+  position: relative;
+  padding-bottom: 10px;
+}
+
+:host ::ng-deep .guide-page .ky-page-title::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 48px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--soft-blue, #3b82f6);
+}
+
+.guide-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.guide-progress {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--soft-blue, #3b82f6);
+  background: color-mix(in srgb, var(--soft-blue, #3b82f6) 12%, transparent);
+}
+
+.guide-progress--done {
+  color: #15803d;
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+}
+
+.guide-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card, 0.875rem);
+}
+
+.guide-alert {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  color: #b91c1c;
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+}
+
+.guide-empty {
+  margin-top: 24px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-muted);
+}
+
+.guide-empty strong {
+  color: var(--text-primary);
+}
+
+.guide-layout {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.guide-list {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.guide-list-title {
+  padding: 4px 6px 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.guide-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.guide-item:hover {
+  background: color-mix(in srgb, var(--soft-blue, #3b82f6) 6%, transparent);
+}
+
+.guide-item--active {
+  border-color: var(--soft-blue, #3b82f6);
+  background: color-mix(in srgb, var(--soft-blue, #3b82f6) 10%, transparent);
+}
+
+.guide-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.guide-item-text strong {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.guide-item-text span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.guide-item-check {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: #16a34a;
+}
+
+.guide-viewer {
+  padding: 18px 20px 20px;
+}
+
+.guide-viewer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.guide-viewer-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.guide-viewed-chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #15803d;
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+}
+
+.guide-description {
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.guide-video {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  border-radius: 10px;
+  background: #0b1220;
+}
+
+.guide-video--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  color: #cbd5e1;
+  font-size: 0.875rem;
+}
+
+.guide-open {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+  color: var(--text-muted);
+}
+
+.guide-admin {
+  margin-top: 36px;
+}
+
+.guide-admin-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.guide-admin-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.guide-admin-head p {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.guide-form {
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.guide-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.guide-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.guide-form-row .guide-field {
+  flex: 1 1 220px;
+}
+
+.guide-form-row .guide-field--small {
+  flex: 0 0 110px;
+}
+
+.guide-field input[type='text'],
+.guide-field input[type='url'],
+.guide-field input[type='number'],
+.guide-field select,
+.guide-field textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.guide-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.guide-form-row .guide-check {
+  padding-bottom: 8px;
+}
+
+.guide-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.guide-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.guide-roles legend {
+  padding: 0 4px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.guide-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.guide-table-wrap {
+  overflow-x: auto;
+}
+
+.guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.guide-table th,
+.guide-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.guide-table th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.guide-row--archived td {
+  color: var(--text-muted);
+}
+
+.guide-table-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.guide-link-btn {
+  margin-left: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--soft-blue, #3b82f6);
+  cursor: pointer;
+}
+
+.guide-muted {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 860px) {
+  .guide-layout {
+    grid-template-columns: 1fr;
+  }
+}

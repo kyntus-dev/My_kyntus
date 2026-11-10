@@ -137,6 +137,16 @@ public static class CongeSchemaPatches
                     ON org_nodes_conge ("ParentId");
                 """, ct);
 
+            // v9 : circuit de validation (ligne unique). Défaut : superviseur seul décideur.
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS conge_workflow_config (
+                    "Id" uuid NOT NULL PRIMARY KEY,
+                    "EtapeRhRequise" boolean NOT NULL DEFAULT false,
+                    "UpdatedAt" timestamp with time zone NOT NULL,
+                    "UpdatedBy" uuid NULL
+                );
+                """, ct);
+
             if (!await db.PeriodesInterdites.AnyAsync(ct))
             {
                 db.PeriodesInterdites.Add(PeriodeInterditeConge.CreerParDefaut());

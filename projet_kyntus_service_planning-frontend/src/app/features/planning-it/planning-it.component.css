@@ -1,0 +1,78 @@
+.pit-sk { min-height: 260px; }
+.pit-kpi-sm { font-size: 1.1rem !important; }
+.pit-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-bottom: 12px; font-size: 0.74rem; color: var(--text-muted); }
+.pit-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pit-lg { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border-color); }
+.pit-lg--travail { background: var(--bg-card); }
+.pit-lg--repos { background: #d1d5db; }
+.pit-lg--conge { background: #f8cbad; }
+.pit-lg--flash { background: color-mix(in srgb, var(--ky-blue) 25%, var(--bg-card)); border-color: var(--ky-blue); }
+
+.pit-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.pit-table th, .pit-table td { border: 1px solid var(--border-color); }
+.pit-table thead th {
+  padding: 8px 6px; background: #a9c8ec; color: #0e1623; font-weight: 700; text-align: center; font-size: 0.78rem;
+  text-transform: capitalize; line-height: 1.25;
+}
+body.theme-dark .pit-table thead th { background: #1e3a5f; color: #e2e8f0; }
+.pit-table thead th b { font-size: 0.86rem; }
+.pit-table thead th.is-today { box-shadow: inset 0 -3px 0 var(--ky-blue); }
+.pit-name { min-width: 170px; padding: 8px 12px !important; text-align: left !important; background: var(--bg-input, #eef2f7); font-weight: 700; }
+.pit-name small { display: block; font-size: 0.68rem; font-weight: 500; color: var(--text-muted); }
+thead .pit-name { background: #a9c8ec; }
+tr.is-me .pit-name { background: color-mix(in srgb, var(--ky-blue) 12%, var(--bg-card)); }
+.pit-cell { position: relative; min-width: 92px; height: 44px; padding: 0 !important; text-align: center; transition: background 0.4s; }
+.pit-cell.s-Repos { background: #d1d5db !important; }
+.pit-cell.s-Conge { background: #f8cbad !important; }
+body.theme-dark .pit-cell.s-Repos { background: #374151 !important; }
+body.theme-dark .pit-cell.s-Conge { background: #7c4a2d !important; }
+.pit-cell.is-today { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ky-blue) 45%, transparent); }
+.pit-cell.is-flash { background: color-mix(in srgb, var(--ky-blue) 25%, var(--bg-card)) !important; }
+.pit-cell.is-saving { opacity: 0.6; }
+.pit-edit { display: flex; align-items: center; height: 100%; }
+.pit-time {
+  flex: 1; min-width: 0; height: 100%; padding: 0 2px !important; border: 0 !important; border-radius: 0 !important;
+  background: transparent !important; box-shadow: none !important; color: var(--text-primary);
+  font: 600 0.9rem var(--font-sans); text-align: center; font-variant-numeric: tabular-nums;
+}
+.pit-time:focus { outline: 2px solid var(--ky-blue); outline-offset: -2px; background: var(--bg-card); }
+.pit-state { flex: 1; height: 100%; border: 0; background: transparent; color: var(--text-primary); font: 700 0.82rem var(--font-sans); cursor: pointer; }
+.pit-more { width: 22px; height: 100%; border: 0; border-left: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.7rem; }
+.pit-more:hover { color: var(--ky-blue); background: color-mix(in srgb, var(--ky-blue) 8%, transparent); }
+.pit-menu {
+  position: absolute; z-index: 20; top: calc(100% + 2px); right: 0; min-width: 150px; display: flex; flex-direction: column;
+  padding: 4px; border-radius: var(--radius-md); background: var(--bg-card); border: 1px solid var(--border-color); box-shadow: var(--shadow-3);
+}
+.pit-menu button { padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-primary); font: 600 0.8rem var(--font-sans); text-align: left; cursor: pointer; }
+.pit-menu button:hover { background: var(--bg-input, #eef2f7); }
+.pit-menu button.is-danger { color: var(--danger-text); }
+.pit-ro { display: inline-block; padding: 0 6px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pit-com { min-width: 180px; padding: 4px !important; }
+.pit-com-input { min-height: 36px; border-color: transparent !important; background: transparent !important; }
+.pit-com-input:focus { border-color: var(--ky-blue); background: var(--bg-card); }
+.pit-ro--com { font-weight: 500; color: var(--text-muted); font-size: 0.8rem; }
+.pit-note { margin-top: 12px; }
+@media (max-width: 720px) {
+  .pit-name { min-width: 140px; position: sticky; left: 0; z-index: 2; }
+}
+.pit-cell td, .pit-table td { background: var(--bg-card); }
+/* Les champs du tableau doivent passer devant le style global des champs (.ks-content input … !important). */
+.pit-table .pit-edit input.pit-time.pit-time.pit-time.pit-time {
+  background: transparent !important; border: 0 !important; border-radius: 0 !important; padding: 0 2px !important; box-shadow: none !important;
+}
+.pit-table .pit-edit input.pit-time.pit-time.pit-time.pit-time:focus { background: var(--bg-card) !important; outline: 2px solid var(--ky-blue); outline-offset: -2px; }
+.pit-table .pit-com input.pit-com-input.pit-com-input.pit-com-input.pit-com-input {
+  background: transparent !important; border: 1px solid transparent !important;
+}
+.pit-table .pit-com input.pit-com-input.pit-com-input.pit-com-input.pit-com-input:focus { background: var(--bg-card) !important; border-color: var(--ky-blue) !important; }
+.pit-sem {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 56px; padding: 0 12px; height: 36px;
+  border-radius: 10px; background: color-mix(in srgb, var(--ky-blue) 10%, var(--bg-card)); color: var(--ky-blue);
+  font-weight: 800; font-size: 0.95rem; letter-spacing: 0.02em;
+}
+
+/* v31 : jours fériés (calendrier français) */
+.pit-lg--ferie { background: #dbeafe; }
+.pit-cell.s-Ferie { background: #dbeafe !important; }
+body.theme-dark .pit-cell.s-Ferie { background: #1e3a5f !important; }
+.pit-ferie { display: block; font-size: 10px; font-weight: 600; color: var(--ky-blue); white-space: nowrap; }

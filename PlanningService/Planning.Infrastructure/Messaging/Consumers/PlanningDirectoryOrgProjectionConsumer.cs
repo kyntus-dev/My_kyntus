@@ -19,7 +19,12 @@ public sealed class PlanningDirectoryOrgProjectionConsumer(
     public async Task Consume(ConsumeContext<DirectoryOrgNodeChangedMessage> context)
     {
         var msg = context.Message;
-        if (msg.IsDeleted) return;
+        if (msg.IsDeleted)
+        {
+            // Nœud supprimé dans l'Organisation RH : masqué dans Planning, historique conservé.
+            await PlanningOrgMirrorArchive.ArchiveAsync(db, msg.Level, msg.NodeId, context.CancellationToken);
+            return;
+        }
 
         switch (msg.Level)
         {
@@ -190,6 +195,7 @@ public sealed class PlanningDirectoryOrgProjectionConsumer(
         else
         {
             floor.Name = name;
+            floor.IsArchived = false;
         }
 
         await db.SaveChangesAsync();
@@ -227,6 +233,7 @@ public sealed class PlanningDirectoryOrgProjectionConsumer(
         {
             service.Name = name;
             service.FloorId = floor.Id;
+            service.IsArchived = false;
         }
 
         await db.SaveChangesAsync();
@@ -255,6 +262,7 @@ public sealed class PlanningDirectoryOrgProjectionConsumer(
         {
             sub.Name = name;
             sub.ServiceId = service.Id;
+            sub.IsArchived = false;
         }
 
         await db.SaveChangesAsync();

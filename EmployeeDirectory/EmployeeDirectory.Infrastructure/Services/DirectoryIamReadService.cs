@@ -11,17 +11,52 @@ namespace EmployeeDirectory.Infrastructure.Services;
 public sealed class DirectoryIamReadService(
     DirectoryDbContext db,
     IOrgResponsibilityResolver responsibility,
-    ICacheService cache) : IIamReadService, IPermissionCatalog, IRebacClient
+    ICacheService cache) : IIamReadService, IPermissionCatalog, IRebacClient, ISubjectPermissionOverrides
 {
     public async Task<EffectivePermissionsDto> GetEffectivePermissionsAsync(Guid subjectId, string role, CancellationToken ct = default)
     {
         var keys = await GetEffectivePermissionKeysAsync(role, ct);
+        if (subjectId != Guid.Empty && !string.Equals(PlatformAccessCatalog.NormalizeRole(role), "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            var exceptions = await db.IamUserPermissions.AsNoTracking()
+                .Where(p => p.SubjectId == subjectId)
+                .Select(p => new { p.Action, p.IsAllowed })
+                .ToListAsync(ct);
+            keys = AppliquerExceptions(keys, exceptions.Select(e => (e.Action, e.IsAllowed)));
+        }
         return new EffectivePermissionsDto(subjectId.ToString(), role, keys);
+    }
+
+    /// <summary>
+    /// Droits du rôle corrigés par les exceptions du compte : une action retirée disparaît (tous
+    /// périmètres), une action accordée est ajoutée sur le périmètre « Self ».
+    /// </summary>
+    public static IReadOnlyList<string> AppliquerExceptions(IReadOnlyList<string> cles, IEnumerable<(string Action, bool Accorde)> exceptions)
+    {
+        var liste = cles.ToList();
+        foreach (var (action, accorde) in exceptions)
+        {
+            if (!accorde)
+                liste.RemoveAll(k => k.StartsWith(action + ":", StringComparison.Ordinal));
+            else if (!liste.Any(k => k.StartsWith(action + ":", StringComparison.Ordinal)))
+                liste.Add(action + ":Self");
+        }
+        return liste;
+    }
+
+    public async Task<bool?> GetOverrideAsync(Guid subjectId, string action, CancellationToken ct = default)
+    {
+        var a = (action ?? string.Empty).Trim();
+        var ligne = await db.IamUserPermissions.AsNoTracking()
+            .Where(p => p.SubjectId == subjectId && p.Action == a)
+            .Select(p => (bool?)p.IsAllowed)
+            .FirstOrDefaultAsync(ct);
+        return ligne;
     }
 
     public async Task<bool> EvaluateAsync(Guid subjectId, string role, string action, string resourceType, string? resourceId, CancellationToken ct = default)
     {
-        var evaluator = new PolicyEvaluator(this, this, Microsoft.Extensions.Logging.Abstractions.NullLogger<PolicyEvaluator>.Instance);
+        var evaluator = new PolicyEvaluator(this, this, Microsoft.Extensions.Logging.Abstractions.NullLogger<PolicyEvaluator>.Instance, this);
         var decision = await evaluator.EvaluateAsync(new PolicyRequest(subjectId, role, action, resourceType, resourceId), ct);
         return decision.Allowed;
     }

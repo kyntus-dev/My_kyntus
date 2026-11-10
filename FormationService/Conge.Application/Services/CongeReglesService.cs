@@ -9,6 +9,24 @@ public record CongeDisponibiliteResult(
     IReadOnlyList<int> MoisInterdits,
     IReadOnlyList<string> JoursSatures);
 
+/// <summary>Occupation d'un jour pour le calendrier de demande.</summary>
+public record CongeJourResult(
+    DateTime Jour,
+    int Absents,
+    bool Sature,
+    bool MoisInterdit,
+    bool DejaDemande);
+
+public record CongeMoisResult(
+    int Annee,
+    int Mois,
+    string? NodeId,
+    string? NodeNom,
+    int? Quota,
+    int Effectif,
+    IReadOnlyList<int> MoisInterdits,
+    IReadOnlyList<CongeJourResult> Jours);
+
 /// <summary>
 /// Règles période interdite + quota cellule/service (absents simultanés).
 /// </summary>
@@ -77,6 +95,17 @@ public class CongeReglesService
         if (quota is null)
             return;
 
+        await AssertQuotaAsync(nodeId, quota, debut, fin, excludeDemandeId, ct);
+    }
+
+    private async Task AssertQuotaAsync(
+        string nodeId,
+        QuotaCongeService quota,
+        DateTime debut,
+        DateTime fin,
+        Guid? excludeDemandeId,
+        CancellationToken ct)
+    {
         var employes = await _employeRepo.GetByOrgNodeIdAsync(nodeId, ct);
         var employeIds = employes.Select(e => e.EmployeId).ToList();
         if (employeIds.Count == 0)
@@ -109,8 +138,8 @@ public class CongeReglesService
         if (resolved is null)
             return;
 
-        await AssertQuotaServiceDisponibleAsync(
-            resolved.Value.NodeId, debut, fin, excludeDemandeId, ct);
+        // Quota résolu (configuré, ou 1 par défaut) appliqué tel quel.
+        await AssertQuotaAsync(resolved.Value.NodeId, resolved.Value.Quota, debut, fin, excludeDemandeId, ct);
     }
 
     public async Task<CongeDisponibiliteResult> EvaluerDisponibiliteAsync(
@@ -161,6 +190,68 @@ public class CongeReglesService
             jours);
     }
 
+    /// <summary>
+    /// Occupation d'un mois pour le calendrier de demande : nombre d'absents par jour,
+    /// jours saturés par le quota et jours des mois interdits. Les jours saturés sont
+    /// grisés et non sélectionnables côté interface.
+    /// </summary>
+    public async Task<CongeMoisResult> EvaluerMoisAsync(
+        Guid employeId,
+        int annee,
+        int mois,
+        CancellationToken ct = default)
+    {
+        var premier = new DateTime(annee, mois, 1);
+        var dernier = premier.AddMonths(1).AddDays(-1);
+
+        var employe = await _employeRepo.GetByEmployeIdAsync(employeId, ct);
+        var config = await ResolvePeriodeAsync(employe, ct);
+        var moisInterdits = config.GetMois().ToList();
+        var moisInterdit = moisInterdits.Contains(mois);
+
+        if (employe is null)
+            return new CongeMoisResult(annee, mois, null, null, null, 0, moisInterdits, JoursVides(premier, dernier, moisInterdit));
+
+        var resolved = await ResolveQuotaContextAsync(employe, ct);
+        var nodeId = resolved?.NodeId ?? ResolveQuotaNodeId(employe);
+        if (nodeId is null)
+            return new CongeMoisResult(annee, mois, null, null, null, 0, moisInterdits, JoursVides(premier, dernier, moisInterdit));
+
+        var peers = await _employeRepo.GetByOrgNodeIdAsync(nodeId, ct);
+        var occupying = await _demandeRepo.GetOccupyingQuotaAsync(
+            peers.Select(e => e.EmployeId), premier, dernier, null, ct);
+
+        var quota = resolved?.Quota.MaxAbsentsSimultanes;
+        var jours = new List<CongeJourResult>();
+        for (var jour = premier; jour <= dernier; jour = jour.AddDays(1))
+        {
+            var ceJour = occupying.Where(d => d.DateDebut.Date <= jour && d.DateFin.Date >= jour).ToList();
+            var absents = ceJour.Count;
+            jours.Add(new CongeJourResult(
+                jour,
+                absents,
+                quota is not null && absents >= quota.Value,
+                moisInterdit,
+                ceJour.Any(d => d.EmployeId == employeId)));
+        }
+
+        return new CongeMoisResult(annee, mois, nodeId, null, quota, peers.Count, moisInterdits, jours);
+    }
+
+    private static IReadOnlyList<CongeJourResult> JoursVides(DateTime premier, DateTime dernier, bool moisInterdit)
+    {
+        var jours = new List<CongeJourResult>();
+        for (var jour = premier; jour <= dernier; jour = jour.AddDays(1))
+            jours.Add(new CongeJourResult(jour, 0, false, moisInterdit, false));
+        return jours;
+    }
+
+    /// <summary>Nœud de rattachement servant au décompte, même sans quota configuré.</summary>
+    private static string? ResolveQuotaNodeId(EmployeSnapshot employe)
+        => QuotaCongeService.NormalizeNodeId(employe.CelluleId)
+            ?? QuotaCongeService.NormalizeNodeId(employe.OrgServiceId)
+            ?? (employe.ServiceId != Guid.Empty ? employe.ServiceId.ToString() : null);
+
     public async Task<IReadOnlyList<int>> GetMoisInterditsAsync(CancellationToken ct = default)
     {
         var config = await ResolvePeriodeAsync(null, ct);
@@ -198,15 +289,21 @@ public class CongeReglesService
         if (serviceId is null && employe.ServiceId != Guid.Empty)
             serviceId = employe.ServiceId.ToString();
 
-        if (serviceId is null)
-            return null;
+        var serviceQuota = serviceId is null ? null : await _quotaRepo.GetByServiceIdAsync(serviceId, ct);
+        if (serviceQuota is not null)
+            return (serviceId!, serviceQuota, QuotaScopeKinds.Normalize(serviceQuota.ScopeKind));
 
-        var serviceQuota = await _quotaRepo.GetByServiceIdAsync(serviceId, ct);
-        if (serviceQuota is null)
+        // 3) Aucun quota configuré : un jour déjà pris par un collègue de la cellule (ou du
+        //    service) n'est plus disponible pour les autres (quota par défaut = 1).
+        var nodeId = celluleId ?? serviceId;
+        if (nodeId is null)
             return null;
-
-        return (serviceId, serviceQuota, QuotaScopeKinds.Normalize(serviceQuota.ScopeKind));
+        var kind = celluleId is not null ? QuotaScopeKinds.Cellule : QuotaScopeKinds.Service;
+        return (nodeId, QuotaCongeService.Creer(nodeId, QuotaParDefaut, null, kind), kind);
     }
+
+    /// <summary>Absents simultanés autorisés quand le superviseur n'a défini aucun quota.</summary>
+    public const int QuotaParDefaut = 1;
 
     private static List<DateTime> FindSaturatedDays(
         DateTime debut,

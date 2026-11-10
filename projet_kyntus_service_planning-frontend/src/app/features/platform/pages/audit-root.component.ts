@@ -30,14 +30,14 @@ import { AuditReportingComponent } from './audit-reporting.component';
           <button
             type="button"
             class="plat-tab"
-            [class.active]="platform.auditSection() === tab.id"
+            [class.active]="section() === tab.id"
             (click)="platform.goAudit(tab.id)"
           >
             {{ tab.label }}
           </button>
         }
       </nav>
-      @switch (platform.auditSection()) {
+      @switch (section()) {
         @case ('dashboard') { <app-audit-dashboard /> }
         @case ('journal') { <app-audit-journal /> }
         @case ('access-history') { <app-audit-access-history /> }
@@ -80,5 +80,12 @@ export class AuditRootComponent {
 
   visibleTabs() {
     return this.tabs.filter((t) => this.access.canView(t.capability));
+  }
+
+  /** Section affichée : celle demandée si elle est ouverte au rôle, sinon le premier onglet autorisé. */
+  section() {
+    const visibles = this.visibleTabs();
+    const demandee = this.platform.auditSection();
+    return visibles.some((t) => t.id === demandee) ? demandee : visibles[0]?.id ?? demandee;
   }
 }

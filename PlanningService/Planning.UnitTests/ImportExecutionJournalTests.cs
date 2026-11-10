@@ -130,6 +130,12 @@ public class ImportExecutionJournalTests
             Task.CompletedTask;
 
         public Task<List<UserDto>> GetAllUsersAsync() => Task.FromResult(new List<UserDto>());
+        public Task<List<UserDto>> GetUsersForSupervisorAsync(int authUserId, CancellationToken ct = default) =>
+            Task.FromResult(new List<UserDto>());
+        public Task<bool> CanSupervisorAccessUserAsync(int authUserId, int targetUserId, CancellationToken ct = default) =>
+            Task.FromResult(false);
+        public Task<bool> CanSupervisorAccessSubServiceAsync(int authUserId, int subServiceId, CancellationToken ct = default) =>
+            Task.FromResult(false);
         public Task<List<UserDto>> GetUsersBySubServiceAsync(int subServiceId) => Task.FromResult(new List<UserDto>());
         public Task<UserDto?> GetUserByIdAsync(int id) => Task.FromResult<UserDto?>(null);
         public Task<UserDto?> GetUserByGuidAsync(Guid employeeGuid) => Task.FromResult<UserDto?>(null);
@@ -146,9 +152,11 @@ public class ImportExecutionJournalTests
             CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<ImportChunkCreateResultDto>>(Array.Empty<ImportChunkCreateResultDto>());
         public Task<UserDto?> UpdateUserAsync(int id, UpdateUserDto dto) => throw new NotImplementedException();
-        public Task<bool> DeleteUserAsync(int id) => throw new NotImplementedException();
+        public Task<bool> SetUserActiveAsync(int id, bool isActive, DateOnly? dateSortie = null, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<bool> RollbackFailedCreationAsync(int id, CancellationToken ct = default) => throw new NotImplementedException();
         public Task SyncMissingAuthUsersAsync() => Task.CompletedTask;
         public Task SyncUserRoleToAuthAsync(int userId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> ChangerRoleAsync(int userId, int roleId, CancellationToken ct = default) => Task.FromResult(true);
         public Task<UserDto?> GetUserByAuthIdAsync(int authUserId) => Task.FromResult<UserDto?>(null);
         public Task<UserDto?> GetUserByEmailAsync(string email) => Task.FromResult<UserDto?>(null);
         public Task<UserDto?> GetOrLinkUserForAuthAsync(int authUserId, string? email) => Task.FromResult<UserDto?>(null);

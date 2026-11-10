@@ -39,16 +39,22 @@ public class GetDemandesByManagerHandler
         if (IsRhOrAdmin(manager.Role))
         {
             var rhStep = await _finalizer.CollapsePendingRhIfDisabledAsync(ct);
+            // Demandes adressées au service RH : congé d'un responsable, cellule sans
+            // superviseur actif, ou deuxième étape RH quand le circuit à deux étapes est actif.
+            var attenteRh = await _demandeRepo.GetByStatutAsync(StatutDemande.EnAttenteRh, ct);
             if (rhStep)
             {
-                demandes = await _demandeRepo.GetByStatutAsync(StatutDemande.EnAttenteRh, ct);
+                demandes = attenteRh;
             }
             else
             {
+                // Suivi : demandes en cours chez les superviseurs + congés validés récents.
                 var year = DateTime.UtcNow.Year;
+                var enAttente = await _demandeRepo.GetByStatutAsync(StatutDemande.EnAttente, ct);
                 var validees = await _demandeRepo.GetByStatutAsync(StatutDemande.Validee, ct);
-                demandes = validees.Where(d =>
-                    d.DateDemande.Year >= year - 1 || d.DateDebut.Year >= year);
+                demandes = attenteRh
+                    .Concat(enAttente)
+                    .Concat(validees.Where(d => d.DateDemande.Year >= year - 1 || d.DateDebut.Year >= year));
             }
         }
         else

@@ -109,16 +109,29 @@ public sealed class PilotRotationTenureService(DirectoryDbContext db) : IPilotRo
             DaysRemaining: daysRemaining);
     }
 
-    public Task ValidateRotationAsync(
+    public async Task ValidateRotationAsync(
         Guid employeeId,
         string targetServiceId,
         bool forceTenureOverride,
         string? reason,
         CancellationToken ct = default)
     {
+        // La règle des 6 mois vise la rotation des pilotes : elle ne s'applique ni à la cellule IT
+        // ni à un compte Admin.
+        var role = await db.Employees.AsNoTracking()
+            .Where(e => e.Id == employeeId)
+            .Select(e => e.Role)
+            .FirstOrDefaultAsync(ct);
+        if (EstExempte(role)) return;
+
         var eligibility = GetEligibilityAsync(employeeId, targetServiceId, ct);
-        return ValidateFromEligibilityAsync(eligibility, forceTenureOverride, reason);
+        await ValidateFromEligibilityAsync(eligibility, forceTenureOverride, reason);
     }
+
+    /// <summary>Rôles non soumis à la règle des 6 mois (employé concerné ou auteur du changement).</summary>
+    public static bool EstExempte(string? role) =>
+        KyntusRoleNames.IsEquipeIt(role)
+        || string.Equals(role?.Trim(), "Admin", StringComparison.OrdinalIgnoreCase);
 
     private static async Task ValidateFromEligibilityAsync(
         Task<PilotRotationEligibilityDto> eligibilityTask,

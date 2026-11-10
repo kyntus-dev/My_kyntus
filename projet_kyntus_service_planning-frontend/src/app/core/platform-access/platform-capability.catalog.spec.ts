@@ -25,9 +25,11 @@ describe('platform capability catalog', () => {
     expect(verbsForScreenRole(screen!, KyntusRoleNames.Audit)).toEqual([]);
   });
 
-  it('lets Superviseur view planning validation without publish rights', () => {
+  it('lets Superviseur validate (publish) plannings of his perimeter, without the RH publish screen', () => {
     const screen = PLATFORM_SCREENS.find((s) => s.id === 'planning.validation');
-    expect(verbsForScreenRole(screen!, KyntusRoleNames.Superviseur)).toEqual(['View']);
+    expect(verbsForScreenRole(screen!, KyntusRoleNames.Superviseur)).toEqual(['View', 'Validate']);
+    const publish = PLATFORM_SCREENS.find((s) => s.id === 'planning.publish');
+    expect(verbsForScreenRole(publish!, KyntusRoleNames.Superviseur)).toEqual([]);
     expect(verbsForScreenRole(screen!, KyntusRoleNames.RH)).toEqual(
       expect.arrayContaining(['View', 'Validate']),
     );

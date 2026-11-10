@@ -20,6 +20,7 @@ public class ServiceService : IServiceService
         return await _context.Services
             .Include(s => s.Floor)
             .Include(s => s.SubServices)
+            .Where(s => !s.IsArchived)
             .Select(s => new ServiceDto
             {
                 Id = s.Id,
@@ -27,7 +28,7 @@ public class ServiceService : IServiceService
                 FloorName = s.Floor.Name,
                 Name = s.Name,
                 Code = s.Code,
-                SubServicesCount = s.SubServices.Count,
+                SubServicesCount = s.SubServices.Count(ss => !ss.IsArchived),
                 PrimeCelluleId = s.PrimeCelluleId
             })
             .OrderBy(s => s.FloorName)
@@ -40,7 +41,7 @@ public class ServiceService : IServiceService
         return await _context.Services
             .Include(s => s.Floor)
             .Include(s => s.SubServices)
-            .Where(s => s.FloorId == floorId)
+            .Where(s => s.FloorId == floorId && !s.IsArchived)
             .Select(s => new ServiceDto
             {
                 Id = s.Id,
@@ -48,7 +49,7 @@ public class ServiceService : IServiceService
                 FloorName = s.Floor.Name,
                 Name = s.Name,
                 Code = s.Code,
-                SubServicesCount = s.SubServices.Count,
+                SubServicesCount = s.SubServices.Count(ss => !ss.IsArchived),
                 PrimeCelluleId = s.PrimeCelluleId
             })
             .OrderBy(s => s.Name)
@@ -95,7 +96,7 @@ public class ServiceService : IServiceService
             FloorName = service.Floor.Name,
             Name = service.Name,
             Code = service.Code,
-            SubServices = service.SubServices.Select(ss => new SubServiceDto
+            SubServices = service.SubServices.Where(ss => !ss.IsArchived).Select(ss => new SubServiceDto
             {
                 Id = ss.Id,
                 ServiceId = ss.ServiceId,
@@ -195,6 +196,7 @@ public class ServiceService : IServiceService
         return await _context.Services
             .Include(s => s.Floor)
             .Include(s => s.SubServices)
+            .Where(s => !s.IsArchived)
             .OrderBy(s => s.Floor.Name)
             .ThenBy(s => s.Name)
             .Select(s => new ServiceDetailDto
@@ -205,6 +207,7 @@ public class ServiceService : IServiceService
                 Name = s.Name,
                 Code = s.Code,
                 SubServices = s.SubServices
+                    .Where(ss => !ss.IsArchived)
                     .OrderBy(ss => ss.Name)
                     .Select(ss => new SubServiceDto
                     {

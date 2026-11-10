@@ -39,6 +39,46 @@ public class UserHrProfile
     public bool EnFormation { get; set; }
     public DateOnly? DateDebutFormation { get; set; }
     public DateOnly? DateFinFormationPrevue { get; set; }
+    /// <summary>
+    /// v30 : jour où la case « En formation » a été décochée (ou l'agent affecté à un service de
+    /// production). L'agent est en production à partir de ce jour ; null tant qu'il est en formation.
+    /// </summary>
+    public DateOnly? FormationTermineeLe { get; set; }
     public int? NiveauExpertiseMetier { get; set; }
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// v30 : change la case « En formation » en gardant la date d'intégration en production :
+    /// décochée → intégration le jour donné ; recochée → la formation reprend (date effacée).
+    /// </summary>
+    public void ChangerEnFormation(bool enFormation, DateOnly aujourdhui)
+    {
+        if (EnFormation && !enFormation)
+            FormationTermineeLe = aujourdhui;
+        else if (!EnFormation && enFormation)
+            FormationTermineeLe = null;
+        EnFormation = enFormation;
+    }
+
+    /// <summary>
+    /// v30 : dernier jour de formation. Case cochée : null (la formation continue, même au-delà de
+    /// la date prévue, puisqu'elle peut être prolongée). Case décochée : la veille de l'intégration,
+    /// ou la date de fin saisie si elle est antérieure.
+    /// </summary>
+    public DateOnly? FinFormationEffective()
+    {
+        if (EnFormation) return null;
+        var veille = FormationTermineeLe?.AddDays(-1);
+        if (DateFinFormationPrevue is DateOnly fin && (veille is null || fin < veille.Value)) return fin;
+        return veille;
+    }
+
+    /// <summary>v30 : le jour donné est-il un jour de formation (hors paie) ?</summary>
+    public bool EstEnFormationLe(DateOnly jour)
+    {
+        if ((DateDebutFormation ?? DateEntree) is DateOnly debut && jour < debut) return false;
+        if (EnFormation) return true;
+        // Formation terminée : jusqu'à son dernier jour, s'il est connu.
+        return FinFormationEffective() is DateOnly fin && jour <= fin;
+    }
 }

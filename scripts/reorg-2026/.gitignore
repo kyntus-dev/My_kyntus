@@ -1,0 +1,9 @@
+# Données personnelles / sauvegardes produites sur le serveur : ne jamais versionner
+export_*/
+sauvegardes/
+.dernier_export
+__pycache__/
+donnees/organisation_cible.csv
+donnees/deplacements_pilotes.csv
+donnees/nouveaux_comptes*
+donnees/responsables_cible.csv

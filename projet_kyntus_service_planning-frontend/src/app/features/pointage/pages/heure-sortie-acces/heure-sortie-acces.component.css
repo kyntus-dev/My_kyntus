@@ -1,0 +1,28 @@
+.hsa-search { width: 320px; }
+.hsa-groups { display: flex; flex-direction: column; gap: 10px; }
+.hsa-group { border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; }
+.hsa-group.is-open { border-color: color-mix(in srgb, var(--ky-blue) 35%, var(--border-color)); }
+.hsa-group-head { display: grid; grid-template-columns: minmax(0, 1fr) 160px auto; align-items: center; gap: 12px; padding: 10px 14px; background: var(--bg-input, var(--bg-primary)); }
+.hsa-toggle { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--text-primary); font: inherit; cursor: pointer; text-align: left; }
+.hsa-chevron { display: inline-block; transition: transform var(--duration-fast); color: var(--text-muted); }
+.hsa-group.is-open .hsa-chevron { transform: rotate(90deg); color: var(--ky-blue); }
+.hsa-list { list-style: none; margin: 0; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px; }
+.hsa-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid transparent; }
+.hsa-list li:hover { background: color-mix(in srgb, var(--ky-blue) 5%, transparent); }
+.hsa-list li.is-on { background: var(--success-bg); border-color: var(--success-border); }
+.hsa-list li.is-changed { border-style: dashed; border-color: var(--warning); }
+.hsa-list label { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+.hsa-list input { width: 16px; height: 16px; accent-color: var(--ky-blue); flex-shrink: 0; }
+.hsa-who { display: flex; flex-direction: column; min-width: 0; }
+.hsa-who b, .hsa-who small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hsa-who small { font-size: 0.7rem; }
+.hsa-savebar {
+  position: sticky; bottom: 16px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px;
+  padding: 12px 16px; border-radius: var(--radius-lg); background: var(--bg-card); border: 1px solid var(--warning-border); box-shadow: var(--shadow-3);
+}
+.hsa-savebar span { margin-right: auto; font-size: 0.86rem; }
+@media (max-width: 640px) {
+  .hsa-search { width: 100%; }
+  .hsa-group-head { grid-template-columns: 1fr auto; }
+  .hsa-bar { display: none; }
+}

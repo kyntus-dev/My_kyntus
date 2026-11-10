@@ -1,0 +1,70 @@
+import { describe, expect, it } from 'vitest';
+import { choixRattachement, contratDe, contratsParPole, niveauResponsable, noeudsResponsable, servicesFiltres, servicesGroupes } from './reaffectations.util';
+
+describe('réaffectations', () => {
+  const services = [
+    { id: 1, service: 'Service A', cellule: 'Satisfaction client', pole: 'Pôle client' },
+    { id: 2, service: 'Service B', cellule: 'Satisfaction client', pole: 'Pôle client' },
+    { id: 3, service: 'Service C', cellule: 'Malfaçons', pole: 'Pôle réseau' },
+  ];
+  it('groupe par pôle et cellule, sans le service actuel', () => {
+    expect(servicesGroupes(services, 1)).toEqual([
+      { titre: 'Pôle client › Satisfaction client', services: [services[1]] },
+      { titre: 'Pôle réseau › Malfaçons', services: [services[2]] },
+    ]);
+  });
+  it('filtre sans accents', () => {
+    expect(servicesGroupes(services, null, 'malfacons').map((g) => g.titre)).toEqual(['Pôle réseau › Malfaçons']);
+  });
+});
+
+describe('rattachement complet (contrat › pôle › cellule › service)', () => {
+  const services = [
+    { id: 1, service: 'N1', cellule: 'Satisfaction', pole: 'Pôle client', poleId: 'p-client' },
+    { id: 2, service: 'FTTH', cellule: 'Malfaçons', pole: 'Pôle réseau', poleId: 'p-reseau' },
+    { id: 3, service: 'Support', cellule: 'Support', pole: 'Pôle support', poleId: 'p-support' },
+  ];
+  const parPole = contratsParPole([
+    { id: 'a', name: 'BYTEL', poleIds: ['p-client', 'p-reseau'] },
+    { id: 'b', name: 'ANCIEN', isActive: false, poleIds: ['p-support'] },
+  ]);
+  it('retrouve le contrat d’un service par son pôle', () => {
+    expect(contratDe(services[0], parPole)).toBe('BYTEL');
+    expect(contratDe(services[2], parPole)).toBeNull();
+  });
+  it('propose les choix en cascade et filtre les services', () => {
+    const f = { contrat: 'BYTEL', pole: '', cellule: '' };
+    expect(choixRattachement(services, parPole, f)).toEqual({
+      contrats: ['BYTEL', 'Sans contrat'], poles: ['Pôle client', 'Pôle réseau'], cellules: ['Malfaçons', 'Satisfaction'],
+    });
+    expect(servicesFiltres(services, parPole, { ...f, pole: 'Pôle réseau' }).map((s) => s.id)).toEqual([2]);
+    expect(servicesFiltres(services, parPole, { contrat: 'Sans contrat', pole: '', cellule: '' }).map((s) => s.id)).toEqual([3]);
+  });
+});
+
+describe('réaffectation des responsables (pôle, cellule, service)', () => {
+  const services = [
+    { id: 1, service: 'N1', cellule: 'Satisfaction', pole: 'Pôle client', poleId: 'p-client', celluleId: 'c-sat', serviceNodeId: 's-n1' },
+    { id: 2, service: 'N2', cellule: 'Satisfaction', pole: 'Pôle client', poleId: 'p-client', celluleId: 'c-sat', serviceNodeId: 's-n2' },
+    { id: 3, service: 'FTTH', cellule: 'Malfaçons', pole: 'Pôle réseau', poleId: 'p-reseau', celluleId: 'c-mal', serviceNodeId: 's-ftth' },
+  ];
+  const parPole = contratsParPole([{ id: 'a', name: 'BYTEL', poleIds: ['p-client', 'p-reseau'] }]);
+  const tous = { contrat: '', pole: '', cellule: '' };
+  it('donne le niveau selon le poste', () => {
+    expect(niveauResponsable('Superviseur')).toBe('Cellule');
+    expect(niveauResponsable('RP')).toBe('Pole');
+    expect(niveauResponsable('Chef de projet')).toBe('Pole');
+    expect(niveauResponsable('Coach')).toBe('Service');
+    expect(niveauResponsable('Pilote')).toBeNull();
+  });
+  it('propose cellules, pôles ou services, sans doublon', () => {
+    expect(noeudsResponsable(services, 'Cellule', parPole, tous)).toEqual([
+      { titre: 'BYTEL › Pôle client', noeuds: [{ id: 'c-sat', nom: 'Satisfaction' }] },
+      { titre: 'BYTEL › Pôle réseau', noeuds: [{ id: 'c-mal', nom: 'Malfaçons' }] },
+    ]);
+    expect(noeudsResponsable(services, 'Pole', parPole, tous)).toEqual([
+      { titre: 'BYTEL', noeuds: [{ id: 'p-client', nom: 'Pôle client' }, { id: 'p-reseau', nom: 'Pôle réseau' }] },
+    ]);
+    expect(noeudsResponsable(services, 'Service', parPole, { ...tous, pole: 'Pôle réseau' })[0].noeuds).toEqual([{ id: 's-ftth', nom: 'FTTH' }]);
+  });
+});

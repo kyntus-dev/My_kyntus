@@ -38,10 +38,13 @@ builder.Services.AddScoped<IEmployeSnapshotRepository, EmployeSnapshotRepository
 builder.Services.AddScoped<IPeriodeInterditeRepository, PeriodeInterditeRepository>();
 builder.Services.AddScoped<IQuotaCongeServiceRepository, QuotaCongeServiceRepository>();
 builder.Services.AddScoped<IOrgNodeCongeRepository, OrgNodeCongeRepository>();
+builder.Services.AddScoped<ICongeWorkflowConfigRepository, CongeWorkflowConfigRepository>();
 builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<CongeDbContext>());
 builder.Services.AddScoped<Conge.Application.Services.CongeReglesService>();
 builder.Services.AddScoped<Conge.Application.Services.CongeValidationFinalizer>();
-builder.Services.AddScoped<ILeaveWorkflowPolicy, DirectoryLeaveWorkflowPolicy>();
+builder.Services.AddScoped<Conge.Application.Services.LeaveRoutingService>();
+// v9 : circuit lu dans la base Congé (superviseur seul par défaut, réversible par un Admin).
+builder.Services.AddScoped<ILeaveWorkflowPolicy, CongeWorkflowConfigPolicy>();
 
 var directoryBaseUrl = builder.Configuration["Directory:BaseUrl"] ?? "http://employee-directory-backend:8080";
 builder.Services.AddKyntusJwtAuthentication(builder.Configuration);

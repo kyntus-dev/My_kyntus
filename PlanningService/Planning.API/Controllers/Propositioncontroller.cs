@@ -20,7 +20,7 @@ namespace Planning.API.Controllers
 
         // POST /api/proposition � Soumettre (tous les r�les)
         [HttpPost]
-        [Authorize(Roles = "Employee,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
+        [Authorize(Roles = "Employee,Ingénieur,Support IT,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
         public async Task<ActionResult<PropositionDto>> Soumettre(
             [FromBody] CreatePropositionDto dto)
         {
@@ -30,7 +30,7 @@ namespace Planning.API.Controllers
 
         // GET /api/proposition/mes-demandes (tous)
         [HttpGet("mes-demandes")]
-        [Authorize(Roles = "Employee,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
+        [Authorize(Roles = "Employee,Ingénieur,Support IT,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
         public async Task<ActionResult<PaginatedResult<PropositionDto>>> MesDemandes(
             [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
@@ -40,7 +40,7 @@ namespace Planning.API.Controllers
 
         // GET /api/proposition/{id}
         [HttpGet("{id:int}")]
-        [Authorize(Roles = "Employee,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
+        [Authorize(Roles = "Employee,Ingénieur,Support IT,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
         public async Task<ActionResult<PropositionDetailDto>> GetById(int id)
         {
             var result = await _service.GetByIdAsync(id, UserId);
@@ -113,7 +113,7 @@ namespace Planning.API.Controllers
 
         // POST /api/proposition/{id}/satisfaction (auteur uniquement)
         [HttpPost("{id:int}/satisfaction")]
-        [Authorize(Roles = "Employee,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
+        [Authorize(Roles = "Employee,Ingénieur,Support IT,RH,Manager,Coach,RP,Admin,Audit,EquipeFormation")]
         public async Task<IActionResult> NoteSatisfaction(int id, [FromBody] SatisfactionDto dto)
         {
             try

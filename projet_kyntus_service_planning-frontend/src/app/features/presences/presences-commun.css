@@ -1,0 +1,53 @@
+/* Styles communs aux écrans « Présences et paie ». */
+
+/* Pages en pleine largeur : les tableaux de paie ont besoin de place. */
+.pz.ku-page { max-width: 1880px; gap: 16px; }
+.pz-periode { min-width: 190px; }
+
+/* ── Barre de filtres ─────────────────────────────────────────────────── */
+.pz-filtres { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.pz-filtres .ku-input { width: auto; min-width: 150px; }
+.pz-filtres .pz-search { min-width: 220px; flex: 1 1 220px; max-width: 320px; }
+.pz-filtres--grille { gap: 8px 10px; }
+.pz-filtres--grille .ku-input { flex: 1 1 170px; width: auto; min-width: 160px; max-width: 260px; }
+.pz-filtres--grille .pz-search { flex: 2 1 260px; min-width: 220px; max-width: 380px; }
+.pz-filtres--grille .ku-check, .pz-filtres--grille .ku-btn { flex: 0 0 auto; white-space: nowrap; }
+.pz-compte {
+  margin-left: auto; font-size: 0.76rem; font-weight: 600; color: var(--text-muted); white-space: nowrap;
+  font-variant-numeric: tabular-nums; padding: 4px 10px; border-radius: var(--radius-pill);
+  background: var(--bg-input, var(--bg-primary));
+}
+
+/* ── Listes (avertissements, EVP, export) ─────────────────────────────── */
+.pz-liste { font-size: 0.82rem; }
+.pz-liste th, .pz-liste td { white-space: nowrap; }
+.pz-liste td.pz-texte { white-space: normal; min-width: 240px; max-width: 520px; }
+.pz-liste td small { display: block; font-size: 0.7rem; color: var(--text-muted); }
+.pz-liste tbody tr { transition: background var(--duration-fast); }
+.pz-liste.ky-table tbody tr:hover > td { background: color-mix(in srgb, var(--ky-blue) 5%, var(--bg-card)) !important; }
+.pz-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.pz-montant { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+.pz-montant.pos { color: var(--success); }
+.pz-montant.neg { color: var(--danger); }
+
+/* ── Fenêtre d'édition (dialog natif, centrée) ────────────────────────── */
+.pz-modal {
+  padding: 0; border: 1px solid var(--border-color); border-radius: var(--radius-lg);
+  width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  background: var(--bg-card); color: var(--text-primary); box-shadow: var(--shadow-3);
+}
+.pz-modal[open] { animation: pz-pop 0.16s ease-out; }
+.pz-modal::backdrop { background: rgb(15 23 42 / 0.35); }
+.pz-modal form { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+.pz-modal h2 { margin: 0; font-size: 1.05rem; }
+.pz-modal .pz-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pz-modal footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.pz-modal textarea { min-height: 84px; resize: vertical; padding-top: 8px; }
+.pz-signe { display: grid; grid-template-columns: auto 1fr; gap: 6px; }
+@keyframes pz-pop { from { transform: translateY(6px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
+
+@media (max-width: 720px) {
+  .pz-filtres--grille .ku-input, .pz-filtres--grille .pz-search { flex: 1 1 100%; max-width: none; }
+  .pz-compte { margin-left: 0; }
+  .pz-modal .pz-grid2 { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,68 @@
+/* ── Vérifications avant export ───────────────────────────────────────── */
+.pze-verif { border-left: 4px solid var(--warning); }
+.pze-verif.pze-ok { border-left-color: var(--success); }
+.pze-verif-tete { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.pze-verif-tete h3 { margin: 0; }
+.pze-export { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.pze-export small { font-size: 0.7rem; font-family: var(--font-mono, monospace); }
+.pze-checks {
+  list-style: none; margin: 12px 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px;
+}
+.pze-checks li {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; font-size: 0.8rem;
+  border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-muted);
+}
+.pze-checks li.ko { color: var(--text-primary); border-color: var(--warning-border); background: var(--warning-bg); }
+.pze-checks li a { margin-left: auto; font-weight: 600; color: var(--ky-blue); text-decoration: none; white-space: nowrap; }
+.pze-checks .pze-n {
+  min-width: 26px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 11px;
+  font-weight: 700; font-size: 0.74rem; background: var(--success-bg); color: var(--success);
+}
+.pze-checks li.ko .pze-n { background: var(--warning); color: #fff; }
+
+/* ── Aperçu ───────────────────────────────────────────────────────────── */
+.pze-table th, .pze-table td { white-space: nowrap; }
+.pze-table thead tr.pze-groupes th {
+  top: 0; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 5px 6px;
+  border-bottom: 1px solid var(--border-color);
+}
+.pze-table thead tr:nth-child(2) th { top: 25px; padding: 5px 6px; }
+.pze-table thead .pz-agent small { display: block; font-weight: 400; font-size: 0.64rem; text-transform: none; letter-spacing: 0; }
+.pze-table td { padding: 3px 6px; }
+.pze-table td.pze-n { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 34px; }
+.pze-table .pze-g-deduit { box-shadow: inset 0 2px 0 color-mix(in srgb, var(--danger) 55%, transparent); }
+.pze-table thead th.pze-g-paie { color: var(--ky-blue); }
+.pze-table tbody td.pze-g-paie { background: color-mix(in srgb, var(--ky-blue) 4%, var(--bg-card)) !important; }
+.pze-code { min-width: 30px; height: 22px; font-size: 0.62rem; cursor: default; }
+.pze-detail { text-align: left !important; cursor: help; }
+.pze-tag {
+  display: inline-block; margin-right: 3px; padding: 1px 6px; border-radius: 6px; font-size: 0.64rem; font-weight: 700;
+  background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border);
+}
+.pze-tag--ko { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
+.pze-alertes { text-align: left !important; }
+.pze-alertes .ku-chip { margin: 1px 3px 1px 0; font-size: 0.66rem; padding: 1px 7px; }
+.pze-statut { text-align: left !important; white-space: nowrap; }
+.pze-statut .ku-chip { font-size: 11px; }
+
+/* ── v37 : agents en formation (mêmes couleurs que le fichier Excel) ─────── */
+.pze-legende { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: 0.74rem; }
+.pze-legende small { color: var(--text-muted); }
+.pze-leg { padding: 3px 10px; border-radius: 6px; font-weight: 600; border: 1px solid transparent; }
+.pze-leg--en-formation { background: #bfdbfe; color: #1e3a8a; border-color: #93c5fd; }
+.pze-leg--integre { background: #ccfbf1; color: #115e59; border-color: #5eead4; }
+.pze-leg--for { background: #60a5fa; color: #fff; }
+.pze-table tbody tr.pze-formation > th,
+.pze-table tbody tr.pze-formation > td { background: color-mix(in srgb, #3b82f6 20%, var(--bg-card)) !important; }
+.pze-table tbody tr.pze-integre > th,
+.pze-table tbody tr.pze-integre > td { background: color-mix(in srgb, #14b8a6 16%, var(--bg-card)) !important; }
+.pze-table tbody tr.pze-formation > th.pz-agent { box-shadow: inset 4px 0 0 #2563eb; }
+.pze-table tbody tr.pze-integre > th.pz-agent { box-shadow: inset 4px 0 0 #0d9488; }
+.pze-badge {
+  display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 9px; font-size: 0.62rem; font-weight: 700;
+  vertical-align: middle; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.pze-badge--formation { background: #2563eb; color: #fff; }
+.pze-badge--integre { background: #0d9488; color: #fff; }
+.pze-table tbody .pz-f-formation { background: #60a5fa !important; color: #fff !important; border-color: #3b82f6 !important; }

@@ -208,6 +208,10 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.field-grid--org.field-grid--org-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .field-grid--org .field {
   grid-template-columns: 1fr;
   gap: 4px;
@@ -573,7 +577,8 @@
 
 @media (max-width: 900px) {
   .field-grid,
-  .field-grid--org {
+  .field-grid--org,
+  .field-grid--org.field-grid--org-3 {
     grid-template-columns: 1fr;
   }
 

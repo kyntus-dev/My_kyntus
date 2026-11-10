@@ -61,9 +61,9 @@ public sealed class DirectoryWriteService(
             LastName = request.LastName.Trim(),
             Role = role,
             BusinessDepartmentId = request.BusinessDepartmentId,
-            ServiceId = dept?.Kind == BusinessDepartmentKind.Support ? null : serviceId,
-            CelluleId = dept?.Kind == BusinessDepartmentKind.Support ? null : celluleId,
-            PoleId = dept?.Kind == BusinessDepartmentKind.Support ? null : poleId,
+            ServiceId = SansRattachement(dept, role) ? null : serviceId,
+            CelluleId = SansRattachement(dept, role) ? null : celluleId,
+            PoleId = SansRattachement(dept, role) ? null : poleId,
             ParentId = request.ParentId,
             HireDate = request.HireDate ?? DateTime.UtcNow,
             IsActive = true,
@@ -100,9 +100,9 @@ public sealed class DirectoryWriteService(
         employee.Email = request.Email.Trim();
         employee.Role = role;
         employee.BusinessDepartmentId = request.BusinessDepartmentId;
-        employee.ServiceId = dept?.Kind == BusinessDepartmentKind.Support ? null : serviceId;
-        employee.CelluleId = dept?.Kind == BusinessDepartmentKind.Support ? null : celluleId;
-        employee.PoleId = dept?.Kind == BusinessDepartmentKind.Support ? null : poleId;
+        employee.ServiceId = SansRattachement(dept, role) ? null : serviceId;
+        employee.CelluleId = SansRattachement(dept, role) ? null : celluleId;
+        employee.PoleId = SansRattachement(dept, role) ? null : poleId;
         employee.ParentId = request.ParentId;
         employee.HireDate = request.HireDate ?? employee.HireDate;
         employee.IsActive = true;
@@ -123,19 +123,30 @@ public sealed class DirectoryWriteService(
         return Map(employee);
     }
 
+    /// <summary>
+    /// Département Support : pas de pôle / cellule / service, sauf pour la cellule IT (Ingénieur,
+    /// Support IT), qui peut être rattachée à une cellule tout en restant dans son département.
+    /// </summary>
+    private static bool SansRattachement(BusinessDepartment? dept, string? role) =>
+        dept?.Kind == BusinessDepartmentKind.Support && !KyntusRoleNames.IsEquipeIt(role);
+
     public async Task<EmployeeDto?> UpdateEmployeeAsync(Guid id, UpdateEmployeeRequest request, Guid? changedBy, CancellationToken ct = default)
     {
         var employee = await db.Employees.FirstOrDefaultAsync(e => e.Id == id, ct);
         if (employee is null) return null;
 
         var (poleId, celluleId, serviceId) = await ResolveOrgIdsAsync(request.ServiceId, ct);
-        var dept = await ResolveBusinessDepartmentAsync(request.BusinessDepartmentId ?? employee.BusinessDepartmentId, ct);
+        // v26 : changement de pôle sans contrat précisé → le contrat suit le pôle (s'il n'en a qu'un).
+        var deptId = request.BusinessDepartmentId;
+        if (deptId is null && poleId is not null && !string.Equals(poleId, employee.PoleId, StringComparison.OrdinalIgnoreCase))
+            deptId = await ContratDuPoleAsync(poleId, ct);
+        var dept = await ResolveBusinessDepartmentAsync(deptId ?? employee.BusinessDepartmentId, ct);
         employee.FirstName = request.FirstName.Trim();
         employee.LastName = request.LastName.Trim();
         employee.Email = request.Email.Trim();
         employee.Role = KyntusRoleNames.NormalizePlanningRole(request.Role);
-        employee.BusinessDepartmentId = request.BusinessDepartmentId ?? employee.BusinessDepartmentId;
-        if (dept?.Kind == BusinessDepartmentKind.Support)
+        employee.BusinessDepartmentId = deptId ?? employee.BusinessDepartmentId;
+        if (SansRattachement(dept, employee.Role))
         {
             employee.ServiceId = null;
             employee.CelluleId = null;
@@ -165,6 +176,18 @@ public sealed class DirectoryWriteService(
         await EnqueueEmployeeChangedAsync(employee, isDeleted: false, emitLegacyCreate: false, ct);
         await PersistAndInvalidateAsync(ct);
         return Map(employee);
+    }
+
+    /// <summary>Contrat (département métier) d'un pôle, s'il est rattaché à un seul contrat.</summary>
+    private async Task<Guid?> ContratDuPoleAsync(string poleId, CancellationToken ct)
+    {
+        var contrats = await db.DepartmentPoleAssignments.AsNoTracking()
+            .Where(a => a.PoleId == poleId)
+            .Select(a => a.BusinessDepartmentId)
+            .Distinct()
+            .Take(2)
+            .ToListAsync(ct);
+        return contrats.Count == 1 ? contrats[0] : null;
     }
 
     public async Task<EmployeeDto?> ClearOrgPlacementAsync(
@@ -384,6 +407,14 @@ public sealed class DirectoryWriteService(
             throw new ArgumentException($"Kind invalide : {kind}");
 
         var trimmedNodeId = nodeId.Trim();
+
+        // v9 : un nœud archivé ne reçoit plus de nouvelle affectation.
+        var nodeArchived = await db.OrgServices.AnyAsync(s => s.Id == trimmedNodeId && s.IsArchived, ct)
+            || await db.OrgCellules.AnyAsync(c => c.Id == trimmedNodeId && c.IsArchived, ct)
+            || await db.OrgPoles.AnyAsync(p => p.Id == trimmedNodeId && p.IsArchived, ct);
+        if (nodeArchived)
+            throw new InvalidOperationException("Ce nœud est archivé : restaurez-le avant d'y affecter quelqu'un.");
+
         string? previousServiceId = null;
         if (assignmentKind == DomainAssignmentKind.Pilote)
         {
@@ -1172,6 +1203,114 @@ public sealed class DirectoryWriteService(
         return id;
     }
 
+    /// <summary>
+    /// v29 : regroupe des cellules (et des services isolés) dans une cellule cible. Les services sont
+    /// rattachés à la cible (Planning, Prime et Congés suivent par l'événement de nœud), les agents
+    /// prennent la cellule et le pôle de la cible, les superviseurs des cellules regroupées deviennent
+    /// superviseurs de la cible, puis les cellules vidées sont archivées (historique conservé).
+    /// </summary>
+    public async Task<RegroupementCellulesResult> RegrouperCellulesAsync(
+        RegrouperCellulesRequest request, Guid? changedBy, CancellationToken ct = default)
+    {
+        static List<string> Ids(IReadOnlyList<string>? ids) =>
+            (ids ?? []).Select(i => i?.Trim() ?? string.Empty).Where(i => i.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+        var sourceIds = Ids(request.SourceIds);
+        var serviceIds = Ids(request.ServiceIds);
+        if (sourceIds.Count == 0 && serviceIds.Count == 0)
+            throw new ArgumentException("Choisissez au moins une cellule ou un service à regrouper.");
+
+        var sources = await db.OrgCellules.Where(c => sourceIds.Contains(c.Id) && !c.IsArchived).ToListAsync(ct);
+        if (sources.Count != sourceIds.Count)
+            throw new ArgumentException("Une des cellules choisies est introuvable ou archivée.");
+
+        // Cellule cible : existante, ou créée sous le pôle choisi (par défaut celui de la 1re cellule).
+        string cibleId, ciblePole, cibleNom;
+        var creee = false;
+        if (!string.IsNullOrWhiteSpace(request.CibleId))
+        {
+            var cible = await db.OrgCellules.AsNoTracking()
+                            .FirstOrDefaultAsync(c => c.Id == request.CibleId.Trim() && !c.IsArchived, ct)
+                        ?? throw new ArgumentException("Cellule de destination introuvable ou archivée.");
+            (cibleId, ciblePole, cibleNom) = (cible.Id, cible.PoleId, cible.Name);
+        }
+        else
+        {
+            var nom = request.NomCible?.Trim();
+            if (string.IsNullOrWhiteSpace(nom))
+                throw new ArgumentException("Donnez un nom à la nouvelle cellule.");
+            var pole = !string.IsNullOrWhiteSpace(request.PoleId)
+                ? request.PoleId.Trim()
+                : sources.FirstOrDefault()?.PoleId
+                  ?? await db.OrgServices.Where(sv => serviceIds.Contains(sv.Id)).Select(sv => sv.Cellule.PoleId).FirstOrDefaultAsync(ct)
+                  ?? throw new ArgumentException("Choisissez le pôle de la nouvelle cellule.");
+            if (!await db.OrgPoles.AnyAsync(p => p.Id == pole && !p.IsArchived, ct))
+                throw new ArgumentException("Pôle de destination introuvable ou archivé.");
+            cibleId = await CreateCelluleAsync(pole, nom, ct);
+            (ciblePole, cibleNom, creee) = (pole, nom, true);
+        }
+
+        var aVider = sources.Where(c => c.Id != cibleId).ToList();
+        var celluleIds = aVider.Select(c => c.Id).ToList();
+        var motif = string.IsNullOrWhiteSpace(request.Motif) ? $"Regroupement dans la cellule « {cibleNom} »" : request.Motif.Trim();
+
+        // 1. Services : ceux des cellules regroupées et ceux choisis un par un.
+        var services = await db.OrgServices
+            .Where(sv => !sv.IsArchived && sv.CelluleId != cibleId && (celluleIds.Contains(sv.CelluleId) || serviceIds.Contains(sv.Id)))
+            .ToListAsync(ct);
+        foreach (var sv in services)
+        {
+            sv.CelluleId = cibleId;
+            await outbox.EnqueueAsync(new DirectoryOrgNodeChangedMessage
+            {
+                NodeId = sv.Id,
+                Name = sv.Name,
+                Level = MessagingEnumMapper.ToMessage(DomainNodeLevel.Service),
+                ParentNodeId = cibleId,
+            }, aggregateId: sv.Id, ct: ct);
+        }
+
+        // 2. Agents : rattachés aux cellules regroupées ou aux services déplacés.
+        var servicesDeplaces = services.Select(sv => sv.Id).ToList();
+        var agents = await db.Employees
+            .Where(e => (e.CelluleId != null && celluleIds.Contains(e.CelluleId))
+                        || (e.ServiceId != null && servicesDeplaces.Contains(e.ServiceId)))
+            .ToListAsync(ct);
+        foreach (var e in agents)
+        {
+            e.CelluleId = cibleId;
+            e.PoleId = ciblePole;
+            e.UpdatedAt = DateTime.UtcNow;
+            await EnqueueEmployeeChangedAsync(e, isDeleted: false, emitLegacyCreate: false, ct);
+        }
+        await PersistAndInvalidateAsync(ct);
+
+        // 3. Superviseurs des cellules regroupées : superviseurs de la cible.
+        var superviseurs = 0;
+        foreach (var source in aVider)
+        {
+            var ids = await db.OrgAssignments.AsNoTracking()
+                .Where(a => a.Kind == DomainAssignmentKind.Superviseur && a.NodeId == source.Id && a.EffectiveTo == null)
+                .Select(a => a.EmployeeId).Distinct().ToListAsync(ct);
+            foreach (var id in ids)
+            {
+                await AssignStructureRoleAsync(DomainAssignmentKind.Superviseur.ToString(), cibleId, id, changedBy, motif, null, false, ct);
+                await RemoveStructureAssignmentAsync(DomainAssignmentKind.Superviseur.ToString(), source.Id, id, changedBy, motif, ct);
+                superviseurs++;
+            }
+        }
+
+        // 4. Cellules vidées : archivées (restaurables, historique conservé).
+        var archivees = new List<string>();
+        foreach (var source in aVider)
+        {
+            var reste = await db.OrgServices.AnyAsync(sv => sv.CelluleId == source.Id && !sv.IsArchived, ct);
+            if (!reste && await DeleteOrgNodeAsync(DomainNodeLevel.Cellule, source.Id, ct))
+                archivees.Add(source.Name);
+        }
+
+        return new RegroupementCellulesResult(cibleId, cibleNom, creee, services.Count, agents.Count, superviseurs, archivees);
+    }
+
     public async Task<string> CreateServiceAsync(string celluleId, string name, CancellationToken ct = default)
     {
         var id = NewOrgId("svc");
@@ -1228,9 +1367,17 @@ public sealed class DirectoryWriteService(
         return true;
     }
 
+    /// <summary>
+    /// v9 : archivage, pas suppression. Le nœud et ses descendants restent en base avec
+    /// leur historique (plannings, primes, congés, affectations clôturées) mais sortent
+    /// des listes et des choix. <see cref="RestoreOrgNodeAsync"/> les rétablit.
+    /// </summary>
     public async Task<bool> DeleteOrgNodeAsync(DomainNodeLevel level, string nodeId, CancellationToken ct = default)
     {
         var trimmedId = nodeId.Trim();
+        var now = DateTime.UtcNow;
+        var archived = new List<(string Id, DomainNodeLevel Level)>();
+
         switch (level)
         {
             case DomainNodeLevel.Pole:
@@ -1239,12 +1386,13 @@ public sealed class DirectoryWriteService(
                     .Include(p => p.Cellules).ThenInclude(c => c.Services)
                     .FirstOrDefaultAsync(p => p.Id == trimmedId, ct);
                 if (pole is null) return false;
-                foreach (var cellule in pole.Cellules.ToList())
+                foreach (var cellule in pole.Cellules)
                 {
-                    db.OrgServices.RemoveRange(cellule.Services);
-                    db.OrgCellules.Remove(cellule);
+                    foreach (var service in cellule.Services)
+                        Archive(service, s => { s.IsArchived = true; s.ArchivedAt = now; }, service.Id, DomainNodeLevel.Service);
+                    Archive(cellule, c => { c.IsArchived = true; c.ArchivedAt = now; }, cellule.Id, DomainNodeLevel.Cellule);
                 }
-                db.OrgPoles.Remove(pole);
+                Archive(pole, p => { p.IsArchived = true; p.ArchivedAt = now; }, pole.Id, DomainNodeLevel.Pole);
                 break;
             }
             case DomainNodeLevel.Cellule:
@@ -1253,14 +1401,164 @@ public sealed class DirectoryWriteService(
                     .Include(c => c.Services)
                     .FirstOrDefaultAsync(c => c.Id == trimmedId, ct);
                 if (cellule is null) return false;
-                db.OrgServices.RemoveRange(cellule.Services);
-                db.OrgCellules.Remove(cellule);
+                foreach (var service in cellule.Services)
+                    Archive(service, s => { s.IsArchived = true; s.ArchivedAt = now; }, service.Id, DomainNodeLevel.Service);
+                Archive(cellule, c => { c.IsArchived = true; c.ArchivedAt = now; }, cellule.Id, DomainNodeLevel.Cellule);
                 break;
             }
             case DomainNodeLevel.Service:
             {
                 var service = await db.OrgServices.FirstOrDefaultAsync(s => s.Id == trimmedId, ct);
                 if (service is null) return false;
+                Archive(service, s => { s.IsArchived = true; s.ArchivedAt = now; }, service.Id, DomainNodeLevel.Service);
+                break;
+            }
+            default:
+                return false;
+        }
+
+        foreach (var (id, lvl) in archived)
+        {
+            await outbox.EnqueueAsync(new DirectoryOrgNodeChangedMessage
+            {
+                NodeId = id,
+                Level = MessagingEnumMapper.ToMessage(lvl),
+                IsDeleted = true,
+            }, aggregateId: id, ct: ct);
+        }
+
+        await PersistAndInvalidateAsync(ct);
+        return true;
+
+        void Archive<T>(T entity, Action<T> apply, string id, DomainNodeLevel lvl)
+        {
+            apply(entity);
+            archived.Add((id, lvl));
+        }
+    }
+
+    /// <summary>Remet un nœud archivé en service, avec ses parents archivés.</summary>
+    public async Task<bool> RestoreOrgNodeAsync(DomainNodeLevel level, string nodeId, CancellationToken ct = default)
+    {
+        var trimmedId = nodeId.Trim();
+        var restored = new List<(string Id, string Name, DomainNodeLevel Level, string? ParentId)>();
+
+        switch (level)
+        {
+            case DomainNodeLevel.Pole:
+            {
+                var pole = await db.OrgPoles.FirstOrDefaultAsync(p => p.Id == trimmedId, ct);
+                if (pole is null) return false;
+                pole.IsArchived = false;
+                pole.ArchivedAt = null;
+                restored.Add((pole.Id, pole.Name, DomainNodeLevel.Pole, pole.BusinessDepartmentId?.ToString()));
+                break;
+            }
+            case DomainNodeLevel.Cellule:
+            {
+                var cellule = await db.OrgCellules.Include(c => c.Pole)
+                    .FirstOrDefaultAsync(c => c.Id == trimmedId, ct);
+                if (cellule is null) return false;
+                if (cellule.Pole is { IsArchived: true } pole)
+                {
+                    pole.IsArchived = false;
+                    pole.ArchivedAt = null;
+                    restored.Add((pole.Id, pole.Name, DomainNodeLevel.Pole, pole.BusinessDepartmentId?.ToString()));
+                }
+                cellule.IsArchived = false;
+                cellule.ArchivedAt = null;
+                restored.Add((cellule.Id, cellule.Name, DomainNodeLevel.Cellule, cellule.PoleId));
+                break;
+            }
+            case DomainNodeLevel.Service:
+            {
+                var service = await db.OrgServices.Include(s => s.Cellule).ThenInclude(c => c.Pole)
+                    .FirstOrDefaultAsync(s => s.Id == trimmedId, ct);
+                if (service is null) return false;
+                if (service.Cellule?.Pole is { IsArchived: true } pole)
+                {
+                    pole.IsArchived = false;
+                    pole.ArchivedAt = null;
+                    restored.Add((pole.Id, pole.Name, DomainNodeLevel.Pole, pole.BusinessDepartmentId?.ToString()));
+                }
+                if (service.Cellule is { IsArchived: true } cellule)
+                {
+                    cellule.IsArchived = false;
+                    cellule.ArchivedAt = null;
+                    restored.Add((cellule.Id, cellule.Name, DomainNodeLevel.Cellule, cellule.PoleId));
+                }
+                service.IsArchived = false;
+                service.ArchivedAt = null;
+                restored.Add((service.Id, service.Name, DomainNodeLevel.Service, service.CelluleId));
+                break;
+            }
+            default:
+                return false;
+        }
+
+        foreach (var (id, name, lvl, parentId) in restored)
+        {
+            await outbox.EnqueueAsync(new DirectoryOrgNodeChangedMessage
+            {
+                NodeId = id,
+                Name = name,
+                Level = MessagingEnumMapper.ToMessage(lvl),
+                ParentNodeId = parentId,
+                IsDeleted = false,
+            }, aggregateId: id, ct: ct);
+        }
+
+        await PersistAndInvalidateAsync(ct);
+        return true;
+    }
+
+    /// <summary>
+    /// Suppression définitive : réservée aux nœuds archivés qui n'ont jamais servi.
+    /// Refuse (InvalidOperationException) dès qu'un descendant, un collaborateur rattaché
+    /// ou une affectation, même clôturée, existe.
+    /// </summary>
+    public async Task<bool> PurgeOrgNodeAsync(DomainNodeLevel level, string nodeId, CancellationToken ct = default)
+    {
+        var id = nodeId.Trim();
+
+        async Task EnsureUnusedAsync(bool isArchived)
+        {
+            if (!isArchived)
+                throw new InvalidOperationException("Archivez d'abord ce nœud : la suppression définitive ne concerne que les nœuds archivés.");
+            if (await db.Employees.AnyAsync(e => e.PoleId == id || e.CelluleId == id || e.ServiceId == id, ct))
+                throw new InvalidOperationException("Des collaborateurs sont encore rattachés à ce nœud : déplacez-les d'abord.");
+            if (await db.OrgAssignments.AnyAsync(a => a.NodeId == id, ct)
+                || await db.OrgAssignmentHistories.AnyAsync(a => a.NodeId == id, ct))
+                throw new InvalidOperationException("Ce nœud a déjà servi (affectations ou historique) : il reste archivé.");
+        }
+
+        switch (level)
+        {
+            case DomainNodeLevel.Pole:
+            {
+                var pole = await db.OrgPoles.Include(p => p.Cellules).FirstOrDefaultAsync(p => p.Id == id, ct);
+                if (pole is null) return false;
+                if (pole.Cellules.Count > 0)
+                    throw new InvalidOperationException("Ce pôle contient encore des cellules : supprimez-les d'abord.");
+                await EnsureUnusedAsync(pole.IsArchived);
+                db.OrgPoles.Remove(pole);
+                break;
+            }
+            case DomainNodeLevel.Cellule:
+            {
+                var cellule = await db.OrgCellules.Include(c => c.Services).FirstOrDefaultAsync(c => c.Id == id, ct);
+                if (cellule is null) return false;
+                if (cellule.Services.Count > 0)
+                    throw new InvalidOperationException("Cette cellule contient encore des services : supprimez-les d'abord.");
+                await EnsureUnusedAsync(cellule.IsArchived);
+                db.OrgCellules.Remove(cellule);
+                break;
+            }
+            case DomainNodeLevel.Service:
+            {
+                var service = await db.OrgServices.FirstOrDefaultAsync(s => s.Id == id, ct);
+                if (service is null) return false;
+                await EnsureUnusedAsync(service.IsArchived);
                 db.OrgServices.Remove(service);
                 break;
             }
@@ -1270,10 +1568,10 @@ public sealed class DirectoryWriteService(
 
         await outbox.EnqueueAsync(new DirectoryOrgNodeChangedMessage
         {
-            NodeId = trimmedId,
+            NodeId = id,
             Level = MessagingEnumMapper.ToMessage(level),
             IsDeleted = true,
-        }, aggregateId: trimmedId, ct: ct);
+        }, aggregateId: id, ct: ct);
         await PersistAndInvalidateAsync(ct);
         return true;
     }
@@ -1334,6 +1632,11 @@ public sealed class DirectoryWriteService(
     {
         var dept = await db.BusinessDepartments.Include(d => d.PoleAssignments).FirstOrDefaultAsync(d => d.Id == id, ct);
         if (dept is null) return false;
+        // v9 : un contrat archivé ne doit pas laisser de pôles actifs orphelins.
+        var polesActifs = await db.OrgPoles.CountAsync(p => p.BusinessDepartmentId == id && !p.IsArchived, ct);
+        if (polesActifs > 0)
+            throw new InvalidOperationException(
+                $"Ce contrat contient encore {polesActifs} pôle(s) actif(s) : archivez-les ou rattachez-les à un autre contrat d'abord.");
         dept.IsActive = false;
         dept.UpdatedAt = DateTime.UtcNow;
         await EnqueueBusinessDepartmentChangedAsync(dept, ct, isDeleted: true);

@@ -84,6 +84,29 @@ export interface StructuralAssignmentsReconcileResult {
   revokedOnNode?: NodeIncumbentRevokedDto[];
 }
 
+export interface OrgScopeReconcileResult {
+  kind: string;
+  employeeId: string;
+  scopeLevel: 'Activite' | 'Cellule';
+  scopeIds: string[];
+  primaryScopeId: string;
+  assignments: StructuralAssignmentsReconcileResult;
+}
+
+export interface OrgScopeCoverageRow {
+  employeeId: string;
+  employeeName: string;
+  employeeEmail: string;
+  role: string;
+  kind: string;
+  scopeLevel: 'Activite' | 'Cellule';
+  scopeId: string;
+  scopeLabel: string;
+  heldNodes: number;
+  totalNodes: number;
+  isFullCoverage: boolean;
+}
+
 export interface SupervisorOrgScopeService {
   id: string;
   name: string;
@@ -292,6 +315,33 @@ export class PrimeOrgApiService {
         reason: reason?.trim() || undefined,
       },
     );
+  }
+
+  /**
+   * Réorganisation 2026 — affecte un responsable par périmètre métier :
+   * Superviseur / Chef de projet → activités (ids départements de production),
+   * Référent technique → cellules. Le backend développe en pôles / cellules / services.
+   */
+  reconcileEmployeeScopeAssignments(
+    kind: 'ChefDeProjet' | 'Superviseur' | 'ReferentTechnique',
+    employeeId: string,
+    scopeIds: string[],
+    primaryScopeId: string,
+    reason?: string,
+  ): Observable<OrgScopeReconcileResult> {
+    return this.http.put<OrgScopeReconcileResult>(
+      `${orgBase}/scope-assignments/${kind}/employees/${encodeURIComponent(employeeId)}`,
+      {
+        scopeIds,
+        primaryScopeId,
+        reason: reason?.trim() || undefined,
+      },
+    );
+  }
+
+  /** Rapport lecture seule de couverture des périmètres (Admin / RH). */
+  getScopeCoverageReport(): Observable<OrgScopeCoverageRow[]> {
+    return this.http.get<OrgScopeCoverageRow[]>(`${orgBase}/scope-assignments/coverage`);
   }
 
   assignCoachPilot(coachUserId: string, pilotUserId: string): Observable<CoachPilotLinkDto> {

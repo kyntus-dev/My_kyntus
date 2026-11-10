@@ -494,6 +494,7 @@ public partial class PlanningService
         var employees = await _context.Users
             .AsNoTracking()
             .Where(u => u.SubServiceId == subServiceId && u.IsActive)
+            .Where(PostesProduction.Planifiable)
             .OrderBy(u => u.LastName).ThenBy(u => u.FirstName)
             .ToListAsync();
 
@@ -594,6 +595,7 @@ public partial class PlanningService
         var activeEmployees = await _context.Users
             .AsNoTracking()
             .Where(u => u.SubServiceId == dto.SubServiceId && u.IsActive)
+            .Where(PostesProduction.Planifiable)
             .Select(u => u.Id)
             .ToListAsync();
 
@@ -691,6 +693,7 @@ public partial class PlanningService
         var activeEmployeeIds = await _context.Users
             .AsNoTracking()
             .Where(u => u.SubServiceId == subServiceId && u.IsActive)
+            .Where(PostesProduction.Planifiable)
             .Select(u => u.Id)
             .ToListAsync();
 

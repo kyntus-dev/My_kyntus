@@ -8,6 +8,8 @@ import { AdminOverviewComponent } from './admin-overview.component';
 import { AdminModulesGalleryComponent } from './admin-modules-gallery.component';
 import { AdminOrgSyncComponent } from './admin-org-sync.component';
 import { AdminAnomaliesComponent } from './admin-anomalies.component';
+import { AdminRolesComponent } from '../roles/admin-roles.component';
+import { AdminUserAccessComponent } from '../user-access/admin-user-access.component';
 
 @Component({
   selector: 'app-admin-root',
@@ -20,6 +22,8 @@ import { AdminAnomaliesComponent } from './admin-anomalies.component';
     AdminModulesGalleryComponent,
     AdminOrgSyncComponent,
     AdminAnomaliesComponent,
+    AdminRolesComponent,
+    AdminUserAccessComponent,
   ],
   template: `
     <section class="plat-page">
@@ -32,7 +36,7 @@ import { AdminAnomaliesComponent } from './admin-anomalies.component';
           <button
             type="button"
             class="plat-tab"
-            [class.active]="platform.adminSection() === tab.id"
+            [class.active]="section() === tab.id"
             (click)="platform.goAdmin(tab.id)"
           >
             {{ tab.label }}
@@ -40,21 +44,24 @@ import { AdminAnomaliesComponent } from './admin-anomalies.component';
         }
       </nav>
 
-      @switch (platform.adminSection()) {
+      @switch (section()) {
         @case ('overview') { <app-admin-overview /> }
         @case ('access') { <app-admin-access-matrix /> }
+        @case ('comptes') { <app-admin-user-access /> }
+        @case ('roles') { <app-admin-roles /> }
         @case ('sync') { <app-admin-org-sync /> }
         @case ('modules') { <app-admin-modules-gallery /> }
         @case ('anomalies') { <app-admin-anomalies /> }
         @default { <app-admin-overview /> }
       }
 
-      <p class="plat-hint">
-        Utilisateurs :
-        <a routerLink="/users">liste des employés</a>
-        · Organisation :
-        <a routerLink="/organisation">structure de production</a>
-      </p>
+      @if (voir('admin.users') || voir('admin.organisation')) {
+        <p class="plat-hint">
+          @if (voir('admin.users')) { Utilisateurs : <a routerLink="/users">liste des employés</a> }
+          @if (voir('admin.users') && voir('admin.organisation')) { · }
+          @if (voir('admin.organisation')) { Organisation : <a routerLink="/organisation">structure de production</a> }
+        </p>
+      }
     </section>
   `,
   styles: [`
@@ -85,12 +92,25 @@ export class AdminRootComponent {
   readonly tabs = [
     { id: 'overview' as const, label: 'Vue d’ensemble', capability: 'admin.overview' },
     { id: 'access' as const, label: 'Accès par rôle', capability: 'admin.access' },
-    { id: 'sync' as const, label: 'Organisation & sync', capability: 'admin.sync' },
-    { id: 'anomalies' as const, label: 'Anomalies', capability: 'admin.anomalies' },
-    { id: 'modules' as const, label: 'Modules', capability: 'admin.modules' },
+    { id: 'comptes' as const, label: 'Accès par compte', capability: 'admin.access' },
+    { id: 'roles' as const, label: 'Rôles', capability: 'admin.roles' },
+    { id: 'sync' as const, label: 'Synchro organisation', capability: 'admin.sync' },
+    { id: 'modules' as const, label: 'Configuration des modules', capability: 'admin.modules' },
+    { id: 'anomalies' as const, label: 'Inbox anomalies', capability: 'admin.anomalies' },
   ];
+
+  voir(capability: string): boolean {
+    return this.access.canView(capability);
+  }
 
   visibleTabs() {
     return this.tabs.filter((t) => this.access.canView(t.capability));
+  }
+
+  /** Section affichée : celle demandée si elle est ouverte au rôle, sinon le premier onglet autorisé. */
+  section() {
+    const visibles = this.visibleTabs();
+    const demandee = this.platform.adminSection();
+    return visibles.some((t) => t.id === demandee) ? demandee : visibles[0]?.id ?? demandee;
   }
 }

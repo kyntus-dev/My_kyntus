@@ -1,0 +1,142 @@
+<div class="ku-page pz">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Présences et paie · {{ dates().libelle }}</p>
+      <h1 class="ku-hero-title">Éléments variables de paie</h1>
+      <p class="ku-hero-sub">Primes, heures supplémentaires, retenues… Montant positif ou négatif, avec un commentaire. Repris dans l’export paie.</p>
+    </div>
+    <div class="ku-hero-actions">
+      <div class="ku-seg" role="tablist">
+        <button type="button" [class.is-active]="plage() === 'paie'" (click)="choisirPlage('paie')">Période de paie</button>
+        <button type="button" [class.is-active]="plage() === 'annee'" (click)="choisirPlage('annee')">12 derniers mois</button>
+      </div>
+      @if (plage() === 'paie') {
+        <button type="button" class="ku-btn" (click)="changerPeriode(-1)" aria-label="Période précédente">‹</button>
+        <button type="button" class="ku-btn" (click)="changerPeriode(1)" aria-label="Période suivante">›</button>
+      }
+      @if (peutAgir()) {
+        <button type="button" class="ku-btn ku-btn--primary" (click)="ouvrir()">+ Nouvel élément</button>
+      }
+    </div>
+  </header>
+
+  <app-presences-nav />
+
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Éléments</span><span class="ku-kpi-value">{{ synthese().total }}</span>
+      <span class="ku-kpi-sub">{{ synthese().agents }} agent(s) · du {{ dateFr(dates().du) }} au {{ dateFr(dates().au) }}</span></div>
+    <div class="ku-kpi ku-kpi--ok"><span class="ku-kpi-label">Gains</span><span class="ku-kpi-value">{{ montantFr(synthese().gains) }}</span>
+      <span class="ku-kpi-sub">primes, indemnités, rappels</span></div>
+    <div class="ku-kpi ku-kpi--danger"><span class="ku-kpi-label">Retenues</span><span class="ku-kpi-value">{{ montantFr(synthese().retenues) }}</span>
+      <span class="ku-kpi-sub">retenues et avances</span></div>
+    <div class="ku-kpi" [class.ku-kpi--warn]="synthese().aValoriser > 0"><span class="ku-kpi-label">À valoriser</span>
+      <span class="ku-kpi-value">{{ synthese().aValoriser }}</span><span class="ku-kpi-sub">montant fixé par le service paie · net {{ montantFr(synthese().net) }}</span></div>
+  </div>
+
+  <section class="ku-card">
+    <div class="pz-filtres pz-filtres--grille">
+      <input class="ku-input pz-search" type="search" placeholder="Rechercher un agent ou un commentaire…"
+             [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+      <select class="ku-input" [ngModel]="filtreType()" (ngModelChange)="filtreType.set($event)" aria-label="Type">
+        <option value="">Tous les types</option>
+        @for (t of types(); track t) { <option [value]="t">{{ t }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="filtreCellule()" (ngModelChange)="filtreCellule.set($event)" aria-label="Cellule">
+        <option value="">Toutes les cellules</option>
+        @for (c of cellules(); track c) { <option [value]="c">{{ c }}</option> }
+      </select>
+      <select class="ku-input" [ngModel]="filtreSens()" (ngModelChange)="filtreSens.set($event)" aria-label="Sens">
+        <option value="">Gains et retenues</option>
+        <option value="gain">Gains (+)</option>
+        <option value="retenue">Retenues (−)</option>
+      </select>
+      <span class="pz-compte">{{ filtrees().length }} ligne(s)</span>
+    </div>
+
+    @if (loading() && !lignes().length) {
+      <div class="ku-skeleton"></div>
+    } @else if (error()) {
+      <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
+    } @else if (!filtrees().length) {
+      <div class="ku-empty"><strong>Aucun élément</strong>sur cette période avec ces filtres.</div>
+    } @else {
+      <div class="ku-table-wrap">
+        <table class="ku-table ky-table pz-liste">
+          <thead>
+            <tr><th>Date</th><th>Agent</th><th>Type</th><th style="text-align:right">Montant</th><th>Commentaire</th><th>Saisi par</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (e of filtrees(); track e.id) {
+              <tr>
+                <td class="ku-mono">{{ dateFr(e.date) }}</td>
+                <td><b>{{ e.agent }}</b><small>{{ celluleDe().get(e.userId) || '—' }}</small></td>
+                <td>{{ e.type }}</td>
+                <td class="pz-montant" [class.pos]="e.montant > 0" [class.neg]="e.montant < 0">{{ e.montant > 0 ? '+' : '' }}{{ montantFr(e.montant) }}</td>
+                <td class="pz-texte">{{ e.commentaire }}</td>
+                <td class="ku-muted">{{ e.auteur ?? '—' }}<small>{{ dateFr(e.createdAt) }}</small></td>
+                <td>
+                  @if (peutAgir()) {
+                    <div class="pz-actions">
+                      <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="ouvrir(e)">Modifier</button>
+                      <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="supprimer(e)">Supprimer</button>
+                    </div>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <dialog #modal class="pz-modal" aria-label="Élément variable de paie">
+    <form (ngSubmit)="enregistrer()">
+      <h2>{{ form().id ? 'Modifier l’élément' : 'Nouvel élément variable' }}</h2>
+      <label class="ku-field"><span>Agent</span>
+        <input class="ku-input" type="search" placeholder="Filtrer par nom ou cellule…" [ngModel]="form().recherche"
+               (ngModelChange)="patch({ recherche: $event })" [ngModelOptions]="{ standalone: true }" />
+        <select class="ku-input" required [ngModel]="form().userId" (ngModelChange)="patch({ userId: $event })" [ngModelOptions]="{ standalone: true }">
+          <option [ngValue]="null" disabled>Choisir un agent</option>
+          @for (g of groupes(); track g.cellule) {
+            <optgroup [label]="g.cellule">
+              @for (a of g.agents; track a.userId) { <option [ngValue]="a.userId">{{ a.nom }}</option> }
+            </optgroup>
+          }
+        </select>
+      </label>
+      <div class="pz-grid2">
+        <label class="ku-field"><span>Date</span>
+          <input class="ku-input" type="date" required [ngModel]="form().date" (ngModelChange)="patch({ date: $event })" [ngModelOptions]="{ standalone: true }" />
+        </label>
+        <label class="ku-field"><span>Type</span>
+          <select class="ku-input" required [ngModel]="form().type" (ngModelChange)="patch({ type: $event })" [ngModelOptions]="{ standalone: true }">
+            @for (t of types(); track t) { <option [value]="t">{{ t }}</option> }
+          </select>
+        </label>
+      </div>
+      <app-presences-types categorie="evp" [personnalises]="typesPerso()" (typesModifies)="appliquerCatalogues($event.catalogues, $event.cree)" />
+      <div class="ku-field"><span>Montant</span>
+        <div class="pz-signe">
+          <div class="ku-seg">
+            <button type="button" [class.is-active]="form().sens === 'gain'" (click)="patch({ sens: 'gain' })">+ Gain</button>
+            <button type="button" [class.is-active]="form().sens === 'retenue'" (click)="patch({ sens: 'retenue' })">− Retenue</button>
+          </div>
+          <input class="ku-input" type="number" min="0" step="0.01" placeholder="0,00 (0 si à valoriser par la paie)"
+                 [ngModel]="form().montant" (ngModelChange)="patch({ montant: $event })" [ngModelOptions]="{ standalone: true }" />
+        </div>
+        @if (form().type.includes('à valoriser')) { <small>Type « à valoriser » : laissez 0, le service paie fixe le montant.</small> }
+      </div>
+      <label class="ku-field"><span>Commentaire</span>
+        <textarea class="ku-input" maxlength="1000" required placeholder="Ex. 4 h supp. le samedi 12, challenge qualité…"
+                  [ngModel]="form().commentaire" (ngModelChange)="patch({ commentaire: $event })" [ngModelOptions]="{ standalone: true }"></textarea>
+      </label>
+      <footer>
+        <button type="button" class="ku-btn" (click)="fermer()">Annuler</button>
+        <button type="submit" class="ku-btn ku-btn--primary" [disabled]="saving() || !valide()">
+          {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+        </button>
+      </footer>
+    </form>
+  </dialog>
+</div>

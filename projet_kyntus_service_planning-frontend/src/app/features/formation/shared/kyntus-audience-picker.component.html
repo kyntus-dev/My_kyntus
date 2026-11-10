@@ -120,6 +120,21 @@
     </div>
   }
 
+  @if (mode === 'beneficiaries' && groupesParRole().length) {
+    <div class="kap-roles-quick" aria-label="Sélection rapide par rôle">
+      <span class="kap-roles-quick-title">Sélection rapide</span>
+      <button type="button" class="kap-role-chip kap-role-chip--all" [disabled]="restantsTotal() === 0" (click)="ajouterParRole(null)">
+        Tout sélectionner <b>{{ restantsTotal() }}</b>
+      </button>
+      @for (g of groupesParRole(); track g.role) {
+        <button type="button" class="kap-role-chip" [disabled]="g.restants === 0" (click)="ajouterParRole(g.role)"
+          [title]="g.restants === 0 ? 'Tous les ' + g.role + ' sont déjà ajoutés' : 'Ajouter les ' + g.restants + ' ' + g.role + ' restants'">
+          {{ g.role }} <b>{{ g.restants }}</b>@if (g.restants !== g.total) { <small>/ {{ g.total }}</small> }
+        </button>
+      }
+    </div>
+  }
+
   @if (mode === 'beneficiaries') {
     <p class="kap-hint-text">
       Filtrez par organisation et/ou rôle, cochez les employés, puis

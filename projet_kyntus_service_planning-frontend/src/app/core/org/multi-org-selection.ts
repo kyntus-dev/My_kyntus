@@ -10,6 +10,7 @@ import {
   isSuperviseurRole,
   type OrgRoleAssignmentDepth,
 } from './org-role-assignment';
+import { compressHeldNodes, expandScopeNodes, scopeRoleKind } from './org-scope-tree';
 import {
   findOperationalSelectionByCelluleId,
   findOperationalSelectionByPoleId,
@@ -140,6 +141,11 @@ export function resolveOrgNodePathLabel(
   const id = nodeId.trim();
   if (!id) return '—';
 
+  if (depth === 'activite') {
+    const dept = operationalDepartments.find((d) => d.id === id);
+    return dept ? `${dept.code} — ${dept.name}` : id;
+  }
+
   if (depth === 'pole') {
     const sel = findOperationalSelectionByPoleId(operationalDepartments, unassignedPoles, id);
     if (!sel) return id;
@@ -210,4 +216,100 @@ export function summarizeMultiOrgSelection(
   return state.selectedOrgNodeIds
     .map((id) => resolveOrgNodePathLabel(operationalDepartments, unassignedPoles, depth, id))
     .join(' · ');
+}
+
+/** Couverture d’un périmètre (activité ou cellule) par les nœuds réellement détenus. */
+export type OrgScopeCoverage = {
+  scopeId: string;
+  heldNodes: number;
+  totalNodes: number;
+};
+
+export type ScopeSelectionHydration = {
+  state: MultiOrgSelectionState;
+  /** Périmètres détenus partiellement : l’enregistrement les étendra à la totalité. */
+  partialScopes: OrgScopeCoverage[];
+  /** Nœuds détenus hors arbre opérationnel (ex. pôle non rattaché à une activité). */
+  unmappedNodeIds: string[];
+};
+
+/** Cellules d’une activité (département de production). */
+export function cellulesOfActivity(
+  operationalDepartments: readonly OperationalDepartmentNode[],
+  activityId: string,
+): string[] {
+  const dept = operationalDepartments.find((d) => d.id === activityId.trim());
+  return (dept?.poles ?? []).flatMap((p) => (p.cellules ?? []).map((c) => c.id));
+}
+
+/** Pôles d’une activité (département de production). */
+export function polesOfActivity(
+  operationalDepartments: readonly OperationalDepartmentNode[],
+  activityId: string,
+): string[] {
+  const dept = operationalDepartments.find((d) => d.id === activityId.trim());
+  return (dept?.poles ?? []).map((p) => p.id);
+}
+
+/** Services techniques d’une cellule (1 service miroir par cellule dans l’organisation cible). */
+export function servicesOfCellule(
+  operationalDepartments: readonly OperationalDepartmentNode[],
+  unassignedPoles: readonly OrgPoleNode[],
+  celluleId: string,
+): string[] {
+  const id = celluleId.trim();
+  for (const pole of [...operationalDepartments.flatMap((d) => d.poles ?? []), ...unassignedPoles]) {
+    const cell = (pole.cellules ?? []).find((c) => c.id === id);
+    if (cell) return (cell.services ?? []).map((s) => s.id);
+  }
+  return [];
+}
+
+/**
+ * Réorganisation 2026 — reconstruit le périmètre exact (activités, pôles et/ou cellules, comme
+ * dans le fichier « Périmètre ») à partir des affectations Directory existantes.
+ */
+export function hydrateScopeSelectionFromOverview(
+  overview: OrgAssignmentsOverview | null | undefined,
+  employeeId: string,
+  roleName: string,
+): ScopeSelectionHydration | null {
+  const kind = scopeRoleKind(roleName);
+  const guid = employeeId.trim();
+  if (!overview || !guid || !kind) return null;
+
+  const depts = overview.operationalDepartments ?? [];
+  const unassigned = overview.unassignedPoles ?? [];
+  const emp = overview.employees?.find((e) => e.id === guid);
+
+  let heldNodes: string[];
+  let anchorNode: string;
+  if (kind === 'ChefDeProjet') {
+    heldNodes = (overview.managerEtage ?? []).filter((a) => a.userId === guid).map((a) => (a.etageId ?? '').trim());
+    anchorNode = (emp?.poleId ?? '').trim();
+  } else if (kind === 'Superviseur') {
+    heldNodes = (overview.supervisorService ?? [])
+      .filter((a) => a.userId === guid)
+      .map((a) => (a.celluleId ?? a.serviceId ?? '').trim());
+    anchorNode = (emp?.celluleId ?? '').trim();
+  } else {
+    heldNodes = (overview.coachSousService ?? [])
+      .filter((a) => a.userId === guid)
+      .map((a) => (a.serviceId ?? a.sousServiceId ?? '').trim());
+    anchorNode = (emp?.serviceId ?? '').trim();
+  }
+
+  const compressed = compressHeldNodes(depts, unassigned, kind, heldNodes);
+  if (compressed.scopeIds.length === 0) return null;
+
+  // Principal = périmètre qui contient l'ancre actuelle, sinon le premier.
+  const primaryOrgNodeId =
+    compressed.scopeIds.find((s) => anchorNode && expandScopeNodes(depts, unassigned, kind, s).includes(anchorNode))
+    ?? compressed.scopeIds[0];
+
+  return {
+    state: { selectedOrgNodeIds: compressed.scopeIds, primaryOrgNodeId },
+    partialScopes: compressed.partial,
+    unmappedNodeIds: compressed.unmapped,
+  };
 }

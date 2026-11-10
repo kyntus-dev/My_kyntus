@@ -138,8 +138,12 @@
               <span class="ce-cal-title">{{ calendarTitle }}</span>
               <button type="button" class="ce-cal-nav" (click)="shiftCalendarMonth(1)" aria-label="Mois suivant">›</button>
             </div>
+            <div class="ce-cal-jump" *ngIf="moisEligibilite">
+              <span>Congé annuel possible à partir du <b>{{ dateEligibiliteLabel }}</b>.</span>
+              <button type="button" (click)="allerAuMoisEligible()">Aller au premier mois possible ›</button>
+            </div>
             <div class="ce-cal-weekdays">
-              <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
+              <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span class="is-we">Sam</span><span class="is-we">Dim</span>
             </div>
             <div class="ce-cal-grid">
               <button
@@ -149,15 +153,33 @@
                 [disabled]="!cell.date || cell.blocked"
                 [class.is-empty]="!cell.date"
                 [class.is-blocked]="cell.blocked"
+                [ngClass]="cell.raison ? 'r-' + cell.raison : (cell.date ? 'n-' + cell.niveau : '')"
+                [class.is-we]="cell.weekend"
+                [class.is-today]="cell.today"
                 [class.is-selected]="cell.selected"
                 [class.is-range]="cell.inRange && !cell.selected"
+                [class.is-mine]="cell.dejaDemande"
+                [attr.title]="dayTitle(cell.date)"
+                [attr.aria-label]="cell.day ? cell.day + ' — ' + dayTitle(cell.date) : null"
                 (click)="onCalendarDayClick(cell)">
-                {{ cell.day || '' }}
+                <span class="ce-cal-num">{{ cell.day || '' }}</span>
+                <span class="ce-cal-occ" *ngIf="cell.date && quotaCellule !== null && !cell.raison && cell.absents > 0">{{ cell.absents }}/{{ quotaCellule }}</span>
               </button>
             </div>
+            <div class="ce-cal-legend">
+              <span><i class="lg lg-libre"></i>Libre</span>
+              <span><i class="lg lg-occupe"></i>Collègues absents</span>
+              <span><i class="lg lg-sature"></i>Quota atteint</span>
+              <span *ngIf="moisInterdits.length"><i class="lg lg-interdit"></i>Mois interdit</span>
+              <span *ngIf="dateEligibiliteYmd && form.typeConge === TypeConge.Annuel"><i class="lg lg-avant"></i>Avant éligibilité</span>
+              <span><i class="lg lg-sel"></i>Votre sélection</span>
+            </div>
+            <div class="ce-cal-selection" *ngIf="resumeSelection as r">{{ r }}</div>
             <p class="ce-cal-hint">
-              Jours grisés = quota atteint ou mois interdit.
-              <span *ngIf="isDateFinManuelle()"> Cliquez début puis fin.</span>
+              <span *ngIf="quotaCellule !== null">
+                Quota {{ celluleNom || 'de votre cellule' }} : {{ quotaCellule }} absent(s) simultané(s) sur {{ effectifCellule }} personne(s).
+              </span>
+              <span *ngIf="isDateFinManuelle()"> Cliquez sur le premier jour, puis sur le dernier.</span>
             </p>
           </div>
         </div>

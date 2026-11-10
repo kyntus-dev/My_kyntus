@@ -145,7 +145,42 @@ public sealed class DirectoryIamAdminService(DirectoryDbContext db) : IIamAdminS
             await db.SaveChangesAsync(ct);
         }
 
+        await FusionnerAliasAsync(ct);
         await EnsureSuperviseurPlanningPerimeterAsync(ct);
+    }
+
+    /// <summary>
+    /// Fusion des anciens noms : les droits « Coach » s'ajoutent à « Référent technique » (rien n'est
+    /// perdu pour les référents, dont le compte de connexion porte encore ce code), puis les lignes
+    /// « Coach » et « Manager » sont supprimées. Les comptes « Manager » prennent les droits du
+    /// Superviseur. Idempotent : sans effet une fois la fusion faite.
+    /// </summary>
+    public async Task FusionnerAliasAsync(CancellationToken ct = default)
+    {
+        var anciens = PlatformAccessCatalog.Alias.Keys.ToList();
+        var lignes = await db.IamPermissions.Where(p => anciens.Contains(p.Role)).ToListAsync(ct);
+        if (lignes.Count == 0) return;
+
+        foreach (var ancienne in lignes.Where(p => p.IsAllowed && p.Role == "Coach"))
+        {
+            var cible = PlatformAccessCatalog.Alias[ancienne.Role];
+            var existante = await db.IamPermissions.FirstOrDefaultAsync(
+                p => p.Role == cible && p.Action == ancienne.Action && p.Scope == ancienne.Scope, ct);
+            if (existante is null)
+                db.IamPermissions.Add(new IamPermission
+                {
+                    Id = Guid.NewGuid(),
+                    Role = cible,
+                    Action = ancienne.Action,
+                    Scope = ancienne.Scope,
+                    IsAllowed = true,
+                });
+            else
+                existante.IsAllowed = true;
+        }
+
+        db.IamPermissions.RemoveRange(lignes);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>

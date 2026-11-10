@@ -97,6 +97,21 @@ public record OrgCelluleOverviewDto(
 
 public record OrgServiceOverviewDto(string Id, string Name);
 
+/// <summary>
+/// Nœud d'organisation archivé (v9) : conservé en base avec son historique,
+/// restaurable, et supprimable définitivement s'il n'a jamais servi.
+/// </summary>
+public record ArchivedOrgNodeDto(
+    string Id,
+    string Name,
+    string Level, // Pole | Cellule | Service
+    string? ParentId,
+    string? ParentName,
+    string? ActiviteNom,
+    DateTime? ArchivedAt,
+    int Collaborateurs,
+    bool SuppressionDefinitivePossible);
+
 public record CreatePoleRequest(string Name, Guid BusinessDepartmentId);
 public record AttachPoleToDepartmentRequest(Guid BusinessDepartmentId);
 
@@ -174,6 +189,28 @@ public record UpdateEmployeeRequest(
 /// Level : service | cellule | pole | all.
 /// </summary>
 public record ClearOrgPlacementRequest(string? Level = null, string? NodeId = null);
+
+/// <summary>
+/// v29 : regroupe des cellules (et/ou des services isolés) dans une cellule cible, existante ou
+/// nouvelle (NomCible + PoleId). Services, agents et superviseurs suivent ; les cellules vidées
+/// sont archivées.
+/// </summary>
+public record RegrouperCellulesRequest(
+    IReadOnlyList<string>? SourceIds,
+    IReadOnlyList<string>? ServiceIds,
+    string? CibleId,
+    string? NomCible,
+    string? PoleId,
+    string? Motif);
+
+public record RegroupementCellulesResult(
+    string CibleId,
+    string CibleNom,
+    bool CibleCreee,
+    int ServicesDeplaces,
+    int Agents,
+    int Superviseurs,
+    IReadOnlyList<string> CellulesArchivees);
 
 public record OrgAssignmentAsOfDto(
     DateTime AsOf,

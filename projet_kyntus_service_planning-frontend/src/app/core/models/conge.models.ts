@@ -77,6 +77,26 @@ export interface DemandeCongeDto {
   validationNodeId?: string | null;
 }
 
+/** Collaborateur du périmètre d'un responsable (vue « Congés de l'équipe »). */
+export interface EquipeMembreDto {
+  employeId: string;
+  nom: string;
+  prenom: string;
+  role: string;
+  poleId: string | null;
+  poleNom: string | null;
+  celluleId: string | null;
+  celluleNom: string | null;
+}
+
+export interface EquipeCongesDto {
+  /** « Votre équipe (n collaborateur(s)) » ou « Toute l'entreprise ». */
+  perimetre: string;
+  annee: number;
+  membres: EquipeMembreDto[];
+  demandes: DemandeCongeDto[];
+}
+
 export interface SoldeCongeDto {
   employeId:    string;
   annee:        number;
@@ -133,6 +153,58 @@ export interface CongeDisponibiliteDto {
   motif: string | null;
   moisInterdits: number[];
   joursSatures: string[];
+}
+
+/** Occupation d'un jour pour le calendrier de demande (v9). */
+export interface CongeJourDto {
+  /** yyyy-MM-dd */
+  jour: string;
+  absents: number;
+  /** Quota de la cellule atteint : jour grisé, non sélectionnable. */
+  sature: boolean;
+  moisInterdit: boolean;
+  /** L'agent a déjà une demande sur ce jour. */
+  dejaDemande: boolean;
+}
+
+export interface CongeDisponibiliteMoisDto {
+  annee: number;
+  mois: number;
+  nodeId: string | null;
+  nodeNom: string | null;
+  quota: number | null;
+  effectif: number;
+  moisInterdits: number[];
+  jours: CongeJourDto[];
+}
+
+/** Absence d'un collègue de la même cellule (sans motif ni type de congé). */
+export interface CelluleAbsenceDto {
+  employeId: string;
+  collaborateur: string;
+  dateDebut: string;
+  dateFin: string;
+  nombreJours: number;
+  statut: StatutDemande;
+  estMoi: boolean;
+}
+
+export interface CelluleCongesDto {
+  celluleId: string | null;
+  celluleNom: string;
+  annee: number;
+  effectif: number;
+  quotaMaxAbsents: number | null;
+  absences: CelluleAbsenceDto[];
+}
+
+/** Circuit de validation des congés en vigueur. */
+export interface CongeWorkflowDto {
+  /** Vrai = ancien circuit : superviseur puis RH. */
+  etapeRhRequise: boolean;
+  updatedAt: string;
+  updatedBy: string | null;
+  demandesEnAttenteRh: number;
 }
 
 /** Normalise un statut API (nombre ou nom enum string). */

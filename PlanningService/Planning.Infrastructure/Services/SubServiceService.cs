@@ -20,6 +20,7 @@ public class SubServiceService : ISubServiceService
         return await _context.SubServices
             .Include(ss => ss.Service)
             .Include(ss => ss.Users)
+            .Where(ss => !ss.IsArchived)
             .Select(ss => new SubServiceDto
             {
                 Id = ss.Id,
@@ -40,7 +41,7 @@ public class SubServiceService : ISubServiceService
         return await _context.SubServices
             .Include(ss => ss.Service)
             .Include(ss => ss.Users)
-            .Where(ss => ss.ServiceId == serviceId)
+            .Where(ss => ss.ServiceId == serviceId && !ss.IsArchived)
             .Select(ss => new SubServiceDto
             {
                 Id = ss.Id,

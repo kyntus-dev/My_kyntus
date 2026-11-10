@@ -1,0 +1,8 @@
+.pe-search { width: 260px; }
+.pe-select { width: auto; min-width: 200px; }
+.pe-badge { margin-left: 6px; }
+.pe-regime { display: block; font-size: 0.68rem; }
+.pe-note { margin-top: 10px; }
+@media (max-width: 640px) {
+  .pe-search, .pe-select { width: 100%; }
+}

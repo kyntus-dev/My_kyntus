@@ -52,6 +52,27 @@ public class AppDbContext : DbContext
     public DbSet<CampaignAnalytics> CampaignAnalytics { get; set; } = null!;
     public DbSet<MediaAsset> MediaAssets { get; set; } = null!;
     public DbSet<TicketComment> TicketComments { get; set; } = null!;
+    public DbSet<AppGuide> AppGuides { get; set; } = null!;
+    public DbSet<AppGuideView> AppGuideViews { get; set; } = null!;
+    public DbSet<EmailOutboxMessage> EmailOutboxMessages { get; set; } = null!;
+    public DbSet<NotificationEmailPreference> NotificationEmailPreferences { get; set; } = null!;
+    public DbSet<NotificationEmailCursor> NotificationEmailCursors { get; set; } = null!;
+    public DbSet<PointageBrut> PointagesBruts { get; set; } = null!;
+    public DbSet<PointageCorrespondance> PointageCorrespondances { get; set; } = null!;
+    public DbSet<PointageSyncState> PointageSyncStates { get; set; } = null!;
+    public DbSet<RegimeHoraire> RegimesHoraires { get; set; } = null!;
+    public DbSet<RegimeHoraireJour> RegimeHoraireJours { get; set; } = null!;
+    public DbSet<RegimeHoraireAffectation> RegimeHoraireAffectations { get; set; } = null!;
+    public DbSet<HeureSortieAcces> HeureSortieAcces { get; set; } = null!;
+    public DbSet<ReaffectationAgent> ReaffectationsAgents { get; set; } = null!;
+    public DbSet<PlanningItHoraire> PlanningItHoraires { get; set; } = null!;
+    public DbSet<PlanningItCommentaire> PlanningItCommentaires { get; set; } = null!;
+    /// <summary>Tableau des présences : saisies des responsables (motif, retard autorisé, commentaire).</summary>
+    public DbSet<PresenceJour> PresenceJours { get; set; } = null!;
+    public DbSet<Avertissement> Avertissements { get; set; } = null!;
+    public DbSet<PresenceTypePersonnalise> PresenceTypesPersonnalises { get; set; } = null!;
+    public DbSet<ElementVariablePaie> ElementsVariablesPaie { get; set; } = null!;
+    public DbSet<DossierDocument> DossierDocuments { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -555,6 +576,217 @@ public class AppDbContext : DbContext
             e.Property(x => x.AuthorNom).HasMaxLength(200);
             e.Property(x => x.Text).HasMaxLength(4000);
             e.HasIndex(x => new { x.OwnerType, x.OwnerId });
+        });
+
+        // ── Espace Aide : guides de l'application ──
+        modelBuilder.Entity<AppGuide>(e =>
+        {
+            e.ToTable("AppGuides");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(2000);
+            e.Property(x => x.ExternalUrl).HasMaxLength(1000);
+            e.Property(x => x.TargetRoles).HasMaxLength(1000);
+            e.Property(x => x.CreatedBy).HasMaxLength(128);
+            e.HasIndex(x => new { x.IsActive, x.SortOrder });
+        });
+
+        modelBuilder.Entity<AppGuideView>(e =>
+        {
+            e.ToTable("AppGuideViews");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UserKey).HasMaxLength(128).IsRequired();
+            e.HasIndex(x => new { x.GuideId, x.UserKey }).IsUnique();
+        });
+
+        // ── E-mails : file d'envoi, préférences, curseur des notifications ──
+        // Pointages ZKBio Time (lecture seule) : heures locales des pointeuses, sans fuseau.
+        modelBuilder.Entity<PointageBrut>(e =>
+        {
+            e.ToTable("PointagesBruts");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.EmpCode).HasMaxLength(32).IsRequired();
+            e.Property(x => x.PunchTime).HasColumnType("timestamp without time zone");
+            e.Property(x => x.UploadTime).HasColumnType("timestamp without time zone");
+            e.Property(x => x.TerminalSn).HasMaxLength(64);
+            e.Property(x => x.TerminalAlias).HasMaxLength(128);
+            e.Property(x => x.NomBioTime).HasMaxLength(200);
+            e.HasIndex(x => new { x.EmpCode, x.PunchTime });
+            e.HasIndex(x => x.PunchTime);
+        });
+
+        modelBuilder.Entity<PointageCorrespondance>(e =>
+        {
+            e.ToTable("PointageCorrespondances");
+            e.HasKey(x => x.EmpCode);
+            e.Property(x => x.EmpCode).HasMaxLength(32);
+            e.Property(x => x.Statut).HasMaxLength(16).IsRequired();
+            e.Property(x => x.NomBioTime).HasMaxLength(200);
+            e.Property(x => x.DepartementBioTime).HasMaxLength(200);
+            e.HasIndex(x => x.UserId);
+            e.HasIndex(x => x.Statut);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<PointageSyncState>(e =>
+        {
+            e.ToTable("PointageSyncStates");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasMaxLength(32);
+            e.Property(x => x.DerniereErreur).HasMaxLength(1000);
+        });
+
+        // Régimes horaires (planning fixe par jour de semaine, défini par l'Admin).
+        modelBuilder.Entity<RegimeHoraire>(e =>
+        {
+            e.ToTable("RegimesHoraires");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Nom).HasMaxLength(100).IsRequired();
+            e.HasIndex(x => x.Nom).IsUnique();
+            e.HasMany(x => x.Jours).WithOne(x => x.RegimeHoraire).HasForeignKey(x => x.RegimeHoraireId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Affectations).WithOne(x => x.RegimeHoraire).HasForeignKey(x => x.RegimeHoraireId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RegimeHoraireJour>(e =>
+        {
+            e.ToTable("RegimeHoraireJours");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.RegimeHoraireId, x.JourSemaine }).IsUnique();
+        });
+
+        modelBuilder.Entity<RegimeHoraireAffectation>(e =>
+        {
+            e.ToTable("RegimeHoraireAffectations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Cible).HasMaxLength(16).IsRequired();
+            e.HasIndex(x => new { x.Cible, x.CibleId }).IsUnique();
+            e.HasIndex(x => x.RegimeHoraireId);
+        });
+
+        modelBuilder.Entity<ReaffectationAgent>(e =>
+        {
+            e.ToTable("ReaffectationsAgents");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.AncienLibelle).HasMaxLength(300);
+            e.Property(x => x.NouveauLibelle).HasMaxLength(300);
+            e.Property(x => x.Motif).HasMaxLength(500);
+            e.Property(x => x.Origine).HasMaxLength(40);
+            e.Property(x => x.CreatedByNom).HasMaxLength(160);
+            e.Property(x => x.AncienRole).HasMaxLength(80);
+            e.Property(x => x.NouveauRole).HasMaxLength(80);
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
+            e.HasIndex(x => x.CreatedAt);
+        });
+
+        modelBuilder.Entity<HeureSortieAcces>(e =>
+        {
+            e.ToTable("HeureSortieAcces");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.UserId).ValueGeneratedNever();
+            e.Property(x => x.ChoixProduction).HasMaxLength(16);
+        });
+
+        // Planning IT : horaires saisis par les membres de la cellule IT.
+        modelBuilder.Entity<PresenceJour>(e =>
+        {
+            e.ToTable("PresenceJours");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Code).HasMaxLength(10);
+            e.Property(x => x.MotifAutorisation).HasMaxLength(300);
+            e.Property(x => x.Commentaire).HasMaxLength(1000);
+            e.Property(x => x.UpdatedByNom).HasMaxLength(120);
+            e.HasIndex(x => new { x.UserId, x.Jour }).IsUnique();
+            e.HasIndex(x => x.Jour);
+        });
+
+        modelBuilder.Entity<Avertissement>(e =>
+        {
+            e.ToTable("Avertissements");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Type).HasMaxLength(60).IsRequired();
+            e.Property(x => x.Commentaire).HasMaxLength(1000).IsRequired();
+            e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.Property(x => x.Code).HasMaxLength(8);
+            e.HasIndex(x => new { x.UserId, x.Date });
+        });
+
+        modelBuilder.Entity<PresenceTypePersonnalise>(e =>
+        {
+            e.ToTable("PresenceTypesPersonnalises");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Categorie).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Libelle).HasMaxLength(60).IsRequired();
+            e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.HasIndex(x => x.Categorie);
+        });
+
+        modelBuilder.Entity<ElementVariablePaie>(e =>
+        {
+            e.ToTable("ElementsVariablesPaie");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Type).HasMaxLength(60).IsRequired();
+            e.Property(x => x.Montant).HasPrecision(12, 2);
+            e.Property(x => x.Commentaire).HasMaxLength(1000).IsRequired();
+            e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.HasIndex(x => new { x.UserId, x.Date });
+        });
+
+        modelBuilder.Entity<DossierDocument>(e =>
+        {
+            e.ToTable("DossierDocuments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Categorie).HasMaxLength(60).IsRequired();
+            e.Property(x => x.NomFichier).HasMaxLength(255).IsRequired();
+            e.Property(x => x.ContentType).HasMaxLength(120).IsRequired();
+            e.Property(x => x.Commentaire).HasMaxLength(500);
+            e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<PlanningItHoraire>(e =>
+        {
+            e.ToTable("PlanningItHoraires");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Statut).HasMaxLength(16).IsRequired();
+            e.HasIndex(x => new { x.UserId, x.Jour }).IsUnique();
+            e.HasIndex(x => x.Jour);
+        });
+
+        modelBuilder.Entity<PlanningItCommentaire>(e =>
+        {
+            e.ToTable("PlanningItCommentaires");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Texte).HasMaxLength(500).IsRequired();
+            e.HasIndex(x => new { x.UserId, x.Semaine }).IsUnique();
+        });
+
+        modelBuilder.Entity<EmailOutboxMessage>(e =>
+        {
+            e.ToTable("EmailOutboxMessages");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ToEmail).HasMaxLength(320).IsRequired();
+            e.Property(x => x.Category).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Subject).HasMaxLength(300).IsRequired();
+            e.Property(x => x.HtmlBody).IsRequired();
+            e.Property(x => x.DedupKey).HasMaxLength(200);
+            e.Property(x => x.LastError).HasMaxLength(1000);
+            e.HasIndex(x => new { x.Status, x.NextAttemptAt });
+            e.HasIndex(x => x.DedupKey).IsUnique().HasFilter("\"DedupKey\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<NotificationEmailPreference>(e =>
+        {
+            e.ToTable("NotificationEmailPreferences");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.UserId).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<NotificationEmailCursor>(e =>
+        {
+            e.ToTable("NotificationEmailCursors");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasMaxLength(32);
         });
     }
 }

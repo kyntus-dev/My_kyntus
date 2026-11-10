@@ -20,6 +20,8 @@ export interface ResetPasswordResult {
   temporaryPassword: string;
   firstName?: string;
   lastName?: string;
+  /** v38 : corrections faites sur le compte de connexion (réactivé, déverrouillé, e-mail corrigé…). */
+  corrections?: string[];
 }
 
 export interface ResetPasswordsByGroupRequest {
@@ -110,8 +112,27 @@ getUserByAuthId(authId: number): Observable<User> {
     );
   }
 
-  deleteUser(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/${id}`).pipe(
+  /**
+   * Sortie d'un collaborateur : le compte est désactivé (connexion bloquée), jamais supprimé.
+   * Plannings, congés, primes et historique restent en base.
+   * @param dateSortie date de sortie (AAAA-MM-JJ), aujourd'hui par défaut
+   */
+  deactivateUser(id: number, dateSortie?: string | null): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/${id}/deactivate`, { dateSortie: dateSortie || null }).pipe(
+      catchError(err => throwError(() => err))
+    );
+  }
+
+  /** Réintégration d'un collaborateur désactivé. */
+  reactivateUser(id: number): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/${id}/reactivate`, {}).pipe(
+      catchError(err => throwError(() => err))
+    );
+  }
+
+  /** Annule une création restée incomplète (seule suppression possible, dans les 30 minutes). */
+  rollbackCreation(id: number): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/${id}/rollback-creation`, {}).pipe(
       catchError(err => throwError(() => err))
     );
   }

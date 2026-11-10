@@ -708,6 +708,316 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>
+    /// Nœuds d'organisation supprimés dans l'Organisation RH : masqués des listes Planning,
+    /// conservés avec leurs plannings pour l'historique (colonnes additives, défaut = visible).
+    /// </summary>
+    public static async Task EnsureOrgMirrorArchiveColumnsAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "Floors" ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            ALTER TABLE "Services" ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            ALTER TABLE "SubServices" ADD COLUMN IF NOT EXISTS "IsArchived" boolean NOT NULL DEFAULT false;
+            """,
+            ct);
+    }
+
+    /// <summary>Espace Aide : guides de l'application et suivi « consulté » (tables additives).</summary>
+    public static async Task EnsureAppGuidesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "AppGuides" (
+                "Id" serial PRIMARY KEY,
+                "Title" character varying(200) NOT NULL,
+                "Description" character varying(2000) NULL,
+                "Kind" integer NOT NULL DEFAULT 0,
+                "MediaAssetId" integer NULL,
+                "ExternalUrl" character varying(1000) NULL,
+                "TargetRoles" character varying(1000) NOT NULL DEFAULT '',
+                "SortOrder" integer NOT NULL DEFAULT 0,
+                "IsActive" boolean NOT NULL DEFAULT true,
+                "CreatedBy" character varying(128) NOT NULL DEFAULT '',
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedAt" timestamp with time zone NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_AppGuides_IsActive_SortOrder"
+              ON "AppGuides" ("IsActive", "SortOrder");
+
+            CREATE TABLE IF NOT EXISTS "AppGuideViews" (
+                "Id" serial PRIMARY KEY,
+                "GuideId" integer NOT NULL,
+                "UserKey" character varying(128) NOT NULL,
+                "ViewedAt" timestamp with time zone NOT NULL DEFAULT now()
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_AppGuideViews_GuideId_UserKey"
+              ON "AppGuideViews" ("GuideId", "UserKey");
+            """,
+            ct);
+    }
+
+    /// <summary>File d'envoi des e-mails, préférences utilisateur et curseur des notifications.</summary>
+    public static async Task EnsureNotificationEmailTablesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "EmailOutboxMessages" (
+                "Id" bigserial PRIMARY KEY,
+                "ToEmail" character varying(320) NOT NULL,
+                "RecipientUserId" integer NULL,
+                "Category" character varying(40) NOT NULL,
+                "Subject" character varying(300) NOT NULL,
+                "HtmlBody" text NOT NULL,
+                "DedupKey" character varying(200) NULL,
+                "Status" integer NOT NULL DEFAULT 0,
+                "Attempts" integer NOT NULL DEFAULT 0,
+                "NextAttemptAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "LastError" character varying(1000) NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "SentAt" timestamp with time zone NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_EmailOutboxMessages_Status_NextAttemptAt"
+              ON "EmailOutboxMessages" ("Status", "NextAttemptAt");
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_EmailOutboxMessages_DedupKey"
+              ON "EmailOutboxMessages" ("DedupKey") WHERE "DedupKey" IS NOT NULL;
+
+            CREATE TABLE IF NOT EXISTS "NotificationEmailPreferences" (
+                "UserId" integer PRIMARY KEY,
+                "EmailEnabled" boolean NOT NULL DEFAULT true,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now()
+            );
+
+            CREATE TABLE IF NOT EXISTS "NotificationEmailCursors" (
+                "Id" character varying(32) PRIMARY KEY,
+                "LastPlanningNotificationId" integer NOT NULL DEFAULT 0,
+                "LastContractNotificationId" integer NOT NULL DEFAULT 0,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now()
+            );
+            """,
+            ct);
+    }
+
+    /// <summary>
+    /// Pointages ZKBio Time (lecture seule) : pointages bruts sans doublon, correspondances
+    /// ID pointeuse → collaborateur, état de la synchronisation.
+    /// </summary>
+    public static async Task EnsurePointageTablesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PointagesBruts" (
+                "Id" bigint PRIMARY KEY,
+                "EmpCode" character varying(32) NOT NULL,
+                "PunchTime" timestamp without time zone NOT NULL,
+                "UploadTime" timestamp without time zone NULL,
+                "TerminalSn" character varying(64) NULL,
+                "TerminalAlias" character varying(128) NULL,
+                "VerifyType" integer NULL,
+                "NomBioTime" character varying(200) NULL,
+                "ReceivedAt" timestamp with time zone NOT NULL DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS "IX_PointagesBruts_EmpCode_PunchTime"
+              ON "PointagesBruts" ("EmpCode", "PunchTime");
+            CREATE INDEX IF NOT EXISTS "IX_PointagesBruts_PunchTime"
+              ON "PointagesBruts" ("PunchTime");
+
+            CREATE TABLE IF NOT EXISTS "PointageCorrespondances" (
+                "EmpCode" character varying(32) PRIMARY KEY,
+                "UserId" integer NULL REFERENCES "Users" ("Id") ON DELETE SET NULL,
+                "Statut" character varying(16) NOT NULL DEFAULT 'AValider',
+                "NomBioTime" character varying(200) NULL,
+                "DepartementBioTime" character varying(200) NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" integer NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_PointageCorrespondances_UserId"
+              ON "PointageCorrespondances" ("UserId");
+            CREATE INDEX IF NOT EXISTS "IX_PointageCorrespondances_Statut"
+              ON "PointageCorrespondances" ("Statut");
+
+            CREATE TABLE IF NOT EXISTS "PointageSyncStates" (
+                "Id" character varying(32) PRIMARY KEY,
+                "DerniereSynchro" timestamp with time zone NULL,
+                "DerniereRelectureComplete" timestamp with time zone NULL,
+                "DerniereSynchroCollaborateurs" timestamp with time zone NULL,
+                "DerniersPointagesRecus" integer NOT NULL DEFAULT 0,
+                "DerniereErreur" character varying(1000) NULL,
+                "DerniereErreurAt" timestamp with time zone NULL
+            );
+            ALTER TABLE "PointageSyncStates" ADD COLUMN IF NOT EXISTS "DernierEssai" timestamp with time zone NULL;
+            """,
+            ct);
+    }
+
+    /// <summary>
+    /// Régimes horaires (v11) : trois tables nouvelles, aucune donnée existante touchée.
+    /// Le régime « 8 h 40 / 7 h 40 » de l'Excel est créé sans affectation : l'Admin choisit
+    /// ensuite les pôles, cellules ou collaborateurs concernés.
+    /// </summary>
+    public static async Task EnsureRegimesHorairesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "RegimesHoraires" (
+                "Id" serial PRIMARY KEY,
+                "Nom" character varying(100) NOT NULL,
+                "PauseAutoriseeMinutes" integer NOT NULL DEFAULT 80,
+                "AccesCalculSortie" boolean NOT NULL DEFAULT true,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" integer NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_RegimesHoraires_Nom" ON "RegimesHoraires" ("Nom");
+
+            CREATE TABLE IF NOT EXISTS "RegimeHoraireJours" (
+                "Id" serial PRIMARY KEY,
+                "RegimeHoraireId" integer NOT NULL REFERENCES "RegimesHoraires" ("Id") ON DELETE CASCADE,
+                "JourSemaine" integer NOT NULL CHECK ("JourSemaine" BETWEEN 1 AND 7),
+                "Arrivee" time without time zone NOT NULL,
+                "ProductionMinutes" integer NOT NULL CHECK ("ProductionMinutes" > 0)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_RegimeHoraireJours_RegimeHoraireId_JourSemaine"
+              ON "RegimeHoraireJours" ("RegimeHoraireId", "JourSemaine");
+
+            CREATE TABLE IF NOT EXISTS "RegimeHoraireAffectations" (
+                "Id" serial PRIMARY KEY,
+                "RegimeHoraireId" integer NOT NULL REFERENCES "RegimesHoraires" ("Id") ON DELETE RESTRICT,
+                "Cible" character varying(16) NOT NULL,
+                "CibleId" integer NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_RegimeHoraireAffectations_Cible_CibleId"
+              ON "RegimeHoraireAffectations" ("Cible", "CibleId");
+            CREATE INDEX IF NOT EXISTS "IX_RegimeHoraireAffectations_RegimeHoraireId"
+              ON "RegimeHoraireAffectations" ("RegimeHoraireId");
+
+            INSERT INTO "RegimesHoraires" ("Nom", "PauseAutoriseeMinutes", "AccesCalculSortie")
+            SELECT 'Standard 8h40 / vendredi 7h40', 80, true
+            WHERE NOT EXISTS (SELECT 1 FROM "RegimesHoraires");
+
+            INSERT INTO "RegimeHoraireJours" ("RegimeHoraireId", "JourSemaine", "Arrivee", "ProductionMinutes")
+            SELECT r."Id", j.jour, time '08:00', CASE WHEN j.jour = 5 THEN 460 ELSE 520 END
+            FROM "RegimesHoraires" r
+            CROSS JOIN (VALUES (1), (2), (3), (4), (5)) AS j(jour)
+            WHERE r."Nom" = 'Standard 8h40 / vendredi 7h40'
+              AND NOT EXISTS (SELECT 1 FROM "RegimeHoraireJours" x WHERE x."RegimeHoraireId" = r."Id");
+            """,
+            ct);
+    }
+
+    /// <summary>Accès « Heure de sortie » compte par compte (v11.4) : table nouvelle, vide au départ.</summary>
+    public static async Task EnsureHeureSortieAccesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "HeureSortieAcces" (
+                "UserId" integer PRIMARY KEY REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "GrantedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "GrantedBy" integer NULL
+            );
+            ALTER TABLE "HeureSortieAcces" ADD COLUMN IF NOT EXISTS "ChoixProduction" varchar(16) NULL;
+            ALTER TABLE "HeureSortieAcces" ADD COLUMN IF NOT EXISTS "ChoixModifieLe" timestamp with time zone NULL;
+            """,
+            ct);
+    }
+
+    /// <summary>Planning IT (v12) : deux tables nouvelles, vides au départ.</summary>
+    public static async Task EnsurePlanningItAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PlanningItHoraires" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Jour" date NOT NULL,
+                "Statut" character varying(16) NOT NULL DEFAULT 'Travail',
+                "Arrivee" time without time zone NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" integer NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_PlanningItHoraires_UserId_Jour" ON "PlanningItHoraires" ("UserId", "Jour");
+            CREATE INDEX IF NOT EXISTS "IX_PlanningItHoraires_Jour" ON "PlanningItHoraires" ("Jour");
+
+            CREATE TABLE IF NOT EXISTS "PlanningItCommentaires" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Semaine" date NOT NULL,
+                "Texte" character varying(500) NOT NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" integer NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_PlanningItCommentaires_UserId_Semaine" ON "PlanningItCommentaires" ("UserId", "Semaine");
+            """,
+            ct);
+    }
+
+    /// <summary>Tableau des présences : saisies des responsables (table vide à la création).</summary>
+    public static async Task EnsurePresencesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PresenceJours" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Jour" date NOT NULL,
+                "Code" character varying(10) NULL,
+                "RetardAutorise" boolean NOT NULL DEFAULT false,
+                "RetardPauseAutorise" boolean NOT NULL DEFAULT false,
+                "MotifAutorisation" character varying(300) NULL,
+                "Commentaire" character varying(1000) NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" integer NULL,
+                "UpdatedByNom" character varying(120) NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_PresenceJours_UserId_Jour" ON "PresenceJours" ("UserId", "Jour");
+            CREATE INDEX IF NOT EXISTS "IX_PresenceJours_Jour" ON "PresenceJours" ("Jour");
+            ALTER TABLE "PresenceJours" ADD COLUMN IF NOT EXISTS "AbsencePartielle" boolean NOT NULL DEFAULT false;
+
+            CREATE TABLE IF NOT EXISTS "Avertissements" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Date" date NOT NULL,
+                "Type" character varying(60) NOT NULL,
+                "Commentaire" character varying(1000) NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" character varying(120) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_Avertissements_UserId_Date" ON "Avertissements" ("UserId", "Date");
+
+            CREATE TABLE IF NOT EXISTS "ElementsVariablesPaie" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Date" date NOT NULL,
+                "Type" character varying(60) NOT NULL,
+                "Montant" numeric(12,2) NOT NULL DEFAULT 0,
+                "Commentaire" character varying(1000) NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" character varying(120) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_ElementsVariablesPaie_UserId_Date" ON "ElementsVariablesPaie" ("UserId", "Date");
+
+            CREATE TABLE IF NOT EXISTS "DossierDocuments" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Categorie" character varying(60) NOT NULL,
+                "NomFichier" character varying(255) NOT NULL,
+                "ContentType" character varying(120) NOT NULL,
+                "Taille" bigint NOT NULL,
+                "Contenu" bytea NOT NULL,
+                "Commentaire" character varying(500) NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" character varying(120) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_DossierDocuments_UserId" ON "DossierDocuments" ("UserId");
+            """,
+            ct);
+    }
+
     /// <summary>Index lecture fréquents (grille, demandes exceptionnelles, users actifs).</summary>
     public static async Task EnsurePerfIndexesAsync(AppDbContext db, CancellationToken ct = default)
     {
@@ -768,5 +1078,65 @@ public static class PlanningSchemaPatches
         {
             Console.WriteLine($"⚠️ Index unique AppliesToSaturday ignoré: {ex.Message}");
         }
+    }
+
+    /// <summary>Historique des réaffectations d'agents (v21) : table nouvelle, vide au départ.</summary>
+    public static async Task EnsureReaffectationsAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "ReaffectationsAgents" (
+                "Id" bigserial PRIMARY KEY,
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "AncienSubServiceId" integer NULL,
+                "NouveauSubServiceId" integer NOT NULL,
+                "AncienLibelle" varchar(300) NULL,
+                "NouveauLibelle" varchar(300) NOT NULL,
+                "Motif" varchar(500) NULL,
+                "Origine" varchar(40) NOT NULL DEFAULT 'Réaffectation',
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" varchar(160) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_ReaffectationsAgents_UserId_CreatedAt" ON "ReaffectationsAgents" ("UserId", "CreatedAt");
+            CREATE INDEX IF NOT EXISTS "IX_ReaffectationsAgents_CreatedAt" ON "ReaffectationsAgents" ("CreatedAt");
+            -- v26 : changement de poste et sortie de la production (aucun service).
+            ALTER TABLE "ReaffectationsAgents" ADD COLUMN IF NOT EXISTS "AncienRole" varchar(80) NULL;
+            ALTER TABLE "ReaffectationsAgents" ADD COLUMN IF NOT EXISTS "NouveauRole" varchar(80) NULL;
+            ALTER TABLE "ReaffectationsAgents" ALTER COLUMN "NouveauSubServiceId" DROP NOT NULL;
+            """,
+            ct);
+    }
+
+    /// <summary>
+    /// v30 : date d'intégration en production (fin de formation constatée) et code du référentiel
+    /// des manquements (R01…Q13). Colonnes ajoutées seulement, aucune donnée modifiée.
+    /// </summary>
+    public static async Task EnsureFormationEtManquementsAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "FormationTermineeLe" date NULL;
+            ALTER TABLE "Avertissements" ADD COLUMN IF NOT EXISTS "Code" character varying(8) NULL;
+            """,
+            ct);
+    }
+
+    /// <summary>v31 : types de manquement et d'élément variable de paie ajoutés à la main.</summary>
+    public static async Task EnsurePresenceTypesAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PresenceTypesPersonnalises" (
+                "Id" bigserial PRIMARY KEY,
+                "Categorie" character varying(20) NOT NULL,
+                "Libelle" character varying(60) NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" character varying(120) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_PresenceTypesPersonnalises_Categorie" ON "PresenceTypesPersonnalises" ("Categorie");
+            """,
+            ct);
     }
 }

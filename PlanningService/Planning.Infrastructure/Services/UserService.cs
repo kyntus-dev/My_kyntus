@@ -16,7 +16,7 @@ using Planning.Application.Abstractions.EmployeeImport;
 namespace Planning.Infrastructure.Services;
 
 file record AuthRegisterResult(int Id, string Email, Guid SubjectId);
-public class UserService : IUserService
+public partial class UserService : IUserService, Planning.Application.Abstractions.IAgentReaffectation
 {
     private sealed record AuthBatchSyncItem(User User, string? DefaultPassword);
     private sealed record AuthBatchSyncResult(string Email, bool Success, int? AuthUserId, string? Message);
@@ -66,7 +66,11 @@ public class UserService : IUserService
 
     public async Task<List<UserDto>> GetAllUsersAsync()
     {
+        // Lecture seule : sans suivi EF, et une requête par collection incluse (évite le produit
+        // cartésien Users × services gérés × cellules gérées, très lent quand l'effectif grandit).
         var users = await _context.Users
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(u => u.Role)
             .Include(u => u.SubService)
                 .ThenInclude(ss => ss!.Service)
@@ -105,6 +109,8 @@ public class UserService : IUserService
             return [];
 
         var users = await _context.Users
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(u => u.Role)
             .Include(u => u.SubService)
                 .ThenInclude(ss => ss!.Service)
@@ -172,6 +178,8 @@ public class UserService : IUserService
     public async Task<List<UserDto>> GetUsersBySubServiceAsync(int subServiceId)
     {
         var users = await _context.Users
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(u => u.Role)
             .Include(u => u.SubService)
             .Include(u => u.ManagedSubServices)
@@ -235,6 +243,44 @@ public class UserService : IUserService
         }
 
         await SyncToAuthServiceAsync(user);
+    }
+
+    public async Task<bool> ChangerRoleAsync(int userId, int roleId, CancellationToken ct = default)
+    {
+        var user = await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null) return false;
+        if (user.RoleId == roleId) return true;
+
+        user.RoleId = roleId;
+        var ancienService = user.SubServiceId;
+        // v27 : un poste hors production quitte son service de production.
+        var nomRole = await _context.Roles.AsNoTracking().Where(r => r.Id == roleId).Select(r => r.Name).FirstOrDefaultAsync(ct);
+        if (ancienService is not null && PostesProduction.QuitteLeService(nomRole))
+            user.SubServiceId = null;
+        await _context.SaveChangesAsync(ct);
+        await _context.Entry(user).Reference(u => u.Role).LoadAsync(ct);
+
+        // Jamais de mot de passe ni de création de compte : seul le rôle de connexion change.
+        if (user.AuthUserId.HasValue)
+            await SyncToAuthServiceAsync(user);
+        else
+            await SyncRoleToAuthByEmailAsync(user);
+
+        if (IsDirectoryWriteMaster())
+            await _directoryEmployeeWrite.TryUpdateEmployeeAsync(user, ct);
+        else
+        {
+            await PublishEmployeUpdatedForUserAsync(user, user.SubServiceId);
+            await _context.SaveChangesAsync(ct);
+        }
+        if (ancienService is int ancienSs && user.SubServiceId is null)
+        {
+            await JournaliserChangementServiceAsync(user, ancienSs, ct);
+            var ancien = await _context.SubServices.AsNoTracking().Include(s => s.Service).ThenInclude(s => s.Floor)
+                .FirstOrDefaultAsync(s => s.Id == ancienSs, ct);
+            await ApresChangementDeServiceAsync(user, ancien, ct);
+        }
+        return true;
     }
 
     public async Task SyncMissingAuthUsersAsync()
@@ -894,14 +940,39 @@ public class UserService : IUserService
         if (user is null)
             return null;
 
-        var password = PasswordGenerator.Generate();
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
-        await _context.SaveChangesAsync(ct);
-
-        var ok = await ResetAuthPasswordAsync(user, password, ct);
-        if (!ok)
+        // v38 : un collaborateur désactivé (sortie) ne peut pas se connecter : le dire tout de suite
+        // plutôt que de donner un mot de passe qui échouera avec « e-mail ou mot de passe incorrect ».
+        if (!user.IsActive)
             throw new InvalidOperationException(
-                "La réinitialisation Auth a échoué. Réessayez ou contactez l'administrateur.");
+                "Ce collaborateur est désactivé dans l'application : réactivez son compte avant de réinitialiser son mot de passe.");
+
+        var password = PasswordGenerator.Generate();
+
+        // Le mot de passe Planning n'est changé qu'une fois le compte de connexion (Auth) à jour :
+        // un échec côté Auth ne laisse plus deux mots de passe différents.
+        var auth = await ResetAuthPasswordAsync(user, password, ct);
+        if (!auth.Ok && auth.Introuvable)
+        {
+            // Compte de connexion absent (jamais créé, ou supprimé) : on le recrée, ou on le
+            // relie par e-mail, avec ce mot de passe. Le lien AuthUserId est enregistré.
+            _logger.LogWarning(
+                "PasswordReset: compte Auth introuvable pour {Email} (AuthUserId={AuthUserId}) — réprovisionnement.",
+                user.Email, user.AuthUserId);
+            auth = await ReprovisionnerAuthAsync(user, password, ct);
+        }
+        if (!auth.Ok)
+            throw new InvalidOperationException(
+                $"La réinitialisation du compte de connexion a échoué : {auth.Message} Réessayez ou contactez l'administrateur.");
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
+        // v38 : lien vers le compte de connexion enregistré. Sans lui, une synchronisation suivante
+        // (rôle, affectation) pouvait recréer un compte et rendre le nouveau mot de passe inutilisable.
+        if (auth.AuthUserId is int authId && user.AuthUserId != authId)
+        {
+            _logger.LogInformation("PasswordReset: AuthUserId {Old} -> {New} pour {Email}", user.AuthUserId, authId, user.Email);
+            user.AuthUserId = authId;
+        }
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "PasswordReset: PlanningUserId={UserId} Email={Email} Actor={Actor}",
@@ -916,6 +987,7 @@ public class UserService : IUserService
             TemporaryPassword = password,
             FirstName = user.FirstName,
             LastName = user.LastName,
+            Corrections = auth.Corrections.ToList(),
         };
     }
 
@@ -1017,7 +1089,20 @@ public class UserService : IUserService
         return result;
     }
 
-    private async Task<bool> ResetAuthPasswordAsync(User user, string newPassword, CancellationToken ct)
+    private sealed record ResultatAuth(bool Ok, bool Introuvable, string Message)
+    {
+        /// <summary>v38 : compte Auth réinitialisé et corrections faites (réactivation, e-mail…).</summary>
+        public int? AuthUserId { get; init; }
+        public IReadOnlyList<string> Corrections { get; init; } = [];
+    }
+
+    private sealed class AuthResetReponse
+    {
+        public int Id { get; set; }
+        public List<string>? Corrections { get; set; }
+    }
+
+    private async Task<ResultatAuth> ResetAuthPasswordAsync(User user, string newPassword, CancellationToken ct)
     {
         try
         {
@@ -1026,27 +1111,110 @@ public class UserService : IUserService
                 new
                 {
                     EmployeeId = user.Guid,
+                    AuthUserId = user.AuthUserId,
                     Email = user.Email,
                     NewPassword = newPassword,
+                    Activer = user.IsActive,
                 },
                 ct);
 
             if (response.IsSuccessStatusCode)
-                return true;
+            {
+                AuthResetReponse? lu = null;
+                try
+                {
+                    lu = await response.Content.ReadFromJsonAsync<AuthResetReponse>(cancellationToken: ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Réponse de réinitialisation Auth illisible pour {Email}", user.Email);
+                }
+                return new ResultatAuth(true, false, string.Empty)
+                {
+                    AuthUserId = lu is { Id: > 0 } ? lu.Id : null,
+                    Corrections = lu?.Corrections ?? new List<string>(),
+                };
+            }
 
             var body = await response.Content.ReadAsStringAsync(ct);
             _logger.LogWarning(
-                "Reset Auth password failed for {Email}: {Status} {Body}",
+                "Reset Auth password failed for {Email} (AuthUserId={AuthUserId}, Guid={Guid}): {Status} {Body}",
                 user.Email,
+                user.AuthUserId,
+                user.Guid,
                 response.StatusCode,
                 body);
-            return false;
+            return new ResultatAuth(
+                false,
+                response.StatusCode == System.Net.HttpStatusCode.NotFound,
+                MessageAuth(body, $"service d'authentification ({(int)response.StatusCode})."));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Reset Auth password exception for {Email}", user.Email);
-            return false;
+            return new ResultatAuth(false, false, "service d'authentification injoignable.");
         }
+    }
+
+    /// <summary>Recrée (ou relie par e-mail) le compte de connexion avec le mot de passe donné.</summary>
+    private async Task<ResultatAuth> ReprovisionnerAuthAsync(User user, string password, CancellationToken ct)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                "api/auth/register-from-planning",
+                new
+                {
+                    Email = user.Email,
+                    DefaultPassword = password,
+                    RoleName = user.Role?.Name,
+                    EmployeeId = user.Guid,
+                    ImposerMotDePasse = true,
+                },
+                ct);
+            if (response.IsSuccessStatusCode
+                && await response.Content.ReadFromJsonAsync<AuthRegisterResult>(cancellationToken: ct) is { } result)
+            {
+                user.AuthUserId = result.Id;
+                await _context.SaveChangesAsync(ct);
+                if (result.SubjectId != Guid.Empty)
+                    await _directoryEmployeeWrite.TryLinkAuthSubjectAsync(user.Guid, result.SubjectId);
+                _logger.LogInformation(
+                    "PasswordReset: compte Auth réprovisionné pour {Email} (AuthUserId={Id}).", user.Email, result.Id);
+                return new ResultatAuth(true, false, string.Empty);
+            }
+
+            var body = await response.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("Réprovisionnement Auth échoué pour {Email} : {Status} {Body}", user.Email, response.StatusCode, body);
+            return new ResultatAuth(false, false, MessageAuth(body, $"compte de connexion introuvable et recréation impossible ({(int)response.StatusCode})."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Réprovisionnement Auth : exception pour {Email}", user.Email);
+            return new ResultatAuth(false, false, "service d'authentification injoignable.");
+        }
+    }
+
+    /// <summary>Message lisible renvoyé par le service Auth ({ "message": "…" }), sinon <paramref name="defaut"/>.</summary>
+    public static string MessageAuth(string? body, string defaut)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return defaut;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                && (doc.RootElement.TryGetProperty("message", out var m) || doc.RootElement.TryGetProperty("Message", out m))
+                && m.ValueKind == System.Text.Json.JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(m.GetString()))
+            {
+                var texte = m.GetString()!.Trim();
+                return texte.EndsWith('.') ? texte : texte + ".";
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+        return defaut;
     }
 
     private static void ValidateCreateUserHrDates(CreateUserDto dto)
@@ -1188,8 +1356,51 @@ public class UserService : IUserService
         }
     }
 
+    /// <summary>
+    /// Compte Planning sans lien Auth (AuthUserId vide) dont le rôle change : le compte Auth est
+    /// retrouvé par e-mail et son rôle aligné, <b>sans mot de passe</b> (Auth ne le modifie pas et
+    /// ne crée aucun compte dans ce cas). Le lien AuthUserId est enregistré au passage.
+    /// </summary>
+    private async Task<bool> SyncRoleToAuthByEmailAsync(User user, bool journaliserEchec = true)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email)) return false;
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                "api/auth/register-from-planning",
+                new { Email = user.Email, DefaultPassword = (string?)null, RoleName = user.Role?.Name, EmployeeId = user.Guid });
+            if (!response.IsSuccessStatusCode)
+            {
+                if (journaliserEchec)
+                    _logger.LogWarning("Auth : rôle {Role} non appliqué à {Email} ({Status}) : {Body}",
+                        user.Role?.Name, user.Email, (int)response.StatusCode, await response.Content.ReadAsStringAsync());
+                return false;
+            }
+            var result = await response.Content.ReadFromJsonAsync<AuthRegisterResult>();
+            if (result is not { Id: > 0 }) return false;
+            user.AuthUserId = result.Id;
+            await _context.SaveChangesAsync();
+            if (result.SubjectId != Guid.Empty)
+                await _directoryEmployeeWrite.TryLinkAuthSubjectAsync(user.Guid, result.SubjectId);
+            _logger.LogInformation("Auth : rôle {Role} appliqué à {Email} (AuthUserId={Id}).", user.Role?.Name, user.Email, result.Id);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Auth : synchronisation du rôle impossible pour {Email}.", user.Email);
+            return false;
+        }
+    }
+
     private async Task SyncToAuthServiceAsync(User user, string? defaultPassword = null)
     {
+        // Compte non lié et aucun mot de passe imposé : si un compte Auth existe déjà pour cet
+        // e-mail, seul son rôle est aligné (aucun mot de passe envoyé, donc jamais réinitialisé).
+        // Le provisionnement avec mot de passe généré ne sert que si le compte n'existe pas.
+        if (!user.AuthUserId.HasValue && string.IsNullOrWhiteSpace(defaultPassword)
+            && await SyncRoleToAuthByEmailAsync(user, journaliserEchec: false))
+            return;
+
         var maxRetries = 3;
 
         for (int attempt = 1; attempt <= maxRetries; attempt++)
@@ -1210,6 +1421,9 @@ public class UserService : IUserService
                         DefaultPassword = password,
                         RoleName = user.Role?.Name,
                         EmployeeId = user.Guid,
+                        // v38 : mot de passe généré (aucun choisi) : il ne sert qu'à créer un compte
+                        // absent, jamais à remplacer le mot de passe d'un compte existant.
+                        ImposerMotDePasse = !string.IsNullOrWhiteSpace(defaultPassword),
                     });
 
                 if (response.IsSuccessStatusCode)
@@ -1267,6 +1481,7 @@ public class UserService : IUserService
                         DefaultPassword = ResolveOrGeneratePassword(i.DefaultPassword),
                         RoleName = i.User.Role?.Name,
                         EmployeeId = i.User.Guid,
+                        ImposerMotDePasse = true,
                     }).ToList(),
                 };
 
@@ -1370,12 +1585,24 @@ public class UserService : IUserService
         if (dto.NiveauExpertiseMetier.HasValue && !IsHrOrAdminRole(callerRole))
             throw new UnauthorizedAccessException("Seuls RH et Admin peuvent modifier l'expertise métier.");
 
+        var ancienSubServiceId = user.SubServiceId;
+        var ancienRoleId = user.RoleId;
         user.RoleId = dto.RoleId;
         user.SubServiceId = dto.SubServiceId;
+        // v27 : un poste hors production (équipe formation, RH…) quitte le service de production,
+        // sauf si un autre service est choisi en même temps.
+        if (dto.RoleId != ancienRoleId && user.SubServiceId is not null && dto.SubServiceId == ancienSubServiceId)
+        {
+            var nouveauRoleNom = await _context.Roles.AsNoTracking()
+                .Where(r => r.Id == dto.RoleId).Select(r => r.Name).FirstOrDefaultAsync();
+            if (PostesProduction.QuitteLeService(nouveauRoleNom))
+                user.SubServiceId = null;
+        }
         user.FirstName = dto.FirstName;
         user.LastName = dto.LastName;
         user.Email = dto.Email;
         user.HireDate = dto.HireDate;
+        var activeChanged = user.IsActive != dto.IsActive;
         user.IsActive = dto.IsActive;
         user.Level = dto.Level;
 
@@ -1388,12 +1615,18 @@ public class UserService : IUserService
         await _context.SaveChangesAsync();
         await _context.Entry(user).Reference(u => u.Role).LoadAsync();
 
+        // La fiche fait foi : chaque enregistrement réaligne le rôle de connexion, même sans
+        // changement (un compte resté désynchronisé se corrige en ré-enregistrant sa fiche).
         if (user.AuthUserId.HasValue)
             await SyncToAuthServiceAsync(user);
+        else
+            await SyncRoleToAuthByEmailAsync(user);
+        if (activeChanged)
+            await SyncAuthActiveAsync(user);
 
         if (!IsDirectoryWriteMaster())
         {
-            await PublishEmployeUpdatedForUserAsync(user, dto.SubServiceId);
+            await PublishEmployeUpdatedForUserAsync(user, user.SubServiceId);
             await _context.SaveChangesAsync();
             await _directoryEmployeeEnsure.TryEnsureFromPlanningAsync(user);
         }
@@ -1405,6 +1638,16 @@ public class UserService : IUserService
 
         if (user.SubServiceId is int subId)
             await EnsureBalancedSaturdayGroupAsync(user.Id, subId);
+        if (ancienSubServiceId != user.SubServiceId)
+        {
+            await JournaliserChangementServiceAsync(user, ancienSubServiceId);
+            // v26 : comme une réaffectation — plannings à venir de l'ancien service, annuaire.
+            var ancienService = ancienSubServiceId is int ancienSs
+                ? await _context.SubServices.AsNoTracking().Include(s => s.Service).ThenInclude(s => s.Floor)
+                    .FirstOrDefaultAsync(s => s.Id == ancienSs)
+                : null;
+            await ApresChangementDeServiceAsync(user, ancienService, CancellationToken.None);
+        }
 
         // Évite LoadOrgNameContext (GET Directory complet) sur le chemin import / update fréquent.
         var hrProfile = await _context.UserHrProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == id);
@@ -1412,48 +1655,98 @@ public class UserService : IUserService
         return ToDto(user, custom.GetValueOrDefault(id), EmptyOrgNameContext, hrProfile);
     }
 
-    public async Task<bool> DeleteUserAsync(int id)
+    public async Task<bool> SetUserActiveAsync(
+        int id,
+        bool isActive,
+        DateOnly? dateSortie = null,
+        CancellationToken ct = default)
     {
         var user = await _context.Users
             .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Id == id);
+            .FirstOrDefaultAsync(u => u.Id == id, ct);
         if (user == null) return false;
 
-        var employeeGuid = user.Guid;
-        var authUserId = user.AuthUserId;
-
-        if (authUserId.HasValue)
+        user.IsActive = isActive;
+        var profile = await _context.UserHrProfiles.FirstOrDefaultAsync(p => p.UserId == id, ct);
+        if (!isActive)
         {
-            try
+            if (profile is null)
             {
-                var response = await _httpClient.DeleteAsync($"api/auth/users/from-planning/{authUserId.Value}");
-                if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
-                {
-                    var body = await response.Content.ReadAsStringAsync();
-                    _logger.LogWarning("Suppression Auth échouée pour {Email} ({Status}): {Body}",
-                        user.Email, response.StatusCode, body);
-                }
+                profile = new UserHrProfile { UserId = id };
+                _context.UserHrProfiles.Add(profile);
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Suppression Auth indisponible pour {Email}", user.Email);
-            }
+            profile.ChangerEnFormation(false, DateOnly.FromDateTime(DateTime.UtcNow));
+            profile.DateSortie = dateSortie ?? profile.DateSortie ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+        else if (profile is not null)
+        {
+            // Réintégration : la date de sortie précédente ne s'applique plus.
+            profile.DateSortie = null;
         }
 
+        await _context.SaveChangesAsync(ct);
+
+        // Connexion bloquée (ou rétablie) côté Auth ; le compte n'est jamais supprimé.
+        await SyncAuthActiveAsync(user, ct);
+
         if (IsDirectoryWriteMaster())
-            await _directoryEmployeeWrite.TryDeleteEmployeeAsync(employeeGuid);
+        {
+            await _directoryEmployeeWrite.TryUpdateEmployeeAsync(user, ct);
+        }
         else
-            await _directoryEmployeeEnsure.TryDeleteFromPlanningAsync(employeeGuid);
+        {
+            await PublishEmployeUpdatedForUserAsync(user, user.SubServiceId);
+            await _context.SaveChangesAsync(ct);
+            await _directoryEmployeeEnsure.TryEnsureFromPlanningAsync(user);
+        }
 
-        var managedLinks = _context.UserSubServices.Where(us => us.UserId == id);
-        _context.UserSubServices.RemoveRange(managedLinks);
-
-        var managedServiceLinks = _context.UserManagedServices.Where(us => us.UserId == id);
-        _context.UserManagedServices.RemoveRange(managedServiceLinks);
-
-        _context.Users.Remove(user);
-        await _context.SaveChangesAsync();
+        _logger.LogInformation(
+            "Collaborateur {UserId} ({Email}) {Etat}.",
+            user.Id,
+            user.Email,
+            isActive ? "réactivé" : $"désactivé (sortie le {profile?.DateSortie:dd/MM/yyyy})");
         return true;
+    }
+
+    public async Task<bool> RollbackFailedCreationAsync(int id, CancellationToken ct = default)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
+        if (user == null) return false;
+        if (DateTime.UtcNow - user.CreatedAt > TimeSpan.FromMinutes(30))
+            throw new InvalidOperationException(
+                "Ce compte n'est pas une création en cours : il ne peut pas être supprimé, seulement désactivé.");
+
+        _logger.LogWarning("Annulation de la création incomplète de {Email} (id {Id}).", user.Email, user.Id);
+        await RollbackImportCreatedUserCoreAsync(user, ct);
+        return true;
+    }
+
+    /// <summary>Aligne l'état « compte actif » d'Auth sur Planning (connexion et renouvellement de session).</summary>
+    private async Task SyncAuthActiveAsync(User user, CancellationToken ct = default)
+    {
+        if (!user.AuthUserId.HasValue)
+            return;
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync(
+                $"api/auth/users/from-planning/{user.AuthUserId.Value}/active",
+                new { isActive = user.IsActive },
+                ct);
+            if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
+            {
+                var body = await response.Content.ReadAsStringAsync(ct);
+                _logger.LogWarning(
+                    "Auth : état actif={Active} non appliqué pour {Email} ({Status}) : {Body}",
+                    user.IsActive,
+                    user.Email,
+                    response.StatusCode,
+                    body);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Auth indisponible : état actif={Active} non appliqué pour {Email}", user.IsActive, user.Email);
+        }
     }
 
     public async Task<bool> ExitAfterInitialTrainingRejectionAsync(
@@ -1477,7 +1770,7 @@ public class UserService : IUserService
             _context.UserHrProfiles.Add(profile);
         }
 
-        profile.EnFormation = false;
+        profile.ChangerEnFormation(false, DateOnly.FromDateTime(DateTime.UtcNow));
         profile.DateSortie ??= DateOnly.FromDateTime(DateTime.UtcNow);
 
         await _context.SaveChangesAsync(ct);
@@ -1487,28 +1780,8 @@ public class UserService : IUserService
         else
             await _directoryEmployeeEnsure.TryEnsureFromPlanningAsync(user);
 
-        if (user.AuthUserId.HasValue)
-        {
-            try
-            {
-                var response = await _httpClient.DeleteAsync(
-                    $"api/auth/users/from-planning/{user.AuthUserId.Value}",
-                    ct);
-                if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
-                {
-                    var body = await response.Content.ReadAsStringAsync(ct);
-                    _logger.LogWarning(
-                        "Suppression Auth après rejet formation échouée pour {Email} ({Status}): {Body}",
-                        user.Email,
-                        response.StatusCode,
-                        body);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Auth indisponible après rejet formation pour {Email}", user.Email);
-            }
-        }
+        // Compte bloqué, jamais supprimé : l'historique reste consultable.
+        await SyncAuthActiveAsync(user, ct);
 
         _logger.LogInformation(
             "Sortie employé {Guid} ({Email}) après rejet formation initiale. Motif: {Reason}",
@@ -1538,10 +1811,12 @@ public class UserService : IUserService
             _context.UserHrProfiles.Add(profile);
         }
 
-        profile.EnFormation = false;
-        profile.DateFinFormationPrevue = productionStartDate == default
+        var debutProduction = productionStartDate == default
             ? DateOnly.FromDateTime(DateTime.UtcNow)
             : productionStartDate;
+        profile.ChangerEnFormation(false, debutProduction);
+        profile.FormationTermineeLe = debutProduction;
+        profile.DateFinFormationPrevue = debutProduction;
 
         var expertise = niveauExpertiseMetier is >= 1 and <= 3
             ? niveauExpertiseMetier
@@ -1913,7 +2188,24 @@ public class UserService : IUserService
 
     private static readonly OrgNameContext EmptyOrgNameContext = new(new(), new(), new());
 
+    /// <summary>
+    /// Noms d'activité lus dans Employee Directory, gardés 60 s : la liste des employés (et chaque
+    /// écran qui la charge) n'interroge plus Directory à chaque ouverture.
+    /// </summary>
+    private static (DateTime Le, OrgNameContext Contexte)? _orgNameCache;
+    private static readonly TimeSpan OrgNameCacheDuree = TimeSpan.FromSeconds(60);
+
     private async Task<OrgNameContext> LoadOrgNameContextAsync()
+    {
+        if (_orgNameCache is { } enCache && DateTime.UtcNow - enCache.Le < OrgNameCacheDuree)
+            return enCache.Contexte;
+        var contexte = await LoadOrgNameContextSansCacheAsync();
+        if (!ReferenceEquals(contexte, EmptyOrgNameContext))
+            _orgNameCache = (DateTime.UtcNow, contexte);
+        return contexte;
+    }
+
+    private async Task<OrgNameContext> LoadOrgNameContextSansCacheAsync()
     {
         try
         {
@@ -2219,7 +2511,7 @@ public class UserService : IUserService
             profile.AncienService = dto.AncienService;
             profile.NiveauScolaire = dto.NiveauScolaire;
             profile.IntitulesEtudes = dto.IntitulesEtudes;
-            profile.EnFormation = dto.EnFormation;
+            profile.ChangerEnFormation(dto.EnFormation, DateOnly.FromDateTime(DateTime.UtcNow));
             profile.DateDebutFormation = dto.DateDebutFormation;
             profile.DateFinFormationPrevue = dto.DateFinFormationPrevue;
         }

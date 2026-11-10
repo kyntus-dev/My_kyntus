@@ -1,4 +1,6 @@
-import { Component, OnDestroy, OnInit, ViewEncapsulation, inject, ElementRef, ViewChild, HostListener, effect, signal } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, OnInit, ViewEncapsulation, inject, ElementRef, ViewChild, HostListener, computed, effect, signal } from '@angular/core';
+import { KyntusRoleWatchService } from '../../core/session/kyntus-role-watch.service';
+import { libelleRole } from '../../core/org/role-libelle';
 
 import { CommonModule } from '@angular/common';
 
@@ -11,6 +13,7 @@ import { Bell, Briefcase, CircleHelp, Moon, Settings, Sun, UserRound } from 'luc
 
 import { Microservice, MenuItem } from '../../core/navigation/microservices.config';
 import { NavigationMenuService } from '../../core/navigation/navigation-menu.service';
+import { HeureSortieAccessService } from '../../core/services/heure-sortie-access.service';
 import { WorkspaceHatService } from '../../core/navigation/workspace-hat.service';
 import {
   landingForHat,
@@ -55,6 +58,8 @@ import { DocumentationNavigationService } from '../documentation/services/docume
 
 import { AuditInterfaceNavService } from '../documentation/services/audit-interface-nav.service';
 import { PlatformAccessService } from '../../core/platform-access/platform-access.service';
+import { AppGuideService } from '../../core/help/app-guide.service';
+import { APP_GUIDE_ROUTE } from '../../core/navigation/microservices.config';
 
 
 
@@ -92,6 +97,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
 
   private readonly menuService = inject(NavigationMenuService);
+  private readonly heureSortieAccess = inject(HeureSortieAccessService);
 
   private readonly deptContext = inject(DepartmentContextService);
 
@@ -104,6 +110,8 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   private readonly primeSection = inject(PrimeSectionService);
 
   private readonly session = inject(KyntusSessionService);
+  private readonly roleWatch = inject(KyntusRoleWatchService);
+  private readonly destroyRef = inject(DestroyRef);
 
   private readonly parrainageNav = inject(ParrainageNavService);
 
@@ -121,6 +129,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   readonly shellUi = inject(KyntusShellUiService);
   readonly workspace = inject(WorkspaceHatService);
   private readonly platformAccess = inject(PlatformAccessService);
+  private readonly appGuides = inject(AppGuideService);
 
   readonly icons = {
     bell: Bell,
@@ -135,6 +144,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   currentUser: any = null;
 
   role = '';
+  readonly libelleRole = libelleRole;
 
   sidebarOpen = false;
   sidebarCollapsed = false;
@@ -159,6 +169,49 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   readonly groups = signal<Microservice[]>([]);
 
   readonly openGroups = signal(new Set<string>());
+
+  /** Recherche dans le menu (Ctrl K) : liste à plat des entrées dont le libellé correspond. */
+  readonly menuRecherche = signal('');
+  @ViewChild('menuSearch') private menuSearch?: ElementRef<HTMLInputElement>;
+  readonly resultatsMenu = computed(() => {
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const q = norm(this.menuRecherche().trim());
+    if (!q) return [];
+    const out: { item: MenuItem; groupe: string }[] = [];
+    for (const g of this.groups()) {
+      for (const item of g.children ?? []) {
+        if (item.isSectionHeader) continue;
+        if (norm(`${item.label} ${g.label}`).includes(q)) out.push({ item, groupe: g.label });
+      }
+    }
+    return out.slice(0, 12);
+  });
+
+  @HostListener('document:keydown', ['$event'])
+  raccourciMenu(e: KeyboardEvent): void {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      if (this.sidebarCollapsed) this.toggleCollapse();
+      this.sidebarOpen = true;
+      setTimeout(() => this.menuSearch?.nativeElement.focus(), 0);
+    }
+  }
+
+  ouvrirResultat(item: MenuItem): void {
+    this.menuRecherche.set('');
+    void this.onItemClick(item);
+  }
+
+  /** Entrée dans la recherche : ouvre le premier résultat ; Échap : efface. */
+  toucheRecherche(e: KeyboardEvent): void {
+    if (e.key === 'Enter') {
+      const premier = this.resultatsMenu()[0];
+      if (premier) this.ouvrirResultat(premier.item);
+    } else if (e.key === 'Escape') {
+      this.menuRecherche.set('');
+      (e.target as HTMLInputElement).blur();
+    }
+  }
 
   private subDocRole?: { unsubscribe(): void };
 
@@ -195,6 +248,12 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
       if (!this.role) return;
       this.refreshGroups();
     });
+    // Badge « Guide de l'application » : suit le nombre de guides non consultés.
+    effect(() => {
+      this.appGuides.pendingCount();
+      if (!this.role) return;
+      this.refreshGroups();
+    });
   }
 
 
@@ -226,6 +285,8 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
     }
 
     this.session.syncStoredUserFromAccessToken();
+    // Rôle changé par un Admin : session et menus mis à jour sans reconnexion.
+    this.roleWatch.demarrer(this.destroyRef);
     this.parrainageRole.syncFromSession();
 
     this.users.getCurrentUser().subscribe({
@@ -243,8 +304,11 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
     this.refreshGroups();
 
+    this.appGuides.refresh().subscribe(() => this.offerAppGuideOnboarding());
+
     void this.deptContext.load().finally(() => this.refreshGroups());
     void this.platformAccess.ensureLoaded().finally(() => this.refreshGroups());
+    void this.heureSortieAccess.charger().then(() => this.refreshGroups());
 
     this.updateModuleClass(this.router.url);
 
@@ -263,6 +327,19 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   }
 
 
+
+  /**
+   * Accueil guidé : à l'arrivée sur l'accueil, s'il reste des guides à consulter pour le rôle,
+   * l'utilisateur est conduit une fois par session vers « Guide de l'application »
+   * (bouton « Passer pour l'instant » disponible).
+   */
+  private offerAppGuideOnboarding(): void {
+    const path = this.router.url.split('?')[0];
+    if (path !== '/home' && path !== '/') return;
+    if (!this.appGuides.shouldOfferOnboarding()) return;
+    this.appGuides.skipOnboardingForSession();
+    void this.router.navigateByUrl(APP_GUIDE_ROUTE);
+  }
 
   private refreshGroups(): void {
 

@@ -82,7 +82,9 @@ public sealed class DirectoryHierarchyService(DirectoryDbContext db)
                 }
                 break;
             case DomainAssignmentKind.Pilote:
-                employee.Role = KyntusRoleNames.Pilote;
+                // Un membre de la cellule IT placé sur un service garde son rôle.
+                if (!KyntusRoleNames.IsEquipeIt(employee.Role))
+                    employee.Role = KyntusRoleNames.Pilote;
                 employee.ServiceId = nodeId;
                 var pilotSvc = await db.OrgServices.AsNoTracking().Include(s => s.Cellule).FirstOrDefaultAsync(s => s.Id == nodeId, ct);
                 if (pilotSvc is not null)

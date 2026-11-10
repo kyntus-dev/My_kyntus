@@ -492,6 +492,20 @@ internal static class CongeQuotaPerimeter
         DirectoryOrgCatalogSnapshot catalog,
         CancellationToken ct)
     {
+        // v36 : un pôle, une cellule ou un service archivé dans Directory disparaît des quotas,
+        // même si un agent y est encore rattaché.
+        var nodes = await ResolveQuotaNodesBrutsAsync(employeRepo, rebac, actorId, team, catalog, ct);
+        return nodes.Where(n => !catalog.EstHorsArbre(n.NodeId)).ToList();
+    }
+
+    private static async Task<IReadOnlyList<QuotaNode>> ResolveQuotaNodesBrutsAsync(
+        IEmployeSnapshotRepository employeRepo,
+        IRebacClient? rebac,
+        Guid actorId,
+        IReadOnlyList<EmployeSnapshot> team,
+        DirectoryOrgCatalogSnapshot catalog,
+        CancellationToken ct)
+    {
         var actor = await employeRepo.GetByEmployeIdAsync(actorId, ct);
         var map = new Dictionary<string, QuotaNode>(StringComparer.OrdinalIgnoreCase);
 
@@ -504,6 +518,28 @@ internal static class CongeQuotaPerimeter
 
         if (rebac is not null)
         {
+            // v29 : chef de projet — tout le périmètre de son département (pôles du contrat, leurs
+            // cellules et leurs services). Un superviseur reste limité à ses cellules (ci-dessous).
+            try
+            {
+                var poles = await rebac.GetManagedNodeIdsAsync(actorId, "ChefDeProjet", ct);
+                if (poles.Count > 0 && catalog.CelluleParents.Count > 0)
+                {
+                    var polesDuDept = catalog.PolesDuDepartement(poles);
+                    var cellulesDuDept = catalog.CellulesDesPoles(polesDuDept).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    foreach (var c in cellulesDuDept)
+                        TryAddManagedNode(map, c, QuotaScopeKinds.Cellule, team, catalog);
+                    foreach (var s in catalog.ServicesDesCellules(cellulesDuDept))
+                        TryAddManagedNode(map, s, QuotaScopeKinds.Service, team, catalog);
+                    if (map.Count > 0)
+                        return map.Values.ToList();
+                }
+            }
+            catch
+            {
+                /* soft-wire : on retombe sur les cellules et services gérés */
+            }
+
             try
             {
                 var cellules = await rebac.GetManagedNodeIdsAsync(actorId, "Superviseur", ct);

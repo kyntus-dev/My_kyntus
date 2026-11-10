@@ -4,7 +4,8 @@ export type OrganisationRhTab =
   | 'departments'
   | 'poles'
   | 'cellules'
-  | 'structure';
+  | 'structure'
+  | 'effectifs';
 
 /** Entrée menu Organisation : accueil sans query ou onglet ciblé. */
 export type OrganisationMenuEntry = 'home' | OrganisationRhTab;
@@ -16,7 +17,7 @@ export function organisationTabQuery(entry: OrganisationMenuEntry): Record<strin
 
 export function parseOrganisationRhTab(tab: string | null | undefined): OrganisationRhTab {
   if (tab === 'metier-departments') return 'metier-departments';
-  if (tab === 'poles' || tab === 'cellules' || tab === 'structure') return tab;
+  if (tab === 'poles' || tab === 'cellules' || tab === 'structure' || tab === 'effectifs') return tab;
   return 'departments';
 }
 

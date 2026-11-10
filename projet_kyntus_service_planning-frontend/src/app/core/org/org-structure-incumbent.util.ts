@@ -33,6 +33,19 @@ export function structureRoleLabel(roleName: string): string {
   return 'titulaire';
 }
 
+/**
+ * Titulaires proposables : uniquement les collaborateurs actifs connus de l'organisation RH
+ * (l'overview Directory ne liste que les comptes actifs). Un compte désactivé ou sorti
+ * n'est jamais proposé comme responsable.
+ */
+function onlyActiveIncumbents(employees: readonly Employee[] | undefined, userIds: readonly string[]): StructureIncumbent[] {
+  const known = new Set((employees ?? []).map((e) => e.id.trim()));
+  return [...new Set(userIds.map((id) => id.trim()).filter((id) => id && known.has(id)))].map((userId) => ({
+    userId,
+    displayName: employeeDisplayName(employees ?? [], userId),
+  }));
+}
+
 export function findStructureIncumbents(
   overview: OrgAssignmentsOverview,
   roleName: string,
@@ -64,11 +77,7 @@ export function findStructureIncumbents(
     }
   }
 
-  const unique = [...new Set(userIds)];
-  return unique.map((userId) => ({
-    userId,
-    displayName: employeeDisplayName(overview.employees, userId),
-  }));
+  return onlyActiveIncumbents(overview.employees, userIds);
 }
 
 /** @deprecated Préférer findStructureIncumbents — retourne le premier titulaire. */
@@ -262,15 +271,10 @@ export function filterSuperviseursForChefDeProjet(
         .map((a) => a.userId!.trim())
     : [];
 
-  const userIds = [...new Set([
+  return onlyActiveIncumbents(overview.employees, [
     ...fromHierarchy.map((e) => e.id),
     ...fromStructure,
-  ])];
-
-  return userIds.map((userId) => ({
-    userId,
-    displayName: employeeDisplayName(overview.employees ?? [], userId),
-  }));
+  ]);
 }
 
 /** Référents techniques sous le superviseur sélectionné. */
@@ -293,13 +297,8 @@ export function filterReferentsForSuperviseur(
         .map((a) => a.userId!.trim())
     : [];
 
-  const userIds = [...new Set([
+  return onlyActiveIncumbents(overview.employees, [
     ...fromHierarchy.map((e) => e.id),
     ...fromStructure,
-  ])];
-
-  return userIds.map((userId) => ({
-    userId,
-    displayName: employeeDisplayName(overview.employees ?? [], userId),
-  }));
+  ]);
 }

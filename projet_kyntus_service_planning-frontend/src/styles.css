@@ -1,6 +1,7 @@
 /* You can add global styles to this file, and also import other style files */
 /* Fonts : chargées via <link> dans index.html (preconnect + display=swap) */
 @import './app/core/styles/_animations.css';
+@import './app/core/styles/ky-ui.css';
 @import './app/features/prime/styles/prime-sector-bands.css';
 
 /* ── Tokens globaux de la plateforme unifiée (style aligné Prime/Kyntus) ── */

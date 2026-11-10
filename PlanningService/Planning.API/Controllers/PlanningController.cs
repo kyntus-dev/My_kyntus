@@ -29,6 +29,8 @@ public class PlanningController(
     private const string CapShiftConfigure = "planning.shift-config.Configure";
     private const string CapGenerate = "planning.generate.Act";
     private const string CapPublish = "planning.publish.Validate";
+    /// <summary>Superviseur : valide (et publie) les plannings de son périmètre.</summary>
+    private const string CapValidateSuperviseur = "planning.validation.Validate";
 
     private async Task<int?> ResolvePlanningUserIdAsync()
     {
@@ -455,10 +457,29 @@ public class PlanningController(
 
     // POST api/planning/5/publish
     [HttpPost("{id}/publish")]
-    [Authorize(Roles = "Admin,RH")]
+    [Authorize]
     public async Task<IActionResult> Publish(int id, [FromQuery] int validatorId)
     {
-        if (await ForbidUnlessAsync(CapPublish) is { } denied) return denied;
+        // Admin / RH (« Publier un planning ») : tous les plannings.
+        // Superviseur (« Valider les plannings › Valider ») : uniquement ceux de son périmètre ;
+        // sa validation publie le planning et déclenche l'envoi aux agents.
+        if (await ForbidUnlessAsync(CapPublish) is not null)
+        {
+            if (await ForbidUnlessAsync(CapValidateSuperviseur) is { } denied) return denied;
+            var viewerId = await ResolvePlanningUserIdAsync();
+            if (viewerId is not > 0) return Forbid();
+            var planning = await _planningService.GetPlanningByIdAsync(id);
+            if (planning is null) return NotFound();
+            try
+            {
+                await _planningService.EnsureViewerCanManageSubServiceAsync(viewerId.Value, planning.SubServiceId);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Ce planning n'est pas dans votre périmètre." });
+            }
+            validatorId = viewerId.Value;
+        }
         try
         {
             var result = await _planningService.PublishPlanningAsync(id, validatorId);

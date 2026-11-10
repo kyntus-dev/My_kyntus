@@ -41,8 +41,25 @@ public interface IDirectoryEmployeeWriteClient
     Task<bool> IsEmailUsedInDirectoryAsync(string email, Guid? excludeEmployeeId = null, CancellationToken ct = default);
 
     Task<bool> TryUpdateEmployeeAsync(User user, CancellationToken ct = default);
+
+    /// <summary>Idem, en rattachant l'agent à un département (structure support, v28).</summary>
+    Task<bool> TryUpdateEmployeeAsync(User user, Guid? departementId, CancellationToken ct = default);
     Task<bool> TryLinkAuthSubjectAsync(Guid employeeId, Guid authSubjectId, CancellationToken ct = default);
     Task<bool> TryDeleteEmployeeAsync(Guid employeeGuid, CancellationToken ct = default);
+
+    /// <summary>
+    /// Détache l'agent d'un nœud d'Organisation RH (level « pole », « cellule », « service » ou « all ») et
+    /// clôt ses titulatures sur ce nœud (v26 : sortie de la production lors d'une réaffectation).
+    /// </summary>
+    Task<bool> TryClearOrgPlacementAsync(Guid employeeGuid, string level, string? nodeId, CancellationToken ct = default);
+
+    /// <summary>
+    /// v29 : remplace les responsabilités d'un responsable dans Organisation RH (kind ChefDeProjet,
+    /// Superviseur ou ReferentTechnique ; nœuds = pôles, cellules ou services). Renvoie le message
+    /// d'erreur de l'annuaire, ou null si c'est fait.
+    /// </summary>
+    Task<string?> TryReconcileAssignmentsAsync(
+        Guid employeeGuid, string kind, IReadOnlyList<string> nodeIds, string? reason, CancellationToken ct = default);
 }
 
 public sealed class DirectoryEmployeeWriteClient(
@@ -248,6 +265,9 @@ public sealed class DirectoryEmployeeWriteClient(
             ct);
 
     public Task<bool> TryUpdateEmployeeAsync(User user, CancellationToken ct = default) =>
+        TryUpdateEmployeeAsync(user, null, ct);
+
+    public Task<bool> TryUpdateEmployeeAsync(User user, Guid? departementId, CancellationToken ct = default) =>
         ExecuteWithRetriesAsync(
             async () =>
             {
@@ -270,6 +290,7 @@ public sealed class DirectoryEmployeeWriteClient(
                     email = user.Email,
                     role = user.Role?.Name ?? KyntusRoleNames.Employee,
                     serviceId = primeServiceId,
+                    businessDepartmentId = departementId,
                     parentId = hr?.SuperviseurId,
                     isActive = user.IsActive,
                     hireDate = user.HireDate,
@@ -367,6 +388,57 @@ public sealed class DirectoryEmployeeWriteClient(
             $"delete guid={employeeGuid}",
             false,
             ct);
+    }
+
+    public Task<bool> TryClearOrgPlacementAsync(Guid employeeGuid, string level, string? nodeId, CancellationToken ct = default)
+    {
+        if (employeeGuid == Guid.Empty) return Task.FromResult(false);
+        return ExecuteWithRetriesAsync(
+            async () =>
+            {
+                var client = CreateClient();
+                using var request = new HttpRequestMessage(HttpMethod.Post, $"api/directory/employees/{employeeGuid:D}/clear-org-placement")
+                {
+                    Content = JsonContent.Create(new { level, nodeId }),
+                };
+                AttachAuth(request);
+                var response = await client.SendAsync(request, ct);
+                if (response.IsSuccessStatusCode) return true;
+                var body = await response.Content.ReadAsStringAsync(ct);
+                logger.LogWarning("Directory clear-org-placement échec {Status} pour {Guid}: {Body}", response.StatusCode, employeeGuid, body);
+                return false;
+            },
+            $"clear-org-placement guid={employeeGuid} {level}",
+            false,
+            ct);
+    }
+
+    public async Task<string?> TryReconcileAssignmentsAsync(
+        Guid employeeGuid, string kind, IReadOnlyList<string> nodeIds, string? reason, CancellationToken ct = default)
+    {
+        if (employeeGuid == Guid.Empty) return "Agent absent d'Organisation RH.";
+        if (nodeIds.Count == 0) return "Choisissez au moins un périmètre.";
+        try
+        {
+            var client = CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"api/directory/org/assignments/{kind}/employees/{employeeGuid:D}")
+            {
+                Content = JsonContent.Create(new { nodeIds, primaryNodeId = nodeIds[0], reason }),
+            };
+            AttachAuth(request);
+            var response = await client.SendAsync(request, ct);
+            if (response.IsSuccessStatusCode) return null;
+            var body = await response.Content.ReadAsStringAsync(ct);
+            logger.LogWarning("Directory responsabilités {Kind} échec {Status} pour {Guid}: {Body}", kind, response.StatusCode, employeeGuid, body);
+            return response.StatusCode == System.Net.HttpStatusCode.Forbidden
+                ? "Organisation RH a refusé le changement (droit « Réaffecter les agents » au niveau Modifier nécessaire)."
+                : "Organisation RH n'a pas accepté le changement de périmètre.";
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Directory responsabilités {Kind} indisponible pour {Guid}", kind, employeeGuid);
+            return "Organisation RH est indisponible : réessayez.";
+        }
     }
 
     private async Task<T> ExecuteWithRetriesAsync<T>(

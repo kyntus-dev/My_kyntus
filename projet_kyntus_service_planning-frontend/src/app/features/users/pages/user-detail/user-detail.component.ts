@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -11,7 +11,9 @@ import { EmployeeFieldService } from '../../services/employee-field.service';
 import type { EmployeeImportFieldConfig } from '../../services/employee-import.service';
 import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
 import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
-import { ArrowLeft, History, KeyRound, Pencil, Trash2 } from 'lucide';
+import { ArrowLeft, ArrowRightLeft, History, KeyRound, Pencil, RotateCcw, ShieldCheck, UserX } from 'lucide';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
+import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import type { Department } from '../../../prime/models';
 import { PrimeOrgApiService, type OrgAssignmentsOverview } from '../../../prime/services/prime-org-api.service';
 import type { SubService } from '../../../sub-services/sub-services-module';
@@ -28,6 +30,7 @@ import {
   orgCellLabel,
   orgDepartmentLabel,
   orgPerimeterSummary,
+  orgServiceIsCelluleMirror,
   type BusinessDepartmentRef,
   type DirectoryEmployeeOrgRef,
   type UserOrgPerimeterView,
@@ -42,16 +45,22 @@ import {
   type EmployeeDetailSection,
 } from '../../../../core/hr/user-hr-display.util';
 import { PilotRotationHistoryModalComponent } from '../../../prime/components/pilot-rotation-history-modal.component';
+import { EmployeeDeactivateDialogComponent } from '../../components/employee-deactivate-dialog.component';
 
 @Component({
   selector: 'app-user-detail',
   standalone: true,
-  imports: [CommonModule, LucideIconComponent, KyntusPageHeaderComponent, PilotRotationHistoryModalComponent],
+  imports: [CommonModule, LucideIconComponent, KyntusPageHeaderComponent, PilotRotationHistoryModalComponent, EmployeeDeactivateDialogComponent],
   templateUrl: './user-detail.component.html',
   styleUrls: ['./user-detail.component.css']
 })
 export class UserDetailComponent implements OnInit {
-  readonly icons = { back: ArrowLeft, edit: Pencil, trash: Trash2, history: History, key: KeyRound };
+  readonly icons = { back: ArrowLeft, edit: Pencil, deactivate: UserX, reactivate: RotateCcw, history: History, key: KeyRound, droits: ShieldCheck, service: ArrowRightLeft };
+  /** Changement de service (droit « rh.affectations »). */
+  private readonly platformAccess = inject(PlatformAccessService);
+  readonly peutReaffecter = () => this.platformAccess.canAct('rh.affectations') || this.peutGererDroits;
+  /** Droits d'accès du compte (Admin) : rôle + exceptions propres au compte. */
+  readonly peutGererDroits = inject(KyntusSessionService).getRole() === 'Admin';
   readonly orgCellLabel = orgCellLabel;
   readonly orgDepartmentLabel = orgDepartmentLabel;
   readonly contractLevelLabel = contractLevelLabel;
@@ -91,6 +100,11 @@ export class UserDetailComponent implements OnInit {
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.loadUser(id);
+  }
+
+  /** Service miroir de la cellule (même nom) : colonne Service masquée pour éviter le doublon. */
+  get serviceIsCelluleMirror(): boolean {
+    return orgServiceIsCelluleMirror(this.perimeter);
   }
 
   get perimeterSummary(): string {
@@ -266,6 +280,14 @@ export class UserDetailComponent implements OnInit {
   goBack(): void { this.router.navigate(['/users']); }
   editUser(): void { this.router.navigate(['/users', 'edit', this.user?.id]); }
 
+  changerService(): void {
+    if (this.user?.id) void this.router.navigate(['/reaffectations'], { queryParams: { agent: this.user.id } });
+  }
+
+  gererDroits(): void {
+    if (this.user?.guid) void this.router.navigate(['/admin'], { queryParams: { section: 'comptes', compte: this.user.guid.toLowerCase() } });
+  }
+
   async resetPassword(): Promise<void> {
     if (!this.user || this.resettingPassword) return;
     const ok = await this.confirmService.confirm({
@@ -334,18 +356,41 @@ export class UserDetailComponent implements OnInit {
     }
   }
 
-  async deleteUser(): Promise<void> {
+  deactivateOpen = false;
+  deactivating = false;
+
+  confirmDeactivate(dateSortie: string): void {
+    if (!this.user || this.deactivating) return;
+    this.deactivating = true;
+    this.userService.deactivateUser(this.user.id, dateSortie).subscribe({
+      next: () => {
+        this.deactivating = false;
+        this.deactivateOpen = false;
+        this.toastService.success('Collaborateur désactivé. Son historique est conservé.');
+        this.router.navigate(['/users']);
+      },
+      error: (err) => {
+        this.deactivating = false;
+        this.toastService.error(err?.error?.message ?? 'Désactivation impossible.');
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  async reactivateUser(): Promise<void> {
     if (!this.user) return;
     const ok = await this.confirmService.confirm({
-      title: 'Supprimer l\'employé',
-      message: 'Supprimer cet employé ?',
-      confirmLabel: 'Supprimer',
-      variant: 'danger',
+      title: 'Réactiver le collaborateur',
+      message: 'Il pourra de nouveau se connecter ; pensez à vérifier son affectation.',
+      confirmLabel: 'Réactiver',
     });
     if (!ok) return;
-    this.userService.deleteUser(this.user.id).subscribe({
-      next: () => this.router.navigate(['/users']),
-      error: (err) => this.toastService.error(`Erreur: ${err.error?.message}`),
+    this.userService.reactivateUser(this.user.id).subscribe({
+      next: () => {
+        this.toastService.success('Collaborateur réactivé.');
+        this.loadUser(this.user!.id);
+      },
+      error: (err) => this.toastService.error(err?.error?.message ?? 'Réactivation impossible.'),
     });
   }
 

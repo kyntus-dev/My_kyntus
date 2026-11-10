@@ -48,7 +48,7 @@ const routes: Routes = [
   {
     path: 'equipe',
     canActivate: [AuthGuard],
-    data: { roles: ['Manager', 'Coach', 'Référent technique', 'Superviseur', 'Admin', 'RH'] },
+    data: { ouvertureIam: 'planning.equipe', roles: ['Manager', 'Coach', 'Référent technique', 'Superviseur', 'Admin', 'RH'] },
     loadComponent: () =>
       import('./pages/planning-equipe/planning-equipe.component')
         .then(m => m.PlanningEquipeComponent),
@@ -56,7 +56,7 @@ const routes: Routes = [
   {
     path: 'change-requests',
     canActivate: [AuthGuard],
-    data: {
+    data: { ouvertureIam: 'planning.change-requests',
       roles: [
         'Admin',
         'RH',
@@ -75,7 +75,7 @@ const routes: Routes = [
   {
     path: 'exceptional-requests',
     canActivate: [AuthGuard],
-    data: {
+    data: { ouvertureIam: 'planning.exceptional-requests',
       roles: [
         'Admin',
         'RH',
@@ -94,7 +94,7 @@ const routes: Routes = [
   {
     path: 'demandes-renfort',
     canActivate: [AuthGuard],
-    data: {
+    data: { ouvertureIam: 'planning.reinforcement',
       roles: [
         'Admin',
         'RH',

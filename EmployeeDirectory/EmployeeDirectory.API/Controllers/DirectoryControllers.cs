@@ -1,3 +1,4 @@
+using EmployeeDirectory.API.Filters;
 using EmployeeDirectory.Application.Abstractions;
 using EmployeeDirectory.Application.BusinessDepartments;
 using EmployeeDirectory.Application.Dtos;
@@ -104,6 +105,8 @@ public class DirectoryEmployeesController(IMediator mediator) : ControllerBase
     /// <summary>
     /// Détache l'employé du périmètre (pole / cellule / service) et clôture les titulatures sur le nœud.
     /// </summary>
+    // v39 : réservé aux comptes habilités (Admin / RH, droit Organisation ou Réaffecter) — était ouvert à tout compte connecté.
+    [OrgWriteAccess]
     [HttpPost("employees/{id:guid}/clear-org-placement")]
     public async Task<ActionResult<EmployeeDto>> ClearOrgPlacement(
         Guid id,
@@ -170,8 +173,30 @@ public class DirectoryEmployeesController(IMediator mediator) : ControllerBase
 [ApiController]
 [Route("api/directory/org")]
 [Authorize]
-public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgController> logger) : ControllerBase
+public class DirectoryOrgController(
+    IMediator mediator,
+    ILogger<DirectoryOrgController> logger,
+    IOrgScopeAssignmentService scopes) : ControllerBase
 {
+    /// <summary>
+    /// Réorganisation 2026 : un nœud créé dans un périmètre déjà couvert en totalité
+    /// (activité pour superviseur / chef de projet, cellule pour référent technique)
+    /// est ajouté au responsable. Ne fait jamais échouer la création du nœud.
+    /// </summary>
+    private async Task PropagateScopeSafelyAsync(Func<Task<int>> propagate, string nodeId)
+    {
+        try
+        {
+            var extended = await propagate();
+            if (extended > 0)
+                logger.LogInformation("Org scope propagation: {Count} responsable(s) étendu(s) au nœud {NodeId}", extended, nodeId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Org scope propagation ignorée pour le nœud {NodeId}", nodeId);
+        }
+    }
+
     [HttpGet("overview")]
     public async Task<ActionResult<OrgOverviewDto>> Overview(CancellationToken ct)
     {
@@ -211,7 +236,7 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
     }
 
     [HttpPost("structure/poles")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<ActionResult<object>> CreatePole([FromBody] CreatePoleRequest? body, CancellationToken ct)
     {
         if (body is null)
@@ -224,6 +249,7 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
         try
         {
             var id = await mediator.Send(new CreatePoleCommand(body.Name.Trim(), body.BusinessDepartmentId), ct);
+            await PropagateScopeSafelyAsync(() => scopes.PropagateAfterPoleAttachedAsync(id, User.GetSubjectId(), ct), id);
             return Ok(new { id });
         }
         catch (KeyNotFoundException e) { return NotFound(new { error = e.Message }); }
@@ -255,57 +281,157 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
         }
     }
 
+    [OrgWriteAccess]
     [HttpPatch("structure/poles/{nodeId}/business-department")]
     public async Task<IActionResult> AttachPoleToDepartment(string nodeId, [FromBody] AttachPoleToDepartmentRequest body, CancellationToken ct)
     {
         try
         {
-            return await mediator.Send(new AttachPoleToDepartmentCommand(nodeId, body.BusinessDepartmentId), ct)
-                ? NoContent()
-                : NotFound();
+            if (!await mediator.Send(new AttachPoleToDepartmentCommand(nodeId, body.BusinessDepartmentId), ct))
+                return NotFound();
+            await PropagateScopeSafelyAsync(() => scopes.PropagateAfterPoleAttachedAsync(nodeId, User.GetSubjectId(), ct), nodeId);
+            return NoContent();
         }
         catch (KeyNotFoundException e) { return NotFound(new { error = e.Message }); }
         catch (InvalidOperationException e) { return Conflict(new { error = e.Message }); }
     }
 
+    [OrgWriteAccess]
     [HttpPost("structure/poles/{poleId}/cellules")]
     public async Task<ActionResult<object>> CreateCellule(string poleId, [FromBody] CreateNodeRequest body, CancellationToken ct)
     {
         var id = await mediator.Send(new CreateCelluleCommand(poleId, body.Name), ct);
+        await PropagateScopeSafelyAsync(() => scopes.PropagateAfterCelluleCreatedAsync(id, User.GetSubjectId(), ct), id);
         return Ok(new { id });
     }
 
+    [OrgWriteAccess]
     [HttpPost("structure/cellules/{celluleId}/services")]
     public async Task<ActionResult<object>> CreateService(string celluleId, [FromBody] CreateNodeRequest body, CancellationToken ct)
     {
         var id = await mediator.Send(new CreateServiceCommand(celluleId, body.Name), ct);
+        await PropagateScopeSafelyAsync(() => scopes.PropagateAfterServiceCreatedAsync(id, User.GetSubjectId(), ct), id);
         return Ok(new { id });
     }
 
+    /// <summary>
+    /// v29 : regroupe des cellules (et des services isolés) dans une cellule existante ou nouvelle.
+    /// Services, agents et superviseurs suivent ; les cellules vidées sont archivées.
+    /// </summary>
+    [OrgWriteAccess]
+    [HttpPost("structure/cellules/regrouper")]
+    public async Task<ActionResult<RegroupementCellulesResult>> RegrouperCellules(
+        [FromBody] RegrouperCellulesRequest body, CancellationToken ct)
+    {
+        try
+        {
+            var result = await mediator.Send(new RegrouperCellulesCommand(body, User.GetSubjectId()), ct);
+            if (result.CibleCreee)
+                await PropagateScopeSafelyAsync(() => scopes.PropagateAfterCelluleCreatedAsync(result.CibleId, User.GetSubjectId(), ct), result.CibleId);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [OrgWriteAccess]
     [HttpPut("structure/poles/{nodeId}")]
     public async Task<IActionResult> RenamePole(string nodeId, [FromBody] CreateNodeRequest body, CancellationToken ct) =>
         await mediator.Send(new RenameOrgNodeCommand(OrgNodeLevel.Pole, nodeId, body.Name), ct) ? NoContent() : NotFound();
 
+    [OrgWriteAccess]
     [HttpPut("structure/poles/{poleId}/cellules/{nodeId}")]
     public async Task<IActionResult> RenameCellule(string poleId, string nodeId, [FromBody] CreateNodeRequest body, CancellationToken ct) =>
         await mediator.Send(new RenameOrgNodeCommand(OrgNodeLevel.Cellule, nodeId, body.Name), ct) ? NoContent() : NotFound();
 
+    [OrgWriteAccess]
     [HttpPut("structure/cellules/{celluleId}/services/{nodeId}")]
     public async Task<IActionResult> RenameService(string celluleId, string nodeId, [FromBody] CreateNodeRequest body, CancellationToken ct) =>
         await mediator.Send(new RenameOrgNodeCommand(OrgNodeLevel.Service, nodeId, body.Name), ct) ? NoContent() : NotFound();
 
+    /// <summary>
+    /// v9 : archive le pôle et ses descendants. <c>?definitif=true</c> supprime
+    /// définitivement un nœud archivé qui n'a jamais servi.
+    /// </summary>
+    [OrgWriteAccess]
     [HttpDelete("structure/poles/{nodeId}")]
-    public async Task<IActionResult> DeletePole(string nodeId, CancellationToken ct) =>
-        await mediator.Send(new DeleteOrgNodeCommand(OrgNodeLevel.Pole, nodeId), ct) ? NoContent() : NotFound();
+    public Task<IActionResult> DeletePole(string nodeId, [FromQuery] bool definitif, CancellationToken ct) =>
+        ArchiveOrPurgeAsync(OrgNodeLevel.Pole, nodeId, definitif, ct);
 
+    [OrgWriteAccess]
     [HttpDelete("structure/poles/{poleId}/cellules/{nodeId}")]
-    public async Task<IActionResult> DeleteCellule(string poleId, string nodeId, CancellationToken ct) =>
-        await mediator.Send(new DeleteOrgNodeCommand(OrgNodeLevel.Cellule, nodeId), ct) ? NoContent() : NotFound();
+    public Task<IActionResult> DeleteCellule(string poleId, string nodeId, [FromQuery] bool definitif, CancellationToken ct) =>
+        ArchiveOrPurgeAsync(OrgNodeLevel.Cellule, nodeId, definitif, ct);
 
+    [OrgWriteAccess]
     [HttpDelete("structure/cellules/{celluleId}/services/{nodeId}")]
-    public async Task<IActionResult> DeleteService(string celluleId, string nodeId, CancellationToken ct) =>
-        await mediator.Send(new DeleteOrgNodeCommand(OrgNodeLevel.Service, nodeId), ct) ? NoContent() : NotFound();
+    public Task<IActionResult> DeleteService(string celluleId, string nodeId, [FromQuery] bool definitif, CancellationToken ct) =>
+        ArchiveOrPurgeAsync(OrgNodeLevel.Service, nodeId, definitif, ct);
 
+    /// <summary>Remet en service un nœud archivé (et ses parents archivés).</summary>
+    [OrgWriteAccess]
+    [HttpPost("structure/{level}/{nodeId}/restore")]
+    public async Task<IActionResult> RestoreNode(string level, string nodeId, CancellationToken ct)
+    {
+        if (!TryParseNodeLevel(level, out var parsed))
+            return BadRequest(new { error = "Niveau attendu : pole, cellule ou service." });
+        return await mediator.Send(new RestoreOrgNodeCommand(parsed, nodeId), ct) ? NoContent() : NotFound();
+    }
+
+    /// <summary>Nœuds archivés, pour l'écran d'organisation (Admin / RH).</summary>
+    [OrgReadAccess]
+    [HttpGet("structure/archived")]
+    public async Task<ActionResult<IReadOnlyList<ArchivedOrgNodeDto>>> ListArchived(CancellationToken ct) =>
+        Ok(await mediator.Send(new ListArchivedOrgNodesQuery(), ct));
+
+    private async Task<IActionResult> ArchiveOrPurgeAsync(
+        OrgNodeLevel level,
+        string nodeId,
+        bool definitif,
+        CancellationToken ct)
+    {
+        try
+        {
+            var ok = definitif
+                ? await mediator.Send(new PurgeOrgNodeCommand(level, nodeId), ct)
+                : await mediator.Send(new DeleteOrgNodeCommand(level, nodeId), ct);
+            return ok ? NoContent() : NotFound();
+        }
+        catch (InvalidOperationException e)
+        {
+            return Conflict(new { error = e.Message });
+        }
+    }
+
+    private static bool TryParseNodeLevel(string raw, out OrgNodeLevel level)
+    {
+        switch ((raw ?? string.Empty).Trim().ToLowerInvariant())
+        {
+            case "pole":
+            case "poles":
+                level = OrgNodeLevel.Pole;
+                return true;
+            case "cellule":
+            case "cellules":
+                level = OrgNodeLevel.Cellule;
+                return true;
+            case "service":
+            case "services":
+                level = OrgNodeLevel.Service;
+                return true;
+            default:
+                level = OrgNodeLevel.Pole;
+                return false;
+        }
+    }
+
+    [OrgWriteAccess]
     [HttpPost("assignments/{kind}/{nodeId}")]
     public async Task<ActionResult<StructuralRoleAssignmentResult>> Assign(string kind, string nodeId, [FromBody] AssignRequest body, CancellationToken ct)
     {
@@ -321,15 +447,29 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
                 .ToList();
         }
 
-        var forceOverride = body.ForceTenureOverride == true
-            && User.IsInRole("Admin");
+        // Règle des 6 mois : un changement fait par un Admin ou un Ingénieur passe toujours
+        // (tracé comme dérogation dans l'historique) ; les autres rôles y restent soumis.
+        var roleAuteur = User.GetAuthRole();
+        var ingenieur = Kyntus.Messaging.Contracts.KyntusRoleNames.Ingenieur; // nom complet : évite le conflit OrgNodeLevel
+        var auteurExempte = User.IsInRole("Admin") || User.IsInRole(ingenieur)
+                            || string.Equals(roleAuteur, "Admin", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(roleAuteur, ingenieur, StringComparison.OrdinalIgnoreCase);
+        var forceOverride = auteurExempte || (body.ForceTenureOverride == true && User.IsInRole("Admin"));
+        var motif = auteurExempte && string.IsNullOrWhiteSpace(body.Reason)
+            ? $"Changement par {roleAuteur ?? "Admin"}"
+            : body.Reason;
 
         try
         {
             var result = await mediator.Send(
                 new AssignStructureRoleCommand(
-                    kind, nodeId, employeeId, changedBy, body.Reason, revokeIds, forceOverride),
+                    kind, nodeId, employeeId, changedBy, motif, revokeIds, forceOverride),
                 ct);
+            // Réorganisation 2026 : toute affectation unitaire (page Organisation RH, import Excel)
+            // respecte les règles de périmètre — référent technique → services de sa cellule ;
+            // superviseur et chef de projet gardent exactement le nœud choisi (règle v8).
+            await PropagateScopeSafelyAsync(
+                () => scopes.ExpandAssignmentToScopeAsync(kind, employeeId, nodeId, changedBy, ct), nodeId);
             return Ok(result);
         }
         catch (PilotRotationTenureException ex)
@@ -353,6 +493,7 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
     /// Synchronise exactement les nœuds managés d'un employé pour un kind
     /// (ChefDeProjet / Superviseur / ReferentTechnique).
     /// </summary>
+    [OrgWriteAccess]
     [HttpPut("assignments/{kind}/employees/{employeeId:guid}")]
     public async Task<ActionResult<StructuralAssignmentsReconcileResult>> ReconcileEmployeeAssignments(
         string kind,
@@ -391,6 +532,7 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
         }
     }
 
+    [OrgWriteAccess]
     [HttpDelete("assignments/Pilote/{serviceId}/employees/{employeeId:guid}")]
     public async Task<IActionResult> RemovePilot(string serviceId, Guid employeeId, CancellationToken ct)
     {
@@ -400,6 +542,7 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
             : NotFound();
     }
 
+    [OrgWriteAccess]
     [HttpDelete("assignments/{kind}/{nodeId}/employees/{employeeId:guid}")]
     public async Task<IActionResult> RemoveAssignment(string kind, string nodeId, Guid employeeId, CancellationToken ct)
     {
@@ -410,6 +553,7 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
             : NotFound();
     }
 
+    [OrgWriteAccess]
     [HttpDelete("assignments/{kind}/{nodeId}")]
     public async Task<IActionResult> Clear(string kind, string nodeId, CancellationToken ct)
     {
@@ -417,6 +561,50 @@ public class DirectoryOrgController(IMediator mediator, ILogger<DirectoryOrgCont
         await mediator.Send(new ClearStructureRoleCommand(kind, nodeId, changedBy), ct);
         return NoContent();
     }
+}
+
+[ApiController]
+[Route("api/directory/org/scope-assignments")]
+[Authorize]
+public class DirectoryOrgScopeController(IOrgScopeAssignmentService scopes) : ControllerBase
+{
+    /// <summary>
+    /// Réorganisation 2026 — affecte un responsable par périmètre métier :
+    /// Superviseur / ChefDeProjet → activités (ids de départements de production),
+    /// ReferentTechnique → cellules. Remplace exactement le périmètre du kind.
+    /// Mêmes droits que les autres écritures d'organisation (Admin / RH, ou délégation users:manage).
+    /// </summary>
+    [OrgWriteAccess]
+    [HttpPut("{kind}/employees/{employeeId:guid}")]
+    public async Task<ActionResult<OrgScopeReconcileResult>> Reconcile(
+        string kind,
+        Guid employeeId,
+        [FromBody] ReconcileEmployeeScopeRequest body,
+        CancellationToken ct)
+    {
+        if (body is null)
+            return BadRequest(new { error = "Corps de requête requis." });
+        try
+        {
+            return Ok(await scopes.ReconcileScopeAsync(
+                kind,
+                employeeId,
+                body.ScopeIds ?? [],
+                body.PrimaryScopeId ?? string.Empty,
+                User.GetSubjectId(),
+                body.Reason,
+                ct));
+        }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
+    }
+
+    /// <summary>Rapport lecture seule : couverture activité / cellule de chaque responsable.</summary>
+    [Authorize(Roles = "Admin,RH")]
+    [HttpGet("coverage")]
+    public async Task<ActionResult<IReadOnlyList<OrgScopeCoverageRowDto>>> Coverage(CancellationToken ct) =>
+        Ok(await scopes.GetCoverageReportAsync(ct));
 }
 
 [ApiController]
@@ -489,6 +677,40 @@ public class DirectoryRebacController(IMediator mediator) : ControllerBase
 
 public record CanActOnRequest(Guid ActorId, Guid TargetEmployeeId);
 
+/// <summary>
+/// Droits d'accès par compte (v19) : le compte hérite de son rôle, avec des exceptions
+/// (rubriques accordées ou retirées) propres à ce compte. Lecture Admin / RH, modification Admin.
+/// </summary>
+[ApiController]
+[Route("api/iam/users")]
+[Authorize]
+public class IamUserAccessController(IIamUserAccessService access) : ControllerBase
+{
+    [HttpGet("{subjectId:guid}/access")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<UserAccessDto>> Get(Guid subjectId, [FromQuery] string? role, CancellationToken ct) =>
+        Ok(await access.GetAsync(subjectId, role ?? "Employee", ct));
+
+    [HttpPut("{subjectId:guid}/access")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<UserAccessDto>> Update(Guid subjectId, [FromBody] UserAccessUpdateRequest body, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await access.UpdateAsync(subjectId, body, User.GetEmail() ?? User.Identity?.Name, ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message, message = ex.Message });
+        }
+    }
+
+    [HttpGet("exceptions")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<ActionResult<IReadOnlyList<UserAccessSummaryDto>>> Exceptions(CancellationToken ct) =>
+        Ok(await access.SummaryAsync(ct));
+}
+
 [ApiController]
 [Route("api/iam")]
 [Authorize]
@@ -504,7 +726,8 @@ public class IamController(IMediator mediator) : ControllerBase
         var preview = !string.IsNullOrWhiteSpace(role)
                       && (string.Equals(callerRole, "Admin", StringComparison.OrdinalIgnoreCase)
                           || string.Equals(callerRole, "RH", StringComparison.OrdinalIgnoreCase));
-        return Ok(await mediator.Send(new GetEffectivePermissionsQuery(subjectId, preview ? role!.Trim() : callerRole), ct));
+        // Aperçu d'un rôle (Admin / RH) : droits du rôle seul, sans les exceptions du compte appelant.
+        return Ok(await mediator.Send(new GetEffectivePermissionsQuery(preview ? Guid.Empty : subjectId, preview ? role!.Trim() : callerRole), ct));
     }
 
     [HttpGet("leave-workflow")]
@@ -620,7 +843,7 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<ActionResult<BusinessDepartmentDto>> Create([FromBody] CreateBusinessDepartmentRequest body, CancellationToken ct)
     {
         var result = await mediator.Send(new CreateBusinessDepartmentCommand(body), ct);
@@ -628,7 +851,7 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpPatch("{id:guid}")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<ActionResult<BusinessDepartmentDto>> Update(Guid id, [FromBody] UpdateBusinessDepartmentRequest body, CancellationToken ct)
     {
         var result = await mediator.Send(new UpdateBusinessDepartmentCommand(id, body), ct);
@@ -636,12 +859,22 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Admin,RH")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken ct) =>
-        await mediator.Send(new DeleteBusinessDepartmentCommand(id), ct) ? NoContent() : NotFound();
+    [OrgWriteAccess]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        // v9 : archivage du contrat (IsActive = false) ; refusé s'il reste des pôles actifs.
+        try
+        {
+            return await mediator.Send(new DeleteBusinessDepartmentCommand(id), ct) ? NoContent() : NotFound();
+        }
+        catch (InvalidOperationException e)
+        {
+            return Conflict(new { error = e.Message });
+        }
+    }
 
     [HttpPost("{id:guid}/poles/{poleId}")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<IActionResult> AssignPole(Guid id, string poleId, CancellationToken ct)
     {
         try
@@ -654,12 +887,12 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpDelete("{id:guid}/poles/{poleId}")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<IActionResult> RemovePole(Guid id, string poleId, CancellationToken ct) =>
         await mediator.Send(new RemovePoleFromBusinessDepartmentCommand(id, poleId), ct) ? NoContent() : NotFound();
 
     [HttpPost("{id:guid}/manager")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<ActionResult<StructuralRoleAssignmentResult>> SetManager(Guid id, [FromBody] SetBusinessDepartmentManagerRequest body, CancellationToken ct)
     {
         if (!Guid.TryParse(body.EmployeeId, out var employeeId))
@@ -674,7 +907,7 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpDelete("{id:guid}/manager")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<IActionResult> ClearManager(Guid id, CancellationToken ct) =>
         await mediator.Send(new ClearBusinessDepartmentManagerCommand(id), ct) ? NoContent() : NotFound();
 }
@@ -794,6 +1027,10 @@ public record AssignRequest(
 public record ReconcileEmployeeAssignmentsRequest(
     IReadOnlyList<string>? NodeIds,
     string? PrimaryNodeId,
+    string? Reason);
+public record ReconcileEmployeeScopeRequest(
+    IReadOnlyList<string>? ScopeIds,
+    string? PrimaryScopeId,
     string? Reason);
 public record SetAuthSubjectRequest(Guid AuthSubjectId);
 public record EvaluatePolicyRequest(string Action, string ResourceType, string? ResourceId);

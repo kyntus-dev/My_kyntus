@@ -1,0 +1,78 @@
+<div class="ky-page-shell my-team">
+  <app-kyntus-page-header
+    title="Membres de mon équipe"
+    [subtitle]="affiches().length + ' collaborateur(s) — périmètre défini dans le fichier Périmètre (Organisation RH)'">
+    <div actions>
+      <a routerLink="/conges/equipe" class="ky-btn-secondary">Congés de l'équipe</a>
+      <button type="button" class="ky-btn-secondary" (click)="load()" [disabled]="loading()">Actualiser</button>
+    </div>
+  </app-kyntus-page-header>
+
+  <div class="team-filters ky-card">
+    <label>
+      <span>Activité</span>
+      <select class="ky-input" [ngModel]="filtre().activite" (ngModelChange)="patch('activite', $event)">
+        <option value="">Toutes</option>
+        @for (o of options().activites; track o.value) { <option [value]="o.value">{{ o.label }}</option> }
+      </select>
+    </label>
+    <label>
+      <span>Pôle</span>
+      <select class="ky-input" [ngModel]="filtre().pole" (ngModelChange)="patch('pole', $event)">
+        <option value="">Tous</option>
+        @for (o of options().poles; track o.value) { <option [value]="o.value">{{ o.label }}</option> }
+      </select>
+    </label>
+    <label>
+      <span>Cellule</span>
+      <select class="ky-input" [ngModel]="filtre().cellule" (ngModelChange)="patch('cellule', $event)">
+        <option value="">Toutes</option>
+        @for (o of options().cellules; track o.value) { <option [value]="o.value">{{ o.label }}</option> }
+      </select>
+    </label>
+    <label class="team-search">
+      <span>Recherche</span>
+      <input class="ky-input" type="search" placeholder="Nom ou e-mail…" [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+    </label>
+    <button type="button" class="ky-btn-secondary" (click)="reset()">Réinitialiser</button>
+  </div>
+
+  @if (parCellule().length > 1) {
+    <ul class="team-counts" aria-label="Effectif par cellule">
+      @for (c of parCellule(); track c.cellule) {
+        <li><strong>{{ c.n }}</strong> {{ c.cellule }}</li>
+      }
+    </ul>
+  }
+
+  <div class="ky-card team-table-card">
+    @if (loading()) {
+      <p class="team-state">Chargement des membres de l'équipe…</p>
+    } @else if (error()) {
+      <p class="team-state team-state--error">{{ error() }}</p>
+    } @else {
+      <div class="team-table-wrapper">
+        <table class="prime-table">
+          <thead>
+            <tr><th>Collaborateur</th><th>Rôle</th><th>Activité</th><th>Pôle</th><th>Cellule</th><th>E-mail</th><th>Téléphone</th></tr>
+          </thead>
+          <tbody>
+            @for (m of affiches(); track m.user.id) {
+              <tr>
+                <td><strong>{{ m.nom }}</strong></td>
+                <td>{{ m.role }}</td>
+                <td>{{ m.activite || '—' }}</td>
+                <td>{{ m.pole || '—' }}</td>
+                <td>{{ m.cellule || '—' }}</td>
+                <td>{{ m.email }}</td>
+                <td>{{ m.telephone || '—' }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="team-state">Aucun collaborateur dans votre périmètre avec ces filtres. Si votre périmètre vous semble incomplet, demandez aux RH de vérifier le fichier Périmètre.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</div>

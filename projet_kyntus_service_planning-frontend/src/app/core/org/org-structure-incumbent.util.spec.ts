@@ -5,6 +5,7 @@ import {
   filterReferentsForSuperviseur,
   filterSuperviseursForChefDeProjet,
   findStructureIncumbent,
+  findStructureIncumbents,
   shouldConfirmOverwrite,
   shouldConfirmIncumbentChoice,
   buildIncumbentChoiceMessage,
@@ -16,6 +17,8 @@ const overview = {
   services: [],
   sousServices: [],
   departments: [],
+  operationalDepartments: [],
+  unassignedPoles: [],
   employees: [
     {
       id: 'u1',
@@ -117,5 +120,18 @@ describe('org-structure-incumbent.util', () => {
         { userId: 'u2', displayName: 'Bob Dupont' },
       ]),
     ).toMatch(/remplacera/i);
+  });
+
+  it('ne propose jamais un compte désactivé (absent de l\'organisation active)', () => {
+    const withLeaver = {
+      ...overview,
+      supervisorService: [
+        ...overview.supervisorService,
+        { id: 'a9', userId: 'u-sorti', serviceId: 'cell-b', celluleId: 'cell-b' },
+      ],
+    } as OrgAssignmentsOverview;
+    expect(findStructureIncumbents(withLeaver, 'Superviseur', { orgCelluleId: 'cell-b' }))
+      .toEqual([{ userId: 'u2', displayName: 'Bob Dupont' }]);
+    expect(filterSuperviseursForChefDeProjet(withLeaver, 'u1', 'cell-b').map((r) => r.userId)).toEqual(['u2']);
   });
 });

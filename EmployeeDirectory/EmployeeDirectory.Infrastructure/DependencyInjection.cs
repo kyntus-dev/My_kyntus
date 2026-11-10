@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IOrgStructuralRoleExclusivityService, OrgStructuralRoleExclusivityService>();
         services.AddScoped<IPilotRotationTenureService, PilotRotationTenureService>();
         services.AddScoped<IDirectoryWriteService, DirectoryWriteService>();
+        services.AddScoped<IOrgScopeAssignmentService, OrgScopeAssignmentService>();
         services.AddScoped<IDirectoryReconciliationService, DirectoryReconciliationService>();
         services.AddHttpClient("DirectoryReconcile");
         services.AddHttpClient("Htel", (sp, client) =>
@@ -70,6 +71,8 @@ public static class DependencyInjection
         services.AddScoped<IIamAdminService, DirectoryIamAdminService>();
         services.AddScoped<IPermissionCatalog, DirectoryIamReadService>();
         services.AddScoped<IRebacClient, DirectoryIamReadService>();
+        services.AddScoped<ISubjectPermissionOverrides, DirectoryIamReadService>();
+        services.AddScoped<EmployeeDirectory.Application.Iam.IIamUserAccessService, DirectoryIamUserAccessService>();
 
         services.AddScoped<DirectoryEmployeSyncService>();
         services.AddScoped<DirectoryOrgSyncService>();

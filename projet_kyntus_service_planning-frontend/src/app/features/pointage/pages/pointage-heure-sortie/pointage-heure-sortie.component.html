@@ -1,0 +1,280 @@
+<div class="ku-page hs">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Pointage · {{ now() | date: 'EEEE d MMMM' }}</p>
+      <h1 class="ku-hero-title">Heure de sortie</h1>
+      <p class="ku-hero-sub">Combien il me reste : votre heure de sortie et votre production, recalculées chaque seconde.</p>
+    </div>
+    <div class="ku-hero-actions">
+      <span class="hs-clock" aria-live="off">{{ now() | date: 'HH:mm:ss' }}</span>
+      <button type="button" class="ku-btn" (click)="load()" [disabled]="loading()">Actualiser mes pointages</button>
+    </div>
+  </header>
+
+  @if (loading() && !jour()) {
+    <div class="hs-grid"><div class="ku-skeleton"></div><div class="ku-skeleton"></div></div>
+  } @else if (error()) {
+    <div class="ku-alert ku-alert--danger"><div><strong>Journée indisponible</strong><p>{{ error() }}</p></div></div>
+  } @else if (jour(); as j) {
+    @if (!j.accesCalculSortie) {
+      <section class="ku-card ku-empty">
+        <strong>Cette page n’est pas activée pour vous</strong>
+        L’administrateur choisit les pôles, cellules ou collaborateurs qui y ont accès (Pointage › Régimes horaires).
+      </section>
+    } @else {
+      @if (!j.jourTravaille) {
+        <div class="ku-alert ku-alert--warn">
+          <div><strong>Jour non travaillé</strong><p>Votre régime ne prévoit pas de production aujourd’hui ; le calcul reste disponible.</p></div>
+        </div>
+      }
+
+      <div class="hs-grid">
+        <!-- Saisie -->
+        <section class="ku-card hs-form" aria-label="Saisie">
+          <div class="ku-card-head">
+            <div>
+              <h2 class="ku-card-title">Ma journée</h2>
+              <p class="ku-card-sub">{{ sourceTexte() }}</p>
+            </div>
+          </div>
+
+          <div class="ku-seg hs-mode" role="group" aria-label="Mode de calcul">
+            <button type="button" [class.is-active]="mode() === 'pointages'" (click)="mode.set('pointages')" [disabled]="!j.pointages.length">D’après mes pointages</button>
+            <button type="button" [class.is-active]="mode() === 'manuel'" (click)="mode.set('manuel')">Saisie manuelle</button>
+          </div>
+
+          <div class="ku-field">
+            <span>Production d’aujourd’hui</span>
+            <div class="hs-choix" role="radiogroup" aria-label="Production d’aujourd’hui">
+              @for (c of choixProposes; track c.valeur) {
+                <button type="button" role="radio" [attr.aria-checked]="choix() === c.valeur" [class.on]="choix() === c.valeur"
+                        [disabled]="enregistrementChoix()" (click)="choisirProduction(c.valeur)">
+                  <b>{{ c.libelle }}</b>
+                </button>
+              }
+            </div>
+            @if (choix()) {
+              <small>Valable aujourd’hui seulement : demain, vous choisissez à nouveau. Ce choix ne change ni votre planning, ni votre solde, ni la paie.</small>
+            } @else {
+              <small class="hs-a-choisir">Choisissez 07h40 ou 08h40 pour aujourd’hui. En attendant, le calcul utilise {{ formatHeuresMinutes(productionPlanning()) }} (votre planning).</small>
+            }
+          </div>
+
+          @if (mode() === 'pointages' && resultatPointages(); as rp) {
+            <div class="hs-auto">
+              <div><span>Entrée (1er pointage)</span><b>{{ formatHeure(rp.entreeSecondes, true) }}</b></div>
+              <div><span>Pauses pointées</span><b>{{ formatHms(rp.pauseTotaleSecondes) }}</b>
+                @if (rp.enPause) { <small class="hs-live">dont {{ formatHms(rp.pauseEnCoursSecondes) }} en cours</small> }</div>
+              <div><span>Statut</span>
+                <b [class.hs-pause-on]="rp.enPause" [class.hs-work-on]="!rp.enPause">{{ rp.enPause ? 'En pause / sorti' : 'Au travail' }}</b>
+                <small class="ku-muted">depuis {{ formatHeure(rp.dernierPointageSecondes) }}</small></div>
+              <div><span>Pause autorisée restante</span><b>{{ formatHeuresMinutes(pauseRestanteMinutes()) }}</b>
+                <small class="ku-muted">sur {{ formatHeuresMinutes(pauseForfaitMinutes()) }}, non ajoutée</small></div>
+            </div>
+            <p class="ku-card-sub">Sortie = entrée + production + pauses pointées. Une nouvelle pause, une fois pointée, repousse la sortie d’autant.</p>
+          } @else {
+            <label class="ku-field">
+              <span>Heure d’arrivée</span>
+              <input class="ku-input ku-input--lg" type="time" step="1" [ngModel]="entree()" (ngModelChange)="entree.set($event ?? '')" />
+              @if (premierPointage(); as p) {
+                <small>Premier pointage du jour : <b>{{ p }}</b>
+                  @if (p !== entree()) { — <button type="button" class="hs-link" (click)="reprendrePremierPointage()">le reprendre</button> }
+                </small>
+              } @else {
+                <small>Aucun pointage reçu aujourd’hui : saisissez votre heure d’arrivée.</small>
+              }
+            </label>
+
+            <div class="hs-fixed">
+              <div>
+                <span>Pauses forfaitaires</span>
+                <b>{{ formatHeuresMinutes(pauseForfaitMinutes()) }}</b>
+              </div>
+            </div>
+
+            <fieldset class="hs-pause">
+              <legend>Pause déjeuner <small>(facultative, ajoutée aux pauses forfaitaires)</small></legend>
+              <label class="ku-field"><span>Début</span>
+                <input class="ku-input" type="time" [ngModel]="debutPause()" (ngModelChange)="debutPause.set($event ?? '')" />
+              </label>
+              <label class="ku-field"><span>Fin</span>
+                <input class="ku-input" type="time" [ngModel]="finPause()" (ngModelChange)="finPause.set($event ?? '')" />
+              </label>
+              @if (debutPause() || finPause()) {
+                <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="effacerPause()">Effacer</button>
+              }
+            </fieldset>
+          }
+
+          <label class="ku-field">
+            <span>Heure de sortie souhaitée <small>(facultative)</small></span>
+            <input class="ku-input" type="time" [ngModel]="sortieSouhaitee()" (ngModelChange)="sortieSouhaitee.set($event ?? '')" />
+          </label>
+
+          @if (j.pointages.length) {
+            <div class="hs-punches">
+              <span class="ku-card-sub">Pointages reçus aujourd’hui</span>
+              <div class="ku-punches">
+                @for (p of j.pointages; track $index) {
+                  <span class="ku-punch"><b>{{ libellePointage($index, j.pointages.length) }}</b>{{ p }}</span>
+                }
+              </div>
+            </div>
+          }
+        </section>
+
+        <!-- Résultat -->
+        <section class="ku-card hs-result" aria-live="polite">
+          @if (resultat(); as r) {
+            <div class="hs-exit">
+              <span class="hs-exit-label">Je peux sortir à</span>
+              <span class="hs-exit-time">{{ formatHeure(r.sortieSecondes, true) }}</span>
+              <span class="ku-chip" [class.ku-chip--ok]="r.termine" [class.ku-chip--info]="!r.termine">
+                {{ r.termine ? 'Done ✅' : 'LOADING…' }}
+              </span>
+            </div>
+
+            <div class="hs-body">
+              <div class="ku-ring" [class.ku-ring--done]="r.termine" [style.--p]="pourcent()">
+                <div>
+                  <span class="ku-ring-value">{{ pourcent() | number: '1.0-0' }} %</span>
+                  <span class="ku-ring-label">de la production</span>
+                </div>
+              </div>
+
+              <dl class="hs-stats">
+                @if (r.termine) {
+                  <div class="hs-sup">
+                    <dt>Heures sup. aujourd’hui</dt>
+                    <dd class="hs-big">+{{ formatHms(ecartJour()) }}</dd>
+                  </div>
+                } @else {
+                  <div>
+                    <dt>Il me reste</dt>
+                    <dd class="hs-big">{{ formatHms(r.resteSecondes) }}</dd>
+                  </div>
+                }
+                <div>
+                  <dt>Production réalisée</dt>
+                  <dd>{{ formatHms(r.productionRealiseeSecondes > 0 ? r.productionRealiseeSecondes : 0) }}</dd>
+                </div>
+                <div>
+                  <dt>Production restante</dt>
+                  <dd>{{ formatHms(r.productionRestanteSecondes > 0 ? r.productionRestanteSecondes : 0) }}</dd>
+                </div>
+                <div>
+                  <dt>Temps de pause (non compté)</dt>
+                  <dd>{{ formatHms(r.pauseTotaleSecondes) }}
+                    @if (r.pauseDejSecondes) { <small class="ku-muted">dont déjeuner {{ formatHms(r.pauseDejSecondes) }}</small> }
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            @if (solde(); as so) {
+              <div class="hs-solde">
+                <button type="button" class="hs-solde-clic" [class.on]="detailOuvert()" (click)="detailOuvert.set(!detailOuvert())"
+                        [attr.aria-expanded]="detailOuvert()" title="Voir le détail jour par jour">
+                  <span>Solde depuis le 24 (jours précédents)</span>
+                  <b [class.ku-pos]="so.soldeMinutes > 0" [class.ku-neg]="so.soldeMinutes < 0">{{ so.soldeMinutes >= 0 ? '+' : '−' }}{{ formatHms(abs(so.soldeMinutes * 60)) }}</b>
+                  <small class="ku-muted">+{{ formatHms(so.plusMinutes * 60) }} en plus · −{{ formatHms(so.moinsMinutes * 60) }} manquantes · {{ so.jours }} jour(s)</small>
+                  <small class="hs-voir">{{ detailOuvert() ? 'Masquer le détail ▲' : 'Voir le détail ▼' }}</small>
+                </button>
+                <div>
+                  <span>Aujourd’hui</span>
+                  <b [class.ku-pos]="ecartJour() > 0" [class.ku-neg]="ecartJour() < 0">{{ ecartJour() >= 0 ? '+' : '−' }}{{ formatHms(abs(ecartJour())) }}</b>
+                  <small class="ku-muted">{{ r.termine ? 'heures en plus' : 'manquant si vous sortez maintenant' }}</small>
+                </div>
+                <div class="hs-solde-total">
+                  <span>Solde en sortant maintenant</span>
+                  <b [class.ku-pos]="soldeApres() > 0" [class.ku-neg]="soldeApres() < 0">{{ soldeApres() >= 0 ? '+' : '−' }}{{ formatHms(abs(soldeApres())) }}</b>
+                  <small class="ku-muted">{{ soldeApres() >= 0 ? 'heures en plus' : 'à récupérer' }}</small>
+                </div>
+              </div>
+              @if (detailOuvert()) {
+                <section class="hs-detail" aria-label="Détail du solde depuis le 24">
+                  <header>
+                    <b>D’où vient ce solde</b>
+                    <small>Du {{ dateCourte(periodeDu()) }} au {{ dateCourte(periodeVeille()) }} (veille). Aujourd’hui est compté à part, dans « Aujourd’hui ».
+                      Chaque jour terminé avec une arrivée et un départ pointés : écart = production réalisée − production prévue.</small>
+                  </header>
+                  <div class="hs-detail-wrap">
+                    <table>
+                      <thead>
+                        <tr><th>Jour</th><th>Arrivée → départ</th><th>Réalisée</th><th>Prévue</th><th>Écart</th><th>Cumul</th></tr>
+                      </thead>
+                      <tbody>
+                        @for (l of detail(); track l.jour) {
+                          @if (l.compte) {
+                            <tr>
+                              <td>{{ dateCourte(l.jour) }}</td>
+                              <td>{{ heure(l.arrivee) }} → {{ heure(l.depart) }} <small>pauses {{ hm(l.pauseMinutes) }}</small></td>
+                              <td>{{ hm(l.realiseeMinutes) }}</td>
+                              <td>{{ hm(l.prevueMinutes) }} <small>{{ l.originePrevue }}</small></td>
+                              <td [class.ku-pos]="(l.ecartMinutes ?? 0) > 0" [class.ku-neg]="(l.ecartMinutes ?? 0) < 0"><b>{{ signeHm(l.ecartMinutes) }}</b></td>
+                              <td [class.ku-pos]="l.cumulMinutes > 0" [class.ku-neg]="l.cumulMinutes < 0">{{ signeHm(l.cumulMinutes) }}</td>
+                            </tr>
+                          } @else {
+                            <tr class="hs-nc">
+                              <td>{{ dateCourte(l.jour) }}</td>
+                              <td colspan="4">Non compté : {{ l.motif }}</td>
+                              <td>{{ signeHm(l.cumulMinutes) }}</td>
+                            </tr>
+                          }
+                        } @empty {
+                          <tr class="hs-nc"><td colspan="6">Aucune journée terminée depuis le 24.</td></tr>
+                        }
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colspan="4">{{ so.jours }} jour(s) comptés : {{ signeHm(so.plusMinutes) }} en plus, −{{ hm(so.moinsMinutes) }} manquantes</td>
+                          <td colspan="2" [class.ku-pos]="so.soldeMinutes > 0" [class.ku-neg]="so.soldeMinutes < 0"><b>= {{ signeHm(so.soldeMinutes) }}</b></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                  <small class="hs-detail-note">Un jour avec un pointage manquant n’est pas compté : faites corriger le pointage pour qu’il entre dans le solde.</small>
+                </section>
+              }
+            }
+
+            @if (r.souhaitee; as s) {
+              <div class="ku-alert" [class.ku-alert--ok]="s.ecartSecondes >= 0" [class.ku-alert--warn]="s.ecartSecondes < 0">
+                <div>
+                  <strong>Sortie à {{ formatHeure(s.sortieSecondes) }}</strong>
+                  <p>
+                    Production à cette heure : {{ formatHms(s.productionSecondes > 0 ? s.productionSecondes : 0) }} —
+                    @if (s.ecartSecondes < 0) {
+                      il manquera <b>{{ formatHms(-s.ecartSecondes) }}</b>.
+                    } @else if (s.ecartSecondes > 0) {
+                      <b>{{ formatHms(s.ecartSecondes) }}</b> au-delà de la production du jour.
+                    } @else {
+                      exactement la production du jour.
+                    }
+                  </p>
+                </div>
+              </div>
+            }
+          } @else {
+            <div class="ku-empty"><strong>Indiquez votre heure d’arrivée</strong>Le calcul démarre aussitôt.</div>
+          }
+        </section>
+      </div>
+
+      <details class="ku-card hs-formules">
+        <summary>Comment c’est calculé (formules de l’Excel « Combien il me reste »)</summary>
+        <ul>
+          <li><b>Sortie</b> = arrivée + production du jour + pauses.</li>
+          <li><b>D’après mes pointages</b> : arrivée = premier pointage ; pauses = chaque paire « sortie → retour » pointée, plus la pause en cours.</li>
+          <li><b>Saisie manuelle</b> (Excel) : pauses = pauses forfaitaires ({{ formatHeuresMinutes(pauseForfaitMinutes()) }}) + pause déjeuner saisie.</li>
+          <li><b>Il me reste</b> = sortie − heure actuelle.</li>
+          <li><b>Production réalisée</b> = (heure actuelle − arrivée) − pauses ; l’avancement est la production réalisée divisée par la production du jour.</li>
+          <li><b>Heures supplémentaires</b> : production réalisée au-delà de la production du jour. Le solde de la période de paie (depuis le 24) additionne les heures en plus et compense les heures manquantes des journées précédentes (production du planning ou du régime de chaque jour, sinon la règle de l’Excel).</li>
+          <li><b>Production du jour</b> : 07h40 ou 08h40, à choisir chaque jour (vous pouvez faire 08h40 aujourd’hui et 07h40 demain). Le choix sert seulement à calculer votre heure de sortie.</li>
+        </ul>
+        <p class="ku-muted">Les heures de prière de l’Excel viennent d’un autre classeur qui n’a pas été transmis : elles ne sont pas reprises.</p>
+        <a routerLink="/pointage/mon-suivi" class="ku-btn ku-btn--sm">Voir mon suivi de pointage</a>
+      </details>
+    }
+  }
+</div>

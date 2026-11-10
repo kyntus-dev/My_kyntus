@@ -4,6 +4,8 @@ using Conge.Application.Commands.ConfigConge;
 using Conge.Application.Commands.DemanderConge;
 using Conge.Application.Commands.RefuserConge;
 using Conge.Application.Commands.ValiderConge;
+using Conge.Application.Queries.GetCongesCellule;
+using Conge.Application.Queries.GetCongesEquipe;
 using Conge.Application.Queries.GetDemandesByEmploye;
 using Conge.Application.Queries.GetDemandesByManager;
 using Conge.Application.Queries.GetHistorique;
@@ -89,11 +91,66 @@ public class CongesController : ControllerBase
         if (actorId is null)
             return Unauthorized(new { message = "Sujet JWT manquant." });
 
-        if (!IsPrivilegedHrOrAdmin() && !IsSuperviseurRole() && actorId.Value != managerId)
-            return Forbid();
+        // Chacun ne consulte que sa propre file (RH / Admin : toutes).
+        if (!IsPrivilegedHrOrAdmin() && actorId.Value != managerId)
+        {
+            var email = User.GetEmail();
+            var actorSnap = await _employeRepo.GetByEmployeIdOrEmailAsync(actorId.Value, email, ct);
+            var managerSnap = await _employeRepo.GetByEmployeIdAsync(managerId, ct);
+            var isSelf = actorSnap?.EmployeId == managerId
+                || (managerSnap is not null && !string.IsNullOrWhiteSpace(email)
+                    && string.Equals(managerSnap.Email, email, StringComparison.OrdinalIgnoreCase));
+            if (!isSelf)
+                return Forbid();
+        }
 
         var result = await _mediator.Send(new GetDemandesByManagerQuery(managerId), ct);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// GET /api/conges/equipe?annee=2026 — Congés de l'équipe du responsable connecté :
+    /// superviseur (ses cellules), référent technique (ses services), chef de projet (ses pôles),
+    /// d'après l'organisation RH ; RH et Admin voient toute l'entreprise.
+    /// </summary>
+    [HttpGet("equipe")]
+    public async Task<IActionResult> GetCongesEquipe([FromQuery] int? annee, CancellationToken ct)
+    {
+        var actorId = RequireActorId();
+        if (actorId is null)
+            return Unauthorized(new { message = "Sujet JWT manquant." });
+        var year = annee is >= 2000 and <= 2100 ? annee.Value : DateTime.UtcNow.Year;
+
+        if (IsPrivilegedHrOrAdmin())
+            return Ok(await _mediator.Send(new GetCongesEquipeQuery(year, null, "Toute l'entreprise"), ct));
+
+        var role = User.GetAuthRole();
+        if (!KyntusRoleNames.IsSuperviseur(role)
+            && !KyntusRoleNames.IsReferentTechnique(role)
+            && !KyntusRoleNames.IsChefDeProjet(role)
+            && !KyntusRoleNames.IsSupportManager(role))
+            return Forbid();
+        if (_rebac is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Organisation RH indisponible." });
+
+        var actorSnap = await _employeRepo.GetByEmployeIdOrEmailAsync(actorId.Value, User.GetEmail(), ct);
+        var employeeId = actorSnap?.EmployeId ?? actorId.Value;
+        IReadOnlyList<Guid> team;
+        try
+        {
+            team = await _rebac.GetManagedEmployeeIdsAsync(employeeId, ct);
+        }
+        catch
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Organisation RH temporairement indisponible.",
+            });
+        }
+
+        return Ok(await _mediator.Send(
+            new GetCongesEquipeQuery(year, team, $"Votre équipe ({team.Count} collaborateur(s))"),
+            ct));
     }
 
     /// <summary>GET /api/conges/historique — Historique global par année (RH)</summary>
@@ -152,6 +209,43 @@ public class CongesController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// GET /api/conges/disponibilite/mois — Occupation du mois (absents par jour, jours
+    /// saturés par le quota, mois interdits) pour griser le calendrier de demande.
+    /// </summary>
+    [HttpGet("disponibilite/mois")]
+    public async Task<IActionResult> GetDisponibiliteMois(
+        [FromQuery] Guid employeId,
+        [FromQuery] int annee,
+        [FromQuery] int mois,
+        CancellationToken ct)
+    {
+        if (annee is < 2000 or > 2100 || mois is < 1 or > 12)
+            return BadRequest(new { message = "Année ou mois invalide." });
+
+        var access = await ResolveEmployeAccessAsync(employeId, ct);
+        if (access.Error is not null)
+            return access.Error;
+
+        return Ok(await _mediator.Send(
+            new GetDisponibiliteMoisQuery(access.CanonicalId, annee, mois), ct));
+    }
+
+    /// <summary>
+    /// GET /api/conges/ma-cellule — Absences des collègues de sa propre cellule
+    /// (nom, dates, statut), pour éviter les chevauchements. Accessible à tous.
+    /// </summary>
+    [HttpGet("ma-cellule")]
+    public async Task<IActionResult> GetCongesMaCellule([FromQuery] int? annee, CancellationToken ct)
+    {
+        var access = await ResolveEmployeAccessAsync(Guid.Empty, ct);
+        if (access.Error is not null)
+            return access.Error;
+
+        var year = annee is >= 2000 and <= 2100 ? annee.Value : DateTime.UtcNow.Year;
+        return Ok(await _mediator.Send(new GetCongesCelluleQuery(access.CanonicalId, year), ct));
+    }
+
     // ── Config ───────────────────────────────────────────────────────────────
 
     [HttpGet("config/periodes-interdites")]
@@ -198,28 +292,68 @@ public class CongesController : ControllerBase
         return ok ? NoContent() : NotFound();
     }
 
+    /// <summary>
+    /// Quotas de congés du périmètre : superviseur = ses cellules ; chef de projet = tout son
+    /// département ; RH / Admin = toute l'entreprise. v29 : le périmètre est toujours celui du compte
+    /// connecté (le paramètre superviseurId n'est retenu que pour RH / Admin).
+    /// </summary>
     [HttpGet("config/quotas-service")]
     public async Task<IActionResult> GetQuotasService([FromQuery] Guid superviseurId, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetQuotasServiceQuery(superviseurId), ct));
+        => Ok(await _mediator.Send(new GetQuotasServiceQuery(await ActeurQuotasAsync(superviseurId, ct)), ct));
 
     [HttpPut("config/quotas-service")]
-    [Authorize(Roles = "Admin,RH,Superviseur,Manager")]
+    [Authorize(Roles = "Admin,RH,Superviseur,Manager,RP,Chef de projet")]
     public async Task<IActionResult> UpsertQuotaService(
         [FromBody] UpsertQuotaServiceRequest body,
         CancellationToken ct)
     {
-        var result = await _mediator.Send(
-            new UpsertQuotaServiceCommand(
-                body.ServiceId,
-                body.MaxAbsentsSimultanes,
-                body.SuperviseurId,
-                body.ScopeKind), ct);
-        return Ok(result);
+        try
+        {
+            var result = await _mediator.Send(
+                new UpsertQuotaServiceCommand(
+                    body.ServiceId,
+                    body.MaxAbsentsSimultanes,
+                    await ActeurQuotasAsync(body.SuperviseurId, ct),
+                    body.ScopeKind), ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Compte dont on lit le périmètre : le compte connecté, sauf RH / Admin.</summary>
+    private async Task<Guid> ActeurQuotasAsync(Guid demande, CancellationToken ct)
+    {
+        if (IsPrivilegedHrOrAdmin() && demande != Guid.Empty) return demande;
+        var actorId = RequireActorId();
+        if (actorId is null) return demande;
+        // Identifiant de connexion et fiche peuvent différer : on retient la fiche du compte connecté.
+        var moi = await _employeRepo.GetByEmployeIdOrEmailAsync(actorId.Value, User.GetEmail(), ct);
+        return moi?.EmployeId ?? actorId.Value;
     }
 
     [HttpGet("config/quotas-service/{serviceId}")]
     public async Task<IActionResult> GetQuotaService(string serviceId, CancellationToken ct)
         => Ok(await _mediator.Send(new GetQuotaServiceByIdQuery(serviceId), ct));
+
+    /// <summary>GET /api/conges/config/workflow — Circuit de validation en vigueur.</summary>
+    [HttpGet("config/workflow")]
+    public async Task<IActionResult> GetWorkflow(CancellationToken ct)
+        => Ok(await _mediator.Send(new GetCongeWorkflowQuery(), ct));
+
+    /// <summary>
+    /// PUT /api/conges/config/workflow — Bascule du circuit (Admin).
+    /// Désactiver l'étape RH finalise les demandes déjà validées par un superviseur.
+    /// </summary>
+    [HttpPut("config/workflow")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateWorkflow(
+        [FromBody] UpdateCongeWorkflowRequest body,
+        CancellationToken ct)
+        => Ok(await _mediator.Send(
+            new UpdateCongeWorkflowCommand(body.EtapeRhRequise, RequireActorId()), ct));
 
     // ── Validation / Refus ───────────────────────────────────────────────────
 
@@ -239,7 +373,11 @@ public class CongesController : ControllerBase
         if (iam is not null)
             return iam;
 
-        if (!IsPrivilegedHrOrAdmin())
+        var suivi = RhSuiviSeulement(StatutDemande.EnAttente);
+        if (suivi is not null)
+            return suivi;
+
+        if (!IsAdmin())
         {
             var forbidden = await EnsureCanActOnDemandeAsync(id, actorId.Value, requireSuperviseurScope: true, ct);
             if (forbidden is not null)
@@ -290,9 +428,13 @@ public class CongesController : ControllerBase
         if (demande is null)
             return NotFound();
 
+        var suivi = RhSuiviSeulement(demande.Statut);
+        if (suivi is not null)
+            return suivi;
+
         if (demande.Statut == StatutDemande.EnAttente)
         {
-            if (!IsPrivilegedHrOrAdmin())
+            if (!IsAdmin())
             {
                 var forbidden = await EnsureCanActOnDemandeAsync(id, actorId.Value, requireSuperviseurScope: true, ct);
                 if (forbidden is not null)
@@ -328,9 +470,13 @@ public class CongesController : ControllerBase
         if (demande is null)
             return NotFound();
 
+        var suivi = RhSuiviSeulement(demande.Statut);
+        if (suivi is not null)
+            return suivi;
+
         if (demande.Statut == StatutDemande.EnAttente)
         {
-            if (!IsPrivilegedHrOrAdmin())
+            if (!IsAdmin())
             {
                 var forbidden = await EnsureCanActOnDemandeAsync(id, actorId.Value, requireSuperviseurScope: true, ct);
                 if (forbidden is not null)
@@ -406,6 +552,27 @@ public class CongesController : ControllerBase
         var role = User.GetAuthRole();
         return string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
             || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsAdmin()
+        => string.Equals(User.GetAuthRole(), "Admin", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsRh()
+        => string.Equals(User.GetAuthRole(), "RH", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// v9 : le service RH suit les congés sans les trancher. Il ne décide que des demandes
+    /// qui lui sont adressées (statut « en attente RH ») : congé d'un responsable,
+    /// cellule sans superviseur actif, ou deuxième étape du circuit à deux étapes.
+    /// </summary>
+    private IActionResult? RhSuiviSeulement(StatutDemande statut)
+    {
+        if (!IsRh() || statut == StatutDemande.EnAttenteRh)
+            return null;
+        return StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            message = "Le service RH suit les demandes sans les valider : la décision appartient au superviseur de la cellule.",
+        });
     }
 
     private bool IsSuperviseurRole()
@@ -515,6 +682,7 @@ public record UpdatePeriodesInterditesRequest(
     Guid? UpdatedBy = null,
     string? ScopeKind = null,
     string? ScopeId = null);
+public record UpdateCongeWorkflowRequest(bool EtapeRhRequise);
 public record UpsertQuotaServiceRequest(
     string ServiceId,
     int MaxAbsentsSimultanes,

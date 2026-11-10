@@ -1,0 +1,120 @@
+<div class="ku-page pt">
+  <header class="ku-hero">
+    <div>
+      <p class="ku-hero-eyebrow">Pointage · {{ data()?.perimetre ?? 'Votre périmètre' }}</p>
+      <h1 class="ku-hero-title">Pointages de l’équipe</h1>
+      <p class="ku-hero-sub">Retards, pointages manquants et production de chaque collaborateur sur la période.</p>
+    </div>
+    <div class="ku-hero-actions">
+      <a routerLink="/pointage/prevu-realise" class="ku-btn">Prévu / réalisé</a>
+      <button type="button" class="ku-btn" (click)="exporter()" [disabled]="loading() || !lignes().length">Exporter (Excel)</button>
+      <button type="button" class="ku-btn ku-btn--primary" (click)="load()" [disabled]="loading()">Actualiser</button>
+    </div>
+  </header>
+
+  <section class="ku-card pt-periode">
+    <div class="ku-seg" role="group" aria-label="Période">
+      <button type="button" [class.is-active]="preset() === 'semaine'" (click)="choisirPreset('semaine')">Cette semaine</button>
+      <button type="button" [class.is-active]="preset() === 'paie'" (click)="choisirPreset('paie')" title="Du 24 au 23 : période de compensation des heures">Période de paie</button>
+      <button type="button" [class.is-active]="preset() === 'paie-precedente'" (click)="choisirPreset('paie-precedente')">Période précédente</button>
+      <button type="button" [class.is-active]="preset() === 'mois'" (click)="choisirPreset('mois')">Mois civil</button>
+    </div>
+    <div class="ku-toolbar">
+      <label class="ku-field"><span>Du</span><input class="ku-input" type="date" [ngModel]="du()" (ngModelChange)="du.set($event)" /></label>
+      <label class="ku-field"><span>Au</span><input class="ku-input" type="date" [ngModel]="au()" (ngModelChange)="au.set($event)" /></label>
+      <button type="button" class="ku-btn ku-btn--primary" (click)="appliquerPeriode()" [disabled]="loading()">Afficher</button>
+    </div>
+  </section>
+
+  <div class="ku-kpis">
+    <div class="ku-kpi"><span class="ku-kpi-label">Collaborateurs</span><span class="ku-kpi-value">{{ lignes().length }}</span>
+      <span class="ku-kpi-sub">{{ nonRelies() }} sans badge relié</span></div>
+    <div class="ku-kpi" [class.ku-kpi--ok]="totalProduction().ecart >= 0" [class.ku-kpi--warn]="totalProduction().ecart < 0">
+      <span class="ku-kpi-label">Production collective</span>
+      <span class="ku-kpi-value">{{ formatDuree(totalProduction().realisee) }}</span>
+      <span class="ku-kpi-sub">prévue {{ formatDuree(totalProduction().prevue) }} · écart {{ formatEcart(totalProduction().ecart) }}</span></div>
+    <div class="ku-kpi ku-kpi--danger"><span class="ku-kpi-label">Retard cumulé</span>
+      <span class="ku-kpi-value">{{ formatDuree(totalRetard()) }}</span>
+      <span class="ku-kpi-sub">{{ joursRetard() }} journée(s) en retard</span></div>
+    <div class="ku-kpi ku-kpi--warn"><span class="ku-kpi-label">Pointages manquants</span>
+      <span class="ku-kpi-value">{{ joursManquants() }}</span>
+      <span class="ku-kpi-sub">journée(s) non calculée(s)</span></div>
+  </div>
+
+  @if (nonRelies() > 0) {
+    <div class="ku-alert ku-alert--warn"><div>
+      <p>{{ nonRelies() }} collaborateur(s) sans badge relié : leurs pointages n’apparaissent pas tant que RH n’a pas fait la correspondance.</p>
+    </div></div>
+  }
+
+  <section class="ku-card">
+    <div class="ku-card-head">
+      <div class="ku-toolbar">
+        <input class="ku-input pe-search" type="search" placeholder="Rechercher un collaborateur…" aria-label="Rechercher"
+          [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+        <select class="ku-input pe-select" aria-label="Cellule" [ngModel]="cellule()" (ngModelChange)="cellule.set($event)">
+          <option value="">Toutes les cellules</option>
+          @for (c of cellules(); track c) { <option [value]="c">{{ c }}</option> }
+        </select>
+        <label class="ku-check">
+          <input type="checkbox" [ngModel]="seulementRetards()" (ngModelChange)="seulementRetards.set($event)" />
+          Seulement retards et pointages manquants
+        </label>
+      </div>
+    </div>
+
+    @if (loading()) {
+      <div class="ku-skeleton"></div>
+    } @else if (error()) {
+      <div class="ku-alert ku-alert--danger"><div><p>{{ error() }}</p></div></div>
+    } @else {
+      <div class="ku-table-wrap">
+        <table class="ku-table ku-table--stack">
+          <thead>
+            <tr>
+              <th>Collaborateur</th>
+              <th>Cellule</th>
+              <th class="is-num">Production</th>
+              <th class="is-num">Écart</th>
+              <th class="is-num">Retard total</th>
+              <th class="is-num">Jours en retard</th>
+              <th class="is-num">À l’heure</th>
+              <th class="is-num">Manquants</th>
+              <th class="is-num">Sans pointage</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of lignes(); track l.userId) {
+              <tr>
+                <td data-label="Collaborateur">
+                  <a [routerLink]="['/pointage/collaborateurs', l.userId]">{{ l.collaborateur }}</a>
+                  @if (!l.relie) { <span class="ku-chip ku-chip--warn pe-badge" title="Aucun badge de pointeuse relié">non relié</span> }
+                  @if (l.regime) { <small class="ku-muted pe-regime">{{ l.regime }}</small> }
+                </td>
+                <td data-label="Cellule" class="ku-muted">{{ l.cellule || '—' }}</td>
+                <td data-label="Production" class="is-num">
+                  {{ formatDuree(l.productionMinutes ?? 0) }}
+                  @if (l.productionPrevueMinutes) { <small class="ku-muted">/ {{ formatDuree(l.productionPrevueMinutes) }}</small> }
+                </td>
+                <td data-label="Écart" class="is-num" [class.ku-neg]="ecart(l) < 0" [class.ku-pos]="ecart(l) > 0">
+                  {{ l.productionPrevueMinutes ? formatEcart(ecart(l)) : '—' }}
+                </td>
+                <td data-label="Retard total" class="is-num" [class.ku-neg]="l.retardTotalMinutes > 0">{{ l.retardTotalMinutes ? formatDuree(l.retardTotalMinutes) : '—' }}</td>
+                <td data-label="Jours en retard" class="is-num">{{ l.joursEnRetard }}</td>
+                <td data-label="À l’heure" class="is-num">{{ l.joursAHeure }}</td>
+                <td data-label="Manquants" class="is-num" [class.pt-manquant]="l.joursPointageManquant > 0">{{ l.joursPointageManquant }}</td>
+                <td data-label="Sans pointage" class="is-num">{{ l.joursSansPointage }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="9" class="ku-empty">Aucun collaborateur avec ces filtres.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="ku-card-sub pe-note">
+        Tolérance : {{ data()?.toleranceMinutes }} minutes, à l’arrivée comme sur les pauses (au-delà, tout le dépassement compte). Référence : planning publié dans My-Kyntus, ou à défaut le régime horaire
+        du collaborateur. Production = départ − arrivée − pauses pointées ; la production prévue ne compte que les journées calculées.
+      </p>
+    }
+  </section>
+</div>

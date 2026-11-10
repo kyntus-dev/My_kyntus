@@ -1,29 +1,36 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { forkJoin } from 'rxjs';
 import { UserService, type OrgGroupScope } from '../../services/user.service';
 import { User } from '../../users-module';
 import { copyTextToClipboard } from '../../../../core/lib/clipboard.util';
 import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
 import { AlertTriangle, Award, Eye, History, KeyRound, Pencil, Search, Trash2 } from 'lucide';
-import type { Department } from '../../../prime/models';
 import type { OrgAssignmentsOverview } from '../../../prime/services/prime-org-api.service';
-import { PrimeOrgApiService } from '../../../prime/services/prime-org-api.service';
 import { PilotRotationHistoryModalComponent } from '../../../prime/components/pilot-rotation-history-modal.component';
 import { BodyPortalDirective } from '../../../../shared/directives/body-portal.directive';
-import type { SubService } from '../../../sub-services/sub-services-module';
-import { SubServiceService } from '../../../sub-services/services/sub-service.service';
+import { EmployeeDeactivateDialogComponent } from '../../components/employee-deactivate-dialog.component';
 import {
   enrichUserOrgPerimeter,
   orgCellLabel,
   orgDepartmentLabel,
-  type BusinessDepartmentRef,
-  type DirectoryEmployeeOrgRef,
+  orgServiceIsCelluleMirror,
   type UserOrgPerimeterView,
 } from '../../../../core/org/user-org-perimeter';
+import { EmployeeRosterService } from '../../services/employee-roster.service';
+import {
+  EMPLOYEE_STATUS_SCOPES,
+  EMPTY_ORG_FILTER,
+  buildOrgFilterOptions,
+  matchesOrgFilter,
+  matchesStatusScope,
+  normalizeOrgFilter,
+  parseStatusScope,
+  type EmployeeOrgFilter,
+  type EmployeeOrgFilterOptions,
+  type EmployeeStatusScope,
+} from '../../lib/employee-list-filters';
 import {
   contractLevelLabel,
   expertiseLevelLabel,
@@ -46,6 +53,7 @@ import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toas
     LucideIconComponent,
     PilotRotationHistoryModalComponent,
     BodyPortalDirective,
+    EmployeeDeactivateDialogComponent,
   ],
   templateUrl: './user-list.component.html',
   styleUrls: ['./user-list.component.css']
@@ -63,6 +71,7 @@ export class UserListComponent implements OnInit, OnDestroy {
   };
   readonly orgCellLabel = orgCellLabel;
   readonly orgDepartmentLabel = orgDepartmentLabel;
+  readonly orgServiceIsCelluleMirror = orgServiceIsCelluleMirror;
   readonly contractLevelLabel = contractLevelLabel;
   readonly expertiseLevelLabel = expertiseLevelLabel;
   readonly matriculeDisplay = matriculeDisplay;
@@ -70,11 +79,13 @@ export class UserListComponent implements OnInit, OnDestroy {
   users: User[] = [];
   filteredUsers: User[] = [];
   private perimeterByUserId = new Map<number, UserOrgPerimeterView>();
-  private directoryEmployees: DirectoryEmployeeOrgRef[] = [];
-  private businessDepartments: BusinessDepartmentRef[] = [];
   searchTerm = '';
-  serviceFilter = '';
-  readonly noServiceFilter = '__none__';
+  /** Filtres d'organisation en cascade : libellés exacts du fichier (activité › pôle › cellule). */
+  orgFilter: EmployeeOrgFilter = { ...EMPTY_ORG_FILTER };
+  orgFilterOptions: EmployeeOrgFilterOptions = { activites: [], poles: [], cellules: [] };
+  statusFilter: EmployeeStatusScope = 'all';
+  readonly statusScopes = EMPLOYEE_STATUS_SCOPES;
+  exporting: EmployeeStatusScope | null = null;
   loading = false;
   error: string | null = null;
 
@@ -104,9 +115,7 @@ export class UserListComponent implements OnInit, OnDestroy {
 
   constructor(
     private userService: UserService,
-    private subServiceService: SubServiceService,
-    private orgApi: PrimeOrgApiService,
-    private http: HttpClient,
+    private roster: EmployeeRosterService,
     private router: Router,
     private confirmService: KyntusConfirmService,
     private toastService: KyntusToastService,
@@ -125,65 +134,22 @@ export class UserListComponent implements OnInit, OnDestroy {
   loadUsers(): void {
     this.loading = true;
     this.error = null;
-    forkJoin({
-      users: this.userService.getAllUsers(),
-      overview: this.orgApi.loadOverview(),
-      subServices: this.subServiceService.getAllSubServices(),
-      directoryEmployees: this.http.get<DirectoryEmployeeOrgRef[]>('/api/directory/employees'),
-      businessDepartments: this.http.get<BusinessDepartmentRef[]>('/api/directory/business-departments'),
-    }).subscribe({
-      next: ({ users, overview, subServices, directoryEmployees, businessDepartments }) => {
+    this.roster.load().subscribe({
+      next: ({ users, overview, perimeters }) => {
         this.users = users;
-        this.orgOverview = overview ?? null;
-        this.directoryEmployees = directoryEmployees ?? [];
-        this.businessDepartments = businessDepartments ?? [];
-        const departments = overview?.departments?.length ? overview.departments : [];
-        this.rebuildPerimeters(users, departments, overview, subServices ?? []);
-        this.normalizeServiceFilter();
+        this.orgOverview = overview;
+        this.perimeterByUserId = perimeters;
+        this.normalizeFilters();
         this.applySearch();
         this.loading = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
-        this.userService.getAllUsers().subscribe({
-          next: (users) => {
-            this.users = users;
-            this.rebuildPerimeters(users, [], null, []);
-            this.normalizeServiceFilter();
-            this.applySearch();
-            this.loading = false;
-            this.cdr.detectChanges();
-          },
-          error: () => {
-            this.error = `Erreur: ${err.status}`;
-            this.loading = false;
-            this.cdr.detectChanges();
-          },
-        });
-      }
+        this.error = `Erreur: ${err?.status ?? ''}`.trim();
+        this.loading = false;
+        this.cdr.detectChanges();
+      },
     });
-  }
-
-  private rebuildPerimeters(
-    users: User[],
-    departments: Department[],
-    overview: OrgAssignmentsOverview | null,
-    subServices: SubService[],
-  ): void {
-    this.perimeterByUserId.clear();
-    for (const user of users) {
-      this.perimeterByUserId.set(
-        user.id,
-        enrichUserOrgPerimeter(
-          user,
-          departments,
-          overview,
-          subServices,
-          this.directoryEmployees,
-          this.businessDepartments,
-        ),
-      );
-    }
   }
 
   onSearch(): void {
@@ -193,9 +159,33 @@ export class UserListComponent implements OnInit, OnDestroy {
     this.resetTableScroll();
   }
 
-  onServiceFilterChange(value: string): void {
-    this.serviceFilter = value || '';
+  onOrgFilterChange(level: keyof EmployeeOrgFilter, value: string): void {
+    const next = { ...this.orgFilter, [level]: value || '' };
+    // Changer l'activité vide le pôle et la cellule ; changer le pôle vide la cellule.
+    if (level === 'activite') { next.pole = ''; next.cellule = ''; }
+    if (level === 'pole') next.cellule = '';
+    this.orgFilter = next;
+    this.onFiltersChanged();
+  }
+
+  onStatusFilterChange(value: string): void {
+    this.statusFilter = parseStatusScope(value);
+    this.onFiltersChanged();
+  }
+
+  get hasActiveFilters(): boolean {
+    return !!(this.orgFilter.activite || this.orgFilter.pole || this.orgFilter.cellule || this.statusFilter !== 'all');
+  }
+
+  clearFilters(): void {
+    this.orgFilter = { ...EMPTY_ORG_FILTER };
+    this.statusFilter = 'all';
+    this.onFiltersChanged();
+  }
+
+  private onFiltersChanged(): void {
     this.currentPage = 1;
+    this.refreshOrgFilterOptions();
     this.applySearch();
     this.saveListView();
     this.resetTableScroll();
@@ -203,39 +193,50 @@ export class UserListComponent implements OnInit, OnDestroy {
 
   private applySearch(): void {
     const term = this.searchTerm.toLowerCase().trim();
-    this.filteredUsers = this.users.filter((user) => {
-      const matchesSearch = !term || userMatchesSearch(user, term);
-      const service = this.userPerimeter(user).service?.trim() || '';
-      const matchesService = !this.serviceFilter
-        || (this.serviceFilter === this.noServiceFilter ? !service : service === this.serviceFilter);
-      return matchesSearch && matchesService;
-    });
+    this.filteredUsers = this.users.filter((user) =>
+      (!term || userMatchesSearch(user, term))
+      && matchesStatusScope(user.isActive, this.statusFilter)
+      && matchesOrgFilter(this.userPerimeter(user), this.orgFilter));
     this.currentPage = Math.min(this.currentPage, this.totalPages);
   }
 
-  get serviceFilterOptions(): { value: string; label: string }[] {
-    const names = new Set<string>();
-    let hasUnassigned = false;
-    for (const user of this.users) {
-      const service = this.userPerimeter(user).service?.trim();
-      if (service) names.add(service);
-      else hasUnassigned = true;
-    }
-    const options = Array.from(names)
-      .sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }))
-      .map((name) => ({ value: name, label: name }));
-    if (hasUnassigned) options.push({ value: this.noServiceFilter, label: 'Sans service' });
-    return options;
+  /** Les listes ne proposent que les activités, pôles et cellules réellement présents (selon le statut choisi). */
+  private refreshOrgFilterOptions(): void {
+    this.orgFilterOptions = buildOrgFilterOptions(this.statusScopedPerimeters(), this.orgFilter);
   }
 
-  private normalizeServiceFilter(): void {
-    if (!this.serviceFilter) return;
-    if (this.serviceFilter === this.noServiceFilter) {
-      if (this.users.some((user) => !this.userPerimeter(user).service?.trim())) return;
-    } else if (this.serviceFilterOptions.some((option) => option.value === this.serviceFilter)) {
-      return;
+  private statusScopedPerimeters(): UserOrgPerimeterView[] {
+    return this.users
+      .filter((u) => matchesStatusScope(u.isActive, this.statusFilter))
+      .map((u) => this.userPerimeter(u));
+  }
+
+  private normalizeFilters(): void {
+    this.orgFilter = normalizeOrgFilter(this.orgFilter, this.statusScopedPerimeters());
+    this.refreshOrgFilterOptions();
+  }
+
+  get emptyStateMessage(): string {
+    if (this.searchTerm.trim()) return `Aucun employé ne correspond à « ${this.searchTerm.trim()} ».`;
+    return 'Aucun employé ne correspond aux filtres choisis.';
+  }
+
+  async exportEmployees(scope: EmployeeStatusScope): Promise<void> {
+    if (this.exporting) return;
+    this.exporting = scope;
+    try {
+      const count = await this.roster.exportExcel(
+        { users: this.users, overview: this.orgOverview, perimeters: this.perimeterByUserId },
+        scope,
+      );
+      if (count === 0) this.toastService.error('Aucun employé à exporter pour ce statut.');
+      else this.toastService.success(`${count} employé(s) exporté(s).`);
+    } catch {
+      this.toastService.error("Échec de l'export Excel.");
+    } finally {
+      this.exporting = null;
+      this.cdr.detectChanges();
     }
-    this.serviceFilter = '';
   }
 
   getAnciennete(user: User): string {
@@ -306,7 +307,7 @@ export class UserListComponent implements OnInit, OnDestroy {
   private saveListView(): void {
     try {
       sessionStorage.setItem(this.viewKey, JSON.stringify({
-        searchTerm: this.searchTerm, serviceFilter: this.serviceFilter,
+        searchTerm: this.searchTerm, orgFilter: this.orgFilter, statusFilter: this.statusFilter,
         currentPage: this.currentPage, pageSize: this.pageSize,
         visibleColumns: this.visibleColumns, scrollTop: this.restoredScrollTop,
         scrollLeft: this.restoredScrollLeft,
@@ -318,7 +319,10 @@ export class UserListComponent implements OnInit, OnDestroy {
       const v = JSON.parse(sessionStorage.getItem(this.viewKey) || '{}');
       if (!v || typeof v !== 'object') return;
       this.searchTerm = typeof v.searchTerm === 'string' ? v.searchTerm.slice(0, 300) : '';
-      this.serviceFilter = typeof v.serviceFilter === 'string' ? v.serviceFilter : '';
+      const f = v.orgFilter && typeof v.orgFilter === 'object' ? v.orgFilter : {};
+      const text = (x: unknown) => (typeof x === 'string' ? x.slice(0, 300) : '');
+      this.orgFilter = { activite: text(f.activite), pole: text(f.pole), cellule: text(f.cellule) };
+      this.statusFilter = parseStatusScope(v.statusFilter);
       this.currentPage = Number.isSafeInteger(v.currentPage) && v.currentPage > 0 ? v.currentPage : 1;
       this.pageSize = [25, 50, 100].includes(v.pageSize) ? v.pageSize : 25;
       if (Array.isArray(v.visibleColumns)) {
@@ -354,12 +358,13 @@ export class UserListComponent implements OnInit, OnDestroy {
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   }
-  runAction(action: 'level' | 'history' | 'reset' | 'delete', user: User): void {
+  runAction(action: 'level' | 'history' | 'reset' | 'deactivate' | 'reactivate', user: User): void {
     this.closeActions();
     if (action === 'level') this.openLevelModal(user);
     else if (action === 'history') this.openPilotRotationHistory(user);
     else if (action === 'reset') void this.resetPassword(user);
-    else void this.deleteUser(user.id);
+    else if (action === 'deactivate') this.deactivateTarget = user;
+    else void this.reactivateUser(user);
   }
 
   goimport(): void { this.router.navigate(['/import']); }
@@ -421,17 +426,42 @@ export class UserListComponent implements OnInit, OnDestroy {
     });
   }
 
-  async deleteUser(id: number): Promise<void> {
+  /** Collaborateur en cours de désactivation (boîte de dialogue ouverte). */
+  deactivateTarget: User | null = null;
+  deactivating = false;
+
+  confirmDeactivate(dateSortie: string): void {
+    const user = this.deactivateTarget;
+    if (!user || this.deactivating) return;
+    this.deactivating = true;
+    this.userService.deactivateUser(user.id, dateSortie).subscribe({
+      next: () => {
+        this.deactivating = false;
+        this.deactivateTarget = null;
+        this.toastService.success(`${user.lastName} ${user.firstName} est désactivé(e). Son historique est conservé.`);
+        this.loadUsers();
+      },
+      error: (err) => {
+        this.deactivating = false;
+        this.toastService.error(err?.error?.message ?? 'Désactivation impossible.');
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  async reactivateUser(user: User): Promise<void> {
     const ok = await this.confirmService.confirm({
-      title: 'Supprimer l\'employé',
-      message: 'Supprimer cet employé ?',
-      confirmLabel: 'Supprimer',
-      variant: 'danger',
+      title: 'Réactiver le collaborateur',
+      message: `Réactiver ${user.lastName} ${user.firstName} ? Il pourra de nouveau se connecter ; pensez à vérifier son affectation.`,
+      confirmLabel: 'Réactiver',
     });
     if (!ok) return;
-    this.userService.deleteUser(id).subscribe({
-      next: () => this.loadUsers(),
-      error: (err) => this.toastService.error(`Erreur: ${err.error?.message}`),
+    this.userService.reactivateUser(user.id).subscribe({
+      next: () => {
+        this.toastService.success(`${user.lastName} ${user.firstName} est réactivé(e).`);
+        this.loadUsers();
+      },
+      error: (err) => this.toastService.error(err?.error?.message ?? 'Réactivation impossible.'),
     });
   }
 
@@ -457,6 +487,8 @@ export class UserListComponent implements OnInit, OnDestroy {
         this.resetCredentialErrors = [];
         this.showResetPassword = true;
         this.resettingUserId = null;
+        // v38 : ce qui empêchait la connexion et a été corrigé (compte réactivé, e-mail, verrouillage).
+        if (result.corrections?.length) this.toastService.info(`Compte de connexion corrigé : ${result.corrections.join(' ')}`, 9000);
         this.cdr.detectChanges();
       },
       error: (err) => {
@@ -679,7 +711,8 @@ export class UserListComponent implements OnInit, OnDestroy {
 
   lifecycleBadge(user: User): { phase: string; label: string } | null {
     const ls = user.lifecycleStatus;
-    if (ls && ls.phase && ls.phase !== 'active') {
+    // « Inactif » est déjà affiché par le statut : pas de second badge identique.
+    if (ls && ls.phase && ls.phase !== 'active' && !(ls.phase === 'inactive' && user.isActive === false)) {
       return { phase: ls.phase, label: ls.label };
     }
     if (user.hrProfile?.enFormation) {

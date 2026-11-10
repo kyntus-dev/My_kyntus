@@ -305,3 +305,17 @@
 .m-0 {
   margin: 0;
 }
+
+/* v11.4 : sélection rapide par rôle */
+.kap-roles-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 12px; padding: 10px 12px;
+  border-radius: 10px; background: color-mix(in srgb, var(--ky-blue, #1e4fd8) 6%, var(--bg-card)); border: 1px solid var(--border-color); }
+.kap-roles-quick-title { margin-right: 4px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.kap-role-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border-color);
+  background: var(--bg-card); color: var(--text-primary); font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.kap-role-chip b { padding: 0 6px; border-radius: 999px; background: var(--bg-input, #eef2f7); font-size: 0.7rem; }
+.kap-role-chip small { color: var(--text-muted); font-size: 0.68rem; }
+.kap-role-chip:hover:not(:disabled) { border-color: var(--ky-blue, #1e4fd8); color: var(--ky-blue, #1e4fd8); }
+.kap-role-chip:disabled { opacity: 0.5; cursor: default; }
+.kap-role-chip--all { background: var(--ky-blue, #1e4fd8); border-color: var(--ky-blue, #1e4fd8); color: #fff; }
+.kap-role-chip--all b { background: rgb(255 255 255 / 0.25); }
+.kap-role-chip--all:hover:not(:disabled) { color: #fff; filter: brightness(1.08); }

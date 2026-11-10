@@ -41,6 +41,7 @@ import {
 } from '../lib/prime-select-options';
 import { RoleService } from '../state/role.service';
 import { parseOrganisationRhTab, type OrganisationRhTab } from '../../../core/navigation/organisation-nav';
+import { EffectifsCellulesComponent } from '../../organisation-admin/effectifs/effectifs-cellules.component';
 import {
   ORG_DUPLICATE_CELLULE_MSG,
   ORG_DUPLICATE_POLE_MSG,
@@ -124,6 +125,7 @@ export type StructureLogEntry = {
     KyntusSelectSyncDirective,
     PilotRotationHistoryModalComponent,
     KyntusPageHeaderComponent,
+    EffectifsCellulesComponent,
   ],
   template: `
     <app-pilot-rotation-history-modal
@@ -838,6 +840,9 @@ export type StructureLogEntry = {
                 </table>
               </div>
             </app-prime-card>
+          }
+          @case ('effectifs') {
+            <app-effectifs-cellules />
           }
           @case ('structure') {
             <div class="org-structure w-full grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch xl:items-start">
@@ -2193,6 +2198,7 @@ export class OrganisationManagementComponent implements OnInit {
     { id: 'poles', label: 'Cellules' },
     { id: 'cellules', label: 'Services' },
     { id: 'structure', label: 'Vue structure' },
+    { id: 'effectifs', label: 'Effectifs' },
   ];
 
   readonly mainTab = signal<OrgMainTab>('metier-departments');
