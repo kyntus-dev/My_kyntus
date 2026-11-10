@@ -106,3 +106,9 @@
 /* v43 : horaire de base */
 .hs-base { color: var(--text-muted); }
 .hs-choix button small { display: block; font-size: 0.66rem; color: var(--text-muted); font-weight: 500; }
+
+/* v45 : correction d'une journée passée */
+.hs-detail td.hs-corr { white-space: nowrap; }
+.hs-corr button { font: inherit; font-size: 0.68rem; padding: 2px 6px; margin-right: 3px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-muted); cursor: pointer; }
+.hs-corr button.on { border-color: var(--ky-blue); color: var(--ky-blue); font-weight: 700; background: color-mix(in srgb, var(--ky-blue) 8%, transparent); }
+.hs-corr button:disabled { opacity: 0.4; cursor: default; }

@@ -217,3 +217,15 @@ describe('horaire de base (v43)', () => {
     expect(soldeHeures(jours, '2026-11-10', (d) => prevueDuChoix(d.toLocaleDateString('sv-SE'), [], '0740')).soldeMinutes).toBe(0);
   });
 });
+
+describe('correction des journées passées (v45)', () => {
+  it('une seule journée à 07h40 par semaine pour un horaire 08h40', async () => {
+    const { courteDejaPriseSemaine } = await import('./heure-sortie.util');
+    const choix = [{ jour: '2026-10-30', choix: '0740' as const }];
+    expect(courteDejaPriseSemaine('2026-10-27', choix, '0840')).toBe('2026-10-30');
+    expect(courteDejaPriseSemaine('2026-10-30', choix, '0840')).toBeNull(); // le jour même : modifiable
+    expect(courteDejaPriseSemaine('2026-11-02', choix, '0840')).toBeNull(); // semaine suivante
+    expect(courteDejaPriseSemaine('2026-10-27', choix, '0740')).toBeNull(); // horaire 07h40
+    expect(courteDejaPriseSemaine('2026-10-31', choix, '0840')).toBeNull(); // samedi
+  });
+});

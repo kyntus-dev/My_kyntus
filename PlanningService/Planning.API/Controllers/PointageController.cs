@@ -127,6 +127,26 @@ public sealed class PointageController(
     public async Task<ActionResult<IReadOnlyList<ChoixProductionJourDto>>> MesChoixProduction([FromQuery] DateOnly? au, CancellationToken ct) =>
         Ok(await query.GetMesChoixProductionAsync(Viewer(), au ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1), ct));
 
+    /// <summary>v45 : choix d'une journée (correction d'un jour passé depuis le 24, ou aujourd'hui).</summary>
+    [HttpPut("heure-sortie/choix/{jour}")]
+    public async Task<IActionResult> ChoixProductionJour(DateOnly jour, [FromBody] ChoixProductionRequest body, CancellationToken ct)
+    {
+        try
+        {
+            return await query.EnregistrerChoixProductionJourAsync(Viewer(), jour, body.Choix, ct)
+                ? Ok(new { jour, choix = body.Choix })
+                : StatusCode(StatusCodes.Status403Forbidden, new { message = "« Heure de sortie » n'est pas ouvert à votre compte." });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
     [HttpPut("heure-sortie/choix")]
     public async Task<IActionResult> ChoixProduction([FromBody] ChoixProductionRequest body, CancellationToken ct)
     {

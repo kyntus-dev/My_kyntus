@@ -18,6 +18,7 @@ import {
   debutPeriodePaie,
   detailSolde,
   prevueDuChoix,
+  courteDejaPriseSemaine,
   type ChoixJour,
   type LigneSolde,
   productionDuChoix,
@@ -113,6 +114,9 @@ export class PointageHeureSortieComponent implements OnInit {
   /** v41 : détail jour par jour du solde (clic sur « Solde depuis le 24 »). */
   readonly detail = signal<LigneSolde[]>([]);
   readonly detailOuvert = signal(false);
+  /** v45 : choix enregistrés jour par jour (correction des journées passées dans le détail). */
+  readonly choixJours = signal<ChoixJour[]>([]);
+  readonly correctionEnCours = signal<string | null>(null);
   readonly periodeDu = signal('');
   readonly periodeVeille = signal('');
   /** Écart du jour en secondes : négatif tant que la production n'est pas atteinte. */
@@ -167,6 +171,33 @@ export class PointageHeureSortieComponent implements OnInit {
     });
   }
 
+  /** v45 : choix enregistré pour une journée passée (null : horaire de base). */
+  choixDuJour(jour: string): ChoixProduction | null {
+    return this.choixJours().find((c) => c.jour.slice(0, 10) === jour)?.choix ?? null;
+  }
+
+  /** v45 : 07h40 impossible ce jour-là (horaire 08h40 : journée à 07h40 déjà prise dans la semaine). */
+  courteBloquee(jour: string): boolean {
+    return this.choixDuJour(jour) !== '0740' && !!courteDejaPriseSemaine(jour, this.choixJours(), this.base());
+  }
+
+  /** v45 : corrige la production prévue d'une journée passée (ex. un vendredi fait à 07h40). */
+  corrigerJour(jour: string, valeur: ChoixProduction): void {
+    if (this.correctionEnCours() || this.choixDuJour(jour) === valeur) return;
+    this.correctionEnCours.set(jour);
+    this.svc.choisirProductionJour(jour, valeur).subscribe({
+      next: () => {
+        this.correctionEnCours.set(null);
+        this.toast.success(`${this.dateCourte(jour)} : production prévue ${valeur === '0840' ? '08h40' : '07h40'}.`);
+        this.chargerSolde(this.periodeDu(), new Date().toLocaleDateString('sv-SE'));
+      },
+      error: (err) => {
+        this.correctionEnCours.set(null);
+        this.toast.error(err?.error?.message ?? 'Correction impossible.');
+      },
+    });
+  }
+
   /** « +01:34:00 » / « −00:12:00 » à partir de minutes. */
   signe(minutes: number | null): string {
     if (minutes == null) return '';
@@ -207,6 +238,7 @@ export class PointageHeureSortieComponent implements OnInit {
       choix: this.svc.mesChoixProduction(au).pipe(catchError(() => of([] as ChoixJour[]))),
     }).subscribe({
       next: ({ suivi, choix }) => {
+        this.choixJours.set(choix);
         const prevue = (d: Date) => prevueDuChoix(d.toLocaleDateString('sv-SE'), choix, this.base());
         this.solde.set(soldeHeures(suivi.jours, au, prevue));
         this.detail.set(detailSolde(suivi.jours, au, prevue));

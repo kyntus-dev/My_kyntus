@@ -209,7 +209,7 @@
                   <div class="hs-detail-wrap">
                     <table>
                       <thead>
-                        <tr><th>Jour</th><th>Arrivée → départ</th><th>Réalisée</th><th>Prévue</th><th>Écart</th><th>Cumul</th></tr>
+                        <tr><th>Jour</th><th>Arrivée → départ</th><th>Réalisée</th><th>Prévue</th><th>Écart</th><th>Cumul</th><th>Corriger</th></tr>
                       </thead>
                       <tbody>
                         @for (l of detail(); track l.jour) {
@@ -221,27 +221,35 @@
                               <td>{{ hm(l.prevueMinutes) }} <small>{{ l.originePrevue }}</small></td>
                               <td [class.ku-pos]="(l.ecartMinutes ?? 0) > 0" [class.ku-neg]="(l.ecartMinutes ?? 0) < 0"><b>{{ signeHm(l.ecartMinutes) }}</b></td>
                               <td [class.ku-pos]="l.cumulMinutes > 0" [class.ku-neg]="l.cumulMinutes < 0">{{ signeHm(l.cumulMinutes) }}</td>
+                              <td class="hs-corr">
+                                <button type="button" [class.on]="l.prevueMinutes === 460" [disabled]="correctionEnCours() === l.jour || courteBloquee(l.jour)"
+                                        (click)="corrigerJour(l.jour, '0740')" title="Prévoir 07h40 ce jour-là">07h40</button>
+                                <button type="button" [class.on]="l.prevueMinutes === 520" [disabled]="correctionEnCours() === l.jour"
+                                        (click)="corrigerJour(l.jour, '0840')" title="Prévoir 08h40 ce jour-là">08h40</button>
+                              </td>
                             </tr>
                           } @else {
                             <tr class="hs-nc">
                               <td>{{ dateCourte(l.jour) }}</td>
                               <td colspan="4">Non compté : {{ l.motif }}</td>
                               <td>{{ signeHm(l.cumulMinutes) }}</td>
+                              <td></td>
                             </tr>
                           }
                         } @empty {
-                          <tr class="hs-nc"><td colspan="6">Aucune journée terminée depuis le 24.</td></tr>
+                          <tr class="hs-nc"><td colspan="7">Aucune journée terminée depuis le 24.</td></tr>
                         }
                       </tbody>
                       <tfoot>
                         <tr>
                           <td colspan="4">{{ so.jours }} jour(s) comptés : {{ signeHm(so.plusMinutes) }} en plus, −{{ hm(so.moinsMinutes) }} manquantes</td>
-                          <td colspan="2" [class.ku-pos]="so.soldeMinutes > 0" [class.ku-neg]="so.soldeMinutes < 0"><b>= {{ signeHm(so.soldeMinutes) }}</b></td>
+                          <td colspan="3" [class.ku-pos]="so.soldeMinutes > 0" [class.ku-neg]="so.soldeMinutes < 0"><b>= {{ signeHm(so.soldeMinutes) }}</b></td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
-                  <small class="hs-detail-note">Un jour avec un pointage manquant n’est pas compté : faites corriger le pointage pour qu’il entre dans le solde.</small>
+                  <small class="hs-detail-note">« Corriger » : si une journée était prévue à 07h40 (ou 08h40), choisissez-la ; le solde se recalcule. Horaire 08h40 : une seule journée à 07h40 par semaine.
+                    Repos, congés et jours fériés ne sont jamais comptés. Un jour avec un pointage manquant n’est pas compté : faites corriger le pointage.</small>
                 </section>
               }
             }

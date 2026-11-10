@@ -263,6 +263,24 @@ export function prevueDuChoix(date: string, choix: readonly ChoixJour[], base?: 
   return null;
 }
 
+/**
+ * v45 : horaire 08h40 : la journée à 07h40 de la semaine (lundi → vendredi) est-elle déjà prise un
+ * autre jour que `date` ? Renvoie ce jour, sinon null. Même règle que le serveur.
+ */
+export function courteDejaPriseSemaine(date: string, choix: readonly ChoixJour[], base: ChoixProduction | null | undefined): string | null {
+  if (base === '0740') return null;
+  const [y, m, d] = date.split('-').map(Number);
+  const jour = new Date(y, m - 1, d);
+  const dow = jour.getDay();
+  if (dow === 0 || dow === 6) return null;
+  const lundi = new Date(y, m - 1, d - ((dow + 6) % 7));
+  const iso = (x: Date) => x.toLocaleDateString('sv-SE');
+  const debut = iso(lundi);
+  const fin = iso(new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate() + 4));
+  const prise = choix.find((c) => c.choix === '0740' && c.jour.slice(0, 10) !== date && c.jour.slice(0, 10) >= debut && c.jour.slice(0, 10) <= fin);
+  return prise ? prise.jour.slice(0, 10) : null;
+}
+
 /** Début de la période de paie (le 24) contenant `date` : la compensation des heures se fait sur 24 → 23. */
 export function debutPeriodePaie(date: Date): Date {
   return date.getDate() >= 24

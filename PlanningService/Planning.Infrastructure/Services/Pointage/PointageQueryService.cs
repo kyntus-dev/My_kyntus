@@ -185,6 +185,46 @@ public sealed class PointageQueryService(
         return true;
     }
 
+    public async Task<bool> EnregistrerChoixProductionJourAsync(PointageViewer viewer, DateOnly jour, string? choix, CancellationToken ct = default)
+    {
+        var today = Aujourdhui();
+        if (jour == today)
+            return await EnregistrerChoixProductionAsync(viewer, choix, ct);
+        if (!ChoixProductionSortie.EstValide(choix))
+            throw new ArgumentException("Choix inconnu : « 0840 » (08h40) ou « 0740 » (07h40).");
+        // v45 : correction d'une journée passée de la période de paie en cours (depuis le 24).
+        var debutPeriode = today.Day >= 24 ? new DateOnly(today.Year, today.Month, 24) : new DateOnly(today.Year, today.Month, 24).AddMonths(-1);
+        if (jour > today || jour < debutPeriode)
+            throw new ArgumentException($"Seules les journées depuis le {debutPeriode:dd/MM} peuvent être corrigées.");
+        var me = await FindViewerAsync(viewer, ct);
+        if (me is null)
+            return false;
+        var acces = await db.HeureSortieAcces.AsNoTracking().FirstOrDefaultAsync(a => a.UserId == me.Id, ct);
+        if (acces is null && !string.Equals(viewer.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (choix == ChoixProductionSortie.Court
+            && ChoixProductionSortie.JourneeCourteDejaPrise(acces?.ProductionBase, jour, await ChoixSemaineAsync(me.Id, jour, ct)) is DateOnly prise)
+            throw new InvalidOperationException(
+                $"La journée à 07h40 de cette semaine est déjà prise le {prise:dd/MM}. Une seule par semaine, du lundi au vendredi.");
+
+        var ligne = await db.HeureSortieChoixJours.FirstOrDefaultAsync(c => c.UserId == me.Id && c.Jour == jour, ct);
+        if (choix is null)
+        {
+            if (ligne is not null) db.HeureSortieChoixJours.Remove(ligne);
+        }
+        else if (ligne is null)
+        {
+            db.HeureSortieChoixJours.Add(new HeureSortieChoixJour { UserId = me.Id, Jour = jour, Choix = choix, ModifieLe = DateTime.UtcNow });
+        }
+        else
+        {
+            ligne.Choix = choix;
+            ligne.ModifieLe = DateTime.UtcNow;
+        }
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
     /// <summary>v43 : choix faits du lundi au vendredi de la semaine du jour donné.</summary>
     private async Task<List<(DateOnly Jour, string Choix)>> ChoixSemaineAsync(int userId, DateOnly jour, CancellationToken ct)
     {
@@ -288,7 +328,8 @@ public sealed class PointageQueryService(
             .GroupBy(a => (a.UserId, a.AssignedDate))
             .ToDictionary(
                 g => g.Key,
-                g => ToPlanningJour(g.OrderBy(a => a.IsOnLeave).ThenBy(a => a.Id).First(), regimeParUser.GetValueOrDefault(g.Key.UserId)));
+                // v45 : un congé ou un férié inscrit au planning l'emporte sur une autre ligne du même jour.
+                g => ToPlanningJour(g.OrderByDescending(a => a.IsOnLeave || a.IsHoliday).ThenBy(a => a.Id).First(), regimeParUser.GetValueOrDefault(g.Key.UserId)));
 
         var conges = await db.Conges.AsNoTracking()
             .Where(c => userIds.Contains(c.UserId) && c.Status == CongeStatus.Approved && c.StartDate <= au && c.EndDate >= du)
@@ -322,8 +363,11 @@ public sealed class PointageQueryService(
                 if (itParJour.TryGetValue((user.Id, jour), out var it))
                     planning = RegimeResolver.PlanningDuJourIt(it.Statut, it.Arrivee, regime, jour,
                         O.PauseSelonShift ? O.PauseParDefautMinutes : O.PauseAutoriseeMinutes);
-                else if (membresIt.Contains(user.Id) && !planningParJour.ContainsKey((user.Id, jour)) && JoursFeries.Nom(jour) is { } nomFerie)
-                    planning = new PlanningJour(null, 0, false, true, nomFerie, null, PlanningSources.PlanningIt);
+                else if (!planningParJour.ContainsKey((user.Id, jour)) && JoursFeries.Nom(jour) is { } nomFerie)
+                    // v45 : jour férié (même calendrier que la génération des plannings) sans planning publié :
+                    // férié pour tous, jamais compté comme absence ni comme heures manquantes.
+                    planning = new PlanningJour(null, 0, false, true, nomFerie, null,
+                        membresIt.Contains(user.Id) ? PlanningSources.PlanningIt : PlanningSources.Regime);
                 else if (!planningParJour.TryGetValue((user.Id, jour), out planning) && regime is not null)
                     planning = RegimeResolver.PlanningDuJour(regime, jour);
                 var productionChoisie = ChoixProductionSortie.ProductionMinutes(choixParJour.GetValueOrDefault((user.Id, jour)), jour);
