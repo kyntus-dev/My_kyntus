@@ -61,7 +61,7 @@
 .hs-sup { background: var(--success-bg); border-color: var(--success-border) !important; }
 .hs-sup dd { color: var(--success-text); }
 .hs-solde { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.hs-solde > div { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); }
+.hs-solde > div, .hs-solde > button { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); }
 .hs-solde span { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); }
 .hs-solde b { font: 700 1.2rem var(--font-display); font-variant-numeric: tabular-nums; }
 .hs-solde small { font-size: 0.68rem; }
@@ -85,3 +85,20 @@
 /* v40 : choix du jour à faire */
 .hs-a-choisir { color: var(--warning, #b45309) !important; font-weight: 600; }
 .hs-choix button b { font-size: 1.15rem; }
+
+/* v41 : solde cliquable et détail jour par jour */
+.hs-solde > button.hs-solde-clic { text-align: left; font: inherit; color: inherit; background: var(--bg-card); cursor: pointer; transition: border-color var(--duration-fast), box-shadow var(--duration-fast); }
+.hs-solde-clic:hover, .hs-solde-clic.on { border-color: var(--ky-blue) !important; box-shadow: 0 0 0 1px var(--ky-blue); }
+.hs-solde .hs-voir { color: var(--ky-blue); font-weight: 600; margin-top: 2px; }
+.hs-detail { margin-top: 10px; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.hs-detail header { display: flex; flex-direction: column; gap: 2px; }
+.hs-detail header small, .hs-detail-note { font-size: 0.72rem; color: var(--text-muted); }
+.hs-detail-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+.hs-detail table { width: 100%; border-collapse: collapse; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.hs-detail table th { padding: 6px 8px !important; position: sticky; top: 0; background: var(--bg-input); text-align: left; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); padding: 6px 8px; }
+.hs-detail table td { padding: 5px 8px !important; height: auto !important; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+.hs-detail td small { color: var(--text-muted); font-size: 0.66rem; margin-left: 4px; }
+.hs-detail tr.hs-nc td { color: var(--text-muted); font-style: italic; }
+.hs-detail tfoot td { border-bottom: 0; padding-top: 8px; font-weight: 600; }
+.hs-detail table td.ku-pos { color: var(--success-text) !important; }
+.hs-detail table td.ku-neg { color: var(--danger-text) !important; }

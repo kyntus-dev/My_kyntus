@@ -15,6 +15,8 @@ import {
   formatHeuresMinutes,
   formatHms,
   debutPeriodePaie,
+  detailSolde,
+  type LigneSolde,
   productionDuChoix,
   productionExcel,
   soldeHeures,
@@ -97,6 +99,11 @@ export class PointageHeureSortieComponent implements OnInit {
 
   /** Solde des jours précédents du mois (heures en plus − heures manquantes). */
   readonly solde = signal<SoldeHeures | null>(null);
+  /** v41 : détail jour par jour du solde (clic sur « Solde depuis le 24 »). */
+  readonly detail = signal<LigneSolde[]>([]);
+  readonly detailOuvert = signal(false);
+  readonly periodeDu = signal('');
+  readonly periodeVeille = signal('');
   /** Écart du jour en secondes : négatif tant que la production n'est pas atteinte. */
   readonly ecartJour = computed(() => {
     const r = this.resultat();
@@ -130,14 +137,20 @@ export class PointageHeureSortieComponent implements OnInit {
     // Compensation sur la période de paie (24 → 23) : solde depuis le 24.
     const du = debutPeriodePaie(now).toLocaleDateString('sv-SE');
     const au = now.toLocaleDateString('sv-SE');
+    this.periodeDu.set(du);
+    const veille = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    this.periodeVeille.set(veille.toLocaleDateString('sv-SE'));
     this.svc.aujourdhui().subscribe({
       next: (j) => {
         this.jour.set(j);
         this.choix.set(j.choixProduction ?? null);
         this.svc.monSuivi(du, au).subscribe({
           // v40 : le solde des jours précédents ne dépend pas du choix du jour (planning ou régime de chaque jour).
-          next: (s) => this.solde.set(soldeHeures(s.jours, au, () => null)),
-          error: () => this.solde.set(null),
+          next: (s) => {
+            this.solde.set(soldeHeures(s.jours, au, () => null));
+            this.detail.set(detailSolde(s.jours, au));
+          },
+          error: () => { this.solde.set(null); this.detail.set([]); },
         });
         if (!this.entree() && j.pointages.length) this.entree.set(j.pointages[0]);
         if (!j.pointages.length) this.mode.set('manuel');
@@ -148,6 +161,36 @@ export class PointageHeureSortieComponent implements OnInit {
         this.error.set(err?.error?.message ?? 'Impossible de charger votre journée.');
       },
     });
+  }
+
+  /** « +01:34:00 » / « −00:12:00 » à partir de minutes. */
+  signe(minutes: number | null): string {
+    if (minutes == null) return '';
+    return `${minutes >= 0 ? '+' : '−'}${formatHms(Math.abs(minutes) * 60)}`;
+  }
+
+  /** « 08:40 » à partir de minutes. */
+  hm(minutes: number | null): string {
+    if (minutes == null) return '—';
+    const m = Math.abs(Math.round(minutes));
+    return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  }
+
+  /** « +00:20 » / « −00:12 ». */
+  signeHm(minutes: number | null): string {
+    if (minutes == null) return '';
+    return `${minutes >= 0 ? '+' : '−'}${this.hm(minutes)}`;
+  }
+
+  /** « lun. 27/10 » */
+  dateCourte(iso: string): string {
+    const [y, m, d] = iso.split('-').map(Number);
+    const jour = new Date(y, m - 1, d).toLocaleDateString('fr-FR', { weekday: 'short' });
+    return `${jour} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+  }
+
+  heure(h: string | null): string {
+    return h ? h.slice(0, 5) : '—';
   }
 
   abs(v: number): number {

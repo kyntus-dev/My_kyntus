@@ -161,3 +161,24 @@ describe('choix de production mémorisé (v18)', () => {
     expect(soldeHeures(jours, '2026-11-04', (d) => productionDuChoix('0740', d)).soldeMinutes).toBe(20);
   });
 });
+
+describe('détail du solde depuis le 24 (v41)', () => {
+  it('liste chaque jour, explique les jours non comptés et cumule le solde', async () => {
+    const { detailSolde, soldeHeures } = await import('./heure-sortie.util');
+    const jours = [
+      { jour: '2026-10-27', statut: 'Retard', arrivee: '09:12', depart: '18:00', pauseMinutes: 60, productionMinutes: 508, productionPrevueMinutes: 520, source: 'Regime' },
+      { jour: '2026-10-24', statut: 'AHeure', arrivee: '08:55', depart: '17:55', pauseMinutes: 60, productionMinutes: 540, productionPrevueMinutes: 520, source: 'Planning' },
+      { jour: '2026-10-25', statut: 'Repos', productionMinutes: null, productionPrevueMinutes: null },
+      { jour: '2026-10-26', statut: 'PointageManquant', arrivee: '09:00', productionMinutes: null, productionPrevueMinutes: 520 },
+      { jour: '2026-11-10', statut: 'EnCours', productionMinutes: 100, productionPrevueMinutes: 520 },
+    ];
+    const d = detailSolde(jours, '2026-11-10');
+    expect(d.map((l) => [l.jour, l.compte, l.ecartMinutes, l.cumulMinutes, l.motif || l.originePrevue])).toEqual([
+      ['2026-10-24', true, 20, 20, 'Planning publié'],
+      ['2026-10-25', false, null, 20, 'Repos'],
+      ['2026-10-26', false, null, 20, 'Pointage incomplet (arrivée ou départ manquant)'],
+      ['2026-10-27', true, -12, 8, 'Régime horaire'],
+    ]);
+    expect(soldeHeures(jours, '2026-11-10')).toEqual({ soldeMinutes: 8, plusMinutes: 20, moinsMinutes: 12, jours: 2 });
+  });
+});

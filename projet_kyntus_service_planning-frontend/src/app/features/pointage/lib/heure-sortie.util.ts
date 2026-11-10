@@ -261,23 +261,100 @@ export interface SoldeHeures {
  * l'Excel). Les heures en plus s'ajoutent, les heures manquantes se compensent.
  */
 export function soldeHeures(
-  jours: readonly { jour: string; productionMinutes?: number | null; productionPrevueMinutes?: number | null }[],
+  jours: readonly JourSolde[],
   aujourdhui: string,
-  /** Production imposée par le choix mémorisé du collaborateur (prioritaire). */
+  /** Production imposée (prioritaire) ; v40 : n'est plus utilisée par l'écran. */
   prevueImposee?: (date: Date) => number | null,
 ): SoldeHeures {
-  let plus = 0;
-  let moins = 0;
-  let n = 0;
-  for (const j of jours) {
-    const date = j.jour.slice(0, 10);
-    if (date >= aujourdhui || j.productionMinutes == null) continue;
-    const [y, m, d] = date.split('-').map(Number);
-    const jourDate = new Date(y, m - 1, d);
-    const prevue = prevueImposee?.(jourDate) ?? j.productionPrevueMinutes ?? productionExcel(jourDate);
-    const ecart = j.productionMinutes - prevue;
-    if (ecart > 0) plus += ecart; else moins -= ecart;
-    n++;
-  }
-  return { soldeMinutes: plus - moins, plusMinutes: plus, moinsMinutes: moins, jours: n };
+  const lignes = detailSolde(jours, aujourdhui, prevueImposee).filter((l) => l.compte);
+  const plus = lignes.reduce((s, l) => s + Math.max(0, l.ecartMinutes ?? 0), 0);
+  const moins = lignes.reduce((s, l) => s + Math.max(0, -(l.ecartMinutes ?? 0)), 0);
+  return { soldeMinutes: plus - moins, plusMinutes: plus, moinsMinutes: moins, jours: lignes.length };
+}
+
+export interface JourSolde {
+  jour: string;
+  statut?: string | null;
+  arrivee?: string | null;
+  depart?: string | null;
+  pauseMinutes?: number | null;
+  productionMinutes?: number | null;
+  productionPrevueMinutes?: number | null;
+  source?: string | null;
+}
+
+/** v41 : une ligne du détail « Solde depuis le 24 ». */
+export interface LigneSolde {
+  jour: string;
+  statut: string | null;
+  arrivee: string | null;
+  depart: string | null;
+  pauseMinutes: number;
+  /** Production réalisée (départ − arrivée − pauses). */
+  realiseeMinutes: number | null;
+  /** Production prévue ce jour-là. */
+  prevueMinutes: number | null;
+  /** D'où vient la production prévue. */
+  originePrevue: string;
+  ecartMinutes: number | null;
+  /** Solde cumulé depuis le 24, après ce jour. */
+  cumulMinutes: number;
+  /** Jour compté dans le solde ; sinon, raison dans `motif`. */
+  compte: boolean;
+  motif: string;
+}
+
+const MOTIFS_NON_COMPTE: Record<string, string> = {
+  Repos: 'Repos',
+  Conge: 'Congé',
+  Ferie: 'Jour férié',
+  SansPointage: 'Aucun pointage',
+  SansPlanning: 'Aucun pointage',
+  PointageManquant: 'Pointage incomplet (arrivée ou départ manquant)',
+  EnCours: 'Journée non terminée',
+  AVenir: 'À venir',
+};
+
+/**
+ * v41 : détail jour par jour du solde, de la date de début (le 24) à la veille d'`aujourdhui`.
+ * Un jour compte s'il a une production réalisée (arrivée et départ pointés). Écart = réalisée − prévue.
+ */
+export function detailSolde(
+  jours: readonly JourSolde[],
+  aujourdhui: string,
+  prevueImposee?: (date: Date) => number | null,
+): LigneSolde[] {
+  let cumul = 0;
+  return [...jours]
+    .filter((j) => j.jour.slice(0, 10) < aujourdhui)
+    .sort((a, b) => a.jour.localeCompare(b.jour))
+    .map((j) => {
+      const date = j.jour.slice(0, 10);
+      const [y, m, d] = date.split('-').map(Number);
+      const jourDate = new Date(y, m - 1, d);
+      const imposee = prevueImposee?.(jourDate) ?? null;
+      const prevue = imposee ?? j.productionPrevueMinutes ?? productionExcel(jourDate);
+      const originePrevue = imposee != null ? 'Choix'
+        : j.productionPrevueMinutes != null
+          ? (j.source === 'Planning' ? 'Planning publié' : j.source === 'PlanningIT' ? 'Planning IT' : j.source === 'Regime' ? 'Régime horaire' : 'Planning')
+          : 'Règle Excel';
+      const realisee = j.productionMinutes ?? null;
+      const compte = realisee != null;
+      const ecart = compte ? realisee - prevue : null;
+      if (ecart != null) cumul += ecart;
+      return {
+        jour: date,
+        statut: j.statut ?? null,
+        arrivee: j.arrivee ?? null,
+        depart: j.depart ?? null,
+        pauseMinutes: j.pauseMinutes ?? 0,
+        realiseeMinutes: realisee,
+        prevueMinutes: compte ? prevue : null,
+        originePrevue: compte ? originePrevue : '',
+        ecartMinutes: ecart,
+        cumulMinutes: cumul,
+        compte,
+        motif: compte ? '' : MOTIFS_NON_COMPTE[j.statut ?? ''] ?? 'Journée non calculable',
+      };
+    });
 }

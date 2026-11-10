@@ -173,11 +173,13 @@
 
             @if (solde(); as so) {
               <div class="hs-solde">
-                <div>
+                <button type="button" class="hs-solde-clic" [class.on]="detailOuvert()" (click)="detailOuvert.set(!detailOuvert())"
+                        [attr.aria-expanded]="detailOuvert()" title="Voir le détail jour par jour">
                   <span>Solde depuis le 24 (jours précédents)</span>
                   <b [class.ku-pos]="so.soldeMinutes > 0" [class.ku-neg]="so.soldeMinutes < 0">{{ so.soldeMinutes >= 0 ? '+' : '−' }}{{ formatHms(abs(so.soldeMinutes * 60)) }}</b>
                   <small class="ku-muted">+{{ formatHms(so.plusMinutes * 60) }} en plus · −{{ formatHms(so.moinsMinutes * 60) }} manquantes · {{ so.jours }} jour(s)</small>
-                </div>
+                  <small class="hs-voir">{{ detailOuvert() ? 'Masquer le détail ▲' : 'Voir le détail ▼' }}</small>
+                </button>
                 <div>
                   <span>Aujourd’hui</span>
                   <b [class.ku-pos]="ecartJour() > 0" [class.ku-neg]="ecartJour() < 0">{{ ecartJour() >= 0 ? '+' : '−' }}{{ formatHms(abs(ecartJour())) }}</b>
@@ -189,6 +191,51 @@
                   <small class="ku-muted">{{ soldeApres() >= 0 ? 'heures en plus' : 'à récupérer' }}</small>
                 </div>
               </div>
+              @if (detailOuvert()) {
+                <section class="hs-detail" aria-label="Détail du solde depuis le 24">
+                  <header>
+                    <b>D’où vient ce solde</b>
+                    <small>Du {{ dateCourte(periodeDu()) }} au {{ dateCourte(periodeVeille()) }} (veille). Aujourd’hui est compté à part, dans « Aujourd’hui ».
+                      Chaque jour terminé avec une arrivée et un départ pointés : écart = production réalisée − production prévue.</small>
+                  </header>
+                  <div class="hs-detail-wrap">
+                    <table>
+                      <thead>
+                        <tr><th>Jour</th><th>Arrivée → départ</th><th>Réalisée</th><th>Prévue</th><th>Écart</th><th>Cumul</th></tr>
+                      </thead>
+                      <tbody>
+                        @for (l of detail(); track l.jour) {
+                          @if (l.compte) {
+                            <tr>
+                              <td>{{ dateCourte(l.jour) }}</td>
+                              <td>{{ heure(l.arrivee) }} → {{ heure(l.depart) }} <small>pauses {{ hm(l.pauseMinutes) }}</small></td>
+                              <td>{{ hm(l.realiseeMinutes) }}</td>
+                              <td>{{ hm(l.prevueMinutes) }} <small>{{ l.originePrevue }}</small></td>
+                              <td [class.ku-pos]="(l.ecartMinutes ?? 0) > 0" [class.ku-neg]="(l.ecartMinutes ?? 0) < 0"><b>{{ signeHm(l.ecartMinutes) }}</b></td>
+                              <td [class.ku-pos]="l.cumulMinutes > 0" [class.ku-neg]="l.cumulMinutes < 0">{{ signeHm(l.cumulMinutes) }}</td>
+                            </tr>
+                          } @else {
+                            <tr class="hs-nc">
+                              <td>{{ dateCourte(l.jour) }}</td>
+                              <td colspan="4">Non compté : {{ l.motif }}</td>
+                              <td>{{ signeHm(l.cumulMinutes) }}</td>
+                            </tr>
+                          }
+                        } @empty {
+                          <tr class="hs-nc"><td colspan="6">Aucune journée terminée depuis le 24.</td></tr>
+                        }
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colspan="4">{{ so.jours }} jour(s) comptés : {{ signeHm(so.plusMinutes) }} en plus, −{{ hm(so.moinsMinutes) }} manquantes</td>
+                          <td colspan="2" [class.ku-pos]="so.soldeMinutes > 0" [class.ku-neg]="so.soldeMinutes < 0"><b>= {{ signeHm(so.soldeMinutes) }}</b></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                  <small class="hs-detail-note">Un jour avec un pointage manquant n’est pas compté : faites corriger le pointage pour qu’il entre dans le solde.</small>
+                </section>
+              }
             }
 
             @if (r.souhaitee; as s) {
