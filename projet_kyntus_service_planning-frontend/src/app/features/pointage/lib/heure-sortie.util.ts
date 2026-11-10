@@ -222,19 +222,20 @@ export function calculerDepuisPointages(
 /** Productions proposées dans la liste (08:40 et 07:40, comme l'Excel). */
 export const PRODUCTIONS_PROPOSEES = [520, 460];
 
-/** Production mémorisée par le collaborateur (v18). */
+/**
+ * Production choisie par le collaborateur. v40 : 07h40 ou 08h40, pour la journée en cours seulement.
+ * Le choix ne sert qu'à calculer l'heure de sortie : il ne change ni le planning, ni le solde, ni la paie.
+ */
 export type ChoixProduction = '0840' | '0740';
 
-export const CHOIX_PRODUCTION: readonly { valeur: ChoixProduction; libelle: string; detail: string }[] = [
-  { valeur: '0840', libelle: '08h40', detail: '07h40 le vendredi et le samedi' },
-  { valeur: '0740', libelle: '07h40', detail: 'tous les jours' },
+export const CHOIX_PRODUCTION: readonly { valeur: ChoixProduction; libelle: string; minutes: number }[] = [
+  { valeur: '0740', libelle: '07h40', minutes: 460 },
+  { valeur: '0840', libelle: '08h40', minutes: 520 },
 ];
 
-/** Production du jour pour un choix mémorisé ; null : pas de choix (planning ou régime). */
-export function productionDuChoix(choix: ChoixProduction | null | undefined, date: Date): number | null {
-  if (choix === '0840') return productionExcel(date);
-  if (choix === '0740') return 460;
-  return null;
+/** Production du jour pour le choix du jour ; null : pas encore de choix aujourd'hui. */
+export function productionDuChoix(choix: ChoixProduction | null | undefined, _date?: Date): number | null {
+  return CHOIX_PRODUCTION.find((c) => c.valeur === choix)?.minutes ?? null;
 }
 
 /** Début de la période de paie (le 24) contenant `date` : la compensation des heures se fait sur 24 → 23. */

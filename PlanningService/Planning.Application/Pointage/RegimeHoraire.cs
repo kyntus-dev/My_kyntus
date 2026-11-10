@@ -54,23 +54,31 @@ public sealed record PointageAujourdhuiDto(
     // Production mémorisée par le collaborateur : « 0840 », « 0740 » ou null (v18).
     string? ChoixProduction = null);
 
-/// <summary>Choix de production proposés dans « Heure de sortie » (v18).</summary>
+/// <summary>
+/// Choix de production proposés dans « Heure de sortie ». v40 : deux valeurs fixes, 07h40 ou 08h40,
+/// choisies par le collaborateur pour la journée en cours seulement (le lendemain, il choisit à nouveau).
+/// Le choix ne sert qu'au calcul de l'heure de sortie : planning, solde et paie n'en dépendent pas.
+/// </summary>
 public static class ChoixProductionSortie
 {
-    /// <summary>08h40, 07h40 le vendredi et le samedi (règle B3 de l'Excel).</summary>
+    /// <summary>08h40.</summary>
     public const string Standard = "0840";
-    /// <summary>07h40 tous les jours.</summary>
+    /// <summary>07h40.</summary>
     public const string Court = "0740";
 
     public static bool EstValide(string? choix) => choix is null or Standard or Court;
 
-    /// <summary>Production du jour pour un choix ; null = pas de choix (planning ou régime).</summary>
+    /// <summary>Production pour un choix ; null = pas de choix aujourd'hui.</summary>
     public static int? ProductionMinutes(string? choix, DateOnly jour) => choix switch
     {
-        Standard => RegimeResolver.ProductionExcelMinutes(jour),
+        Standard => 8 * 60 + 40,
         Court => 7 * 60 + 40,
         _ => null,
     };
+
+    /// <summary>v40 : un choix ne vaut que pour le jour où il a été fait (date locale).</summary>
+    public static string? ChoixDuJour(string? choix, DateOnly? choisiLe, DateOnly aujourdhui) =>
+        choisiLe == aujourdhui && EstValide(choix) ? choix : null;
 }
 
 public sealed record ChoixProductionRequest(string? Choix);

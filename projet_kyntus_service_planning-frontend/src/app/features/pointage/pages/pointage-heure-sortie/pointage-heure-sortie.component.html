@@ -44,20 +44,20 @@
           </div>
 
           <div class="ku-field">
-            <span>Production du jour · {{ formatHeuresMinutes(productionMinutes()) }}</span>
-            <div class="hs-choix" role="radiogroup" aria-label="Production mémorisée">
+            <span>Production d’aujourd’hui</span>
+            <div class="hs-choix" role="radiogroup" aria-label="Production d’aujourd’hui">
               @for (c of choixProposes; track c.valeur) {
                 <button type="button" role="radio" [attr.aria-checked]="choix() === c.valeur" [class.on]="choix() === c.valeur"
                         [disabled]="enregistrementChoix()" (click)="choisirProduction(c.valeur)">
-                  <b>{{ c.libelle }}</b><small>{{ c.detail }}</small>
+                  <b>{{ c.libelle }}</b>
                 </button>
               }
-              <button type="button" role="radio" [attr.aria-checked]="choix() === null" [class.on]="choix() === null"
-                      [disabled]="enregistrementChoix()" (click)="choisirProduction(null)">
-                <b>{{ formatHeuresMinutes(productionPlanning()) }}</b><small>selon mon planning</small>
-              </button>
             </div>
-            <small>Votre choix est mémorisé sur votre compte et repris à chaque connexion.</small>
+            @if (choix()) {
+              <small>Valable aujourd’hui seulement : demain, vous choisissez à nouveau. Ce choix ne change ni votre planning, ni votre solde, ni la paie.</small>
+            } @else {
+              <small class="hs-a-choisir">Choisissez 07h40 ou 08h40 pour aujourd’hui. En attendant, le calcul utilise {{ formatHeuresMinutes(productionPlanning()) }} (votre planning).</small>
+            }
           </div>
 
           @if (mode() === 'pointages' && resultatPointages(); as rp) {
@@ -222,8 +222,8 @@
           <li><b>Saisie manuelle</b> (Excel) : pauses = pauses forfaitaires ({{ formatHeuresMinutes(pauseForfaitMinutes()) }}) + pause déjeuner saisie.</li>
           <li><b>Il me reste</b> = sortie − heure actuelle.</li>
           <li><b>Production réalisée</b> = (heure actuelle − arrivée) − pauses ; l’avancement est la production réalisée divisée par la production du jour.</li>
-          <li><b>Heures supplémentaires</b> : production réalisée au-delà de la production du jour. Le solde de la période de paie (depuis le 24) additionne les heures en plus et compense les heures manquantes des journées précédentes (production mémorisée si vous en avez choisi une, sinon celle du planning ou du régime, sinon la règle de l’Excel).</li>
-          <li><b>Production du jour</b> : 8 h 40 ou 7 h 40, au choix dans la liste ; par défaut, celle de votre régime horaire, sinon la règle de l’Excel (07:40 le vendredi et le samedi, 08:40 sinon).</li>
+          <li><b>Heures supplémentaires</b> : production réalisée au-delà de la production du jour. Le solde de la période de paie (depuis le 24) additionne les heures en plus et compense les heures manquantes des journées précédentes (production du planning ou du régime de chaque jour, sinon la règle de l’Excel).</li>
+          <li><b>Production du jour</b> : 07h40 ou 08h40, à choisir chaque jour (vous pouvez faire 08h40 aujourd’hui et 07h40 demain). Le choix sert seulement à calculer votre heure de sortie.</li>
         </ul>
         <p class="ku-muted">Les heures de prière de l’Excel viennent d’un autre classeur qui n’a pas été transmis : elles ne sont pas reprises.</p>
         <a routerLink="/pointage/mon-suivi" class="ku-btn ku-btn--sm">Voir mon suivi de pointage</a>

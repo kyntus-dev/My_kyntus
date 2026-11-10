@@ -135,13 +135,14 @@ public sealed class PointageQueryService(
             jour.Pointages,
             jour.Statut,
             suivi.DerniereSynchro,
-            acces?.ChoixProduction);
+            // v40 : choix valable pour la journée où il a été fait ; le lendemain, la personne choisit à nouveau.
+            ChoixProductionSortie.ChoixDuJour(acces?.ChoixProduction, JourLocal(acces?.ChoixModifieLe), today));
     }
 
     public async Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default)
     {
         if (!ChoixProductionSortie.EstValide(choix))
-            throw new ArgumentException("Choix inconnu : « 0840 » (08h40, 07h40 le vendredi) ou « 0740 » (07h40).");
+            throw new ArgumentException("Choix inconnu : « 0840 » (08h40) ou « 0740 » (07h40).");
         var me = await FindViewerAsync(viewer, ct);
         if (me is null)
             return false;
@@ -457,6 +458,22 @@ public sealed class PointageQueryService(
             .Where(s => s.Id == PointageSyncState.SingletonId)
             .Select(s => s.DerniereSynchro)
             .FirstOrDefaultAsync(ct);
+
+    /// <summary>v40 : date locale (fuseau du pointage) d'un horodatage UTC.</summary>
+    private DateOnly? JourLocal(DateTime? utc)
+    {
+        if (utc is not DateTime u) return null;
+        var enUtc = u.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(u, DateTimeKind.Utc) : u.ToUniversalTime();
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(O.FuseauHoraire);
+            return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(enUtc, tz));
+        }
+        catch (Exception)
+        {
+            return DateOnly.FromDateTime(enUtc);
+        }
+    }
 
     private DateOnly Aujourdhui()
     {

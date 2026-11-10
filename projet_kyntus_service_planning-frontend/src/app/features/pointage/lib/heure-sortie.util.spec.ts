@@ -149,7 +149,8 @@ describe('choix de production mémorisé (v18)', () => {
   it('08h40 (07h40 vendredi et samedi) ou 07h40 tous les jours', async () => {
     const { productionDuChoix, debutPeriodePaie, soldeHeures } = await import('./heure-sortie.util');
     expect(productionDuChoix('0840', new Date(2026, 10, 2))).toBe(520);
-    expect(productionDuChoix('0840', new Date(2026, 10, 6))).toBe(460);
+    // v40 : 08h40 reste 08h40 le vendredi (choix libre de la personne, jour par jour).
+    expect(productionDuChoix('0840', new Date(2026, 10, 6))).toBe(520);
     expect(productionDuChoix('0740', new Date(2026, 10, 2))).toBe(460);
     expect(productionDuChoix(null, new Date(2026, 10, 2))).toBeNull();
     expect(debutPeriodePaie(new Date(2026, 10, 4))).toEqual(new Date(2026, 9, 24));

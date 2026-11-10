@@ -57,11 +57,11 @@ export class PointageHeureSortieComponent implements OnInit {
 
   /** Calcul d'après les pointages du jour (par défaut) ou saisie manuelle comme l'Excel. */
   readonly mode = signal<'pointages' | 'manuel'>('pointages');
-  /** Production mémorisée sur le compte (null : celle du planning ou du régime, sinon de l'Excel). */
+  /** v40 : production choisie pour aujourd'hui (07h40 ou 08h40) ; null tant que la personne n'a pas choisi. */
   readonly choix = signal<ChoixProduction | null>(null);
   readonly enregistrementChoix = signal(false);
 
-  /** Production du planning ou du régime (sans choix mémorisé). */
+  /** Production du planning ou du régime (en attendant le choix du jour). */
   readonly productionPlanning = computed(() => this.jour()?.productionPrevueMinutes ?? productionExcel(this.now()));
   /** B3 : production du jour. */
   readonly productionMinutes = computed(() => productionDuChoix(this.choix(), this.now()) ?? this.productionPlanning());
@@ -135,7 +135,8 @@ export class PointageHeureSortieComponent implements OnInit {
         this.jour.set(j);
         this.choix.set(j.choixProduction ?? null);
         this.svc.monSuivi(du, au).subscribe({
-          next: (s) => this.solde.set(soldeHeures(s.jours, au, (d) => productionDuChoix(this.choix(), d))),
+          // v40 : le solde des jours précédents ne dépend pas du choix du jour (planning ou régime de chaque jour).
+          next: (s) => this.solde.set(soldeHeures(s.jours, au, () => null)),
           error: () => this.solde.set(null),
         });
         if (!this.entree() && j.pointages.length) this.entree.set(j.pointages[0]);
@@ -153,8 +154,8 @@ export class PointageHeureSortieComponent implements OnInit {
     return Math.abs(v);
   }
 
-  /** Choix mémorisé sur le compte : conservé aux prochaines connexions. */
-  choisirProduction(valeur: ChoixProduction | null): void {
+  /** v40 : choix du jour (07h40 ou 08h40). Il ne vaut que pour aujourd'hui et n'a aucun autre effet. */
+  choisirProduction(valeur: ChoixProduction): void {
     if (this.enregistrementChoix() || valeur === this.choix()) return;
     const avant = this.choix();
     this.choix.set(valeur);
@@ -162,8 +163,7 @@ export class PointageHeureSortieComponent implements OnInit {
     this.svc.enregistrerChoixProduction(valeur).subscribe({
       next: () => {
         this.enregistrementChoix.set(false);
-        this.toast.success(valeur ? 'Choix mémorisé sur votre compte.' : 'Production selon votre planning.');
-        this.load();
+        this.toast.success(`Production du jour : ${valeur === '0840' ? '08h40' : '07h40'}.`);
       },
       error: (err) => {
         this.choix.set(avant);
