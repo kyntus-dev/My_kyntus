@@ -135,8 +135,10 @@ public static class RegimeResolver
     public static PlanningJour? PlanningDuJour(RegimeEffectif regime, DateOnly jour)
     {
         var iso = jour.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)jour.DayOfWeek;
+        // v44 : l'heure d'arrivée vient du planning publié, jamais du régime : le régime ne fixe que la
+        // production et la pause. Sans planning publié, aucun retard d'arrivée n'est calculé.
         return regime.Jours.TryGetValue(iso, out var j)
-            ? new PlanningJour(j.Arrivee, regime.PauseAutoriseeMinutes, false, false, regime.Nom, j.ProductionMinutes, PlanningSources.Regime)
+            ? new PlanningJour(null, regime.PauseAutoriseeMinutes, false, false, regime.Nom, j.ProductionMinutes, PlanningSources.Regime)
             : null;
     }
 
@@ -190,7 +192,9 @@ public static class RegimeResolver
         {
             if (j.JourSemaine is < 1 or > 7)
                 return "Jour de la semaine invalide (1 = lundi … 7 = dimanche).";
-            if (!TimeOnly.TryParse(j.Arrivee, System.Globalization.CultureInfo.InvariantCulture, out _))
+            // v44 : l'arrivée vient du planning ; une valeur vide est acceptée.
+            if (!string.IsNullOrWhiteSpace(j.Arrivee)
+                && !TimeOnly.TryParse(j.Arrivee, System.Globalization.CultureInfo.InvariantCulture, out _))
                 return $"Heure d'arrivée invalide : « {j.Arrivee} ».";
             if (j.ProductionMinutes is <= 0 or > 16 * 60)
                 return "La production d'un jour doit être comprise entre 1 minute et 16 h.";

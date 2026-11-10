@@ -53,7 +53,8 @@ public class RegimeHoraireTests
     {
         var lundi = RegimeResolver.PlanningDuJour(Standard(), Lundi);
         Assert.NotNull(lundi);
-        Assert.Equal(new TimeOnly(8, 0), lundi!.Debut);
+        // v44 : l'heure d'arrivée vient du planning publié, pas du régime.
+        Assert.Null(lundi!.Debut);
         Assert.Equal(520, lundi.ProductionPrevueMinutes);
         Assert.Equal(80, lundi.PauseMinutes);
         Assert.Equal(PlanningSources.Regime, lundi.Source);
@@ -76,7 +77,9 @@ public class RegimeHoraireTests
         Assert.Equal(480, r.ProductionMinutes);
         Assert.Equal(520, r.ProductionPrevueMinutes);
         Assert.Equal(-40, r.EcartProductionMinutes);
-        Assert.Equal(PointageJourStatuts.AHeure, r.Statut);
+        // v44 : sans planning publié, pas d'heure d'arrivée de référence.
+        Assert.Equal(PointageJourStatuts.SansPlanning, r.Statut);
+        Assert.Equal(0, r.RetardEntreeMinutes);
     }
 
     [Fact]
@@ -139,4 +142,13 @@ public class RegimeHoraireTests
     }
 
     private static DateTime At(DateOnly d, string hhmm) => d.ToDateTime(TimeOnly.Parse(hhmm));
+
+    [Fact]
+    public void Jour_du_regime_sans_pointage_reste_une_absence_v44()
+    {
+        var r = PointageCalculator.CalculerJour(Lundi, [], RegimeResolver.PlanningDuJour(Standard(), Lundi), Lundi.AddDays(1));
+        Assert.Equal(PointageJourStatuts.SansPointage, r.Statut);
+        var samedi = PointageCalculator.CalculerJour(Samedi, [], RegimeResolver.PlanningDuJour(Standard(), Samedi), Samedi.AddDays(1));
+        Assert.Equal(PointageJourStatuts.Repos, samedi.Statut);
+    }
 }

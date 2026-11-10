@@ -265,7 +265,8 @@ public sealed class RegimeHoraireService(AppDbContext db) : IRegimeHoraireServic
             regime.Jours.Add(new RegimeHoraireJour
             {
                 JourSemaine = j.JourSemaine,
-                Arrivee = TimeOnly.Parse(j.Arrivee, CultureInfo.InvariantCulture),
+                // v44 : l'arrivée n'est plus utilisée (elle vient du planning) ; valeur neutre si vide.
+                Arrivee = string.IsNullOrWhiteSpace(j.Arrivee) ? new TimeOnly(8, 0) : TimeOnly.Parse(j.Arrivee, CultureInfo.InvariantCulture),
                 ProductionMinutes = j.ProductionMinutes,
             });
         }

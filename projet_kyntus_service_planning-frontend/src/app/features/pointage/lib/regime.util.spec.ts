@@ -21,15 +21,15 @@ describe('regime.util', () => {
     expect(minutesVersDuree(460)).toBe('07:40');
   });
 
-  it('nouveau régime = modèle de l’Excel : 8 h 40 lundi–jeudi, 7 h 40 vendredi, samedi non travaillé', () => {
+  it('nouveau régime (v44) : 8 h 40 du lundi au vendredi, samedi non travaillé ; 07h40 choisie dans Heure de sortie', () => {
     const res = formVersRequest({ ...nouveauRegime(), nom: 'Pilotes 6e' });
     expect('request' in res).toBe(true);
     if (!('request' in res)) return;
     expect(res.request.pauseAutoriseeMinutes).toBe(80);
     expect(res.request.jours.map((j) => j.jourSemaine)).toEqual([1, 2, 3, 4, 5]);
-    expect(res.request.jours.find((j) => j.jourSemaine === 5)!.productionMinutes).toBe(460);
-    expect(productionHebdo(res.request.jours)).toBe(4 * 520 + 460);
-    expect(resumeSemaine(res.request.jours)).toBe('Lun–Jeu 08:40 · Ven 07:40');
+    expect(res.request.jours.find((j) => j.jourSemaine === 5)!.productionMinutes).toBe(520);
+    expect(productionHebdo(res.request.jours)).toBe(5 * 520);
+    expect(resumeSemaine(res.request.jours)).toBe('Lun–Ven 08:40');
   });
 
   it('saisie incomplète refusée', () => {

@@ -65,7 +65,8 @@ export function nouveauRegime(): RegimeForm {
       iso: j.iso,
       travaille: j.iso <= 5,
       arrivee: '08:00',
-      production: j.iso === 5 ? '07:40' : '08:40',
+      // v44 : 08h40 tous les jours ; la journée à 07h40 se choisit dans « Heure de sortie ».
+      production: '08:40',
     })),
   };
 }
@@ -116,7 +117,8 @@ export function resumeSemaine(jours: readonly RegimeJourDto[]): string {
   const groupes: { debut: number; fin: number; production: number; arrivee: string }[] = [];
   for (const j of tries) {
     const g = groupes[groupes.length - 1];
-    if (g && g.fin === j.jourSemaine - 1 && g.production === j.productionMinutes && g.arrivee === j.arrivee) g.fin = j.jourSemaine;
+    // v44 : l'arrivée vient du planning ; les jours se regroupent par production seulement.
+    if (g && g.fin === j.jourSemaine - 1 && g.production === j.productionMinutes) g.fin = j.jourSemaine;
     else groupes.push({ debut: j.jourSemaine, fin: j.jourSemaine, production: j.productionMinutes, arrivee: j.arrivee });
   }
   const court = (iso: number) => JOURS_SEMAINE[iso - 1].court;

@@ -296,6 +296,17 @@ public sealed class PointageQueryService(
             .ToListAsync(ct);
 
         var congesParUser = conges.GroupBy(c => c.UserId).ToDictionary(g => g.Key, g => g.ToList());
+
+        // v44 : production prévue = choix du jour dans « Heure de sortie » (07h40 ou 08h40), sinon l'horaire
+        // de base du compte ; elle remplace celle du planning ou du régime (plus de 07h40 imposé le vendredi).
+        var choixParJour = (await db.HeureSortieChoixJours.AsNoTracking()
+                .Where(c => userIds.Contains(c.UserId) && c.Jour >= du && c.Jour <= au)
+                .Select(c => new { c.UserId, c.Jour, c.Choix })
+                .ToListAsync(ct))
+            .ToDictionary(c => (c.UserId, c.Jour), c => c.Choix);
+        var baseParUser = await db.HeureSortieAcces.AsNoTracking()
+            .Where(a => userIds.Contains(a.UserId))
+            .ToDictionaryAsync(a => a.UserId, a => a.ProductionBase, ct);
         var today = Aujourdhui();
         var derniereSynchro = await DerniereSynchroAsync(ct);
         var result = new List<PointageSuiviDto>(users.Count);
@@ -315,6 +326,12 @@ public sealed class PointageQueryService(
                     planning = new PlanningJour(null, 0, false, true, nomFerie, null, PlanningSources.PlanningIt);
                 else if (!planningParJour.TryGetValue((user.Id, jour), out planning) && regime is not null)
                     planning = RegimeResolver.PlanningDuJour(regime, jour);
+                var productionChoisie = ChoixProductionSortie.ProductionMinutes(choixParJour.GetValueOrDefault((user.Id, jour)), jour);
+                if (productionChoisie is int choisie)
+                    planning = (planning ?? new PlanningJour(null, regime?.PauseAutoriseeMinutes ?? O.PauseAutoriseeMinutes, false, false, null))
+                        with { ProductionPrevueMinutes = choisie };
+                else if (planning is not null && ChoixProductionSortie.ProductionMinutes(baseParUser.GetValueOrDefault(user.Id), jour) is int deBase)
+                    planning = planning with { ProductionPrevueMinutes = deBase };
                 if (congesParUser.TryGetValue(user.Id, out var siens) && siens.Any(c => c.StartDate <= jour && c.EndDate >= jour))
                     planning = (planning ?? new PlanningJour(null, 0, false, false, null)) with { Conge = true };
                 pointagesParJour.TryGetValue((user.Id, jour), out var bruts);

@@ -155,10 +155,13 @@ public static class PointageCalculator
         if (planning?.Conge == true)
             return Result(PointageJourStatuts.Conge);
 
+        // v44 : un jour travaillé du régime n'a pas d'heure d'arrivée (elle vient du planning publié),
+        // mais reste un jour travaillé : sans pointage, c'est une absence ; avec, la pause est contrôlée.
+        var jourTravaille = debut is not null || planning is { Source: PlanningSources.Regime } || planning?.ProductionPrevueMinutes is not null;
         if (heures.Count == 0)
         {
-            if (jour > aujourdhui) return Result(debut is null ? PointageJourStatuts.Repos : PointageJourStatuts.AVenir);
-            if (debut is null) return Result(PointageJourStatuts.Repos);
+            if (jour > aujourdhui) return Result(jourTravaille ? PointageJourStatuts.AVenir : PointageJourStatuts.Repos);
+            if (!jourTravaille) return Result(PointageJourStatuts.Repos);
             return Result(jour == aujourdhui ? PointageJourStatuts.AVenir : PointageJourStatuts.SansPointage);
         }
 
@@ -172,7 +175,18 @@ public static class PointageCalculator
         var production = (int)Math.Floor((pointages[^1] - pointages[0]).TotalMinutes - pause);
 
         if (debut is null)
-            return Result(PointageJourStatuts.SansPlanning, pauseMinutes, production: production);
+        {
+            if (!jourTravaille)
+                return Result(PointageJourStatuts.SansPlanning, pauseMinutes, production: production);
+            // Sans heure d'arrivée : pas de retard d'arrivée, mais le dépassement de pause compte.
+            var retardPauseSeul = RetardAvecTolerance(pauseMinutes - pauseAutorisee, toleranceMinutes);
+            return Result(
+                retardPauseSeul > 0 ? PointageJourStatuts.Retard : PointageJourStatuts.SansPlanning,
+                pauseMinutes,
+                0,
+                retardPauseSeul,
+                production);
+        }
 
         var retardEntree = (int)Math.Floor((pointages[0] - jour.ToDateTime(debut.Value)).TotalMinutes);
         if (retardEntree <= toleranceMinutes)
