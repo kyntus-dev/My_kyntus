@@ -125,3 +125,6 @@
 .oa-ar-liste { margin: 0 0 0.75rem; padding-left: 1.1rem; max-height: 260px; overflow: auto; font-size: 0.86rem; columns: 2; }
 .oa-ar-liste--warn li { color: var(--ky-orange, #b45309); }
 @media (max-width: 720px) { .oa-ar-liste { columns: 1; } }
+
+/* v39 : consultation seule */
+.oa-lecture { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; color: var(--text-muted); background: var(--bg-input); border: 1px solid var(--border-color); }

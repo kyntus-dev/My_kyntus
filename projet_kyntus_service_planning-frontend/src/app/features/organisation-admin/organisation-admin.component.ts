@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } 
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { firstValueFrom, forkJoin, type Observable } from 'rxjs';
+import { catchError, firstValueFrom, forkJoin, of, type Observable } from 'rxjs';
+import { PlatformAccessService } from '../../core/platform-access/platform-access.service';
 import { KyntusPageHeaderComponent } from '../../shared/components/ui/kyntus-page-header.component';
 import { KyntusToastService } from '../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../shared/components/kyntus-confirm/kyntus-confirm.service';
@@ -63,6 +64,7 @@ export class OrganisationAdminComponent implements OnInit {
   private readonly confirm = inject(KyntusConfirmService);
   private readonly prompt = inject(KyntusPromptService);
   private readonly auth = inject(AuthService);
+  private readonly access = inject(PlatformAccessService);
 
   readonly SANS_CELLULE = SANS_CELLULE;
   readonly celluleLabel = celluleLabel;
@@ -94,6 +96,11 @@ export class OrganisationAdminComponent implements OnInit {
   readonly cibleService = signal('');
 
   readonly isAdmin = computed(() => (this.auth.getRole() || '').toLowerCase() === 'admin');
+  /** v39 : Admin / RH, ou « Organisation » au niveau Modifier dans Accès par rôle (même règle que le serveur). */
+  readonly peutModifier = computed(() => {
+    const r = (this.auth.getRole() || '').toLowerCase();
+    return r === 'admin' || r === 'rh' || (this.access.hasCatalog() && this.access.can('admin.organisation', 'Act'));
+  });
   readonly index = computed(() => buildCelluleIndex(this.depts(), this.unassigned()));
   readonly effectifs = computed(() => effectifsParCellule(this.agents()));
   readonly codeParContrat = computed(() => new Map(this.contrats().map((c) => [c.id, c.code])));
@@ -329,10 +336,11 @@ export class OrganisationAdminComponent implements OnInit {
     this.orgApi.invalidateOverviewCache();
     this.loading.set(true);
     this.error.set(null);
+    // v39 : la structure s'affiche même si la liste des contrats ou des archives n'est pas lisible.
     forkJoin({
       overview: this.orgApi.loadOverview(),
-      contrats: this.api.listBusinessDepartments(),
-      archives: this.api.listArchivedNodes(),
+      contrats: this.api.listBusinessDepartments().pipe(catchError(() => of([] as BusinessDepartmentRow[]))),
+      archives: this.api.listArchivedNodes().pipe(catchError(() => of([] as ArchivedOrgNode[]))),
     }).subscribe({
       next: ({ overview, contrats, archives }) => {
         this.depts.set(overview.operationalDepartments ?? []);
@@ -354,7 +362,9 @@ export class OrganisationAdminComponent implements OnInit {
       },
       error: (err) => {
         this.loading.set(false);
-        this.error.set(err?.error?.error ?? err?.error?.message ?? 'Impossible de charger l’organisation.');
+        this.error.set(err?.status === 403
+          ? 'Accès refusé : le droit « Organisation » est requis (Administration › Accès par rôle).'
+          : err?.error?.error ?? err?.error?.message ?? 'Impossible de charger l’organisation.');
       },
     });
   }

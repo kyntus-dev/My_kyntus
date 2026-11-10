@@ -89,11 +89,30 @@ export type EtatFormation = 'production' | 'en-formation' | 'integre';
  * Bleu : en formation, hors paie. Vert d'eau : formation terminée pendant la période (prorata).
  */
 export const COULEURS_FORMATION: Record<Exclude<EtatFormation, 'production'>, { fond: string; texte: string; libelle: string }> = {
-  'en-formation': { fond: 'FFBFDBFE', texte: 'FF1E3A8A', libelle: 'En formation – hors paie (0 jour payé)' },
-  integre: { fond: 'FFCCFBF1', texte: 'FF115E59', libelle: 'Formation terminée pendant la période – payé au prorata' },
+  'en-formation': { fond: 'FFDBEAFE', texte: 'FF1E3A8A', libelle: 'En formation – hors paie (0 jour payé)' },
+  integre: { fond: 'FFDDF5EF', texte: 'FF115E59', libelle: 'Formation terminée pendant la période – payé au prorata' },
 };
-/** Case « FOR » (jour de formation) dans les colonnes de jours. */
-export const COULEUR_JOUR_FORMATION = { fond: 'FF60A5FA', texte: 'FFFFFFFF' };
+/** Case « FOR » (jour de formation) : texte bleu, sans fond (v39 : moins de bruit visuel). */
+export const COULEUR_JOUR_FORMATION = { fond: 'FFDBEAFE', texte: 'FF1D4ED8' };
+
+/**
+ * v39 : mise en forme sobre du fichier (mêmes colonnes, même ordre, mêmes valeurs).
+ * Un seul accent de couleur par information : les zéros ne s'affichent pas, les absences déduites
+ * et les pénalités sont en rouge, la présence « P » est discrète, les agents en formation sont teintés.
+ */
+export const STYLE_EXPORT = {
+  police: 'Calibri',
+  taille: 10,
+  enteteFond: 'FF1F2937',
+  enteteTexte: 'FFFFFFFF',
+  trait: 'FFE5E7EB',
+  discret: 'FF9CA3AF',
+  rouge: 'FFB91C1C',
+  /** Entier sans zéro affiché ; négatif en rouge. */
+  formatCompte: '0;[Red]-0;;@',
+  /** Montant : séparateur de milliers, négatif en rouge, zéro masqué. */
+  formatMontant: '#,##0.##;[Red]-#,##0.##;;@',
+} as const;
 
 export function etatFormation(formation: number, joursProduction: number): EtatFormation {
   if (formation <= 0) return 'production';
@@ -337,83 +356,133 @@ export async function classeurExportPaie(lignes: readonly LignePaie[], du: strin
   const nbJours = entetes.length - 3 - COLONNES_FIN.length;
   const remplir = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
 
-  const tete = ws.addRow(entetes);
-  tete.font = { bold: true };
-  tete.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
-  tete.height = 32;
-  const colStatut = entetes.length; // « Statut paie » : dernière colonne
-  for (const l of lignes) {
-    const row = ws.addRow(valeursPaie(l));
-    // v37 : agents en formation en couleur sur toute la ligne, jours de formation en bleu soutenu.
-    if (l.etatFormation !== 'production') {
-      const c = COULEURS_FORMATION[l.etatFormation];
-      for (let i = 1; i <= entetes.length; i++) {
-        const cell = row.getCell(i);
-        cell.fill = remplir(c.fond);
-        cell.font = { color: { argb: c.texte }, bold: i <= 3 || i === colStatut };
-      }
-    }
-    l.jours.forEach((code, i) => {
-      if (code !== 'FOR') return;
-      const cell = row.getCell(4 + i);
-      cell.fill = remplir(COULEUR_JOUR_FORMATION.fond);
-      cell.font = { color: { argb: COULEUR_JOUR_FORMATION.texte }, bold: true };
+  const st = STYLE_EXPORT;
+  const trait = { style: 'thin' as const, color: { argb: st.trait } };
+  const styleEntete = (row: import('exceljs').Row, hauteur = 34) => {
+    row.height = hauteur;
+    row.eachCell((cell) => {
+      cell.font = { name: st.police, size: st.taille, bold: true, color: { argb: st.enteteTexte } };
+      cell.fill = remplir(st.enteteFond);
+      cell.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
     });
+  };
+
+  const tete = ws.addRow(entetes);
+  styleEntete(tete);
+  const colStatut = entetes.length; // « Statut paie » : dernière colonne
+  const premiereFin = 4 + nbJours; // 1re colonne après les jours
+  const colonneFin = (nom: string) => premiereFin + COLONNES_FIN.indexOf(nom as (typeof COLONNES_FIN)[number]);
+  const colonnesMontant = new Set([colonneFin('Total EVP'), colonneFin('Montant pénalité')]);
+  const colonnesTexte = new Set(['Date entrée', 'Cumul retards', 'Commentaire Présence', 'Éléments Variables de Paie', 'Origine pénalité', 'Sortie (AR)', 'Statut paie'].map(colonneFin));
+  const colonnesDeduites = new Set([...CODES_DEDUITS.map((c) => colonneFin(`${c} (déduit)`)), colonneFin('Total des absences')]);
+  const colJrs = colonneFin('Jrs travaillés');
+  const codesDeduits = new Set<string>(CODES_DEDUITS);
+
+  for (const l of lignes) {
+    const valeurs = valeursPaie(l);
+    // Cumul retards nul : case vide, comme les autres zéros.
+    const iRetards = colonneFin('Cumul retards') - 1;
+    if (valeurs[iRetards] === '00:00:00') valeurs[iRetards] = '';
+    const row = ws.addRow(valeurs);
+    const teinte = l.etatFormation === 'production' ? null : COULEURS_FORMATION[l.etatFormation];
+    row.eachCell({ includeEmpty: true }, (cell, col) => {
+      cell.font = { name: st.police, size: st.taille, color: teinte ? { argb: teinte.texte } : undefined, bold: col === 3 || col === colJrs };
+      cell.border = { bottom: trait };
+      cell.alignment = { vertical: 'middle', horizontal: col <= 3 || colonnesTexte.has(col) ? 'left' : 'center' };
+      if (teinte) cell.fill = remplir(teinte.fond);
+      if (col > 3 && col < premiereFin) {
+        // Jours : P discret, absences déduites en rouge, FOR en bleu.
+        const code = String(cell.value ?? '');
+        if (code === 'P') cell.font = { ...cell.font, color: { argb: st.discret } };
+        else if (code === 'FOR') cell.font = { ...cell.font, bold: true, color: { argb: COULEUR_JOUR_FORMATION.texte } };
+        else if (codesDeduits.has(code)) cell.font = { ...cell.font, bold: true, color: { argb: st.rouge } };
+      } else if (colonnesMontant.has(col)) {
+        cell.numFmt = st.formatMontant;
+        cell.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+      } else if (col >= premiereFin && col !== colJrs && !colonnesTexte.has(col)) {
+        cell.numFmt = st.formatCompte;
+        if (colonnesDeduites.has(col) && Number(cell.value) > 0) cell.font = { ...cell.font, bold: true, color: { argb: st.rouge } };
+      }
+    });
+    // Statut : « Production » en gris (cas courant), les autres statuts ressortent.
+    row.getCell(colStatut).font = teinte
+      ? { name: st.police, size: st.taille, bold: true, color: { argb: teinte.texte } }
+      : { name: st.police, size: st.taille, color: { argb: l.statutPaie === 'Production' ? st.discret : 'FF92400E' }, bold: l.statutPaie !== 'Production' };
   }
 
   ws.columns.forEach((c, i) => {
-    if (i === 0) c.width = 13;
-    else if (i === 1) c.width = 22;
-    else if (i === 2) c.width = 28;
-    else if (i < 3 + nbJours) { c.width = 7; c.alignment = { horizontal: 'center' }; }
-    else {
-      const nom = entetes[i];
-      c.width = nom.startsWith('Commentaire') || nom.startsWith('Éléments') || nom.startsWith('Origine') ? 48
-        : nom.startsWith('Sortie') || nom.startsWith('Statut') ? 40 : 13;
-    }
+    const nom = entetes[i];
+    if (i === 0) c.width = 12;
+    else if (i === 1) c.width = 20;
+    else if (i === 2) c.width = 26;
+    else if (i < 3 + nbJours) c.width = 6.5;
+    else c.width = nom.startsWith('Commentaire') || nom.startsWith('Éléments') || nom.startsWith('Origine') ? 42
+      : nom.startsWith('Sortie') || nom.startsWith('Statut') ? 34 : 11;
   });
-  ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 1 }];
+  ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 1, showGridLines: false }];
+  // Impression : paysage A4, toute la largeur sur une page, en-tête répété.
+  ws.pageSetup = { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '1:1' };
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: entetes.length } };
+
+  /** Feuilles annexes : même en-tête sombre, traits fins, pas de quadrillage. */
+  const sobre = (feuilleAnnexe: import('exceljs').Worksheet) => {
+    feuilleAnnexe.eachRow((row, n) => {
+      if (n === 1) return;
+      row.eachCell((cell) => {
+        cell.font = { name: st.police, size: st.taille, ...(cell.font ?? {}) };
+        cell.border = { bottom: trait };
+        cell.alignment = { vertical: 'top', wrapText: true, ...(cell.alignment ?? {}) };
+      });
+    });
+    feuilleAnnexe.views = [{ state: 'frozen', ySplit: 1, showGridLines: false }];
+  };
 
   // v37 : détail de chaque pénalité (la somme par agent = « Montant pénalité » de la 1re feuille).
   const det = wb.addWorksheet('Détail pénalités');
-  const enteteDet = det.addRow(['Pilote', 'Affectation', 'Date', 'Code', 'Manquement', 'Origine', 'Rang', 'Montant (DH)']);
-  enteteDet.font = { bold: true };
+  styleEntete(det.addRow(['Pilote', 'Affectation', 'Date', 'Code', 'Manquement', 'Origine', 'Rang', 'Montant (DH)']), 24);
   for (const r of lignesDetailPenalites(lignes)) det.addRow(r);
-  [28, 22, 12, 7, 60, 30, 24, 16].forEach((w, i) => { det.getColumn(i + 1).width = w; });
-  det.views = [{ state: 'frozen', ySplit: 1 }];
+  [26, 20, 12, 7, 56, 28, 22, 14].forEach((w, i) => { det.getColumn(i + 1).width = w; });
+  sobre(det);
+  det.getColumn(8).numFmt = st.formatMontant;
   det.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 8 } };
 
   // v37 : référentiel appliqué (identique au document de la direction).
   const ref = wb.addWorksheet('Référentiel');
-  const enteteRef = ref.addRow(['Code', 'Catégorie', 'Manquement unifié', '1er mois (DH)', '2e mois consécutif (DH)', '3e mois consécutif et + (DH)', 'Gravité']);
-  enteteRef.font = { bold: true };
+  styleEntete(ref.addRow(['Code', 'Catégorie', 'Manquement unifié', '1er mois (DH)', '2e mois consécutif (DH)', '3e mois consécutif et + (DH)', 'Gravité']));
   for (const m of REFERENTIEL) ref.addRow([m.code, m.categorie, m.libelle, m.mois1 ?? '—', m.mois2 ?? '—', m.mois3 ?? '—', m.gravite]);
-  [7, 34, 70, 14, 22, 26, 10].forEach((w, i) => { ref.getColumn(i + 1).width = w; });
-  ref.views = [{ state: 'frozen', ySplit: 1 }];
+  [7, 30, 64, 12, 16, 18, 9].forEach((w, i) => { ref.getColumn(i + 1).width = w; });
+  sobre(ref);
 
   // v37 : règles, légende des couleurs et totaux de contrôle.
   const reg = wb.addWorksheet('Règles et contrôle');
   reg.getColumn(1).width = 70;
   reg.getColumn(2).width = 18;
-  reg.addRow(['Légende des couleurs']).font = { bold: true, size: 12 };
-  for (const c of Object.values(COULEURS_FORMATION)) {
-    const r = reg.addRow([c.libelle]);
-    r.getCell(1).fill = remplir(c.fond);
-    r.getCell(1).font = { color: { argb: c.texte }, bold: true };
+  const titre = (texte: string) => { reg.addRow([texte]).font = { name: st.police, bold: true, size: 12 }; };
+  const legende = (texte: string, police: Partial<import('exceljs').Font>, fond?: string) => {
+    const r = reg.addRow([texte]);
+    r.getCell(1).font = { name: st.police, size: st.taille, ...police };
+    if (fond) r.getCell(1).fill = remplir(fond);
+  };
+  titre('Légende');
+  for (const c of Object.values(COULEURS_FORMATION)) legende(c.libelle, { bold: true, color: { argb: c.texte } }, c.fond);
+  legende('FOR (texte bleu) : jour de formation, non payé', { bold: true, color: { argb: COULEUR_JOUR_FORMATION.texte } });
+  legende('ABS N, AM, AR, CSS, MAT en rouge : absences déduites', { bold: true, color: { argb: st.rouge } });
+  legende('P en gris : présent', { color: { argb: st.discret } });
+  legende('Case vide dans une colonne de nombres : zéro (masqué pour la lisibilité)', { color: { argb: st.discret } });
+  reg.addRow([]);
+  reg.addRow(['Totaux de contrôle', 'Valeur']).font = { name: st.police, bold: true, size: 12 };
+  for (const t of totauxControle(lignes)) {
+    const r = reg.addRow(t);
+    r.eachCell((cell) => { cell.font = { name: st.police, size: st.taille }; cell.border = { bottom: trait }; });
   }
-  const rFor = reg.addRow(['Case « FOR » : jour de formation (non payé)']);
-  rFor.getCell(1).fill = remplir(COULEUR_JOUR_FORMATION.fond);
-  rFor.getCell(1).font = { color: { argb: COULEUR_JOUR_FORMATION.texte }, bold: true };
   reg.addRow([]);
-  reg.addRow(['Totaux de contrôle', 'Valeur']).font = { bold: true, size: 12 };
-  for (const t of totauxControle(lignes)) reg.addRow(t);
-  reg.addRow([]);
-  reg.addRow(['Règles de calcul appliquées']).font = { bold: true, size: 12 };
+  titre('Règles de calcul appliquées');
   for (const r of reglesExport(du, au)) {
     const row = reg.addRow([r]);
+    row.getCell(1).font = { name: st.police, size: st.taille };
     row.getCell(1).alignment = { wrapText: true, vertical: 'top' };
   }
+  reg.views = [{ showGridLines: false }];
 
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 }

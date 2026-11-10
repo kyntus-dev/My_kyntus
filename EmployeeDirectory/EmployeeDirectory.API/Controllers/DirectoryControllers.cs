@@ -105,6 +105,8 @@ public class DirectoryEmployeesController(IMediator mediator) : ControllerBase
     /// <summary>
     /// Détache l'employé du périmètre (pole / cellule / service) et clôture les titulatures sur le nœud.
     /// </summary>
+    // v39 : réservé aux comptes habilités (Admin / RH, droit Organisation ou Réaffecter) — était ouvert à tout compte connecté.
+    [OrgWriteAccess]
     [HttpPost("employees/{id:guid}/clear-org-placement")]
     public async Task<ActionResult<EmployeeDto>> ClearOrgPlacement(
         Guid id,
@@ -234,7 +236,7 @@ public class DirectoryOrgController(
     }
 
     [HttpPost("structure/poles")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<ActionResult<object>> CreatePole([FromBody] CreatePoleRequest? body, CancellationToken ct)
     {
         if (body is null)
@@ -383,7 +385,7 @@ public class DirectoryOrgController(
     }
 
     /// <summary>Nœuds archivés, pour l'écran d'organisation (Admin / RH).</summary>
-    [Authorize(Roles = "Admin,RH")]
+    [OrgReadAccess]
     [HttpGet("structure/archived")]
     public async Task<ActionResult<IReadOnlyList<ArchivedOrgNodeDto>>> ListArchived(CancellationToken ct) =>
         Ok(await mediator.Send(new ListArchivedOrgNodesQuery(), ct));
@@ -841,7 +843,7 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<ActionResult<BusinessDepartmentDto>> Create([FromBody] CreateBusinessDepartmentRequest body, CancellationToken ct)
     {
         var result = await mediator.Send(new CreateBusinessDepartmentCommand(body), ct);
@@ -849,7 +851,7 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpPatch("{id:guid}")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<ActionResult<BusinessDepartmentDto>> Update(Guid id, [FromBody] UpdateBusinessDepartmentRequest body, CancellationToken ct)
     {
         var result = await mediator.Send(new UpdateBusinessDepartmentCommand(id, body), ct);
@@ -857,7 +859,7 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         // v9 : archivage du contrat (IsActive = false) ; refusé s'il reste des pôles actifs.
@@ -872,7 +874,7 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpPost("{id:guid}/poles/{poleId}")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<IActionResult> AssignPole(Guid id, string poleId, CancellationToken ct)
     {
         try
@@ -885,12 +887,12 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpDelete("{id:guid}/poles/{poleId}")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<IActionResult> RemovePole(Guid id, string poleId, CancellationToken ct) =>
         await mediator.Send(new RemovePoleFromBusinessDepartmentCommand(id, poleId), ct) ? NoContent() : NotFound();
 
     [HttpPost("{id:guid}/manager")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<ActionResult<StructuralRoleAssignmentResult>> SetManager(Guid id, [FromBody] SetBusinessDepartmentManagerRequest body, CancellationToken ct)
     {
         if (!Guid.TryParse(body.EmployeeId, out var employeeId))
@@ -905,7 +907,7 @@ public class DirectoryBusinessDepartmentsController(IMediator mediator) : Contro
     }
 
     [HttpDelete("{id:guid}/manager")]
-    [Authorize(Roles = "Admin,RH")]
+    [OrgWriteAccess]
     public async Task<IActionResult> ClearManager(Guid id, CancellationToken ct) =>
         await mediator.Send(new ClearBusinessDepartmentManagerCommand(id), ct) ? NoContent() : NotFound();
 }

@@ -19,6 +19,8 @@ public sealed class OrgWriteAccessFilter(
 {
     public const string ManageUsersAction = "users:manage";
     public const string ReaffecterAction = "rh.affectations.Act";
+    /// <summary>v39 : « Organisation » au niveau Modifier dans Accès par rôle / par compte.</summary>
+    public const string OrganisationAgirAction = "admin.organisation.Act";
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
@@ -48,9 +50,19 @@ public sealed class OrgWriteAccessFilter(
                     return;
                 }
 
+                // v39 : le droit donné dans « Accès par rôle » (Organisation, Modifier) suffit : l'écran
+                // et le serveur suivent la même règle.
+                if (await iam.EvaluateAsync(subject, role, OrganisationAgirAction, "platform", null, http.RequestAborted))
+                {
+                    await next();
+                    return;
+                }
+
                 // v29 : un responsable autorisé à réaffecter (« Réaffecter les agents » au niveau
                 // Modifier) peut changer les affectations (pôle, cellule, service) — pas la structure.
-                if (http.Request.Path.Value?.Contains("/assignments/", StringComparison.OrdinalIgnoreCase) == true
+                var chemin = http.Request.Path.Value ?? string.Empty;
+                if ((chemin.Contains("/assignments/", StringComparison.OrdinalIgnoreCase)
+                     || chemin.Contains("/clear-org-placement", StringComparison.OrdinalIgnoreCase))
                     && await iam.EvaluateAsync(subject, role, ReaffecterAction, "platform", null, http.RequestAborted))
                 {
                     await next();
@@ -68,7 +80,7 @@ public sealed class OrgWriteAccessFilter(
             http.Request.Method,
             http.Request.Path,
             role ?? "inconnu");
-        context.Result = new ObjectResult(new { error = "Action réservée aux rôles Admin / RH." })
+        context.Result = new ObjectResult(new { error = "Action non autorisée : droit « Organisation » (Modifier) requis dans Accès par rôle." })
         {
             StatusCode = StatusCodes.Status403Forbidden,
         };
@@ -77,4 +89,60 @@ public sealed class OrgWriteAccessFilter(
     private static bool IsAdminOrHr(string? role) =>
         string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
         || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// v39 — lecture des écrans d'organisation réservés (archives, couverture) : Admin / RH, appel interne,
+/// ou droit IAM « Organisation » (Voir ou Modifier) donné dans Accès par rôle / par compte.
+/// </summary>
+public sealed class OrgReadAccessAttribute() : TypeFilterAttribute(typeof(OrgReadAccessFilter));
+
+public sealed class OrgReadAccessFilter(
+    IIamReadService iam,
+    ILogger<OrgReadAccessFilter> logger) : IAsyncActionFilter
+{
+    public const string OrganisationVoirAction = "admin.organisation.View";
+
+    public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+    {
+        var http = context.HttpContext;
+        if (http.Items.TryGetValue("IsInternalService", out var internalFlag) && internalFlag is true)
+        {
+            await next();
+            return;
+        }
+
+        var user = http.User;
+        var subjectId = Kyntus.Identity.Jwt.KyntusClaimsPrincipalExtensions.GetSubjectId(user);
+        var role = Kyntus.Identity.Jwt.KyntusClaimsPrincipalExtensions.GetAuthRole(user);
+        if (user.IsInRole("Admin") || user.IsInRole("RH")
+            || string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase))
+        {
+            await next();
+            return;
+        }
+
+        if (subjectId is Guid subject && subject != Guid.Empty && !string.IsNullOrWhiteSpace(role))
+        {
+            try
+            {
+                if (await iam.EvaluateAsync(subject, role, OrganisationVoirAction, "platform", null, http.RequestAborted)
+                    || await iam.EvaluateAsync(subject, role, OrgWriteAccessFilter.OrganisationAgirAction, "platform", null, http.RequestAborted))
+                {
+                    await next();
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Évaluation IAM indisponible pour {Role} — lecture refusée par défaut", role);
+            }
+        }
+
+        context.Result = new ObjectResult(new { error = "Accès non autorisé : droit « Organisation » requis dans Accès par rôle." })
+        {
+            StatusCode = StatusCodes.Status403Forbidden,
+        };
+    }
 }
