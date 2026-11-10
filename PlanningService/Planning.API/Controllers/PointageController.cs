@@ -122,6 +122,11 @@ public sealed class PointageController(
     /// Production mémorisée pour « Heure de sortie » : « 0840 » (08h40, 07h40 le vendredi), « 0740 » ou null.
     /// Réservé aux comptes ayant accès à « Heure de sortie ».
     /// </summary>
+    /// <summary>v42 : choix de production faits jour par jour (solde des heures depuis le 24).</summary>
+    [HttpGet("heure-sortie/choix")]
+    public async Task<ActionResult<IReadOnlyList<ChoixProductionJourDto>>> MesChoixProduction([FromQuery] DateOnly? au, CancellationToken ct) =>
+        Ok(await query.GetMesChoixProductionAsync(Viewer(), au ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1), ct));
+
     [HttpPut("heure-sortie/choix")]
     public async Task<IActionResult> ChoixProduction([FromBody] ChoixProductionRequest body, CancellationToken ct)
     {

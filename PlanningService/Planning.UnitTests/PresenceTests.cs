@@ -268,5 +268,6 @@ public class PresenceTests
         public Task<int> ValiderCorrespondancesAutoAsync(PointageViewer viewer, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<PointageEtatDto> GetEtatAsync(CancellationToken ct = default) => throw new NotSupportedException();
         public Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ChoixProductionJourDto>> GetMesChoixProductionAsync(PointageViewer viewer, DateOnly au, CancellationToken ct = default) => throw new NotSupportedException();
     }
 }

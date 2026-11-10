@@ -157,8 +157,37 @@ public sealed class PointageQueryService(
         }
         acces.ChoixProduction = choix;
         acces.ChoixModifieLe = DateTime.UtcNow;
+
+        // v42 : le choix est aussi gardé pour la journée : le solde compare chaque jour à son choix.
+        var today = Aujourdhui();
+        var jour = await db.HeureSortieChoixJours.FirstOrDefaultAsync(c => c.UserId == me.Id && c.Jour == today, ct);
+        if (choix is null)
+        {
+            if (jour is not null) db.HeureSortieChoixJours.Remove(jour);
+        }
+        else if (jour is null)
+        {
+            db.HeureSortieChoixJours.Add(new HeureSortieChoixJour { UserId = me.Id, Jour = today, Choix = choix, ModifieLe = DateTime.UtcNow });
+        }
+        else
+        {
+            jour.Choix = choix;
+            jour.ModifieLe = DateTime.UtcNow;
+        }
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    public async Task<IReadOnlyList<ChoixProductionJourDto>> GetMesChoixProductionAsync(PointageViewer viewer, DateOnly au, CancellationToken ct = default)
+    {
+        var me = await FindViewerAsync(viewer, ct);
+        if (me is null)
+            return Array.Empty<ChoixProductionJourDto>();
+        var lignes = await db.HeureSortieChoixJours.AsNoTracking()
+            .Where(c => c.UserId == me.Id && c.Jour <= au)
+            .OrderBy(c => c.Jour)
+            .ToListAsync(ct);
+        return lignes.Select(c => new ChoixProductionJourDto(c.Jour, c.Choix)).ToList();
     }
 
     /// <summary>

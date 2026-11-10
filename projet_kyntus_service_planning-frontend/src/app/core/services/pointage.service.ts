@@ -43,6 +43,11 @@ export class PointageService {
     return this.http.put<{ choix: string | null }>(`${this.base}/heure-sortie/choix`, { choix });
   }
 
+  /** v42 : choix de production faits jour par jour (solde des heures). */
+  mesChoixProduction(au: string): Observable<{ jour: string; choix: '0840' | '0740' }[]> {
+    return this.http.get<{ jour: string; choix: '0840' | '0740' }[]>(`${this.base}/heure-sortie/choix`, { params: { au } });
+  }
+
   correspondances(statut?: string): Observable<PointageCorrespondanceDto[]> {
     return this.http.get<PointageCorrespondanceDto[]>(`${this.base}/correspondances`, {
       params: statut ? { statut } : {},

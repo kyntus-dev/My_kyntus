@@ -83,6 +83,9 @@ public static class ChoixProductionSortie
 
 public sealed record ChoixProductionRequest(string? Choix);
 
+/// <summary>v42 : choix fait pour une journée (« 0740 » ou « 0840 »).</summary>
+public sealed record ChoixProductionJourDto(DateOnly Jour, string Choix);
+
 /// <summary>Résolution des régimes : la cible la plus précise l'emporte.</summary>
 public static class RegimeResolver
 {

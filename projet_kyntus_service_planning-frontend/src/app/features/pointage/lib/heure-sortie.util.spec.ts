@@ -182,3 +182,25 @@ describe('détail du solde depuis le 24 (v41)', () => {
     expect(soldeHeures(jours, '2026-11-10')).toEqual({ soldeMinutes: 8, plusMinutes: 20, moinsMinutes: 12, jours: 2 });
   });
 });
+
+describe('solde journée sur journée selon le choix (v42)', () => {
+  it('choix du jour, sinon dernier choix, sinon premier choix pour les jours antérieurs', async () => {
+    const { prevueDuChoix, soldeHeures, detailSolde } = await import('./heure-sortie.util');
+    const choix = [{ jour: '2026-11-05', choix: '0740' as const }, { jour: '2026-11-09', choix: '0840' as const }];
+    expect(prevueDuChoix('2026-11-05', choix)).toEqual({ minutes: 460, origine: 'choisi ce jour' });
+    expect(prevueDuChoix('2026-11-06', choix)).toEqual({ minutes: 460, origine: 'dernier choix' });
+    expect(prevueDuChoix('2026-11-09', choix)).toEqual({ minutes: 520, origine: 'choisi ce jour' });
+    expect(prevueDuChoix('2026-10-27', choix)?.minutes).toBe(460);
+    expect(prevueDuChoix('2026-10-27', [])).toBeNull();
+
+    // Collègue à 07h40 : le régime prévoit 08h40, mais son choix 07h40 fait foi.
+    const jours = [
+      { jour: '2026-10-27', productionMinutes: 462, productionPrevueMinutes: 520, source: 'Regime' },
+      { jour: '2026-10-28', productionMinutes: 458, productionPrevueMinutes: 520, source: 'Regime' },
+    ];
+    const prevue = (d: Date) => prevueDuChoix(d.toLocaleDateString('sv-SE'), [{ jour: '2026-11-10', choix: '0740' }]);
+    expect(soldeHeures(jours, '2026-11-10', prevue).soldeMinutes).toBe(0);
+    expect(detailSolde(jours, '2026-11-10', prevue)[0].originePrevue).toBe('premier choix');
+    expect(soldeHeures(jours, '2026-11-10').soldeMinutes).toBe(-120);
+  });
+});

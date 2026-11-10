@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, injec
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { catchError, forkJoin, of } from 'rxjs';
 import { PointageService } from '../../../../core/services/pointage.service';
 import type { PointageAujourdhuiDto } from '../../../../core/models/pointage.models';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
@@ -16,6 +17,8 @@ import {
   formatHms,
   debutPeriodePaie,
   detailSolde,
+  prevueDuChoix,
+  type ChoixJour,
   type LigneSolde,
   productionDuChoix,
   productionExcel,
@@ -144,14 +147,7 @@ export class PointageHeureSortieComponent implements OnInit {
       next: (j) => {
         this.jour.set(j);
         this.choix.set(j.choixProduction ?? null);
-        this.svc.monSuivi(du, au).subscribe({
-          // v40 : le solde des jours précédents ne dépend pas du choix du jour (planning ou régime de chaque jour).
-          next: (s) => {
-            this.solde.set(soldeHeures(s.jours, au, () => null));
-            this.detail.set(detailSolde(s.jours, au));
-          },
-          error: () => { this.solde.set(null); this.detail.set([]); },
-        });
+        this.chargerSolde(du, au);
         if (!this.entree() && j.pointages.length) this.entree.set(j.pointages[0]);
         if (!j.pointages.length) this.mode.set('manuel');
         this.loading.set(false);
@@ -193,6 +189,24 @@ export class PointageHeureSortieComponent implements OnInit {
     return h ? h.slice(0, 5) : '—';
   }
 
+  /**
+   * v42 : solde depuis le 24, journée sur journée : chaque jour est comparé à la production choisie
+   * ce jour-là (07h40 ou 08h40) ; un jour sans choix reprend le dernier choix connu.
+   */
+  private chargerSolde(du: string, au: string): void {
+    forkJoin({
+      suivi: this.svc.monSuivi(du, au),
+      choix: this.svc.mesChoixProduction(au).pipe(catchError(() => of([] as ChoixJour[]))),
+    }).subscribe({
+      next: ({ suivi, choix }) => {
+        const prevue = (d: Date) => prevueDuChoix(d.toLocaleDateString('sv-SE'), choix);
+        this.solde.set(soldeHeures(suivi.jours, au, prevue));
+        this.detail.set(detailSolde(suivi.jours, au, prevue));
+      },
+      error: () => { this.solde.set(null); this.detail.set([]); },
+    });
+  }
+
   abs(v: number): number {
     return Math.abs(v);
   }
@@ -207,6 +221,8 @@ export class PointageHeureSortieComponent implements OnInit {
       next: () => {
         this.enregistrementChoix.set(false);
         this.toast.success(`Production du jour : ${valeur === '0840' ? '08h40' : '07h40'}.`);
+        // Le 1er choix sert aussi aux jours précédents sans choix : solde recalculé.
+        this.chargerSolde(this.periodeDu(), new Date().toLocaleDateString('sv-SE'));
       },
       error: (err) => {
         this.choix.set(avant);

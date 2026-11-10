@@ -64,6 +64,7 @@ public class AppDbContext : DbContext
     public DbSet<RegimeHoraireJour> RegimeHoraireJours { get; set; } = null!;
     public DbSet<RegimeHoraireAffectation> RegimeHoraireAffectations { get; set; } = null!;
     public DbSet<HeureSortieAcces> HeureSortieAcces { get; set; } = null!;
+    public DbSet<HeureSortieChoixJour> HeureSortieChoixJours { get; set; } = null!;
     public DbSet<ReaffectationAgent> ReaffectationsAgents { get; set; } = null!;
     public DbSet<PlanningItHoraire> PlanningItHoraires { get; set; } = null!;
     public DbSet<PlanningItCommentaire> PlanningItCommentaires { get; set; } = null!;
@@ -685,6 +686,13 @@ public class AppDbContext : DbContext
             e.HasKey(x => x.UserId);
             e.Property(x => x.UserId).ValueGeneratedNever();
             e.Property(x => x.ChoixProduction).HasMaxLength(16);
+        });
+
+        modelBuilder.Entity<HeureSortieChoixJour>(e =>
+        {
+            e.ToTable("HeureSortieChoixJours");
+            e.HasKey(x => new { x.UserId, x.Jour });
+            e.Property(x => x.Choix).HasMaxLength(4);
         });
 
         // Planning IT : horaires saisis par les membres de la cellule IT.

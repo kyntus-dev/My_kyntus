@@ -919,6 +919,20 @@ public static class PlanningSchemaPatches
             );
             ALTER TABLE "HeureSortieAcces" ADD COLUMN IF NOT EXISTS "ChoixProduction" varchar(16) NULL;
             ALTER TABLE "HeureSortieAcces" ADD COLUMN IF NOT EXISTS "ChoixModifieLe" timestamp with time zone NULL;
+
+            -- v42 : choix de production jour par jour (solde des heures) ; reprise du dernier choix connu.
+            CREATE TABLE IF NOT EXISTS "HeureSortieChoixJours" (
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Jour" date NOT NULL,
+                "Choix" varchar(4) NOT NULL,
+                "ModifieLe" timestamp with time zone NOT NULL DEFAULT now(),
+                PRIMARY KEY ("UserId", "Jour")
+            );
+            INSERT INTO "HeureSortieChoixJours" ("UserId", "Jour", "Choix", "ModifieLe")
+            SELECT a."UserId", (a."ChoixModifieLe" AT TIME ZONE 'Africa/Casablanca')::date, a."ChoixProduction", a."ChoixModifieLe"
+            FROM "HeureSortieAcces" a
+            WHERE a."ChoixProduction" IN ('0740', '0840') AND a."ChoixModifieLe" IS NOT NULL
+            ON CONFLICT ("UserId", "Jour") DO NOTHING;
             """,
             ct);
     }

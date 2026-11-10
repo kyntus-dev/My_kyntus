@@ -32,6 +32,9 @@ public interface IPointageQueryService
     /// </summary>
     Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default);
 
+    /// <summary>v42 : choix de production faits jour par jour par le collaborateur connecté, jusqu'au jour donné.</summary>
+    Task<IReadOnlyList<ChoixProductionJourDto>> GetMesChoixProductionAsync(PointageViewer viewer, DateOnly au, CancellationToken ct = default);
+
     /// <summary>Journée en cours du collaborateur connecté (page « Heure de sortie », tableau de bord).</summary>
     Task<PointageAujourdhuiDto?> GetAujourdhuiAsync(PointageViewer viewer, CancellationToken ct = default);
 
