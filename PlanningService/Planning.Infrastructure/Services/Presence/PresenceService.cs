@@ -1,3 +1,4 @@
+using Kyntus.Messaging.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -49,8 +50,13 @@ public sealed class PresenceService(
             await DerniereSynchroAsync(ct),
             peutModifier,
             PresenceCodes.Tous,
-            agents);
+            agents,
+            PeutAutoriserRetard(viewer.Role));
     }
+
+    /// <summary>v46 : superviseurs et référents techniques n'autorisent ni retard ni dépassement de pause.</summary>
+    internal static bool PeutAutoriserRetard(string? role) =>
+        !KyntusRoleNames.IsSuperviseur(role) && !KyntusRoleNames.IsReferentTechnique(role);
 
     public async Task<PresenceAgentDto> SaisirAsync(
         PresenceViewer viewer, PresenceSaisieRequest request, DateOnly grilleDu, DateOnly grilleAu, CancellationToken ct = default)
@@ -82,6 +88,19 @@ public sealed class PresenceService(
         var existantes = await db.PresenceJours
             .Where(p => p.UserId == request.UserId && p.Jour >= request.Jour && p.Jour <= fin)
             .ToDictionaryAsync(p => p.Jour, ct);
+
+        // v46 : un superviseur ou un référent technique ne change jamais une autorisation de retard.
+        if (!PeutAutoriserRetard(viewer.Role))
+        {
+            for (var j = request.Jour; j <= fin; j = j.AddDays(1))
+            {
+                existantes.TryGetValue(j, out var avant);
+                if (request.RetardAutorise != (avant?.RetardAutorise ?? false)
+                    || request.RetardPauseAutorise != (avant?.RetardPauseAutorise ?? false))
+                    throw new PresenceRefusException(
+                        "Seuls le chef de projet, les RH et l'Admin peuvent autoriser un retard ou un dépassement de pause.");
+            }
+        }
 
         for (var jour = request.Jour; jour <= fin; jour = jour.AddDays(1))
         {
@@ -145,6 +164,7 @@ public sealed class PresenceService(
                 CelluleId = u.SubService != null ? u.SubService.Service.PrimeCelluleId : null,
                 Pole = u.SubService != null ? u.SubService.Service.Floor.Name : null,
                 PoleId = u.SubService != null ? u.SubService.Service.Floor.PrimePoleId : null,
+                Role = u.Role != null ? u.Role.Name : null,
             })
             .ToDictionaryAsync(u => u.Id, ct);
         var profils = await db.UserHrProfiles.AsNoTracking()
@@ -218,7 +238,8 @@ public sealed class PresenceService(
                 ADejaEteEnFormation(profil) ? profil!.DateDebutFormation ?? profil.DateEntree : null,
                 profil?.FinFormationEffective(),
                 org is null ? null : $"{(org.LastName ?? string.Empty).Trim().ToUpperInvariant()} {(org.FirstName ?? string.Empty).Trim()}".Trim(),
-                profil?.EnFormation ?? false));
+                profil?.EnFormation ?? false,
+                org?.Role));
         }
         return result
             .OrderBy(a => a.Cellule ?? "", StringComparer.CurrentCultureIgnoreCase)
@@ -298,6 +319,13 @@ public sealed class PresenceService(
                 .Select(u => u.Id).ToListAsync(ct);
         }
         var horsFormation = ids.Except(enFormation).ToList();
+        // v46 : un chef de projet voit aussi (et saisit) les superviseurs et référents techniques de son
+        // périmètre : placés dans ses services, ou désignés sur la fiche de ses agents.
+        if (KyntusRoleNames.IsChefDeProjet(viewer.Role) && ids.Count > 0)
+        {
+            var encadrement = await EncadrementAsync(me, ids, scope, ct);
+            horsFormation = horsFormation.Union(encadrement).ToList();
+        }
         if (!inclureFormation)
         {
             if (scope.Count == 0)
@@ -320,6 +348,32 @@ public sealed class PresenceService(
         return (visibles, formation.Count == 0
             ? $"Votre périmètre ({visibles.Count} agent(s))"
             : $"Votre périmètre ({visibles.Count} agent(s), dont {formation.Count} en formation)");
+    }
+
+    /// <summary>
+    /// v46 : superviseurs et référents techniques du périmètre d'un chef de projet : comptes actifs de ces
+    /// rôles placés dans ses services, ou désignés comme superviseur / référent sur la fiche de ses agents.
+    /// </summary>
+    private async Task<List<int>> EncadrementAsync(User me, List<int> agents, HashSet<int> scope, CancellationToken ct)
+    {
+        var designes = await db.UserHrProfiles.AsNoTracking()
+            .Where(p => agents.Contains(p.UserId))
+            .Select(p => new { p.SuperviseurId, p.ReferentTechniqueId })
+            .ToListAsync(ct);
+        var guids = designes.SelectMany(p => new[] { p.SuperviseurId, p.ReferentTechniqueId })
+            .Where(g => g is not null && g != Guid.Empty)
+            .Select(g => g!.Value)
+            .Distinct()
+            .ToList();
+        var candidats = await db.Users.AsNoTracking()
+            .Where(u => u.IsActive && u.Id != me.Id && u.Role != null
+                        && ((u.SubServiceId != null && scope.Contains(u.SubServiceId.Value)) || guids.Contains(u.Guid)))
+            .Select(u => new { u.Id, Role = u.Role!.Name })
+            .ToListAsync(ct);
+        return candidats
+            .Where(c => KyntusRoleNames.IsSuperviseur(c.Role) || KyntusRoleNames.IsReferentTechnique(c.Role))
+            .Select(c => c.Id)
+            .ToList();
     }
 
     private async Task<User?> FindViewerAsync(PresenceViewer viewer, CancellationToken ct)

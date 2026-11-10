@@ -48,6 +48,23 @@
         <option value="">Tous les contrats</option>
         @for (o of options().types; track o) { <option [value]="o">{{ o }}</option> }
       </select>
+      <select class="ku-input" [ngModel]="filtres().formation" (ngModelChange)="filtrer({ formation: $event })" aria-label="Formation">
+        <option value="">Formation : tous</option>
+        <option value="oui">En formation seulement ({{ nbFormation() }})</option>
+        <option value="non">Hors formation</option>
+      </select>
+      @if (estChefDeProjet()) {
+        <select class="ku-input" [ngModel]="filtres().superviseurs" (ngModelChange)="filtrer({ superviseurs: $event })" aria-label="Superviseurs">
+          <option value="">Superviseurs : masqués</option>
+          <option value="*">Tous les superviseurs ({{ options().superviseurs.length }})</option>
+          @for (p of options().superviseurs; track p.id) { <option [value]="p.id">{{ p.nom }}</option> }
+        </select>
+        <select class="ku-input" [ngModel]="filtres().referents" (ngModelChange)="filtrer({ referents: $event })" aria-label="Référents techniques">
+          <option value="">Référents techniques : masqués</option>
+          <option value="*">Tous les référents ({{ options().referents.length }})</option>
+          @for (p of options().referents; track p.id) { <option [value]="p.id">{{ p.nom }}</option> }
+        </select>
+      }
       <label class="ku-check pz-atraiter"><input type="checkbox" [ngModel]="filtres().aTraiter" (ngModelChange)="filtrer({ aTraiter: $event })" /> À traiter seulement</label>
       <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="reinitialiser()">Réinitialiser</button>
       <span class="pz-compte">{{ agents().length }} / {{ data()?.agents?.length ?? 0 }} agents</span>
@@ -63,6 +80,7 @@
       <span class="pz-code pz-f-present"><i class="pz-dot"></i>P</span> Commentaire
       <span class="pz-code pz-f-present pz-partiel">P</span> Absence partielle
       <span class="pz-code pz-f-present pz-manuel">P</span> Saisi par un responsable
+      <span class="pz-leg-formation">Ligne bleue : en formation</span>
     </div>
 
     @if (loading() && !data()) {
@@ -88,9 +106,12 @@
           <tbody>
             @for (l of lignes(); track l.agent.userId) {
               @let a = l.agent;
-              <tr [class.pz-row-formation]="a.enFormation">
+              <tr [class.pz-row-formation]="a.enFormation" [class.pz-row-encadrement]="estSuperviseur(a.role) || estReferentTechnique(a.role)">
                 <th class="pz-agent" scope="row">
                   <b>{{ a.nom }}</b>
+                  @if (a.enFormation) { <span class="pz-badge pz-badge--formation">En formation</span> }
+                  @if (estSuperviseur(a.role)) { <span class="pz-badge pz-badge--encadrement">Superviseur</span> }
+                  @if (estReferentTechnique(a.role)) { <span class="pz-badge pz-badge--encadrement">Référent technique</span> }
                   <small>{{ a.cellule ?? (a.enFormation ? 'Formation' : '—') }} · {{ a.type }}</small>
                   @if (a.enFormation) {
                     <small class="pz-formation">En formation{{ a.formationDu ? ' depuis le ' + a.formationDu.slice(8, 10) + '/' + a.formationDu.slice(5, 7) : '' }} · hors paie</small>
@@ -186,9 +207,12 @@
 
         <section class="pz-bloc">
           <h3>Retard</h3>
-          <label class="ku-check"><input type="checkbox" [ngModel]="e.retardAutorise" (ngModelChange)="patch({ retardAutorise: $event })" />
+          @if (!peutAutoriserRetard()) {
+            <p class="pz-note-droit">Autoriser un retard ou un dépassement de pause est réservé au chef de projet, aux RH et à l’Admin.</p>
+          }
+          <label class="ku-check"><input type="checkbox" [ngModel]="e.retardAutorise" (ngModelChange)="patch({ retardAutorise: $event })" [disabled]="!peutAutoriserRetard()" />
             Retard d’arrivée autorisé @if (e.jour.retardEntreeMinutes) { <small>({{ formatMinutes(e.jour.retardEntreeMinutes) }})</small> }</label>
-          <label class="ku-check"><input type="checkbox" [ngModel]="e.retardPauseAutorise" (ngModelChange)="patch({ retardPauseAutorise: $event })" />
+          <label class="ku-check"><input type="checkbox" [ngModel]="e.retardPauseAutorise" (ngModelChange)="patch({ retardPauseAutorise: $event })" [disabled]="!peutAutoriserRetard()" />
             Dépassement de pause autorisé @if (e.jour.retardPauseMinutes) { <small>({{ formatMinutes(e.jour.retardPauseMinutes) }})</small> }</label>
           @if (e.retardAutorise || e.retardPauseAutorise) {
             <label class="ku-field"><span>Motif de l’autorisation</span>

@@ -15,6 +15,9 @@ import { PresencesNavComponent } from '../components/presences-nav.component';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import {
   FILTRES_VIDES,
+  TYPES_CONTRAT,
+  estReferentTechnique,
+  estSuperviseur,
   type FiltresPresence,
   enteteJour,
   familleCode,
@@ -62,6 +65,13 @@ export class PresencesTableauComponent implements OnInit {
   private readonly auth = inject(AuthService);
   /** v37 : agents en formation visibles, saisie réservée à l'équipe formation, aux RH et aux Admin. */
   readonly saisieFormation = computed(() => peutSaisirFormation(this.auth.getRole()));
+  /** v46 : chef de projet (ou RP) : listes « Superviseurs » et « Référents techniques ». */
+  readonly estChefDeProjet = computed(() => {
+    const r = (this.auth.getRole() || '').trim().toLowerCase();
+    return r === 'chef de projet' || r === 'rp';
+  });
+  /** v46 : superviseurs et référents techniques n'autorisent pas les retards (le serveur le refuse aussi). */
+  readonly peutAutoriserRetard = computed(() => this.data()?.peutAutoriserRetard !== false);
 
   readonly enteteJour = enteteJour;
   readonly familleCode = familleCode;
@@ -95,25 +105,43 @@ export class PresencesTableauComponent implements OnInit {
     }
     return m;
   });
-  readonly activiteDuPole = (poleId: string | null): string | null =>
-    poleId ? this.activiteParPole().get(poleId) ?? null : null;
+  /** v46 : « Formation & Qualité » : nom du contrat de ce nom s'il existe, sinon ce libellé. */
+  readonly activiteFormation = computed(() =>
+    this.activites().find((a) => a.isActive && /formation/i.test(a.name))?.name ?? 'Formation & Qualité');
+  /** Activité d'un agent : celle de son pôle ; v46 : un agent en formation sans pôle relève de Formation & Qualité. */
+  readonly activiteDuPole = (poleId: string | null, agent?: PresenceAgentDto): string | null =>
+    (poleId ? this.activiteParPole().get(poleId) ?? null : null)
+    ?? (agent?.enFormation ? this.activiteFormation() : null);
 
   readonly options = computed(() => {
     const agents = this.data()?.agents ?? [];
     const uniq = (xs: (string | null)[]) =>
       [...new Set(xs.filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
     const f = this.filtres();
-    const dansActivite = agents.filter((a) => !f.activite || this.activiteDuPole(a.poleId) === f.activite);
+    const dansActivite = agents.filter((a) => !f.activite || this.activiteDuPole(a.poleId, a) === f.activite);
     const dansPole = dansActivite.filter((a) => !f.pole || a.pole === f.pole);
+    const personnes = (test: (r?: string | null) => boolean) => agents
+      .filter((a) => test(a.role))
+      .map((a) => ({ id: String(a.userId), nom: a.nom }))
+      .sort((x, y) => x.nom.localeCompare(y.nom, 'fr', { sensitivity: 'base' }));
     return {
-      activites: uniq(agents.map((a) => this.activiteDuPole(a.poleId))),
+      // v46 : Formation & Qualité toujours proposée.
+      activites: uniq([...agents.map((a) => this.activiteDuPole(a.poleId, a)), this.activiteFormation()]),
       poles: uniq(dansActivite.map((a) => a.pole)),
       cellules: uniq(dansPole.map((a) => a.cellule)),
-      types: uniq(agents.map((a) => a.type)),
+      // v46 : Salarié et Sous-traitant toujours proposés.
+      types: [...TYPES_CONTRAT] as string[],
+      superviseurs: personnes(estSuperviseur),
+      referents: personnes(estReferentTechnique),
     };
   });
 
-  readonly agents = computed(() => filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole));
+  readonly agents = computed(() =>
+    filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole, this.estChefDeProjet()));
+  /** v46 : nombre d'agents en formation dans les données (filtre « Formation »). */
+  readonly nbFormation = computed(() => (this.data()?.agents ?? []).filter((a) => a.enFormation).length);
+  readonly estSuperviseur = estSuperviseur;
+  readonly estReferentTechnique = estReferentTechnique;
 
   /** En-têtes calculés une fois par période (et non à chaque rafraîchissement de l'écran). */
   readonly entetes = computed(() => this.jours().map((j) => ({ jour: j, ...enteteJour(j), today: j === this.aujourdhui })));

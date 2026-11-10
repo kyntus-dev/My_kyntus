@@ -125,6 +125,48 @@ public class PresenceTests
     }
 
     [Fact]
+    public async Task Superviseur_ne_peut_pas_autoriser_un_retard_v46()
+    {
+        await using var db = await SeedAsync();
+        var svc = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()));
+        var sup = new PresenceViewer(500, null, null, "Superviseur", Global: false);
+
+        var refus = await Assert.ThrowsAsync<PresenceRefusException>(() =>
+            svc.SaisirAsync(sup, new PresenceSaisieRequest(2, Lundi, null, "P", true, false, "prévenu", null), Lundi, Lundi));
+        Assert.Contains("chef de projet", refus.Message);
+
+        // Sans toucher à l'autorisation, la saisie reste possible.
+        var ligne = await svc.SaisirAsync(sup, new PresenceSaisieRequest(2, Lundi, null, "P", false, false, null, "ok"), Lundi, Lundi);
+        Assert.Equal("P", ligne.Jours.Single().Code);
+        var grille = await svc.GetGrilleAsync(sup, Lundi, Lundi, true);
+        Assert.False(grille!.PeutAutoriserRetard);
+    }
+
+    [Fact]
+    public async Task Chef_de_projet_voit_superviseurs_et_referents_de_son_perimetre_v46()
+    {
+        await using var db = await SeedAsync();
+        db.Roles.AddRange(new Role { Id = 2, Name = "Superviseur" }, new Role { Id = 3, Name = "Chef de projet" }, new Role { Id = 4, Name = "Référent technique" });
+        var supGuid = Guid.NewGuid();
+        db.Users.AddRange(
+            new User { Id = 7, RoleId = 3, FirstName = "Chef", LastName = "Projet", Email = "cp@kyntus.com", AuthUserId = 700, IsActive = true },
+            new User { Id = 8, RoleId = 2, FirstName = "Sup", LastName = "Designe", Email = "s8@kyntus.com", Guid = supGuid, IsActive = true },
+            new User { Id = 9, RoleId = 4, FirstName = "Ref", LastName = "Place", Email = "r9@kyntus.com", SubServiceId = 10, IsActive = true },
+            new User { Id = 11, RoleId = 2, FirstName = "Sup", LastName = "Ailleurs", Email = "s11@kyntus.com", SubServiceId = 20, IsActive = true });
+        await db.SaveChangesAsync();
+        var profil = await db.UserHrProfiles.SingleAsync(p => p.UserId == 2);
+        profil.SuperviseurId = supGuid;
+        await db.SaveChangesAsync();
+        var svc = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()));
+
+        var grille = await svc.GetGrilleAsync(new PresenceViewer(700, null, null, "Chef de projet", false), Lundi, Lundi, true);
+
+        Assert.Equal(new[] { 2, 8, 9 }, grille!.Agents.Select(a => a.UserId).OrderBy(i => i).ToArray());
+        Assert.Equal("Superviseur", grille.Agents.Single(a => a.UserId == 8).Role);
+        Assert.True(grille.PeutAutoriserRetard);
+    }
+
+    [Fact]
     public async Task Avertissements_et_evp_limites_au_perimetre()
     {
         await using var db = await SeedAsync();

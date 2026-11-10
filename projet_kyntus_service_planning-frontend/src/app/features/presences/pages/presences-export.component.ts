@@ -92,8 +92,13 @@ export class PresencesExportComponent implements OnInit {
     }
     return m;
   });
+  /** v46 : « Formation & Qualité » (nom du contrat s'il existe). */
+  private readonly activiteFormation = computed(() =>
+    this.activites().find((a) => a.isActive && /formation/i.test(a.name))?.name ?? 'Formation & Qualité');
   private activiteDe(l: LignePaie): string {
-    return (l.poleId && this.activiteParPole().get(l.poleId)) || '';
+    // v46 : un agent en formation sans pôle relève de Formation & Qualité.
+    return (l.poleId && this.activiteParPole().get(l.poleId))
+      || (l.etatFormation === 'en-formation' ? this.activiteFormation() : '');
   }
 
   readonly toutes = computed(() => {
@@ -111,7 +116,7 @@ export class PresencesExportComponent implements OnInit {
     const dansActivite = l.filter((x) => !this.activite() || this.activiteDe(x) === this.activite());
     const dansPole = dansActivite.filter((x) => !this.pole() || x.pole === this.pole());
     return {
-      activites: uniq(l.map((x) => this.activiteDe(x))),
+      activites: uniq([...l.map((x) => this.activiteDe(x)), this.activiteFormation()]),
       poles: uniq(dansActivite.map((x) => x.pole)),
       cellules: uniq(dansPole.map((x) => x.cellule)),
     };

@@ -61,9 +61,27 @@ export interface FiltresPresence {
   cellule: string;
   type: string;
   aTraiter: boolean;
+  /** v46 : '' tous ; 'oui' en formation seulement ; 'non' hors formation. */
+  formation: '' | 'oui' | 'non';
+  /** v46 (chef de projet) : superviseurs / référents techniques affichés : '' aucun, '*' tous, sinon un userId. */
+  superviseurs: string;
+  referents: string;
 }
 
-export const FILTRES_VIDES: FiltresPresence = { recherche: '', activite: '', pole: '', cellule: '', type: '', aTraiter: false };
+export const FILTRES_VIDES: FiltresPresence = {
+  recherche: '', activite: '', pole: '', cellule: '', type: '', aTraiter: false, formation: '', superviseurs: '', referents: '',
+};
+
+/** v46 : contrats proposés dans le filtre (toujours les deux, même si le périmètre n'en a qu'un). */
+export const TYPES_CONTRAT = ['Salarié', 'Sous-traitant'] as const;
+
+const sansAccent = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export const estSuperviseur = (role?: string | null) => sansAccent(role ?? '').trim() === 'superviseur';
+export const estReferentTechnique = (role?: string | null) => {
+  const r = sansAccent(role ?? '').replace(/[_\s]/g, '');
+  return r === 'referenttechnique' || r === 'coach';
+};
+export const estEncadrement = (role?: string | null) => estSuperviseur(role) || estReferentTechnique(role);
 
 /** Un agent « à traiter » : absence non qualifiée, retard non autorisé ou pointage manquant. */
 export function aTraiter(a: PresenceAgentDto): boolean {
@@ -73,16 +91,30 @@ export function aTraiter(a: PresenceAgentDto): boolean {
 export function filtrerAgents(
   agents: readonly PresenceAgentDto[],
   f: FiltresPresence,
-  activiteDuPole: (poleId: string | null) => string | null,
+  activiteDuPole: (poleId: string | null, agent?: PresenceAgentDto) => string | null,
+  /** v46 : chef de projet : superviseurs et référents affichés seulement s'ils sont choisis dans leur liste. */
+  encadrementSurDemande = false,
 ): PresenceAgentDto[] {
   const q = f.recherche.trim().toLowerCase();
+  const encadrementVisible = (a: PresenceAgentDto) => {
+    if (!encadrementSurDemande || !estEncadrement(a.role)) return true;
+    const choix = estSuperviseur(a.role) ? f.superviseurs : f.referents;
+    return choix === '*' || choix === String(a.userId);
+  };
+  // Un superviseur ou référent choisi nommément reste affiché, même hors des autres filtres.
+  const choisiNommement = (a: PresenceAgentDto) =>
+    encadrementSurDemande && estEncadrement(a.role)
+    && (estSuperviseur(a.role) ? f.superviseurs : f.referents) === String(a.userId);
   return agents.filter((a) =>
-    (!q || a.nom.toLowerCase().includes(q))
-    && (!f.activite || activiteDuPole(a.poleId) === f.activite)
-    && (!f.pole || a.pole === f.pole)
-    && (!f.cellule || a.cellule === f.cellule)
-    && (!f.type || a.type === f.type)
-    && (!f.aTraiter || aTraiter(a)));
+    encadrementVisible(a)
+    && (choisiNommement(a) || (
+      (!q || a.nom.toLowerCase().includes(q))
+      && (!f.activite || activiteDuPole(a.poleId, a) === f.activite)
+      && (!f.pole || a.pole === f.pole)
+      && (!f.cellule || a.cellule === f.cellule)
+      && (!f.type || a.type === f.type)
+      && (!f.formation || (f.formation === 'oui') === !!a.enFormation)
+      && (!f.aTraiter || aTraiter(a)))));
 }
 
 export interface LigneRetard {

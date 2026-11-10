@@ -62,6 +62,8 @@ export interface PresenceAgentDto {
   pilote?: string | null;
   /** v30 : case « En formation » cochée (hors paie tant qu'il n'a pas intégré la production). */
   enFormation?: boolean;
+  /** v46 : rôle du compte (superviseurs et référents techniques du périmètre d'un chef de projet). */
+  role?: string | null;
 }
 
 export interface PresenceGrilleDto {
@@ -73,6 +75,8 @@ export interface PresenceGrilleDto {
   peutModifier: boolean;
   codes: PresenceCodeDto[];
   agents: PresenceAgentDto[];
+  /** v46 : false pour un superviseur ou un référent technique (pas d'autorisation de retard). */
+  peutAutoriserRetard?: boolean;
 }
 
 export interface PresenceSaisieRequest {

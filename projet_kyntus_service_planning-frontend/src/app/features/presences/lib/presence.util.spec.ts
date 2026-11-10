@@ -56,3 +56,26 @@ describe('presence.util', () => {
     expect(l[0].motif).toBe('Prévenu la veille');
   });
 });
+
+describe('filtres v46 : formation, contrats, superviseurs et référents', () => {
+  it('filtre formation et affiche l’encadrement seulement sur demande (chef de projet)', async () => {
+    const { filtrerAgents, FILTRES_VIDES, TYPES_CONTRAT } = await import('./presence.util');
+    const base = { nom: '', type: 'Salarié', pole: null, poleId: null, cellule: null, celluleId: null, service: null, dateEntree: null, dateSortie: null,
+      jours: [], totaux: { presents: 0, formation: 0, absences: {}, retardRetenuMinutes: 0, retardAutoriseMinutes: 0, joursEnRetard: 0, manquesPointage: 0, absencesNonQualifiees: 0 } };
+    const agents = [
+      { ...base, userId: 1, nom: 'Pilote' },
+      { ...base, userId: 2, nom: 'Stagiaire', enFormation: true },
+      { ...base, userId: 3, nom: 'Sup', role: 'Superviseur' },
+      { ...base, userId: 4, nom: 'Ref', role: 'Référent technique' },
+    ] as never[];
+    const act = () => null;
+    const ids = (f: object, cp = true) => filtrerAgents(agents, { ...FILTRES_VIDES, ...f }, act, cp).map((a: { userId: number }) => a.userId);
+    expect(TYPES_CONTRAT).toEqual(['Salarié', 'Sous-traitant']);
+    expect(ids({})).toEqual([1, 2]);
+    expect(ids({}, false)).toEqual([1, 2, 3, 4]);
+    expect(ids({ formation: 'oui' })).toEqual([2]);
+    expect(ids({ formation: 'non' })).toEqual([1]);
+    expect(ids({ superviseurs: '*' })).toEqual([1, 2, 3]);
+    expect(ids({ referents: '4', formation: 'oui' })).toEqual([2, 4]);
+  });
+});
