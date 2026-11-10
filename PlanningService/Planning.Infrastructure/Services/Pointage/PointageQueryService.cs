@@ -136,7 +136,9 @@ public sealed class PointageQueryService(
             jour.Statut,
             suivi.DerniereSynchro,
             // v40 : choix valable pour la journée où il a été fait ; le lendemain, la personne choisit à nouveau.
-            ChoixProductionSortie.ChoixDuJour(acces?.ChoixProduction, JourLocal(acces?.ChoixModifieLe), today));
+            ChoixProductionSortie.ChoixDuJour(acces?.ChoixProduction, JourLocal(acces?.ChoixModifieLe), today),
+            acces?.ProductionBase,
+            ChoixProductionSortie.JourneeCourteDejaPrise(acces?.ProductionBase, today, await ChoixSemaineAsync(me.Id, today, ct)));
     }
 
     public async Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default)
@@ -160,6 +162,11 @@ public sealed class PointageQueryService(
 
         // v42 : le choix est aussi gardé pour la journée : le solde compare chaque jour à son choix.
         var today = Aujourdhui();
+        // v43 : horaire 08h40 : une seule journée à 07h40 par semaine (lundi → vendredi).
+        if (choix == ChoixProductionSortie.Court
+            && ChoixProductionSortie.JourneeCourteDejaPrise(acces.ProductionBase, today, await ChoixSemaineAsync(me.Id, today, ct)) is DateOnly prise)
+            throw new InvalidOperationException(
+                $"Vous avez déjà pris votre journée à 07h40 cette semaine (le {prise:dd/MM}). Une seule par semaine, du lundi au vendredi.");
         var jour = await db.HeureSortieChoixJours.FirstOrDefaultAsync(c => c.UserId == me.Id && c.Jour == today, ct);
         if (choix is null)
         {
@@ -176,6 +183,18 @@ public sealed class PointageQueryService(
         }
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    /// <summary>v43 : choix faits du lundi au vendredi de la semaine du jour donné.</summary>
+    private async Task<List<(DateOnly Jour, string Choix)>> ChoixSemaineAsync(int userId, DateOnly jour, CancellationToken ct)
+    {
+        var lundi = jour.AddDays(-(((int)jour.DayOfWeek + 6) % 7));
+        var vendredi = lundi.AddDays(4);
+        var lignes = await db.HeureSortieChoixJours.AsNoTracking()
+            .Where(c => c.UserId == userId && c.Jour >= lundi && c.Jour <= vendredi)
+            .Select(c => new { c.Jour, c.Choix })
+            .ToListAsync(ct);
+        return lignes.Select(c => (c.Jour, c.Choix)).ToList();
     }
 
     public async Task<IReadOnlyList<ChoixProductionJourDto>> GetMesChoixProductionAsync(PointageViewer viewer, DateOnly au, CancellationToken ct = default)

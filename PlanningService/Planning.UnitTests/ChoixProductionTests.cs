@@ -29,4 +29,18 @@ public class ChoixProductionTests
         Assert.Null(ChoixProductionSortie.ChoixDuJour("0840", lundi, lundi.AddDays(1)));
         Assert.Null(ChoixProductionSortie.ChoixDuJour("0840", null, lundi));
     }
+
+    [Fact]
+    public void Une_journee_a_07h40_par_semaine_pour_un_horaire_08h40_v43()
+    {
+        var mercredi = new DateOnly(2026, 11, 11);
+        var mardi = new DateOnly(2026, 11, 10);
+        var lundiSuivant = new DateOnly(2026, 11, 16);
+        var choix = new[] { (mardi, "0740"), (new DateOnly(2026, 11, 9), "0840") };
+        Assert.Equal(mardi, ChoixProductionSortie.JourneeCourteDejaPrise("0840", mercredi, choix));
+        Assert.Null(ChoixProductionSortie.JourneeCourteDejaPrise("0840", mardi, choix));          // le jour même : modifiable
+        Assert.Null(ChoixProductionSortie.JourneeCourteDejaPrise("0740", mercredi, choix));       // horaire 07h40 : libre
+        Assert.Null(ChoixProductionSortie.JourneeCourteDejaPrise("0840", lundiSuivant, choix));   // nouvelle semaine
+        Assert.Null(ChoixProductionSortie.JourneeCourteDejaPrise("0840", new DateOnly(2026, 11, 14), choix)); // samedi
+    }
 }

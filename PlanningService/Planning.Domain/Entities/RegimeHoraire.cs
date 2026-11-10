@@ -80,6 +80,12 @@ public class HeureSortieAcces
     /// </summary>
     public string? ChoixProduction { get; set; }
     public DateTime? ChoixModifieLe { get; set; }
+
+    /// <summary>
+    /// v43 : horaire de base du collaborateur, fixé par l'Admin : « 0840 » (08h40, avec une journée à
+    /// 07h40 par semaine, du lundi au vendredi) ou « 0740 » (07h40 tous les jours).
+    /// </summary>
+    public string ProductionBase { get; set; } = "0840";
 }
 
 /// <summary>

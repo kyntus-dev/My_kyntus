@@ -69,7 +69,15 @@ export class PointageHeureSortieComponent implements OnInit {
   /** Production du planning ou du régime (en attendant le choix du jour). */
   readonly productionPlanning = computed(() => this.jour()?.productionPrevueMinutes ?? productionExcel(this.now()));
   /** B3 : production du jour. */
-  readonly productionMinutes = computed(() => productionDuChoix(this.choix(), this.now()) ?? this.productionPlanning());
+  /** v43 : horaire de base fixé par l'Admin (08h40 avec une journée à 07h40 par semaine, ou 07h40). */
+  readonly base = computed(() => this.jour()?.productionBase ?? null);
+  /** v43 : journée à 07h40 de la semaine déjà prise un autre jour (horaire 08h40). */
+  readonly courteDejaPrise = computed(() => {
+    const j = this.jour()?.jour0740Semaine;
+    return j && this.choix() !== '0740' ? j : null;
+  });
+  readonly productionMinutes = computed(() =>
+    productionDuChoix(this.choix(), this.now()) ?? productionDuChoix(this.base()) ?? this.productionPlanning());
   /** I4 : pauses forfaitaires. */
   readonly pauseForfaitMinutes = computed(() => this.jour()?.pauseAutoriseeMinutes ?? PAUSE_FORFAIT_EXCEL);
   readonly premierPointage = computed(() => this.jour()?.pointages?.[0] ?? null);
@@ -199,7 +207,7 @@ export class PointageHeureSortieComponent implements OnInit {
       choix: this.svc.mesChoixProduction(au).pipe(catchError(() => of([] as ChoixJour[]))),
     }).subscribe({
       next: ({ suivi, choix }) => {
-        const prevue = (d: Date) => prevueDuChoix(d.toLocaleDateString('sv-SE'), choix);
+        const prevue = (d: Date) => prevueDuChoix(d.toLocaleDateString('sv-SE'), choix, this.base());
         this.solde.set(soldeHeures(suivi.jours, au, prevue));
         this.detail.set(detailSolde(suivi.jours, au, prevue));
       },
@@ -219,6 +227,7 @@ export class PointageHeureSortieComponent implements OnInit {
     this.enregistrementChoix.set(true);
     this.svc.enregistrerChoixProduction(valeur).subscribe({
       next: () => {
+        this.jour.update((j) => (j ? { ...j, choixProduction: valeur } : j));
         this.enregistrementChoix.set(false);
         this.toast.success(`Production du jour : ${valeur === '0840' ? '08h40' : '07h40'}.`);
         // Le 1er choix sert aussi aux jours précédents sans choix : solde recalculé.

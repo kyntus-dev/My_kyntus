@@ -94,7 +94,7 @@ export class PointageJourWidgetComponent implements OnInit {
   /** Production du jour : choix mémorisé dans « Heure de sortie », sinon planning ou régime. */
   readonly production = computed(() => {
     const j = this.jour();
-    return productionDuChoix(j?.choixProduction, this.now()) ?? j?.productionPrevueMinutes ?? 0;
+    return productionDuChoix(j?.choixProduction, this.now()) ?? productionDuChoix(j?.productionBase) ?? j?.productionPrevueMinutes ?? 0;
   });
 
   readonly resultat = computed(() => {

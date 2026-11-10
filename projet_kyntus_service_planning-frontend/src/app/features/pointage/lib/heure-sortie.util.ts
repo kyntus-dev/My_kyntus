@@ -245,16 +245,17 @@ export interface ChoixJour { jour: string; choix: ChoixProduction }
 export interface PrevueJour { minutes: number; origine: string }
 
 /**
- * v42 : production prévue d'une journée d'après les choix de la personne (journée sur journée) :
- * 1. le choix fait ce jour-là ;
- * 2. sinon le dernier choix fait avant ce jour ;
- * 3. sinon (jours antérieurs au premier choix) le premier choix fait ensuite ;
+ * Production prévue d'une journée pour le solde (journée sur journée) :
+ * 1. le choix fait ce jour-là (07h40 ou 08h40) ;
+ * 2. v43 : sinon l'horaire de base fixé par l'Admin (08h40 ou 07h40) ;
+ * 3. sans horaire de base connu : le dernier choix fait avant ce jour, sinon le premier choix fait ensuite ;
  * 4. sinon null : production du planning ou du régime.
  */
-export function prevueDuChoix(date: string, choix: readonly ChoixJour[]): PrevueJour | null {
+export function prevueDuChoix(date: string, choix: readonly ChoixJour[], base?: ChoixProduction | null): PrevueJour | null {
   const tries = [...choix].sort((a, b) => a.jour.localeCompare(b.jour));
   const duJour = tries.find((c) => c.jour.slice(0, 10) === date);
   if (duJour) return { minutes: productionDuChoix(duJour.choix)!, origine: 'choisi ce jour' };
+  if (base) return { minutes: productionDuChoix(base)!, origine: 'horaire de base' };
   const avant = [...tries].reverse().find((c) => c.jour.slice(0, 10) < date);
   if (avant) return { minutes: productionDuChoix(avant.choix)!, origine: 'dernier choix' };
   const apres = tries.find((c) => c.jour.slice(0, 10) > date);

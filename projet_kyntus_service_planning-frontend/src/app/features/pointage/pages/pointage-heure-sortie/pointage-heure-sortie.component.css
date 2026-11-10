@@ -102,3 +102,7 @@
 .hs-detail tfoot td { border-bottom: 0; padding-top: 8px; font-weight: 600; }
 .hs-detail table td.ku-pos { color: var(--success-text) !important; }
 .hs-detail table td.ku-neg { color: var(--danger-text) !important; }
+
+/* v43 : horaire de base */
+.hs-base { color: var(--text-muted); }
+.hs-choix button small { display: block; font-size: 0.66rem; color: var(--text-muted); font-weight: 500; }

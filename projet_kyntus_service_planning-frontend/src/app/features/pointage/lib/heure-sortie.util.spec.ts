@@ -204,3 +204,16 @@ describe('solde journée sur journée selon le choix (v42)', () => {
     expect(soldeHeures(jours, '2026-11-10').soldeMinutes).toBe(-120);
   });
 });
+
+describe('horaire de base (v43)', () => {
+  it('un jour sans choix prend l’horaire de base', async () => {
+    const { prevueDuChoix, soldeHeures } = await import('./heure-sortie.util');
+    const choix = [{ jour: '2026-11-10', choix: '0740' as const }];
+    expect(prevueDuChoix('2026-11-10', choix, '0840')).toEqual({ minutes: 460, origine: 'choisi ce jour' });
+    expect(prevueDuChoix('2026-11-11', choix, '0840')).toEqual({ minutes: 520, origine: 'horaire de base' });
+    expect(prevueDuChoix('2026-11-11', choix, '0740')).toEqual({ minutes: 460, origine: 'horaire de base' });
+    // Horaire 07h40 : jours à 07h40 réalisées = solde nul, même si le régime prévoit 08h40.
+    const jours = [{ jour: '2026-10-27', productionMinutes: 460, productionPrevueMinutes: 520 }];
+    expect(soldeHeures(jours, '2026-11-10', (d) => prevueDuChoix(d.toLocaleDateString('sv-SE'), [], '0740')).soldeMinutes).toBe(0);
+  });
+});

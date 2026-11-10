@@ -187,7 +187,8 @@ public sealed class RegimeHoraireService(AppDbContext db) : IRegimeHoraireServic
 
     public async Task<IReadOnlyList<HeureSortieAccesDto>> GetAccesHeureSortieAsync(CancellationToken ct = default)
     {
-        var acces = (await db.HeureSortieAcces.AsNoTracking().Select(a => a.UserId).ToListAsync(ct)).ToHashSet();
+        var acces = (await db.HeureSortieAcces.AsNoTracking().Select(a => new { a.UserId, a.ProductionBase }).ToListAsync(ct))
+            .ToDictionary(a => a.UserId, a => a.ProductionBase);
         var users = await db.Users.AsNoTracking()
             .Where(u => u.IsActive)
             .Select(u => new
@@ -198,7 +199,8 @@ public sealed class RegimeHoraireService(AppDbContext db) : IRegimeHoraireServic
             })
             .ToListAsync(ct);
         return users
-            .Select(u => new HeureSortieAccesDto(u.Id, $"{u.LastName} {u.FirstName}".Trim(), u.Email, u.Role, u.Cellule, acces.Contains(u.Id)))
+            .Select(u => new HeureSortieAccesDto(u.Id, $"{u.LastName} {u.FirstName}".Trim(), u.Email, u.Role, u.Cellule,
+                acces.ContainsKey(u.Id), acces.GetValueOrDefault(u.Id)))
             .OrderBy(u => u.Role ?? "", StringComparer.CurrentCultureIgnoreCase)
             .ThenBy(u => u.Collaborateur, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
@@ -228,6 +230,17 @@ public sealed class RegimeHoraireService(AppDbContext db) : IRegimeHoraireServic
         }
         await db.SaveChangesAsync(ct);
         return modifies;
+    }
+
+    public async Task<bool> SetBaseHeureSortieAsync(int userId, string productionBase, CancellationToken ct = default)
+    {
+        if (productionBase is not (ChoixProductionSortie.Standard or ChoixProductionSortie.Court))
+            throw new InvalidOperationException("Horaire inconnu : « 0840 » (08h40) ou « 0740 » (07h40).");
+        var acces = await db.HeureSortieAcces.FirstOrDefaultAsync(a => a.UserId == userId, ct);
+        if (acces is null) return false;
+        acces.ProductionBase = productionBase;
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     public Task<bool> ADroitHeureSortieAsync(int userId, CancellationToken ct = default) =>

@@ -48,15 +48,22 @@
             <div class="hs-choix" role="radiogroup" aria-label="Production d’aujourd’hui">
               @for (c of choixProposes; track c.valeur) {
                 <button type="button" role="radio" [attr.aria-checked]="choix() === c.valeur" [class.on]="choix() === c.valeur"
-                        [disabled]="enregistrementChoix()" (click)="choisirProduction(c.valeur)">
+                        [disabled]="enregistrementChoix() || (c.valeur === '0740' && !!courteDejaPrise())" (click)="choisirProduction(c.valeur)">
                   <b>{{ c.libelle }}</b>
+                  @if (c.valeur === '0740' && base() === '0840') { <small>1 jour par semaine</small> }
                 </button>
               }
             </div>
+            @if (base(); as b) {
+              <small class="hs-base">Votre horaire : <b>{{ b === '0840' ? '08h40, avec une journée à 07h40 par semaine (du lundi au vendredi)' : '07h40' }}</b>.</small>
+            }
+            @if (courteDejaPrise(); as d) {
+              <small class="hs-a-choisir">Journée à 07h40 de la semaine déjà prise le {{ dateCourte(d.slice(0, 10)) }}.</small>
+            }
             @if (choix()) {
               <small>Choix d’aujourd’hui : votre journée est comparée à cette production dans le solde. Demain, vous choisissez à nouveau. Il ne change ni votre planning, ni la paie.</small>
             } @else {
-              <small class="hs-a-choisir">Choisissez 07h40 ou 08h40 pour aujourd’hui. En attendant, le calcul utilise {{ formatHeuresMinutes(productionPlanning()) }} (votre planning).</small>
+              <small class="hs-a-choisir">Choisissez 07h40 ou 08h40 pour aujourd’hui. En attendant, le calcul utilise {{ formatHeuresMinutes(productionMinutes()) }} ({{ base() ? 'votre horaire de base' : 'votre planning' }}).</small>
             }
           </div>
 
@@ -197,7 +204,7 @@
                     <b>D’où vient ce solde</b>
                     <small>Du {{ dateCourte(periodeDu()) }} au {{ dateCourte(periodeVeille()) }} (veille). Aujourd’hui est compté à part, dans « Aujourd’hui ».
                       Chaque jour terminé avec une arrivée et un départ pointés : écart = production réalisée − production prévue.
-                      Production prévue = votre choix de ce jour-là (07h40 ou 08h40) ; un jour sans choix reprend votre dernier choix.</small>
+                      Production prévue = votre choix de ce jour-là (07h40 ou 08h40) ; un jour sans choix prend votre horaire de base.</small>
                   </header>
                   <div class="hs-detail-wrap">
                     <table>
@@ -270,8 +277,8 @@
           <li><b>Saisie manuelle</b> (Excel) : pauses = pauses forfaitaires ({{ formatHeuresMinutes(pauseForfaitMinutes()) }}) + pause déjeuner saisie.</li>
           <li><b>Il me reste</b> = sortie − heure actuelle.</li>
           <li><b>Production réalisée</b> = (heure actuelle − arrivée) − pauses ; l’avancement est la production réalisée divisée par la production du jour.</li>
-          <li><b>Heures supplémentaires</b> : production réalisée au-delà de la production du jour. Le solde de la période de paie (depuis le 24) additionne les heures en plus et compense les heures manquantes des journées précédentes (production choisie ce jour-là, sinon votre dernier choix, sinon celle du planning ou du régime).</li>
-          <li><b>Production du jour</b> : 07h40 ou 08h40, à choisir chaque jour (vous pouvez faire 08h40 aujourd’hui et 07h40 demain). Le choix sert seulement à calculer votre heure de sortie.</li>
+          <li><b>Heures supplémentaires</b> : production réalisée au-delà de la production du jour. Le solde de la période de paie (depuis le 24) additionne les heures en plus et compense les heures manquantes des journées précédentes (production choisie ce jour-là, sinon votre horaire de base, sinon celle du planning ou du régime).</li>
+          <li><b>Production du jour</b> : 07h40 ou 08h40, à choisir chaque jour. Horaire 08h40 : une journée à 07h40 par semaine, du lundi au vendredi. Horaire 07h40 : 07h40 tous les jours.</li>
         </ul>
         <p class="ku-muted">Les heures de prière de l’Excel viennent d’un autre classeur qui n’a pas été transmis : elles ne sont pas reprises.</p>
         <a routerLink="/pointage/mon-suivi" class="ku-btn ku-btn--sm">Voir mon suivi de pointage</a>

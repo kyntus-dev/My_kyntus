@@ -65,6 +65,8 @@ public interface IRegimeHoraireService
     /// <summary>Donne ou retire l'accès à une liste de comptes ; retourne le nombre de comptes modifiés.</summary>
     Task<int> SetAccesHeureSortieAsync(HeureSortieAccesRequest request, int? by, CancellationToken ct = default);
     Task<bool> ADroitHeureSortieAsync(int userId, CancellationToken ct = default);
+    /// <summary>v43 : fixe l'horaire de base d'un compte ayant accès (false : pas d'accès).</summary>
+    Task<bool> SetBaseHeureSortieAsync(int userId, string productionBase, CancellationToken ct = default);
     /// <summary>Régime effectif de chaque collaborateur demandé (absent : aucun régime).</summary>
     Task<IReadOnlyDictionary<int, RegimeEffectif>> ResoudreAsync(IReadOnlyCollection<int> userIds, CancellationToken ct = default);
 }

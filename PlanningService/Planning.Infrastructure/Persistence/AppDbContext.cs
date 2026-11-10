@@ -686,6 +686,7 @@ public class AppDbContext : DbContext
             e.HasKey(x => x.UserId);
             e.Property(x => x.UserId).ValueGeneratedNever();
             e.Property(x => x.ChoixProduction).HasMaxLength(16);
+            e.Property(x => x.ProductionBase).HasMaxLength(4);
         });
 
         modelBuilder.Entity<HeureSortieChoixJour>(e =>

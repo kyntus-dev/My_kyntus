@@ -50,4 +50,9 @@ export class RegimeHoraireService {
   setAccesHeureSortie(userIds: number[], acces: boolean): Observable<{ modifies: number }> {
     return this.http.put<{ modifies: number }>(`${this.base}/acces-heure-sortie`, { userIds, acces });
   }
+
+  /** v43 : horaire de base d'un compte : 08h40 (une journée à 07h40 par semaine) ou 07h40. */
+  setBaseHeureSortie(userId: number, base: '0840' | '0740'): Observable<void> {
+    return this.http.put<void>(`${this.base}/acces-heure-sortie/${userId}/base`, { base });
+  }
 }

@@ -140,6 +140,11 @@ public sealed class PointageController(
         {
             return BadRequest(new { message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            // v43 : journée à 07h40 déjà prise cette semaine.
+            return Conflict(new { message = ex.Message });
+        }
     }
 
     private PointageViewer Viewer() =>

@@ -920,6 +920,17 @@ public static class PlanningSchemaPatches
             ALTER TABLE "HeureSortieAcces" ADD COLUMN IF NOT EXISTS "ChoixProduction" varchar(16) NULL;
             ALTER TABLE "HeureSortieAcces" ADD COLUMN IF NOT EXISTS "ChoixModifieLe" timestamp with time zone NULL;
 
+            -- v43 : horaire de base (08h40 + une journée à 07h40 par semaine, ou 07h40 tous les jours).
+            -- Reprise : 07h40 pour ceux dont le dernier choix était 07h40, sinon 08h40.
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'HeureSortieAcces' AND column_name = 'ProductionBase') THEN
+                    ALTER TABLE "HeureSortieAcces" ADD COLUMN "ProductionBase" varchar(4) NOT NULL DEFAULT '0840';
+                    UPDATE "HeureSortieAcces" SET "ProductionBase" = '0740' WHERE "ChoixProduction" = '0740';
+                END IF;
+            END $$;
+
             -- v42 : choix de production jour par jour (solde des heures) ; reprise du dernier choix connu.
             CREATE TABLE IF NOT EXISTS "HeureSortieChoixJours" (
                 "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,

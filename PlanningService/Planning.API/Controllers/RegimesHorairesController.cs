@@ -61,6 +61,12 @@ public sealed class RegimesHorairesController(IRegimeHoraireService service, App
     public async Task<IActionResult> SetAcces([FromBody] HeureSortieAccesRequest body, CancellationToken ct) =>
         Ok(new { modifies = await service.SetAccesHeureSortieAsync(body, await MeAsync(ct), ct) });
 
+    /// <summary>v43 : horaire de base d'un compte (08h40 avec une journée à 07h40 par semaine, ou 07h40).</summary>
+    [HttpPut("acces-heure-sortie/{userId:int}/base")]
+    [Authorize(Roles = "Admin")]
+    public Task<IActionResult> SetBase(int userId, [FromBody] HeureSortieBaseRequest body, CancellationToken ct) =>
+        Run(async () => await service.SetBaseHeureSortieAsync(userId, body.Base, ct) ? NoContent() : NotFound());
+
     private async Task<IActionResult> Run(Func<Task<IActionResult>> action)
     {
         try
