@@ -92,29 +92,30 @@ export function filtrerAgents(
   agents: readonly PresenceAgentDto[],
   f: FiltresPresence,
   activiteDuPole: (poleId: string | null, agent?: PresenceAgentDto) => string | null,
-  /** v46 : chef de projet : superviseurs et référents affichés seulement s'ils sont choisis dans leur liste. */
+  /**
+   * v46.1 (chef de projet) : chacun son tableau. Sans choix dans « Superviseurs » ni « Référents
+   * techniques » : les agents seulement. Un choix dans l'une de ces listes : uniquement les personnes
+   * choisies (tous les superviseurs, un superviseur, tous les référents ou un référent).
+   */
   encadrementSurDemande = false,
 ): PresenceAgentDto[] {
   const q = f.recherche.trim().toLowerCase();
-  const encadrementVisible = (a: PresenceAgentDto) => {
-    if (!encadrementSurDemande || !estEncadrement(a.role)) return true;
-    const choix = estSuperviseur(a.role) ? f.superviseurs : f.referents;
-    return choix === '*' || choix === String(a.userId);
-  };
-  // Un superviseur ou référent choisi nommément reste affiché, même hors des autres filtres.
-  const choisiNommement = (a: PresenceAgentDto) =>
-    encadrementSurDemande && estEncadrement(a.role)
-    && (estSuperviseur(a.role) ? f.superviseurs : f.referents) === String(a.userId);
+  const correspond = (choix: string, a: PresenceAgentDto) => choix === '*' || choix === String(a.userId);
+  if (encadrementSurDemande && (f.superviseurs || f.referents)) {
+    return agents.filter((a) =>
+      ((f.superviseurs && estSuperviseur(a.role) && correspond(f.superviseurs, a))
+        || (f.referents && estReferentTechnique(a.role) && correspond(f.referents, a)))
+      && (!q || a.nom.toLowerCase().includes(q)));
+  }
   return agents.filter((a) =>
-    encadrementVisible(a)
-    && (choisiNommement(a) || (
-      (!q || a.nom.toLowerCase().includes(q))
-      && (!f.activite || activiteDuPole(a.poleId, a) === f.activite)
-      && (!f.pole || a.pole === f.pole)
-      && (!f.cellule || a.cellule === f.cellule)
-      && (!f.type || a.type === f.type)
-      && (!f.formation || (f.formation === 'oui') === !!a.enFormation)
-      && (!f.aTraiter || aTraiter(a)))));
+    (!encadrementSurDemande || !estEncadrement(a.role))
+    && (!q || a.nom.toLowerCase().includes(q))
+    && (!f.activite || activiteDuPole(a.poleId, a) === f.activite)
+    && (!f.pole || a.pole === f.pole)
+    && (!f.cellule || a.cellule === f.cellule)
+    && (!f.type || a.type === f.type)
+    && (!f.formation || (f.formation === 'oui') === !!a.enFormation)
+    && (!f.aTraiter || aTraiter(a)));
 }
 
 export interface LigneRetard {

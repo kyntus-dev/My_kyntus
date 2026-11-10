@@ -222,6 +222,9 @@ export class PresencesTableauComponent implements OnInit {
     // Cascade : changer d'activité ou de pôle remet à zéro les niveaux en dessous.
     if ('activite' in patch) { next.pole = ''; next.cellule = ''; }
     if ('pole' in patch) next.cellule = '';
+    // v46.1 : un seul tableau à la fois : superviseurs OU référents techniques (OU les agents).
+    if (patch.superviseurs) next.referents = '';
+    if (patch.referents) next.superviseurs = '';
     this.filtres.set(next);
   }
 

@@ -55,13 +55,13 @@
       </select>
       @if (estChefDeProjet()) {
         <select class="ku-input" [ngModel]="filtres().superviseurs" (ngModelChange)="filtrer({ superviseurs: $event })" aria-label="Superviseurs">
-          <option value="">Superviseurs : masqués</option>
-          <option value="*">Tous les superviseurs ({{ options().superviseurs.length }})</option>
+          <option value="">Superviseurs : —</option>
+          <option value="*">Tableau des superviseurs ({{ options().superviseurs.length }})</option>
           @for (p of options().superviseurs; track p.id) { <option [value]="p.id">{{ p.nom }}</option> }
         </select>
         <select class="ku-input" [ngModel]="filtres().referents" (ngModelChange)="filtrer({ referents: $event })" aria-label="Référents techniques">
-          <option value="">Référents techniques : masqués</option>
-          <option value="*">Tous les référents ({{ options().referents.length }})</option>
+          <option value="">Référents techniques : —</option>
+          <option value="*">Tableau des référents ({{ options().referents.length }})</option>
           @for (p of options().referents; track p.id) { <option [value]="p.id">{{ p.nom }}</option> }
         </select>
       }
@@ -69,6 +69,14 @@
       <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="reinitialiser()">Réinitialiser</button>
       <span class="pz-compte">{{ agents().length }} / {{ data()?.agents?.length ?? 0 }} agents</span>
     </div>
+
+    @if (estChefDeProjet() && (filtres().superviseurs || filtres().referents)) {
+      <div class="pz-vue-encadrement">
+        <b>{{ filtres().superviseurs ? 'Tableau des superviseurs' : 'Tableau des référents techniques' }}</b>
+        — seules les personnes choisies sont affichées (les filtres activité, pôle, cellule, contrat et formation ne s’appliquent pas ici).
+        <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="filtrer({ superviseurs: '', referents: '' })">Revenir aux agents</button>
+      </div>
+    }
 
     <div class="pz-legende">
       <span class="pz-code pz-f-present">P</span> Présent

@@ -136,3 +136,7 @@ button.pz-code:disabled { cursor: default; }
 .pz-badge--encadrement { background: #7c3aed; }
 .pz-leg-formation { margin-left: 8px; padding: 1px 8px; border-radius: 6px; background: color-mix(in srgb, #3b82f6 14%, var(--bg-card)); border-left: 4px solid #2563eb; }
 .pz-note-droit { margin: 0 0 6px; font-size: 0.76rem; color: var(--warning, #b45309); }
+
+/* v46.1 : tableau des superviseurs / référents */
+.pz-vue-encadrement { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 10px; padding: 8px 12px; border-radius: 8px;
+  font-size: 0.8rem; background: color-mix(in srgb, #7c3aed 10%, var(--bg-card)); border-left: 4px solid #7c3aed; }

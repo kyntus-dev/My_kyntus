@@ -75,7 +75,10 @@ describe('filtres v46 : formation, contrats, superviseurs et référents', () =>
     expect(ids({}, false)).toEqual([1, 2, 3, 4]);
     expect(ids({ formation: 'oui' })).toEqual([2]);
     expect(ids({ formation: 'non' })).toEqual([1]);
-    expect(ids({ superviseurs: '*' })).toEqual([1, 2, 3]);
-    expect(ids({ referents: '4', formation: 'oui' })).toEqual([2, 4]);
+    // v46.1 : chacun son tableau.
+    expect(ids({ superviseurs: '*' })).toEqual([3]);
+    expect(ids({ referents: '4', formation: 'oui' })).toEqual([4]);
+    expect(ids({ referents: '*' })).toEqual([4]);
+    expect(ids({ superviseurs: '99' })).toEqual([]);
   });
 });
