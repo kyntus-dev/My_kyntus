@@ -187,6 +187,14 @@
 
 .prime-table td {
   overflow-wrap: anywhere;
+  /* Les cellules héritaient d'un « nowrap » global : les titres longs débordaient sur la colonne voisine. */
+  white-space: normal;
+}
+
+.prime-table td .doc-titre,
+.prime-table td .doc-note,
+.prime-table td.muted-cell {
+  white-space: normal;
 }
 
 .prime-table th {
@@ -225,11 +233,25 @@
   display: flex;
   align-items: flex-start;
   gap: 0.55rem;
+  min-width: 0;
+}
+
+/* Sans min-width, un titre long déborde sur la colonne voisine (flex). */
+.doc-cell > div {
+  min-width: 0;
+}
+
+.doc-cell app-lucide-icon {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+  color: var(--text-muted);
 }
 
 .doc-titre {
+  display: block;
   font-weight: 650;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .doc-note {

@@ -40,6 +40,9 @@ public static class PlatformAccessCatalog
     ];
     /// <summary>Dossier administratif et export paie : RH, Admin et chefs de projet.</summary>
     private static readonly string[] RhChefProjet = ["Admin", "RH", "RP", "Chef de projet"];
+    /// <summary>v48 — Dépôt des procédures « Process Bytel » : l'encadrement, superviseurs compris.</summary>
+    private static readonly string[] ProcessDepot =
+        ["Admin", "RH", "RP", "Chef de projet", "Superviseur", "Référent technique"];
     private static readonly string[] PlanningGenerate =
     [
         "Admin", "RH", "Manager", "Coach", "Référent technique", "RP", "Chef de projet",
@@ -152,9 +155,9 @@ public static class PlatformAccessCatalog
         S("conges.periodes", "Périodes interdites", "Congés", View: AdminRh, Configure: AdminRh),
 
         S("documentation.module", "Module Documentation (accès au menu)", "Documentation", View: Self),
-        // v48 : Process Bytel — tout le monde consulte (selon la visibilité du document),
-        // RH / Admin / chef de projet déposent ; « Agir » s'accorde ici à d'autres rôles (superviseur…).
-        S("process-bytel", "Process Bytel (documents partagés)", "Documentation", View: Self, Act: RhChefProjet),
+        // v48 : Process Bytel — tout le monde consulte (selon la visibilité du document) ;
+        // l'encadrement dépose (superviseurs compris). « Agir » s'accorde à d'autres rôles ici.
+        S("process-bytel", "Process Bytel (documents partagés)", "Documentation", View: Self, Act: ProcessDepot),
         S("documentation.admin-config", "Configuration documentation", "Documentation", View: Admin, Configure: Admin),
         S("documentation.doc-types", "Types de documents", "Documentation", View: Admin, Configure: Admin),
         S("documentation.permissions", "Permissions documents", "Documentation", View: Admin, Configure: Admin),

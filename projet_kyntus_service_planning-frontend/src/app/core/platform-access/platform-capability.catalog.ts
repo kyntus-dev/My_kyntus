@@ -61,6 +61,8 @@ const TEAM_LEAD = [
   KyntusRoleNames.ChefDeProjet,
 ] as const;
 const RH_CHEF_PROJET = [...ADMIN_RH, KyntusRoleNames.Rp, KyntusRoleNames.ChefDeProjet] as const;
+/** v48 — Dépôt des procédures « Process Bytel » : l'encadrement, superviseurs compris. */
+const PROCESS_DEPOT = [...RH_CHEF_PROJET, KyntusRoleNames.Superviseur, KyntusRoleNames.ReferentTechnique] as const;
 const PLANNING_VALIDATION = [
   ...ADMIN_RH,
   KyntusRoleNames.Superviseur,
@@ -210,7 +212,7 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
 
   { id: 'documentation.module', label: 'Module Documentation (accès au menu)', module: 'Documentation', view: SELF, defaultScope: 'Self' },
   // v48 : Process Bytel — lecture pour tous (selon la visibilité choisie à l'envoi), dépôt pour RH / Admin / chef de projet.
-  { id: 'process-bytel', label: 'Process Bytel (documents partagés)', module: 'Documentation', view: SELF, act: RH_CHEF_PROJET },
+  { id: 'process-bytel', label: 'Process Bytel (documents partagés)', module: 'Documentation', view: SELF, act: PROCESS_DEPOT },
   { id: 'documentation.admin-config', label: 'Configuration documentation', module: 'Documentation', view: ADMIN, configure: ADMIN },
   { id: 'documentation.doc-types', label: 'Types de documents', module: 'Documentation', view: ADMIN, configure: ADMIN },
   { id: 'documentation.permissions', label: 'Permissions documents', module: 'Documentation', view: ADMIN, configure: ADMIN },
