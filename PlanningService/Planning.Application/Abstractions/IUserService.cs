@@ -90,6 +90,11 @@ public interface IUserService
         bool creerCompte,
         CancellationToken ct = default);
 
+    /// <summary>v49 — Création en lot depuis le fichier RH (écran « Liaisons HTEL »).</summary>
+    Task<ImportEmployesResultDto> ImporterEmployesAsync(
+        ImportEmployesRequest request,
+        CancellationToken ct = default);
+
     Task SyncAllEmployesToCongeAsync();
     Task<List<UserDto>> GetManagersBySubServiceAsync(int subServiceId, CancellationToken ct = default);
     Task<SetNewEmployeeStatusResultDto?> SetNewEmployeeStatusAsync(

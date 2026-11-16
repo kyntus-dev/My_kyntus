@@ -174,6 +174,9 @@ public class ImportExecutionJournalTests
         public Task<AttributionMailResultDto> AttribuerMailInterneAsync(
             int userId, string email, bool creerCompte, CancellationToken ct = default) =>
             Task.FromResult(new AttributionMailResultDto(userId, "", "", email, true, null, null));
+        public Task<ImportEmployesResultDto> ImporterEmployesAsync(
+            ImportEmployesRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new ImportEmployesResultDto(new List<ImportEmployeResultatDto>(), 0, 0));
         public Task SyncAllEmployesToCongeAsync() => Task.CompletedTask;
         public Task<List<UserDto>> GetManagersBySubServiceAsync(int subServiceId, CancellationToken ct = default) =>
             Task.FromResult(new List<UserDto>());

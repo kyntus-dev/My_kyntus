@@ -8,6 +8,7 @@ import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kynt
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { formatHttpErrorMessage } from '../../../../core/lib/http-error-message.util';
 import { libelleMail } from '../../lib/mail-interne.util';
+import { ImportEmployesHtelComponent } from './import-employes-htel.component';
 import {
   HtelAmbiguousMatchDto,
   HtelApiService,
@@ -23,7 +24,7 @@ type HtelListKey = 'linked' | 'orphans' | 'ambiguous';
 @Component({
   selector: 'app-htel-liaisons-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, LucideIconComponent, KyntusPageHeaderComponent],
+  imports: [CommonModule, FormsModule, RouterLink, LucideIconComponent, KyntusPageHeaderComponent, ImportEmployesHtelComponent],
   templateUrl: './htel-liaisons-page.component.html',
   styleUrls: ['./htel-liaisons-page.component.css'],
 })
@@ -79,6 +80,14 @@ export class HtelLiaisonsPageComponent implements OnInit {
 
   get ambiguous(): HtelAmbiguousMatchDto[] {
     return this.report?.ambiguous ?? [];
+  }
+
+  /** v49 : tous les employés connus (liés ou non) — doublons signalés à l'import. */
+  get employesExistants(): { nom: string; prenom: string }[] {
+    return [
+      ...this.linked.map((r) => ({ nom: r.lastName, prenom: r.firstName })),
+      ...this.unlinked.map((r) => ({ nom: r.lastName, prenom: r.firstName })),
+    ];
   }
 
   get unlinked(): HtelUnlinkedEmployeeDto[] {

@@ -29,6 +29,12 @@
     </div>
   }
 
+  <app-import-employes-htel
+    [orphelins]="orphans"
+    [existants]="employesExistants"
+    (importe)="reload()"
+  />
+
   @if (loading && !report) {
     <div class="state-box">
       <div class="spinner"></div>
