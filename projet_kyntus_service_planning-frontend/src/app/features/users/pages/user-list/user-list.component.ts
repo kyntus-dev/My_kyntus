@@ -40,6 +40,7 @@ import {
   telephoneDisplay,
   userMatchesSearch,
 } from '../../../../core/hr/user-hr-display.util';
+import { libelleMail } from '../../lib/mail-interne.util';
 import { resolveUserGuid } from '../../../../core/lib/user-guid.util';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
@@ -121,6 +122,11 @@ export class UserListComponent implements OnInit, OnDestroy {
     private toastService: KyntusToastService,
     private cdr: ChangeDetectorRef
   ) {}
+
+  /** v47 : une adresse provisoire s'affiche « Sans mail interne ». */
+  libelleMail(email: string | null | undefined): string {
+    return libelleMail(email);
+  }
 
   ngOnInit(): void {
     this.restoreListView();

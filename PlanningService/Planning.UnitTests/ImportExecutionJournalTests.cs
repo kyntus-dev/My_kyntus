@@ -167,6 +167,13 @@ public class ImportExecutionJournalTests
             Guid? subjectId,
             CancellationToken ct = default) => Task.FromResult<UserDto?>(null);
         public Task<bool> IsEmailUniqueAsync(string email, int? excludeId = null) => Task.FromResult(true);
+        public Task<List<AgentSansMailDto>> ListerAgentsSansMailAsync(CancellationToken ct = default) =>
+            Task.FromResult(new List<AgentSansMailDto>());
+        public Task<Dictionary<string, string>> ListerMailsUtilisesAsync(CancellationToken ct = default) =>
+            Task.FromResult(new Dictionary<string, string>());
+        public Task<AttributionMailResultDto> AttribuerMailInterneAsync(
+            int userId, string email, bool creerCompte, CancellationToken ct = default) =>
+            Task.FromResult(new AttributionMailResultDto(userId, "", "", email, true, null, null));
         public Task SyncAllEmployesToCongeAsync() => Task.CompletedTask;
         public Task<List<UserDto>> GetManagersBySubServiceAsync(int subServiceId, CancellationToken ct = default) =>
             Task.FromResult(new List<UserDto>());

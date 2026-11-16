@@ -45,6 +45,7 @@ import {
   type EmployeeDetailSection,
 } from '../../../../core/hr/user-hr-display.util';
 import { PilotRotationHistoryModalComponent } from '../../../prime/components/pilot-rotation-history-modal.component';
+import { libelleMail } from '../../lib/mail-interne.util';
 import { EmployeeDeactivateDialogComponent } from '../../components/employee-deactivate-dialog.component';
 
 @Component({
@@ -96,6 +97,11 @@ export class UserDetailComponent implements OnInit {
     private toastService: KyntusToastService,
     private cdr: ChangeDetectorRef
   ) {}
+
+  /** v47 : une adresse provisoire s'affiche « Sans mail interne ». */
+  libelleMail(email: string | null | undefined): string {
+    return libelleMail(email);
+  }
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));

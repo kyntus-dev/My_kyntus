@@ -1,0 +1,372 @@
+/* v47 — Mails internes : liste des collaborateurs sans adresse et import des e-mails. */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 1.15rem;
+}
+
+@media (max-width: 900px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card, 0.65rem);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.stat--warn {
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--border-color));
+  background: color-mix(in srgb, var(--warning) 6%, var(--bg-card));
+}
+
+.stat-val {
+  font-size: 1.45rem;
+  font-weight: 750;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.stat-lbl {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.card {
+  margin-bottom: 1.1rem;
+  padding: 1.15rem 1.25rem 1.25rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 750;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.section-heading p {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 70ch;
+}
+
+.count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.35rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--soft-blue) 22%, var(--bg-card));
+  color: var(--text-primary);
+  border: 1px solid color-mix(in srgb, var(--soft-blue) 40%, var(--border-color));
+}
+
+.count-pill--warn {
+  background: color-mix(in srgb, var(--warning) 16%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border-color));
+  color: var(--warning-text);
+}
+
+/* ── Dépôt du fichier ── */
+
+.depot {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+
+.depot-zone {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border: 1px dashed color-mix(in srgb, var(--soft-blue) 55%, var(--border-color));
+  border-radius: var(--radius-card, 0.65rem);
+  background: color-mix(in srgb, var(--soft-blue) 7%, var(--bg-card));
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.depot-zone:hover {
+  background: color-mix(in srgb, var(--soft-blue) 13%, var(--bg-card));
+}
+
+.depot-zone input[type='file'] {
+  display: none;
+}
+
+.depot-etat {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.resume {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin: 0.2rem 0 0.9rem;
+}
+
+.resume-note {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* ── Tableaux ── */
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 0 -0.25rem;
+}
+
+.prime-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+}
+
+.prime-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.prime-table td {
+  padding: 0.6rem 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+
+.prime-table tbody tr:hover {
+  background: color-mix(in srgb, var(--soft-blue) 8%, transparent);
+}
+
+.col-check {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.name {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.muted-cell {
+  color: var(--text-muted);
+}
+
+.id-chip {
+  font-size: 0.78rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--border-color) 35%, transparent);
+}
+
+.mi-row--off td {
+  background: color-mix(in srgb, var(--border-color) 14%, transparent);
+}
+
+.mi-select {
+  min-width: 15rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.mi-message {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.mi-mdp {
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--border-color) 35%, transparent);
+}
+
+/* ── Badges de statut ── */
+
+.mi-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.mi-badge--exact {
+  background: color-mix(in srgb, #16a34a 14%, var(--bg-card));
+  border-color: color-mix(in srgb, #16a34a 40%, var(--border-color));
+  color: #15803d;
+}
+
+.mi-badge--probable {
+  background: color-mix(in srgb, #2563eb 13%, var(--bg-card));
+  border-color: color-mix(in srgb, #2563eb 38%, var(--border-color));
+  color: #1d4ed8;
+}
+
+.mi-badge--ambigu {
+  background: color-mix(in srgb, #d97706 15%, var(--bg-card));
+  border-color: color-mix(in srgb, #d97706 40%, var(--border-color));
+  color: #b45309;
+}
+
+.mi-badge--introuvable,
+.mi-badge--deja {
+  background: color-mix(in srgb, var(--border-color) 30%, var(--bg-card));
+  color: var(--text-muted);
+}
+
+.mi-badge--utilise,
+.mi-badge--doublon,
+.mi-badge--invalide {
+  background: color-mix(in srgb, #dc2626 12%, var(--bg-card));
+  border-color: color-mix(in srgb, #dc2626 38%, var(--border-color));
+  color: #b91c1c;
+}
+
+/* ── Actions ── */
+
+.actions-import {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+.mi-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.87rem;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.mi-conflit {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.mi-note {
+  margin: 0.8rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* ── Recherche ── */
+
+.search-box {
+  max-width: 640px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.9rem;
+}
+
+.search-icon {
+  color: var(--text-muted);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  min-width: 0;
+}
+
+.search-input:focus {
+  outline: none;
+}
+
+.search-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: 0.35rem;
+}
+
+.state-box {
+  padding: 1.6rem 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.95rem;
+  border-radius: var(--radius-card, 0.65rem);
+  font-size: 0.88rem;
+  margin-bottom: 0.9rem;
+}
+
+.alert-error {
+  background: color-mix(in srgb, #dc2626 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #dc2626 35%, var(--border-color));
+  color: #b91c1c;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+}

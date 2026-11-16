@@ -7,6 +7,7 @@ import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
 import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { formatHttpErrorMessage } from '../../../../core/lib/http-error-message.util';
+import { libelleMail } from '../../lib/mail-interne.util';
 import {
   HtelAmbiguousMatchDto,
   HtelApiService,
@@ -61,6 +62,11 @@ export class HtelLiaisonsPageComponent implements OnInit {
 
   ngOnInit(): void {
     this.reload();
+  }
+
+  /** v47 : une adresse provisoire s'affiche « Sans mail interne ». */
+  libelleMail(email: string | null | undefined): string {
+    return libelleMail(email);
   }
 
   get linked(): HtelLinkedEmployeeDto[] {

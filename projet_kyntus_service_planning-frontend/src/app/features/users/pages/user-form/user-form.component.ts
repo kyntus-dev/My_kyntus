@@ -6,6 +6,7 @@ import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin, defer, of, Observable, throwError } from 'rxjs';
 import { retry, switchMap, map, catchError } from 'rxjs/operators';
+import { estMailProvisoire, formatMailValide, mailAffiche } from '../../lib/mail-interne.util';
 import { formatHttpErrorMessage } from '../../../../core/lib/http-error-message.util';
 import { copyTextToClipboard } from '../../../../core/lib/clipboard.util';
 import { resolveUserGuid } from '../../../../core/lib/user-guid.util';
@@ -208,6 +209,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
   createdUserId: number | null = null;
   createSuccessMessage: string | null = null;
   createdCredentials: { email: string; password: string } | null = null;
+  /** v47 : employé créé sans mail interne — aucun compte de connexion. */
+  createdSansMail = false;
   showCreatedPassword = false;
   downloadingCredentialsExcel = false;
 
@@ -2596,7 +2599,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
           subServiceId: user.subServiceId ?? null,
           firstName: user.firstName,
           lastName: user.lastName,
-          email: user.email,
+          // v47 : adresse provisoire = pas de mail interne → champ vide, modifiable à tout moment.
+          email: mailAffiche(user.email),
           hireDate: user.hireDate
             ? this.toDateInputValue(new Date(user.hireDate))
             : this.toDateInputValue(new Date()),
@@ -2687,7 +2691,19 @@ export class UserFormComponent implements OnInit, OnDestroy {
   }
 
   checkEmail(): void {
-    if (!this.form.email.trim()) return;
+    // v47 : le mail interne est facultatif — vide, il n'y a rien à contrôler.
+    if (!this.form.email.trim()) {
+      this.emailError = null;
+      return;
+    }
+    if (estMailProvisoire(this.form.email)) {
+      this.emailError = 'Ce domaine est réservé à l\'application.';
+      return;
+    }
+    if (!formatMailValide(this.form.email)) {
+      this.emailError = 'Format du mail interne invalide.';
+      return;
+    }
     this.userService.checkEmailUnique(this.form.email, this.userId ?? undefined).subscribe({
       next: (res) => {
         this.emailError = res.isUnique ? null : 'Ce mail interne est déjà utilisé.';
@@ -3178,7 +3194,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
       return;
     }
     if (!this.form.roleId || !this.form.firstName.trim() ||
-        !this.form.lastName.trim() || !this.form.email.trim() || !this.form.hireDate) {
+        !this.form.lastName.trim() || !this.form.hireDate) {
       this.error = 'Tous les champs obligatoires doivent être remplis.';
       return;
     }
@@ -3245,6 +3261,11 @@ export class UserFormComponent implements OnInit, OnDestroy {
             return throwError(
               () => new Error('Réponse serveur invalide : identifiant employé (guid) manquant.'),
             );
+          }
+          // v47 : créé sans mail interne — le serveur a posé une adresse provisoire, les
+          // synchronisations annuaire doivent la reprendre telle quelle (jamais une adresse vide).
+          if (!this.form.email.trim() && user.email) {
+            this.form.email = user.email;
           }
           return this.resolveDirectorySync$(guid, roleName).pipe(map(() => user));
         }),
@@ -3332,7 +3353,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
             message = `Employé créé et dossier parrainage passé en ${statusLabel}.`;
           }
           const generated = (user as { generatedPassword?: string | null }).generatedPassword?.trim();
-          this.createdCredentials = generated
+          this.createdSansMail = estMailProvisoire(user.email);
+          this.createdCredentials = generated && !this.createdSansMail
             ? { email: user.email, password: generated }
             : null;
           this.showCreatedPassword = false;
@@ -3430,9 +3452,6 @@ export class UserFormComponent implements OnInit, OnDestroy {
   private validateWizardStepIdentity(): string | null {
     if (!this.form.firstName.trim() || !this.form.lastName.trim()) {
       return 'Le nom et le prénom sont obligatoires.';
-    }
-    if (!this.form.email.trim()) {
-      return 'Le mail interne est obligatoire.';
     }
     if (this.emailError) {
       return this.emailError;

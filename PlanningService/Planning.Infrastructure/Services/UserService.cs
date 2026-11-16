@@ -9,6 +9,7 @@ using Planning.Infrastructure.Persistence;
 using Planning.Infrastructure.Security;
 using Planning.Application.DTOs;
 using Planning.Application.Abstractions;
+using Planning.Application.Users;
 using Planning.Domain.Entities;
 
 using Planning.Application.Abstractions.EmployeeImport;
@@ -296,6 +297,10 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
     }
     public async Task<UserDto> CreateUserAsync(CreateUserDto dto)
     {
+        // v47 : le mail interne est facultatif. Sans adresse, une adresse provisoire réservée est
+        // posée (fiche unique en base, aucun compte de connexion, aucun e-mail envoyé) ; elle sera
+        // remplacée par la vraie adresse à l'import (Utilisateurs › Mails internes).
+        PreparerMailInterneCreation(dto);
         if (!await IsEmailUniqueAsync(dto.Email))
             throw new InvalidOperationException($"L'adresse email « {dto.Email.Trim()} » est déjà utilisée.");
 
@@ -324,7 +329,9 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         await _context.SaveChangesAsync();
 
         await _context.Entry(user).Reference(u => u.Role).LoadAsync();
-        await SyncToAuthServiceAsync(user, password);
+        // v47 : sans mail interne, aucun compte de connexion n'est créé.
+        if (MailInterne.EstReel(user.Email))
+            await SyncToAuthServiceAsync(user, password);
 
         await PublishEmployeCreatedForUserAsync(user, dto.SubServiceId);
         await _context.SaveChangesAsync();
@@ -344,7 +351,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
 
         var created = await GetUserByIdAsync(user.Id)
             ?? throw new Exception("Erreur création utilisateur.");
-        created.GeneratedPassword = password;
+        created.GeneratedPassword = MailInterne.EstReel(user.Email) ? password : null;
         return created;
     }
 
@@ -946,6 +953,12 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             throw new InvalidOperationException(
                 "Ce collaborateur est désactivé dans l'application : réactivez son compte avant de réinitialiser son mot de passe.");
 
+        // v47 : sans mail interne, il n'y a pas d'identifiant de connexion à réinitialiser.
+        if (MailInterne.EstProvisoire(user.Email))
+            throw new InvalidOperationException(
+                "Ce collaborateur n'a pas encore de mail interne : attribuez-lui son adresse "
+                + "(Utilisateurs › Mails internes) avant de réinitialiser son mot de passe.");
+
         var password = PasswordGenerator.Generate();
 
         // Le mot de passe Planning n'est changé qu'une fois le compte de connexion (Auth) à jour :
@@ -1015,11 +1028,14 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
                 hintGuids.Add(g);
         }
 
+        // v47 : un collaborateur sans mail interne n'a pas de compte de connexion → jamais concerné.
+        var suffixeProvisoire = "@" + MailInterne.DomaineProvisoire;
         var query = _context.Users
             .AsNoTracking()
             .Include(u => u.Role)
             .Include(u => u.SubService)!.ThenInclude(s => s!.Service)!.ThenInclude(sv => sv.Floor)
-            .Where(u => u.IsActive && (u.Role == null || u.Role.Name != "Admin"));
+            .Where(u => u.IsActive && (u.Role == null || u.Role.Name != "Admin"))
+            .Where(u => u.Email != string.Empty && !u.Email.EndsWith(suffixeProvisoire));
 
         query = normalized switch
         {
@@ -1299,12 +1315,16 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             await _context.SaveChangesAsync();
             await _context.Entry(user).Reference(u => u.Role).LoadAsync();
 
-            await SyncToAuthServiceAsync(user, password);
-
-            if (requireAuthSuccess && !user.AuthUserId.HasValue)
+            // v47 : sans mail interne, aucun compte de connexion n'est créé.
+            if (MailInterne.EstReel(user.Email))
             {
-                throw new InvalidOperationException(
-                    "La synchronisation Auth a échoué. L'employé n'a pas été conservé.");
+                await SyncToAuthServiceAsync(user, password);
+
+                if (requireAuthSuccess && !user.AuthUserId.HasValue)
+                {
+                    throw new InvalidOperationException(
+                        "La synchronisation Auth a échoué. L'employé n'a pas été conservé.");
+                }
             }
 
             await _fieldService.UpsertCustomFieldsAsync(user.Id, dto.CustomFields, isCreate: true);
@@ -1328,7 +1348,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             // Import hot path : pas de GetUserById / LoadOrgNameContext (GET all employees Directory).
             var hrProfile = await _context.UserHrProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == user.Id);
             var resultDto = ToDto(user, null, EmptyOrgNameContext, hrProfile);
-            resultDto.GeneratedPassword = password;
+            resultDto.GeneratedPassword = MailInterne.EstReel(user.Email) ? password : null;
             committed = true;
             return resultDto;
         }
@@ -1600,7 +1620,8 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         }
         user.FirstName = dto.FirstName;
         user.LastName = dto.LastName;
-        user.Email = dto.Email;
+        // v47 : champ laissé vide = adresse inchangée (jamais effacée par mégarde).
+        user.Email = PreparerMailInterneMiseAJour(dto.Email, user.Email);
         user.HireDate = dto.HireDate;
         var activeChanged = user.IsActive != dto.IsActive;
         user.IsActive = dto.IsActive;

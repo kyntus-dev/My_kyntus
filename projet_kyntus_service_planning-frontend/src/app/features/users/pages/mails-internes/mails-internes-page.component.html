@@ -1,0 +1,297 @@
+<div class="ky-page-shell">
+  <app-kyntus-page-header
+    title="Mails internes"
+    subtitle="Collaborateurs créés sans adresse professionnelle — attribution par import, en se basant sur le nom et le prénom.">
+    <div actions>
+      <a routerLink="/users/htel-liaisons" class="ky-btn-secondary">Liaisons HTEL</a>
+      <button type="button" class="ky-btn-secondary" (click)="telechargerModele()">
+        <app-lucide-icon [icon]="icons.sheet" className="w-4 h-4" />
+        Modèle Excel
+      </button>
+      <button type="button" class="ky-btn-primary" [disabled]="loading" (click)="charger()">
+        <app-lucide-icon [icon]="icons.refresh" className="w-4 h-4" />
+        Actualiser
+      </button>
+    </div>
+  </app-kyntus-page-header>
+
+  @if (error) {
+    <div class="alert alert-error">
+      <app-lucide-icon [icon]="icons.warn" className="w-4 h-4" />
+      <span>{{ error }}</span>
+    </div>
+  }
+
+  <div class="stats">
+    <div class="stat stat--warn">
+      <span class="stat-val">{{ agents.length }}</span>
+      <span class="stat-lbl">Sans mail interne</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">{{ apercu?.total ?? 0 }}</span>
+      <span class="stat-lbl">Lignes lues</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">{{ apercu?.exacts ?? 0 }}</span>
+      <span class="stat-lbl">Correspondances exactes</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">{{ selectionCount }}</span>
+      <span class="stat-lbl">Prêtes à appliquer</span>
+    </div>
+  </div>
+
+  <!-- ── Import ─────────────────────────────────────────────────────────── -->
+  <section class="card ky-card">
+    <div class="section-heading">
+      <div>
+        <h2>Importer les adresses</h2>
+        <p>
+          Fichier Excel (.xlsx) ou CSV avec les colonnes <strong>Nom</strong>, <strong>Prénom</strong> et
+          <strong>E-mail</strong>. Chaque ligne est rapprochée du bon collaborateur par son nom et son
+          prénom. Rien n'est enregistré avant votre validation.
+        </p>
+      </div>
+    </div>
+
+    <div class="depot">
+      <label class="depot-zone">
+        <input type="file" accept=".xlsx,.xls,.csv" (change)="onFichier($event)" [disabled]="analysing || applying" />
+        <app-lucide-icon [icon]="icons.upload" className="w-5 h-5" />
+        <span>{{ fichierNom || 'Choisir le fichier des adresses' }}</span>
+      </label>
+      @if (analysing) {
+        <span class="depot-etat">Analyse en cours…</span>
+      }
+      @if (fichierNom && !analysing) {
+        <button type="button" class="ky-btn-secondary btn-sm" (click)="reinitialiserImport()">
+          <app-lucide-icon [icon]="icons.clear" className="w-3.5 h-3.5" />
+          Retirer
+        </button>
+      }
+    </div>
+
+    @if (lectureErreur) {
+      <div class="alert alert-error">
+        <app-lucide-icon [icon]="icons.warn" className="w-4 h-4" />
+        <span>{{ lectureErreur }}</span>
+      </div>
+    }
+
+    @if (apercu) {
+      <div class="resume">
+        <span class="mi-badge mi-badge--exact">{{ apercu.exacts }} exactes</span>
+        <span class="mi-badge mi-badge--probable">{{ apercu.probables }} à confirmer</span>
+        <span class="mi-badge mi-badge--ambigu">{{ apercu.ambigus }} à choisir</span>
+        <span class="mi-badge mi-badge--introuvable">{{ apercu.introuvables }} introuvables</span>
+        <span class="mi-badge mi-badge--invalide">{{ apercu.rejetes }} refusées</span>
+        @if (ignorees > 0) {
+          <span class="resume-note">{{ ignorees }} ligne(s) sans adresse ignorée(s).</span>
+        }
+      </div>
+
+      <div class="table-wrap">
+        <table class="prime-table">
+          <thead>
+            <tr>
+              <th class="col-check">
+                <input type="checkbox" (change)="toutCocher($any($event.target).checked)" title="Tout cocher" />
+              </th>
+              <th>Ligne</th>
+              <th>Nom et prénom du fichier</th>
+              <th>Adresse</th>
+              <th>Résultat</th>
+              <th>Collaborateur</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of apercu.lignes; track l.numero) {
+              <tr [class.mi-row--off]="!attribuable(l)">
+                <td class="col-check">
+                  @if (attribuable(l)) {
+                    <input
+                      type="checkbox"
+                      [checked]="coche[l.numero]"
+                      [disabled]="!aChoix(l)"
+                      (change)="basculer(l)"
+                    />
+                  }
+                </td>
+                <td class="muted-cell">{{ l.numero }}</td>
+                <td>
+                  <span class="name">{{ l.nom }} {{ l.prenom }}</span>
+                </td>
+                <td class="muted-cell">{{ l.email }}</td>
+                <td>
+                  <span [class]="statutClasse(l.statut)">{{ statutLibelle(l.statut) }}</span>
+                  @if (l.message) {
+                    <span class="mi-message">{{ l.message }}</span>
+                  }
+                </td>
+                <td>
+                  @if (attribuable(l)) {
+                    <select
+                      class="ky-input mi-select"
+                      (change)="onChoix(l, $any($event.target).value)"
+                    >
+                      <option [value]="0" [selected]="!aChoix(l)">— Ne pas attribuer —</option>
+                      @for (o of optionsLigne(l); track o.userId) {
+                        <option [value]="o.userId" [selected]="o.userId === choixDe(l)">{{ o.libelle }}</option>
+                      }
+                    </select>
+                  } @else {
+                    <span class="muted-cell">—</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="actions-import">
+        <label class="mi-check">
+          <input type="checkbox" [(ngModel)]="creerComptes" name="creerComptes" />
+          <span>Créer aussi le compte de connexion (mot de passe provisoire à communiquer)</span>
+        </label>
+        @if (conflitSelection) {
+          <span class="mi-conflit">Un même collaborateur est sélectionné sur deux lignes.</span>
+        }
+        <button
+          type="button"
+          class="ky-btn-primary"
+          [disabled]="applying || selectionCount === 0 || conflitSelection"
+          (click)="appliquer()"
+        >
+          <app-lucide-icon [icon]="icons.ok" className="w-4 h-4" />
+          {{ applying ? 'Attribution…' : 'Attribuer ' + selectionCount + ' adresse(s)' }}
+        </button>
+      </div>
+    }
+  </section>
+
+  <!-- ── Rapport ────────────────────────────────────────────────────────── -->
+  @if (rapport) {
+    <section class="card ky-card">
+      <div class="section-heading">
+        <div>
+          <h2>Résultat de l'attribution</h2>
+          <p>{{ rapport.appliques }} adresse(s) attribuée(s), {{ rapport.echecs }} en échec.</p>
+        </div>
+        @if (motsDePasse) {
+          <button type="button" class="ky-btn-secondary" (click)="telechargerIdentifiants()">
+            <app-lucide-icon [icon]="icons.download" className="w-4 h-4" />
+            Télécharger les identifiants
+          </button>
+        }
+      </div>
+      <div class="table-wrap">
+        <table class="prime-table">
+          <thead>
+            <tr>
+              <th>Collaborateur</th>
+              <th>Mail interne</th>
+              <th>État</th>
+              <th>Mot de passe provisoire</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (r of rapport.resultats; track r.userId) {
+              <tr>
+                <td><span class="name">{{ r.nom }} {{ r.prenom }}</span></td>
+                <td class="muted-cell">{{ r.email }}</td>
+                <td>
+                  @if (r.ok) {
+                    <span class="mi-badge mi-badge--exact">Attribuée</span>
+                  } @else {
+                    <span class="mi-badge mi-badge--invalide">Échec</span>
+                  }
+                  @if (r.message) {
+                    <span class="mi-message">{{ r.message }}</span>
+                  }
+                </td>
+                <td>
+                  @if (r.motDePasse) {
+                    <code class="mi-mdp">{{ r.motDePasse }}</code>
+                  } @else {
+                    <span class="muted-cell">—</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="mi-note">
+        Les mots de passe provisoires ne sont affichés qu'une fois : téléchargez-les avant de quitter l'écran.
+      </p>
+    </section>
+  }
+
+  <!-- ── Collaborateurs sans mail interne ───────────────────────────────── -->
+  <section class="card ky-card">
+    <div class="section-heading">
+      <div>
+        <h2>Collaborateurs sans mail interne <span class="count-pill count-pill--warn">{{ agentsFiltres.length }}</span></h2>
+        <p>Créés sans adresse : aucun compte de connexion, aucun e-mail envoyé, tout le reste de la fiche fonctionne.</p>
+      </div>
+    </div>
+
+    <div class="search-box ky-card">
+      <span class="search-icon"><app-lucide-icon [icon]="icons.search" className="w-4 h-4" /></span>
+      <input
+        type="text"
+        class="search-input ky-input"
+        placeholder="Rechercher par nom, rôle, service ou ID technicien…"
+        [(ngModel)]="recherche"
+        name="recherche"
+      />
+      @if (recherche) {
+        <button type="button" class="search-clear" (click)="effacerRecherche()" title="Effacer">
+          <app-lucide-icon [icon]="icons.clear" className="w-4 h-4" />
+        </button>
+      }
+    </div>
+
+    @if (loading) {
+      <div class="state-box"><p>Chargement…</p></div>
+    } @else if (agentsFiltres.length === 0) {
+      <div class="state-box"><p>Aucun collaborateur sans mail interne.</p></div>
+    } @else {
+      <div class="table-wrap">
+        <table class="prime-table">
+          <thead>
+            <tr>
+              <th>Collaborateur</th>
+              <th>Rôle</th>
+              <th>Service</th>
+              <th>ID technicien</th>
+              <th>Actif</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (a of agentsFiltres; track a.userId) {
+              <tr>
+                <td><span class="name">{{ a.nom }} {{ a.prenom }}</span></td>
+                <td class="muted-cell">{{ a.role || '—' }}</td>
+                <td class="muted-cell">{{ a.service || '—' }}</td>
+                <td>
+                  @if (a.idTechnicien) {
+                    <code class="id-chip">{{ a.idTechnicien }}</code>
+                  } @else {
+                    <span class="muted-cell">—</span>
+                  }
+                </td>
+                <td>
+                  <span class="mi-badge" [class.mi-badge--exact]="a.actif" [class.mi-badge--invalide]="!a.actif">
+                    {{ a.actif ? 'Oui' : 'Non' }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>

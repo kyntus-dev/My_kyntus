@@ -10,6 +10,11 @@ const routes: Routes = [
     loadComponent: () =>
       import('./pages/htel-liaisons/htel-liaisons-page.component').then((m) => m.HtelLiaisonsPageComponent),
   },
+  {
+    path: 'mails-internes',
+    loadComponent: () =>
+      import('./pages/mails-internes/mails-internes-page.component').then((m) => m.MailsInternesPageComponent),
+  },
   { path: 'edit/:id', loadComponent: () => import('./pages/user-form/user-form.component').then(m => m.UserFormComponent) },
   {
     path: 'import',

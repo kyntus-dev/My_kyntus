@@ -150,7 +150,7 @@
           <div class="avatar">{{ user.firstName[0] }}{{ user.lastName[0] }}</div>
           <div class="profile-main">
             <h2>{{ user.firstName }} {{ user.lastName }}</h2>
-            <p class="email">{{ user.email }}</p>
+            <p class="email">{{ libelleMail(user.email) }}</p>
             <div class="profile-badges">
               <span class="badge badge-role">{{ user.roleName }}</span>
               <span class="level-badge lv-{{ user.level }}">{{ contractLevelLabel(user.level) }}</span>
