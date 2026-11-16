@@ -1,4 +1,4 @@
-using Planning.Application.Pointage;
+﻿using Planning.Application.Pointage;
 using Planning.Domain.Enums;
 
 namespace Planning.Application.Presence;
@@ -139,7 +139,9 @@ public sealed record PresenceAgentDto(
     // FormationAu = dernier jour de formation une fois terminée (null tant qu'elle continue).
     bool EnFormation = false,
     // v46 : rôle du compte (les superviseurs et référents techniques du périmètre d'un chef de projet).
-    string? Role = null);
+    string? Role = null,
+    // v48 : « contractuel » / « non-contractuel » (type de formation choisi sur la fiche).
+    string? TypeFormation = null);
 
 public sealed record PresenceGrilleDto(
     string Perimetre,

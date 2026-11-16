@@ -1,4 +1,4 @@
-using Kyntus.Messaging.Outbox;
+﻿using Kyntus.Messaging.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Planning.Infrastructure.Persistence;
 using Planning.Domain.Entities;
@@ -74,6 +74,8 @@ public class AppDbContext : DbContext
     public DbSet<PresenceTypePersonnalise> PresenceTypesPersonnalises { get; set; } = null!;
     public DbSet<ElementVariablePaie> ElementsVariablesPaie { get; set; } = null!;
     public DbSet<DossierDocument> DossierDocuments { get; set; } = null!;
+    /// <summary>v48 : bibliothèque « Process Bytel » (procédures partagées aux agents).</summary>
+    public DbSet<ProcessDocument> ProcessDocuments { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -751,6 +753,21 @@ public class AppDbContext : DbContext
             e.Property(x => x.Commentaire).HasMaxLength(500);
             e.Property(x => x.CreatedByNom).HasMaxLength(120);
             e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<ProcessDocument>(e =>
+        {
+            e.ToTable("ProcessDocuments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Dossier).HasMaxLength(80).IsRequired();
+            e.Property(x => x.Titre).HasMaxLength(200).IsRequired();
+            e.Property(x => x.NomFichier).HasMaxLength(255).IsRequired();
+            e.Property(x => x.ContentType).HasMaxLength(120).IsRequired();
+            e.Property(x => x.Commentaire).HasMaxLength(1000);
+            e.Property(x => x.Activites).HasMaxLength(600).IsRequired();
+            e.Property(x => x.Poles).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.HasIndex(x => x.Dossier);
         });
 
         modelBuilder.Entity<PlanningItHoraire>(e =>

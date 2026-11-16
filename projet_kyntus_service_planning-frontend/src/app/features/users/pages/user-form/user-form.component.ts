@@ -276,6 +276,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
     niveauScolaire: '',
     intitulesEtudes: '',
     enFormation: false,
+    typeFormation: '',
     dateDebutFormation: '',
     dateFinFormationPrevue: '',
   };
@@ -532,6 +533,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
       niveauScolaire: '',
       intitulesEtudes: '',
       enFormation: false,
+      typeFormation: '',
       dateDebutFormation: '',
       dateFinFormationPrevue: '',
     };
@@ -1114,6 +1116,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
       niveauScolaire: profile.niveauScolaire ?? '',
       intitulesEtudes: profile.intitulesEtudes ?? '',
       enFormation: profile.enFormation ?? false,
+      typeFormation: profile.typeFormation ?? '',
       dateDebutFormation: this.dateToInputValue(profile.dateDebutFormation),
       dateFinFormationPrevue: this.dateToInputValue(profile.dateFinFormationPrevue),
     };
@@ -1177,6 +1180,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
       niveauScolaire: this.hrProfile.niveauScolaire.trim() || null,
       intitulesEtudes: this.hrProfile.intitulesEtudes.trim() || null,
       enFormation: this.hrProfile.enFormation,
+      // v48 : type de formation — vidé dès que l'agent n'est plus en formation.
+      typeFormation: this.hrProfile.enFormation ? this.hrProfile.typeFormation || null : null,
       dateDebutFormation: this.hrProfile.enFormation
         ? this.toOptionalDateIso(this.hrProfile.dateDebutFormation)
         : null,
@@ -1212,6 +1217,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
       }
       void this.loadFormationDocs();
     } else {
+      this.hrProfile.typeFormation = '';
       this.hrProfile.dateDebutFormation = '';
       this.hrProfile.dateFinFormationPrevue = '';
       this.formationDocs = [];
@@ -3492,6 +3498,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
 
   private validateWizardStepPathway(): string | null {
     if (this.hrProfile.enFormation) {
+      if (!this.hrProfile.typeFormation) {
+        return 'Choisissez le type de formation : contractuel ou non contractuel.';
+      }
       if (!this.hrProfile.dateDebutFormation.trim()) {
         return 'La date de début de formation est obligatoire.';
       }

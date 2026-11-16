@@ -1,0 +1,181 @@
+<div class="ky-page-shell">
+  <app-kyntus-page-header
+    title="Process Bytel"
+    subtitle="Procédures et documents partagés par l'encadrement. Vous ne voyez que ceux destinés à votre activité.">
+    <div actions>
+      @if (peutDeposer) {
+        <button type="button" class="ky-btn-primary" (click)="basculerDepot()">
+          <app-lucide-icon [icon]="icons.upload" className="w-4 h-4" />
+          {{ ouvertDepot ? 'Fermer' : 'Déposer un document' }}
+        </button>
+      }
+      <button type="button" class="ky-btn-secondary" [disabled]="loading" (click)="charger()">
+        <app-lucide-icon [icon]="icons.refresh" className="w-4 h-4" />
+        Actualiser
+      </button>
+    </div>
+  </app-kyntus-page-header>
+
+  @if (error) {
+    <div class="alert alert-error">
+      <app-lucide-icon [icon]="icons.warn" className="w-4 h-4" />
+      <span>{{ error }}</span>
+    </div>
+  }
+
+  <!-- ── Dépôt ──────────────────────────────────────────────────────────── -->
+  @if (peutDeposer && ouvertDepot) {
+    <section class="card ky-card">
+      <div class="section-heading">
+        <div>
+          <h2>Déposer un document</h2>
+          <p>Choisissez le dossier, le fichier (25 Mo au plus) et qui pourra le consulter.</p>
+        </div>
+      </div>
+
+      <div class="depot-grille">
+        <label class="depot-zone">
+          <input type="file" (change)="onFichier($event)" [disabled]="envoi" />
+          <app-lucide-icon [icon]="icons.upload" className="w-5 h-5" />
+          <span>{{ fichier?.name || 'Choisir le fichier' }}</span>
+        </label>
+
+        <div class="champ">
+          <label for="pbDossier">Dossier</label>
+          <input class="ky-input" id="pbDossier" name="pbDossier" list="pbDossiers" [(ngModel)]="fDossier" placeholder="ITs" />
+          <datalist id="pbDossiers">
+            @for (d of dossiers; track d) { <option [value]="d"></option> }
+          </datalist>
+        </div>
+
+        <div class="champ">
+          <label for="pbTitre">Titre <span class="requis">*</span></label>
+          <input class="ky-input" id="pbTitre" name="pbTitre" [(ngModel)]="fTitre" placeholder="IT — Besoin nacelle (Code 27)" />
+        </div>
+
+        <div class="champ champ--large">
+          <label for="pbCommentaire">Commentaire</label>
+          <input class="ky-input" id="pbCommentaire" name="pbCommentaire" [(ngModel)]="fCommentaire" placeholder="Version, date d'application…" />
+        </div>
+      </div>
+
+      <div class="visibilite">
+        <span class="visibilite-titre">Qui peut voir ce document ?</span>
+        <label class="radio-ligne">
+          <input type="radio" name="pbVisibilite" [value]="true" [(ngModel)]="fPourTous" />
+          <span>Tous les collaborateurs</span>
+        </label>
+        <label class="radio-ligne">
+          <input type="radio" name="pbVisibilite" [value]="false" [(ngModel)]="fPourTous" />
+          <span>Seulement certaines activités</span>
+        </label>
+
+        @if (!fPourTous) {
+          <div class="activites">
+            @for (a of activites; track a.id) {
+              <label class="check-ligne">
+                <input type="checkbox" [(ngModel)]="fActivites[a.id]" [name]="'act-' + a.id" />
+                <span>{{ a.name }}</span>
+              </label>
+            }
+            @if (activites.length === 0) {
+              <span class="hint">Aucune activité trouvée — réessayez après avoir actualisé la page.</span>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="actions-depot">
+        <button type="button" class="ky-btn-secondary" [disabled]="envoi" (click)="reinitialiserDepot()">Annuler</button>
+        <button type="button" class="ky-btn-primary" [disabled]="envoi || !depotPret" (click)="deposer()">
+          {{ envoi ? 'Envoi…' : 'Déposer' }}
+        </button>
+      </div>
+    </section>
+  }
+
+  <!-- ── Dossiers ───────────────────────────────────────────────────────── -->
+  <div class="dossiers">
+    @for (d of dossiers; track d) {
+      <button type="button" class="dossier" [class.on]="d === dossierActif" (click)="choisirDossier(d)">
+        <app-lucide-icon [icon]="icons.folder" className="w-4 h-4" />
+        {{ d }}
+        <span class="dossier-n">{{ nbDossier(d) }}</span>
+      </button>
+    }
+  </div>
+
+  <section class="card ky-card">
+    <div class="search-box ky-card">
+      <span class="search-icon"><app-lucide-icon [icon]="icons.search" className="w-4 h-4" /></span>
+      <input
+        type="text"
+        class="search-input ky-input"
+        placeholder="Rechercher un document…"
+        [(ngModel)]="recherche"
+        name="recherche"
+      />
+      @if (recherche) {
+        <button type="button" class="search-clear" (click)="recherche = ''" title="Effacer">
+          <app-lucide-icon [icon]="icons.clear" className="w-4 h-4" />
+        </button>
+      }
+    </div>
+
+    @if (loading) {
+      <div class="state-box"><p>Chargement…</p></div>
+    } @else if (documents.length === 0) {
+      <div class="state-box">
+        <p>Aucun document dans « {{ dossierActif }} » pour le moment.</p>
+      </div>
+    } @else {
+      <div class="table-wrap">
+        <table class="prime-table">
+          <thead>
+            <tr>
+              <th>Document</th>
+              <th>Fichier</th>
+              <th>Destinataires</th>
+              <th>Déposé par</th>
+              <th>Date</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (d of documents; track d.id) {
+              <tr>
+                <td>
+                  <div class="doc-cell">
+                    <app-lucide-icon [icon]="icons.file" className="w-4 h-4" />
+                    <div>
+                      <span class="doc-titre">{{ d.titre }}</span>
+                      @if (d.commentaire) { <small class="doc-note">{{ d.commentaire }}</small> }
+                    </div>
+                  </div>
+                </td>
+                <td class="muted-cell">{{ d.nomFichier }} · {{ poids(d.taille) }}</td>
+                <td>
+                  <span class="pb-badge" [class.pb-badge--tous]="d.pourTous">{{ destinataires(d) }}</span>
+                </td>
+                <td class="muted-cell">{{ d.auteur || '—' }}</td>
+                <td class="muted-cell">{{ d.creeLe | date: 'dd/MM/yyyy' }}</td>
+                <td class="col-actions">
+                  <button type="button" class="ky-btn-secondary btn-sm" (click)="telecharger(d)">
+                    <app-lucide-icon [icon]="icons.download" className="w-3.5 h-3.5" />
+                    Télécharger
+                  </button>
+                  @if (peutDeposer) {
+                    <button type="button" class="ky-btn-secondary btn-sm btn-danger" (click)="supprimer(d)">
+                      <app-lucide-icon [icon]="icons.delete" className="w-3.5 h-3.5" />
+                      Supprimer
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>

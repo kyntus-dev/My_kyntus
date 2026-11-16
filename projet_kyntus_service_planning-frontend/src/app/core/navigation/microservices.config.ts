@@ -243,6 +243,15 @@ export const MICROSERVICES: Microservice[] = [
     ],
   },
   {
+    // v48 : Process Bytel — procédures déposées par l'encadrement, visibles selon l'activité.
+    id: 'process-bytel',
+    label: 'Process Bytel',
+    icon: ICONS.doc,
+    children: [
+      { label: 'Documents (ITs…)', route: '/process-bytel', roles: EMPLOYEE_ROLES, hat: 'self', ouvertureIam: 'process-bytel' },
+    ],
+  },
+  {
     id: 'documentation',
     label: 'Documentation',
     icon: ICONS.doc,

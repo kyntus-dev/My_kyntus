@@ -51,6 +51,8 @@
       <select class="ku-input" [ngModel]="filtres().formation" (ngModelChange)="filtrer({ formation: $event })" aria-label="Formation">
         <option value="">Formation : tous</option>
         <option value="oui">En formation seulement ({{ nbFormation() }})</option>
+        <option value="contractuel">Formation contractuelle ({{ nbFormationContractuel() }})</option>
+        <option value="non-contractuel">Formation non contractuelle ({{ nbFormationNonContractuel() }})</option>
         <option value="non">Hors formation</option>
       </select>
       @if (estChefDeProjet()) {
@@ -117,7 +119,7 @@
               <tr [class.pz-row-formation]="a.enFormation" [class.pz-row-encadrement]="estSuperviseur(a.role) || estReferentTechnique(a.role)">
                 <th class="pz-agent" scope="row">
                   <b>{{ a.nom }}</b>
-                  @if (a.enFormation) { <span class="pz-badge pz-badge--formation">En formation</span> }
+                  @if (a.enFormation) { <span class="pz-badge pz-badge--formation">{{ badgeFormation(a.typeFormation) }}</span> }
                   @if (estSuperviseur(a.role)) { <span class="pz-badge pz-badge--encadrement">Superviseur</span> }
                   @if (estReferentTechnique(a.role)) { <span class="pz-badge pz-badge--encadrement">Référent technique</span> }
                   <small>{{ a.cellule ?? (a.enFormation ? 'Formation' : '—') }} · {{ a.type }}</small>

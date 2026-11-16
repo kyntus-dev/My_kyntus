@@ -95,6 +95,8 @@
         <option value="formation">En formation ou intégrés ({{ synthese().horsPaieFormation + synthese().integres }})</option>
         <option value="en-formation">En formation – hors paie</option>
         <option value="integre">Formation terminée (prorata)</option>
+        <option value="contractuel">Formation contractuelle</option>
+        <option value="non-contractuel">Formation non contractuelle</option>
         <option value="production">Production seulement</option>
       </select>
       <label class="ku-check"><input type="checkbox" [ngModel]="alertesSeulement()" (ngModelChange)="alertesSeulement.set($event)" /> À vérifier seulement</label>
@@ -156,8 +158,8 @@
               <tr [class.pze-formation]="l.etatFormation === 'en-formation'" [class.pze-integre]="l.etatFormation === 'integre'">
                 <th class="pz-agent" scope="row">
                   <b>{{ l.pilote }}</b>
-                  @if (l.etatFormation === 'en-formation') { <span class="pze-badge pze-badge--formation">En formation</span> }
-                  @if (l.etatFormation === 'integre') { <span class="pze-badge pze-badge--integre">Fin de formation</span> }
+                  @if (l.etatFormation === 'en-formation') { <span class="pze-badge pze-badge--formation">{{ l.typeFormation || 'En formation' }}</span> }
+                  @if (l.etatFormation === 'integre') { <span class="pze-badge pze-badge--integre">Fin de formation{{ l.typeFormation ? ' · ' + l.typeFormation : '' }}</span> }
                   <small>{{ l.affectation || '—' }} · {{ l.type }}</small>
                 </th>
                 @if (voirJours()) {

@@ -1,4 +1,4 @@
-import { KyntusRoleNames } from '../org/kyntus-role-names';
+﻿import { KyntusRoleNames } from '../org/kyntus-role-names';
 
 export const PLATFORM_VERBS = ['View', 'Act', 'Validate', 'Configure'] as const;
 export type PlatformVerb = (typeof PLATFORM_VERBS)[number];
@@ -209,6 +209,8 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'conges.periodes', label: 'Périodes interdites', module: 'Congés', view: ADMIN_RH, configure: ADMIN_RH, serveurAgir: SRV_ADMIN_RH },
 
   { id: 'documentation.module', label: 'Module Documentation (accès au menu)', module: 'Documentation', view: SELF, defaultScope: 'Self' },
+  // v48 : Process Bytel — lecture pour tous (selon la visibilité choisie à l'envoi), dépôt pour RH / Admin / chef de projet.
+  { id: 'process-bytel', label: 'Process Bytel (documents partagés)', module: 'Documentation', view: SELF, act: RH_CHEF_PROJET },
   { id: 'documentation.admin-config', label: 'Configuration documentation', module: 'Documentation', view: ADMIN, configure: ADMIN },
   { id: 'documentation.doc-types', label: 'Types de documents', module: 'Documentation', view: ADMIN, configure: ADMIN },
   { id: 'documentation.permissions', label: 'Permissions documents', module: 'Documentation', view: ADMIN, configure: ADMIN },

@@ -1,4 +1,4 @@
-public class UserDto
+﻿public class UserDto
 {
     public int Id { get; set; }
     public Guid Guid { get; set; }
@@ -95,6 +95,8 @@ public class UserHrProfileDto
     public string? NiveauScolaire { get; set; }
     public string? IntitulesEtudes { get; set; }
     public bool EnFormation { get; set; }
+    /// <summary>v48 : « contractuel » ou « non-contractuel ».</summary>
+    public string? TypeFormation { get; set; }
     public DateOnly? DateDebutFormation { get; set; }
     public DateOnly? DateFinFormationPrevue { get; set; }
 }

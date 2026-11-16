@@ -1,4 +1,4 @@
-using Kyntus.Messaging.Contracts;
+﻿using Kyntus.Messaging.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -239,7 +239,9 @@ public sealed class PresenceService(
                 profil?.FinFormationEffective(),
                 org is null ? null : $"{(org.LastName ?? string.Empty).Trim().ToUpperInvariant()} {(org.FirstName ?? string.Empty).Trim()}".Trim(),
                 profil?.EnFormation ?? false,
-                org?.Role));
+                org?.Role,
+                // v48 : type de formation (contractuel / non contractuel).
+                profil?.TypeFormation));
         }
         return result
             .OrderBy(a => a.Cellule ?? "", StringComparer.CurrentCultureIgnoreCase)

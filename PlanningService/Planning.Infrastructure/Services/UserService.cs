@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Kyntus.Iam;
 using Kyntus.Identity.Jwt;
 using Kyntus.Messaging.Contracts;
@@ -2412,6 +2412,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         NiveauScolaire = p.NiveauScolaire,
         IntitulesEtudes = p.IntitulesEtudes,
         EnFormation = p.EnFormation,
+        TypeFormation = p.TypeFormation,
         DateDebutFormation = p.DateDebutFormation,
         DateFinFormationPrevue = p.DateFinFormationPrevue,
     };
@@ -2533,6 +2534,8 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             profile.NiveauScolaire = dto.NiveauScolaire;
             profile.IntitulesEtudes = dto.IntitulesEtudes;
             profile.ChangerEnFormation(dto.EnFormation, DateOnly.FromDateTime(DateTime.UtcNow));
+            // v48 : type de formation (contractuel / non contractuel) — vidé dès la fin de formation.
+            profile.TypeFormation = dto.EnFormation ? Planning.Application.Presence.TypesFormation.Normaliser(dto.TypeFormation) : null;
             profile.DateDebutFormation = dto.DateDebutFormation;
             profile.DateFinFormationPrevue = dto.DateFinFormationPrevue;
         }

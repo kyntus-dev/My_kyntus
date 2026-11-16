@@ -38,6 +38,8 @@ export interface UserHrProfile {
   niveauScolaire?: string | null;
   intitulesEtudes?: string | null;
   enFormation?: boolean;
+  /** v48 : « contractuel » ou « non-contractuel ». */
+  typeFormation?: string | null;
   dateDebutFormation?: string | null;
   dateFinFormationPrevue?: string | null;
 }

@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -82,6 +82,7 @@ public static class PlanningStartup
                 await TryPatch("reaffectations", () => PlanningSchemaPatches.EnsureReaffectationsAsync(db));
                 await TryPatch("formation-manquements", () => PlanningSchemaPatches.EnsureFormationEtManquementsAsync(db));
                 await TryPatch("presence-types", () => PlanningSchemaPatches.EnsurePresenceTypesAsync(db));
+                await TryPatch("formation-process-bytel", () => PlanningSchemaPatches.EnsureFormationEtProcessBytelAsync(db));
                 await TryPatch("perf-indexes", () => PlanningSchemaPatches.EnsurePerfIndexesAsync(db));
                 Console.WriteLine("✅ Patches schéma Planning appliqués.");
             }

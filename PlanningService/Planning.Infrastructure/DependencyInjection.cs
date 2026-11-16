@@ -1,4 +1,4 @@
-using Kyntus.Caching;
+﻿using Kyntus.Caching;
 using Kyntus.Iam;
 using Kyntus.Messaging.Outbox;
 using MassTransit;
@@ -82,6 +82,8 @@ public static class DependencyInjection
         services.AddMemoryCache();
         services.AddScoped<Planning.Application.Presence.IPresenceService, Planning.Infrastructure.Services.Presence.PresenceService>();
         services.AddScoped<Planning.Application.Presence.IPresenceSuiviService, Planning.Infrastructure.Services.Presence.PresenceSuiviService>();
+        // v48 : bibliothèque Process Bytel (procédures partagées aux agents).
+        services.AddScoped<Planning.Application.Presence.IProcessDocumentService, Planning.Infrastructure.Services.Presence.ProcessDocumentService>();
         services.AddScoped<Planning.Application.Presence.IPlanningExportService, Planning.Infrastructure.Services.PlanningExport.PlanningExportService>();
         if (!isTesting)
             services.AddHostedService<PointageSyncHostedService>();

@@ -418,6 +418,15 @@ export const routes: Routes = [
             .then(m => m.CongeManagerComponent),
       },
       {
+        // v48 : Process Bytel — procédures partagées (dépôt par l'encadrement, lecture par les agents).
+        path: 'process-bytel',
+        canActivate: [AuthGuard],
+        data: { ouvertureIam: 'process-bytel' },
+        loadComponent: () =>
+          import('./features/process-bytel/process-bytel-page.component')
+            .then(m => m.ProcessBytelPageComponent),
+      },
+      {
         // Présences et paie : tableau des présences (pointage + saisies), retards et autorisations.
         // Droits dans « Accès par rôle » ; chaque responsable ne voit que son périmètre (serveur).
         path: 'presences',

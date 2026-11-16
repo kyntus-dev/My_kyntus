@@ -5,6 +5,7 @@ import {
   maritalStatusLabel,
   nationalityLabelForCode,
 } from './hr-form-options';
+import { libelleTypeFormation } from './type-formation.util';
 
 export function contractLevelLabel(level: number): string {
   if (level === 2) return 'Confirmé';
@@ -155,6 +156,7 @@ export function buildCompleteHrProfileDisplayRows(profile: UserHrProfile | null 
     { label: 'Niveau scolaire', value: niveauScolaireDisplay(p.niveauScolaire) },
     { label: 'Intitulés études', value: hrDisplayValue(p.intitulesEtudes) },
     { label: 'En formation', value: boolDisplay(p.enFormation) },
+    { label: 'Type de formation', value: libelleTypeFormation(p.typeFormation) || '—' },
     { label: 'Début formation', value: dateDisplay(p.dateDebutFormation) },
     { label: 'Fin formation prévue', value: dateDisplay(p.dateFinFormationPrevue) },
   ];

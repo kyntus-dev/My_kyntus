@@ -64,6 +64,8 @@ export interface PresenceAgentDto {
   enFormation?: boolean;
   /** v46 : rôle du compte (superviseurs et référents techniques du périmètre d'un chef de projet). */
   role?: string | null;
+  /** v48 : « contractuel » ou « non-contractuel » (agent en formation). */
+  typeFormation?: string | null;
 }
 
 export interface PresenceGrilleDto {

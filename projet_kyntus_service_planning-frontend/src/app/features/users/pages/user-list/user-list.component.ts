@@ -41,6 +41,7 @@ import {
   userMatchesSearch,
 } from '../../../../core/hr/user-hr-display.util';
 import { libelleMail } from '../../lib/mail-interne.util';
+import { badgeTypeFormation } from '../../../../core/hr/type-formation.util';
 import { resolveUserGuid } from '../../../../core/lib/user-guid.util';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
@@ -722,7 +723,8 @@ export class UserListComponent implements OnInit, OnDestroy {
       return { phase: ls.phase, label: ls.label };
     }
     if (user.hrProfile?.enFormation) {
-      return { phase: 'onboarding_formation', label: 'En formation' };
+      // v48 : le type de formation (contractuel / non contractuel) apparaît dans le badge.
+      return { phase: 'onboarding_formation', label: badgeTypeFormation(user.hrProfile.typeFormation) };
     }
     return null;
   }

@@ -1,4 +1,5 @@
 import type { PresenceAgentDto, PresenceJourDto } from '../../../core/models/presence.models';
+import { normaliserTypeFormation } from '../../../core/hr/type-formation.util';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 export const ymd = (d: Date): string => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -61,8 +62,11 @@ export interface FiltresPresence {
   cellule: string;
   type: string;
   aTraiter: boolean;
-  /** v46 : '' tous ; 'oui' en formation seulement ; 'non' hors formation. */
-  formation: '' | 'oui' | 'non';
+  /**
+   * v46 : '' tous ; 'oui' en formation seulement ; 'non' hors formation.
+   * v48 : 'contractuel' / 'non-contractuel' — en formation du type choisi.
+   */
+  formation: '' | 'oui' | 'non' | 'contractuel' | 'non-contractuel';
   /** v46 (chef de projet) : superviseurs / référents techniques affichés : '' aucun, '*' tous, sinon un userId. */
   superviseurs: string;
   referents: string;
@@ -82,6 +86,17 @@ export const estReferentTechnique = (role?: string | null) => {
   return r === 'referenttechnique' || r === 'coach';
 };
 export const estEncadrement = (role?: string | null) => estSuperviseur(role) || estReferentTechnique(role);
+
+/**
+ * v48 — Le filtre « Formation » : tous, en formation (tous types), hors formation, ou l'un des
+ * deux types (contractuel / non contractuel).
+ */
+export function correspondFormation(choix: FiltresPresence['formation'], a: PresenceAgentDto): boolean {
+  if (!choix) return true;
+  if (choix === 'oui') return !!a.enFormation;
+  if (choix === 'non') return !a.enFormation;
+  return !!a.enFormation && normaliserTypeFormation(a.typeFormation) === choix;
+}
 
 /** Un agent « à traiter » : absence non qualifiée, retard non autorisé ou pointage manquant. */
 export function aTraiter(a: PresenceAgentDto): boolean {
@@ -114,7 +129,7 @@ export function filtrerAgents(
     && (!f.pole || a.pole === f.pole)
     && (!f.cellule || a.cellule === f.cellule)
     && (!f.type || a.type === f.type)
-    && (!f.formation || (f.formation === 'oui') === !!a.enFormation)
+    && correspondFormation(f.formation, a)
     && (!f.aTraiter || aTraiter(a)));
 }
 

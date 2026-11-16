@@ -5,6 +5,7 @@ import { HttpClient } from '@angular/common/http';
 import { PresenceService } from '../../../core/services/presence.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { peutSaisirFormation } from '../lib/formation.util';
+import { badgeTypeFormation, normaliserTypeFormation } from '../../../core/hr/type-formation.util';
 import type {
   PresenceAgentDto,
   PresenceCodeDto,
@@ -140,6 +141,17 @@ export class PresencesTableauComponent implements OnInit {
     filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole, this.estChefDeProjet()));
   /** v46 : nombre d'agents en formation dans les données (filtre « Formation »). */
   readonly nbFormation = computed(() => (this.data()?.agents ?? []).filter((a) => a.enFormation).length);
+  // v48 : nombre d'agents par type de formation (libellés des filtres).
+  private nbParType(type: string): number {
+    return (this.data()?.agents ?? [])
+      .filter((a) => a.enFormation && normaliserTypeFormation(a.typeFormation) === type).length;
+  }
+  readonly nbFormationContractuel = computed(() => this.nbParType('contractuel'));
+  readonly nbFormationNonContractuel = computed(() => this.nbParType('non-contractuel'));
+  /** Badge de la ligne : « Formation contractuelle », « non contractuelle » ou « En formation ». */
+  badgeFormation(type: string | null | undefined): string {
+    return badgeTypeFormation(type);
+  }
   readonly estSuperviseur = estSuperviseur;
   readonly estReferentTechnique = estReferentTechnique;
 

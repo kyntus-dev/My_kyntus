@@ -1,4 +1,4 @@
-namespace Planning.Domain.Entities;
+﻿namespace Planning.Domain.Entities;
 
 /// <summary>Projection locale du profil RH canonique (Directory).</summary>
 public class UserHrProfile
@@ -37,6 +37,11 @@ public class UserHrProfile
     public string? NiveauScolaire { get; set; }
     public string? IntitulesEtudes { get; set; }
     public bool EnFormation { get; set; }
+    /// <summary>
+    /// v48 : « contractuel » (formation prévue au contrat) ou « non-contractuel ».
+    /// null tant que rien n'a été choisi (fiches antérieures à la v48).
+    /// </summary>
+    public string? TypeFormation { get; set; }
     public DateOnly? DateDebutFormation { get; set; }
     public DateOnly? DateFinFormationPrevue { get; set; }
     /// <summary>

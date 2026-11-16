@@ -22,6 +22,7 @@ import {
 import { type ContextePenalites, type PeriodeAgents, penalitesAgent } from '../lib/manquements.util';
 import { enteteJour, familleCode, periodePaie, ymd } from '../lib/presence.util';
 import { dateFr, messageErreur, montantFr, sansAccents } from '../lib/suivi.util';
+import { normaliserTypeFormation } from '../../../core/hr/type-formation.util';
 
 interface Activite { id: string; name: string; kind: string; isActive: boolean; poleIds: string[] }
 type Mode = 'paie' | 'mois';
@@ -74,7 +75,8 @@ export class PresencesExportComponent implements OnInit {
   readonly contrat = signal('');
   readonly alertesSeulement = signal(false);
   /** v37 : '' tous ; 'formation' = en formation ou intégrés ; sinon un état précis. */
-  readonly formation = signal<'' | 'formation' | 'en-formation' | 'integre' | 'production'>('');
+  // v48 : « contractuel » / « non-contractuel » = type de formation choisi sur la fiche.
+  readonly formation = signal<'' | 'formation' | 'en-formation' | 'integre' | 'production' | 'contractuel' | 'non-contractuel'>('');
   readonly couleursFormation = COULEURS_FORMATION;
   readonly voirJours = signal(true);
   readonly tri = signal<Tri>('affectation');
@@ -146,6 +148,9 @@ export class PresencesExportComponent implements OnInit {
     const f = this.formation();
     if (!f) return true;
     if (f === 'formation') return l.etatFormation !== 'production';
+    if (f === 'contractuel' || f === 'non-contractuel') {
+      return normaliserTypeFormation(l.typeFormation) === f;
+    }
     return l.etatFormation === f;
   }
 

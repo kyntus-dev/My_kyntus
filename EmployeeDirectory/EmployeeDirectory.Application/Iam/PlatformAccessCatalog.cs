@@ -1,4 +1,4 @@
-namespace EmployeeDirectory.Application.Iam;
+﻿namespace EmployeeDirectory.Application.Iam;
 
 public static class PlatformAccessCatalog
 {
@@ -152,6 +152,9 @@ public static class PlatformAccessCatalog
         S("conges.periodes", "Périodes interdites", "Congés", View: AdminRh, Configure: AdminRh),
 
         S("documentation.module", "Module Documentation (accès au menu)", "Documentation", View: Self),
+        // v48 : Process Bytel — tout le monde consulte (selon la visibilité du document),
+        // RH / Admin / chef de projet déposent ; « Agir » s'accorde ici à d'autres rôles (superviseur…).
+        S("process-bytel", "Process Bytel (documents partagés)", "Documentation", View: Self, Act: RhChefProjet),
         S("documentation.admin-config", "Configuration documentation", "Documentation", View: Admin, Configure: Admin),
         S("documentation.doc-types", "Types de documents", "Documentation", View: Admin, Configure: Admin),
         S("documentation.permissions", "Permissions documents", "Documentation", View: Admin, Configure: Admin),

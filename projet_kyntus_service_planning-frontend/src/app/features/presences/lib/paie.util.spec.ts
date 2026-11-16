@@ -24,13 +24,13 @@ function agent(jours: PresenceJourDto[], extra: Partial<PresenceAgentDto> = {}):
 }
 
 describe('export paie', () => {
-  it('reprend les 52 colonnes du fichier d’octobre 2026 (27 jours du lundi au samedi), plus « Statut paie »', () => {
+  it('reprend les 52 colonnes du fichier d’octobre 2026 (27 jours du lundi au samedi), plus « Statut paie » et « Type de formation » (v48)', () => {
     const entetes = entetesPaie('2026-10-01', '2026-10-31');
-    expect(entetes).toHaveLength(53);
+    expect(entetes).toHaveLength(54);
     expect(entetes.slice(0, 4)).toEqual(['Type', 'Affectation', 'Pilote', 'jeu\n01/10']);
     expect(entetes).not.toContain('dim\n04/10');
     expect(entetes.slice(-2)).toEqual(['Sortie (AR)', 'Statut paie']);
-    expect(entetes.slice(-23, -17)).toEqual(['Formation', 'Date entrée', 'Abs. partielle', 'ABS N (déduit)', 'AM (déduit)', 'AR (déduit)']);
+    expect(entetes.slice(-24, -17)).toEqual(['Formation', 'Type de formation', 'Date entrée', 'Abs. partielle', 'ABS N (déduit)', 'AM (déduit)', 'AR (déduit)']);
     expect(hhmmss(1505)).toBe('25:05:00');
   });
 
@@ -74,7 +74,7 @@ describe('export paie', () => {
     expect(l.evp).toBe('05/10 Heures Supp. (à valoriser) : 4 h | 20/10 Prime : Objectif');
     expect(l.totalEvp).toBe(300);
     expect(l.alertes).toContain('EVP à valoriser');
-    expect(valeursPaie(l)).toHaveLength(53);
+    expect(valeursPaie(l)).toHaveLength(54);
     const avecPenalite = lignePaie(a, evp, du, au, { montant: 250, details: [], origine: 'R01 ×1', disciplinaires: 0, alertes: [] });
     expect(avecPenalite.penalite).toBe(-250);
     expect(avecPenalite.originePenalite).toBe('R01 ×1');

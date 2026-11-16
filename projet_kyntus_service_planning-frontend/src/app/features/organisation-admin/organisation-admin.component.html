@@ -163,6 +163,22 @@
               <span class="oa-meta">{{ codeParContrat().get(d.id) || d.code }} · {{ d.poles.length }} pôle(s)</span>
             </div>
             <div class="oa-actions">
+              @if (estFormationQualite(d)) {
+                <!-- v48 : cellules Formateurs / Contrôleurs de qualité / Agents en formation. -->
+                <button
+                  type="button"
+                  class="oa-link"
+                  [disabled]="busy() || !peutModifier() || cellulesFormationManquantes(d).length === 0"
+                  [title]="cellulesFormationManquantes(d).length === 0
+                    ? 'Les cellules Formateurs, Contrôleurs de qualité et Agents en formation existent déjà.'
+                    : 'Créer : ' + cellulesFormationManquantes(d).join(', ')"
+                  (click)="creerCellulesFormation(d)"
+                >
+                  {{ cellulesFormationManquantes(d).length === 0
+                    ? 'Cellules formation : complètes'
+                    : 'Créer les cellules formation (' + cellulesFormationManquantes(d).length + ')' }}
+                </button>
+              }
               <button type="button" class="oa-link" (click)="nouveauPole(d)" [disabled]="busy() || !peutModifier()">+ Pôle</button>
               <button type="button" class="oa-link" (click)="renommerContrat(d)" [disabled]="busy() || !peutModifier()">Renommer</button>
               <button type="button" class="oa-link oa-link--warn" (click)="archiverContrat(d)" [disabled]="busy() || !peutModifier()">Archiver</button>

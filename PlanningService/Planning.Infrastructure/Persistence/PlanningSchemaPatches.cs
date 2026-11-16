@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 
 namespace Planning.Infrastructure.Persistence;
 
@@ -93,6 +93,34 @@ public static class PlanningSchemaPatches
         await db.Database.ExecuteSqlRawAsync(
             """
             ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "DateDebutFormation" date NULL;
+            """,
+            ct);
+    }
+
+    /// <summary>v48 : type de formation (contractuel / non contractuel) et bibliothèque Process Bytel.</summary>
+    public static async Task EnsureFormationEtProcessBytelAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "TypeFormation" character varying(32) NULL;
+
+            CREATE TABLE IF NOT EXISTS "ProcessDocuments" (
+                "Id" bigserial PRIMARY KEY,
+                "Dossier" character varying(80) NOT NULL DEFAULT 'ITs',
+                "Titre" character varying(200) NOT NULL,
+                "NomFichier" character varying(255) NOT NULL,
+                "ContentType" character varying(120) NOT NULL,
+                "Taille" bigint NOT NULL,
+                "Contenu" bytea NOT NULL,
+                "Commentaire" character varying(1000) NULL,
+                "PourTous" boolean NOT NULL DEFAULT true,
+                "Activites" character varying(600) NOT NULL DEFAULT '',
+                "Poles" character varying(2000) NOT NULL DEFAULT '',
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" character varying(120) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_ProcessDocuments_Dossier" ON "ProcessDocuments" ("Dossier");
             """,
             ct);
     }
