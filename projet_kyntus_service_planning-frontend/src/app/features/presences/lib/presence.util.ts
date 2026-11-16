@@ -193,3 +193,36 @@ export function lignesExportRetards(lignes: readonly LigneRetard[]): (string | n
     ]),
   ];
 }
+
+// ── v48.1 : pôles et cellules proposés même sans agent présent ────────────────
+
+/** Nœud « activité » de l'organisation (GET /api/directory/org/overview). */
+export interface ActiviteStructure {
+  name: string;
+  isActive?: boolean;
+  poles: readonly { name: string; cellules: readonly { name: string }[] }[];
+}
+
+const memeNom = (a: string | null | undefined, b: string | null | undefined): boolean =>
+  (a ?? '').trim().localeCompare((b ?? '').trim(), 'fr', { sensitivity: 'base' }) === 0;
+
+/**
+ * Pôles et cellules déclarés dans l'organisation pour l'activité choisie. Les listes des filtres
+ * étaient construites à partir des seuls agents présents : une activité sans agent (Formation &
+ * Qualité juste après la création de ses cellules) n'en proposait aucun.
+ */
+export function structureDeLActivite(
+  activites: readonly ActiviteStructure[],
+  activite: string,
+  pole: string,
+): { poles: string[]; cellules: string[] } {
+  if (!activite) return { poles: [], cellules: [] };
+  const dept = activites.find((a) => a.isActive !== false && memeNom(a.name, activite));
+  if (!dept) return { poles: [], cellules: [] };
+  return {
+    poles: dept.poles.map((p) => p.name),
+    cellules: dept.poles
+      .filter((p) => !pole || memeNom(p.name, pole))
+      .flatMap((p) => p.cellules.map((c) => c.name)),
+  };
+}

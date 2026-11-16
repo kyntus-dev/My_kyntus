@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PresenceAgentDto, PresenceJourDto } from '../../../core/models/presence.models';
-import { FILTRES_VIDES, familleCode, filtrerAgents, joursDeLaPeriode, lignesRetards, periodePaie } from './presence.util';
+import { FILTRES_VIDES, familleCode, filtrerAgents, joursDeLaPeriode, lignesRetards, periodePaie, structureDeLActivite } from './presence.util';
 
 const jour = (p: Partial<PresenceJourDto>): PresenceJourDto => ({
   jour: '2026-11-02', code: 'P', auto: true, codeAuto: 'P', statut: 'Retard', planning: '09:00', arrivee: '09:12:00', depart: '18:00:00',
@@ -100,5 +100,36 @@ describe('filtres v46 : formation, contrats, superviseurs et référents', () =>
     expect(ids({ formation: 'non-contractuel' })).toEqual([3]);
     expect(ids({ formation: 'non' })).toEqual([1]);
     expect(ids({})).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe('structureDeLActivite (v48.1)', () => {
+  const activites = [
+    {
+      name: 'Formation & Qualité',
+      isActive: true,
+      poles: [
+        { name: 'Formation', cellules: [{ name: 'Formateurs' }, { name: 'Agents en formation' }] },
+        { name: 'Contrôle qualité', cellules: [{ name: 'Contrôleurs de qualité' }] },
+      ],
+    },
+    { name: 'Bytel Kyntus', isActive: true, poles: [{ name: 'Pôle client', cellules: [{ name: 'Support VIP' }] }] },
+  ];
+
+  it('propose les pôles et cellules de l’activité même sans agent présent', () => {
+    expect(structureDeLActivite(activites, 'Formation & Qualité', '')).toEqual({
+      poles: ['Formation', 'Contrôle qualité'],
+      cellules: ['Formateurs', 'Agents en formation', 'Contrôleurs de qualité'],
+    });
+  });
+
+  it('limite les cellules au pôle choisi', () => {
+    expect(structureDeLActivite(activites, 'Formation & Qualité', 'Formation').cellules)
+      .toEqual(['Formateurs', 'Agents en formation']);
+  });
+
+  it('ne propose rien sans activité choisie ou pour une activité inconnue', () => {
+    expect(structureDeLActivite(activites, '', '')).toEqual({ poles: [], cellules: [] });
+    expect(structureDeLActivite(activites, 'Inconnue', '')).toEqual({ poles: [], cellules: [] });
   });
 });

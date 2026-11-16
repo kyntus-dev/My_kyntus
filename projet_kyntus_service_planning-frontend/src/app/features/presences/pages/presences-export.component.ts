@@ -20,7 +20,8 @@ import {
   telechargerExportPaie,
 } from '../lib/paie.util';
 import { type ContextePenalites, type PeriodeAgents, penalitesAgent } from '../lib/manquements.util';
-import { enteteJour, familleCode, periodePaie, ymd } from '../lib/presence.util';
+import { ActiviteStructure, enteteJour, familleCode, periodePaie, structureDeLActivite, ymd } from '../lib/presence.util';
+import { DirectoryFacadeService } from '../../../core/directory/directory-facade.service';
 import { dateFr, messageErreur, montantFr, sansAccents } from '../lib/suivi.util';
 import { normaliserTypeFormation } from '../../../core/hr/type-formation.util';
 
@@ -44,6 +45,7 @@ export class PresencesExportComponent implements OnInit {
   private readonly presences = inject(PresenceService);
   private readonly suivi = inject(PresenceSuiviService);
   private readonly http = inject(HttpClient);
+  private readonly annuaire = inject(DirectoryFacadeService);
   private readonly toast = inject(KyntusToastService);
 
   readonly codesDeduits = CODES_DEDUITS;
@@ -64,6 +66,8 @@ export class PresencesExportComponent implements OnInit {
   readonly evp = signal<EvpDto[]>([]);
   readonly evpIndisponible = signal(false);
   readonly activites = signal<Activite[]>([]);
+  /** v48.1 : pôles et cellules déclarés dans l'organisation (filtres même sans agent). */
+  readonly structure = signal<ActiviteStructure[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly exportEnCours = signal(false);
@@ -117,10 +121,12 @@ export class PresencesExportComponent implements OnInit {
     const l = this.toutes();
     const dansActivite = l.filter((x) => !this.activite() || this.activiteDe(x) === this.activite());
     const dansPole = dansActivite.filter((x) => !this.pole() || x.pole === this.pole());
+    // v48.1 : complétées par l'organisation (activité sans agent : Formation & Qualité).
+    const declarees = structureDeLActivite(this.structure(), this.activite(), this.pole());
     return {
       activites: uniq([...l.map((x) => this.activiteDe(x)), this.activiteFormation()]),
-      poles: uniq(dansActivite.map((x) => x.pole)),
-      cellules: uniq(dansPole.map((x) => x.cellule)),
+      poles: uniq([...dansActivite.map((x) => x.pole), ...declarees.poles]),
+      cellules: uniq([...dansPole.map((x) => x.cellule), ...declarees.cellules]),
     };
   });
 
@@ -197,6 +203,10 @@ export class PresencesExportComponent implements OnInit {
     this.http.get<Activite[]>('/api/directory/business-departments').subscribe({
       next: (a) => this.activites.set(a ?? []),
       error: () => this.activites.set([]),
+    });
+    this.annuaire.getOrgOverview<{ operationalDepartments?: ActiviteStructure[] }>().subscribe({
+      next: (o) => this.structure.set(o?.operationalDepartments ?? []),
+      error: () => this.structure.set([]),
     });
   }
 

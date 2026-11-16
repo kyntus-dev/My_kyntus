@@ -12,6 +12,8 @@ import type {
   PresenceGrilleDto,
   PresenceJourDto,
 } from '../../../core/models/presence.models';
+import { DirectoryFacadeService } from '../../../core/directory/directory-facade.service';
+import { ActiviteStructure, structureDeLActivite } from '../lib/presence.util';
 import { PresencesNavComponent } from '../components/presences-nav.component';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import {
@@ -64,6 +66,7 @@ export class PresencesTableauComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly toast = inject(KyntusToastService);
   private readonly auth = inject(AuthService);
+  private readonly annuaire = inject(DirectoryFacadeService);
   /** v37 : agents en formation visibles, saisie réservée à l'équipe formation, aux RH et aux Admin. */
   readonly saisieFormation = computed(() => peutSaisirFormation(this.auth.getRole()));
   /** v46 : chef de projet (ou RP) : listes « Superviseurs » et « Référents techniques ». */
@@ -86,6 +89,8 @@ export class PresencesTableauComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly filtres = signal<FiltresPresence>({ ...FILTRES_VIDES });
   readonly activites = signal<Activite[]>([]);
+  /** v48.1 : pôles et cellules déclarés dans l'organisation (filtres même sans agent présent). */
+  readonly structure = signal<ActiviteStructure[]>([]);
   readonly edition = signal<Edition | null>(null);
   readonly enregistrement = signal(false);
   @ViewChild('panneau') private panneau?: ElementRef<HTMLDialogElement>;
@@ -121,6 +126,7 @@ export class PresencesTableauComponent implements OnInit {
     const f = this.filtres();
     const dansActivite = agents.filter((a) => !f.activite || this.activiteDuPole(a.poleId, a) === f.activite);
     const dansPole = dansActivite.filter((a) => !f.pole || a.pole === f.pole);
+    const declarees = structureDeLActivite(this.structure(), f.activite, f.pole);
     const personnes = (test: (r?: string | null) => boolean) => agents
       .filter((a) => test(a.role))
       .map((a) => ({ id: String(a.userId), nom: a.nom }))
@@ -128,8 +134,10 @@ export class PresencesTableauComponent implements OnInit {
     return {
       // v46 : Formation & Qualité toujours proposée.
       activites: uniq([...agents.map((a) => this.activiteDuPole(a.poleId, a)), this.activiteFormation()]),
-      poles: uniq(dansActivite.map((a) => a.pole)),
-      cellules: uniq(dansPole.map((a) => a.cellule)),
+      // v48.1 : complétées par l'organisation — une activité sans agent propose quand même
+      // ses pôles et ses cellules (ex. Formation & Qualité).
+      poles: uniq([...dansActivite.map((a) => a.pole), ...declarees.poles]),
+      cellules: uniq([...dansPole.map((a) => a.cellule), ...declarees.cellules]),
       // v46 : Salarié et Sous-traitant toujours proposés.
       types: [...TYPES_CONTRAT] as string[],
       superviseurs: personnes(estSuperviseur),
@@ -203,6 +211,10 @@ export class PresencesTableauComponent implements OnInit {
     this.http.get<Activite[]>('/api/directory/business-departments').subscribe({
       next: (a) => this.activites.set(a ?? []),
       error: () => this.activites.set([]),
+    });
+    this.annuaire.getOrgOverview<{ operationalDepartments?: ActiviteStructure[] }>().subscribe({
+      next: (o) => this.structure.set(o?.operationalDepartments ?? []),
+      error: () => this.structure.set([]),
     });
   }
 
