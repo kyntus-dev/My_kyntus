@@ -631,7 +631,8 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
       id: s.id,
       name: s.name,
       orgLabel: s.name,
-      employeesCount: st?.activeEmployeeCount ?? s.employeesCount ?? 0,
+      // v50 : l'effectif affiché est celui que le générateur retient (postes planifiables).
+      employeesCount: st?.planifiableEmployeeCount ?? st?.activeEmployeeCount ?? s.employeesCount ?? 0,
       primeServiceId: s.primeServiceId?.trim() || null,
       hasTemplate: st?.hasTemplate ?? false,
     };
@@ -714,8 +715,9 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
         }
         for (const opt of this.subServiceOptions) {
           opt.hasTemplate = this.statusBySubId.get(opt.id)?.hasTemplate ?? false;
+          const st = this.statusBySubId.get(opt.id);
           opt.employeesCount =
-            this.statusBySubId.get(opt.id)?.activeEmployeeCount ?? opt.employeesCount;
+            st?.planifiableEmployeeCount ?? st?.activeEmployeeCount ?? opt.employeesCount;
         }
         const inTree = this.subServiceOptions.filter((opt) => this.isLinkedToTree(opt));
         this.totalServiceCount = inTree.length;

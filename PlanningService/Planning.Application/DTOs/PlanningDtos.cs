@@ -1,4 +1,4 @@
-namespace Planning.Application.DTOs.Planning;
+﻿namespace Planning.Application.DTOs.Planning;
 
 // -- Cr�er un planning --
 public class CreateWeeklyPlanningDto
@@ -455,6 +455,8 @@ public class ShiftConfigStatusItemDto
     public int ShiftCount { get; set; }
     public int TemplateEffectif { get; set; }
     public int ActiveEmployeeCount { get; set; }
+    /// <summary>v50 : agents réellement planifiables (hors postes non planifiés : formation, RH, IT…).</summary>
+    public int PlanifiableEmployeeCount { get; set; }
 }
 
 public class ShiftConfigStatusResponseDto

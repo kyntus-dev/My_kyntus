@@ -168,7 +168,11 @@ public static class PlanningLeaveImpactEvaluator
             var assignedAfter = after.Count(a => a.SubServiceShiftConfigId == cfg.Id);
             var assignedBefore = before.Count(a => a.SubServiceShiftConfigId == cfg.Id);
 
-            if (assignedBefore >= cfg.RequiredCount && assignedAfter < cfg.RequiredCount)
+            // v50 : le départ laisse le shift sous son quota → il faut regénérer pour que
+            // quelqu'un d'autre le couvre. Avant, la couverture n'était rétablie que si le shift
+            // était pile à son quota : dans une cellule déjà en sous-effectif, le congé validé
+            // creusait le trou sans jamais réaffecter personne.
+            if (assignedAfter < cfg.RequiredCount && assignedAfter < assignedBefore)
                 return true;
 
             if (assignedBefore > 0 && assignedAfter == 0 && cfg.Id == affectedShiftConfigId)

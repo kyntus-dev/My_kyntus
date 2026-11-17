@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Planning.Application.Abstractions;
 using Planning.Application.DTOs.Planning;
@@ -159,6 +159,40 @@ public class PlanningLeaveImpactTests
 
         Assert.True(PlanningLeaveImpactEvaluator.NeedsRegen(
             planning, [Cfg(1, required: 2, minPresence: 50)], userId: 1, monday, monday,
+            absenceRemoved: false, regenerateFrom: monday));
+    }
+
+    // v50 : cellule déjà en sous-effectif — le congé validé doit quand même faire couvrir le shift.
+    [Fact]
+    public void NeedsRegen_true_when_shift_was_already_under_quota_v50()
+    {
+        var monday = FutureMonday();
+        // Shift 1 demande 4 personnes, seules 2 y sont : le départ de l'une creuse encore le trou.
+        var planning = Week(monday,
+            Assign(1, monday, 1, new TimeOnly(12, 0)),
+            Assign(2, monday, 1, new TimeOnly(13, 0)),
+            Assign(3, monday, 2, new TimeOnly(12, 30)),
+            Assign(4, monday, 2, new TimeOnly(13, 30)));
+
+        Assert.True(PlanningLeaveImpactEvaluator.NeedsRegen(
+            planning,
+            [Cfg(1, required: 4, minPresence: 0), Cfg(2, required: 2, minPresence: 0)],
+            userId: 1, monday, monday,
+            absenceRemoved: false, regenerateFrom: monday));
+    }
+
+    // Le shift reste au-dessus de son quota après le départ : aucune regen inutile.
+    [Fact]
+    public void NeedsRegen_false_when_shift_stays_at_quota_v50()
+    {
+        var monday = FutureMonday();
+        var planning = Week(monday,
+            Assign(1, monday, 1, new TimeOnly(12, 0)),
+            Assign(2, monday, 1, new TimeOnly(13, 0)),
+            Assign(3, monday, 1, new TimeOnly(14, 0)));
+
+        Assert.False(PlanningLeaveImpactEvaluator.NeedsRegen(
+            planning, [Cfg(1, required: 2, minPresence: 0)], userId: 1, monday, monday,
             absenceRemoved: false, regenerateFrom: monday));
     }
 

@@ -243,11 +243,25 @@
           <span class="kpi-shift-tag shift-total-tag">Total</span>
           <span class="kpi-pct">100%</span>
         </div>
-        <div class="kpi-val">{{ planning.totalEffectif }}</div>
-        <div class="kpi-desc">effectif total</div>
+        <div class="kpi-val">{{ effectifPlanifie }}</div>
+        <div class="kpi-desc">
+          agents dans la grille
+          <span class="kpi-quota-hint">· quotas {{ quotaTotal }}/jour</span>
+        </div>
         <div class="kpi-bar-fill kpi-bar-total" style="width:100%"></div>
       </div>
     </div>
+
+    <!-- v50 : cohérence effectif cellule / grille / quotas -->
+    @if (alerteEffectif) {
+      <div class="pv-alerte-effectif">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div>
+          <strong>Effectif à vérifier</strong>
+          <p>{{ alerteEffectif }}</p>
+        </div>
+      </div>
+    }
 
     <!-- ══════════════ GRILLE ══════════════ -->
     <div class="grid-container">

@@ -595,6 +595,51 @@ selectedHolidayShiftId      = 0;
     });
   }
 
+  // ── v50 : cohérence effectif / quotas ──────────────────────────────────────
+
+  /** Somme des quotas configurés (ce que la configuration des shifts demande chaque jour). */
+  get quotaTotal(): number {
+    return (this.planning?.shiftConfigs ?? []).reduce((s, c) => s + (c.requiredCount || 0), 0);
+  }
+
+  /** Agents réellement présents dans la grille (une personne comptée une fois). */
+  get effectifPlanifie(): number {
+    const ids = new Set((this.planning?.assignments ?? []).map((a) => a.userId));
+    return ids.size;
+  }
+
+  /** Effectif retenu par le générateur pour cette semaine (agents de la cellule). */
+  get effectifCellule(): number {
+    return this.planning?.totalEffectif ?? 0;
+  }
+
+  /**
+   * Message d'incohérence entre l'effectif de la cellule, la grille et les quotas.
+   * null = tout est cohérent.
+   */
+  get alerteEffectif(): string | null {
+    if (!this.planning) return null;
+    const planifie = this.effectifPlanifie;
+    const cellule = this.effectifCellule;
+    const quotas = this.quotaTotal;
+
+    if (planifie === 0) {
+      return 'Aucun agent dans la grille : la cellule ne compte aucun agent planifiable dans le '
+        + 'Planning. Vérifiez les affectations dans Organisation RH, lancez « Synchro organisation », '
+        + 'puis régénérez.';
+    }
+    if (quotas > 0 && planifie < quotas) {
+      return `Effectif insuffisant : ${planifie} agent(s) dans la cellule pour ${quotas} poste(s) `
+        + 'demandés par jour. Ajustez la configuration des shifts ou renforcez la cellule — '
+        + 'les cases « MANQUE » viennent de là.';
+    }
+    if (cellule > 0 && cellule !== planifie) {
+      return `Le planning a été généré avec ${cellule} agent(s) et la grille en contient ${planifie} : `
+        + 'régénérez pour repartir de l\'effectif actuel.';
+    }
+    return null;
+  }
+
   toggleShiftKpiDetail(label: string, expandable: boolean): void {
     if (!expandable) return;
     this.expandedShiftKpiLabel = this.expandedShiftKpiLabel === label ? null : label;

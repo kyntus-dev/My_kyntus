@@ -2800,3 +2800,39 @@
 .export-note-cell {
   background: #fffbeb;
 }
+/* v50 — Cohérence effectif : bandeau d'alerte au-dessus de la grille. */
+.pv-alerte-effectif {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, #d97706 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #d97706 32%, var(--border-color));
+  color: var(--text-primary);
+}
+
+.pv-alerte-effectif svg {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+  color: #b45309;
+}
+
+.pv-alerte-effectif strong {
+  display: block;
+  font-size: 0.9rem;
+  color: #b45309;
+}
+
+.pv-alerte-effectif p {
+  margin: 0.2rem 0 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  max-width: 100ch;
+}
+
+.kpi-quota-hint {
+  color: var(--text-muted);
+  white-space: nowrap;
+}

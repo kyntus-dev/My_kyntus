@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.SignalR;
+﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Planning.Infrastructure.Persistence;
@@ -360,10 +360,22 @@ public partial class PlanningService : IPlanningService
 
         var activeBySub = activeCounts.ToDictionary(x => x.SubServiceId, x => x.Count);
 
+        // v50 : effectif réellement planifiable (le générateur écarte les postes hors production).
+        var planifiableCounts = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.IsActive && u.SubServiceId != null)
+            .Where(PostesProduction.Planifiable)
+            .GroupBy(u => u.SubServiceId!.Value)
+            .Select(g => new { SubServiceId = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var planifiableBySub = planifiableCounts.ToDictionary(x => x.SubServiceId, x => x.Count);
+
         var items = subs.Select(s =>
         {
             templateBySub.TryGetValue(s.Id, out var tpl);
             activeBySub.TryGetValue(s.Id, out var active);
+            planifiableBySub.TryGetValue(s.Id, out var planifiable);
             return new ShiftConfigStatusItemDto
             {
                 SubServiceId = s.Id,
@@ -372,7 +384,8 @@ public partial class PlanningService : IPlanningService
                 HasTemplate = tpl != null && tpl.ShiftCount > 0,
                 ShiftCount = tpl?.ShiftCount ?? 0,
                 TemplateEffectif = tpl?.TemplateEffectif ?? 0,
-                ActiveEmployeeCount = active
+                ActiveEmployeeCount = active,
+                PlanifiableEmployeeCount = planifiable
             };
         }).ToList();
 
@@ -749,6 +762,13 @@ public partial class PlanningService : IPlanningService
             .Where(PostesProduction.Planifiable)
             .OrderBy(u => u.Id)
             .ToListAsync();
+
+        // v50 : l'effectif du planning est celui de la cellule, jamais un nombre saisi à la main.
+        // Sans agent rattaché, on refuse plutôt que de produire une grille vide pleine de « MANQUE ».
+        if (employees.Count == 0)
+            throw new InvalidOperationException(
+                "Aucun agent n'est rattaché à cette cellule dans le Planning : vérifiez les affectations "
+                + "dans Organisation RH, puis relancez « Synchro organisation » avant de générer.");
 
         planning.TotalEffectif = employees.Count;
 

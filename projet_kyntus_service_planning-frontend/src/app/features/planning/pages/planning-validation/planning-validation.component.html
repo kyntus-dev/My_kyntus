@@ -551,7 +551,12 @@
       <span class="badge badge-svc">Svc.</span>
       <span class="tree-name">{{ svc.name }}</span>
     </span>
-    <span class="pv-col-eff">{{ headcountForPrime(svc.id) || '—' }}</span>
+    <span class="pv-col-eff">
+      {{ headcountForPrime(svc.id) || '—' }}
+      @if (effectifPlanningDifferent(svc.id); as fige) {
+        <span class="pv-eff-ecart" [title]="'Planning généré avec ' + fige + ' agent(s) — effectif réel : ' + headcountForPrime(svc.id) + '. Régénérez le planning.'">≠ {{ fige }}</span>
+      }
+    </span>
     <span class="pv-col-mod">
       <span
         *ngIf="itemForPrime(svc.id) as it"

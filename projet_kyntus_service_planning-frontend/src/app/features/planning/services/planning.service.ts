@@ -469,6 +469,8 @@ export interface ShiftConfigStatusItem {
   shiftCount: number;
   templateEffectif: number;
   activeEmployeeCount: number;
+  /** v50 : agents réellement planifiables (ceux que le générateur retient). */
+  planifiableEmployeeCount?: number;
 }
 
 export interface ShiftConfigStatusResponse {

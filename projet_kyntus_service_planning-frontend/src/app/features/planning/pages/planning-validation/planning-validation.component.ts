@@ -547,10 +547,24 @@ export class PlanningValidationComponent implements OnInit {
     return this.byPrimeId.get(this.normPrimeId(primeId));
   }
 
+  /**
+   * v50 : l'effectif affiché est celui de l'Organisation (agents réellement rattachés à la cellule).
+   * Le chiffre figé dans le planning ne sert que si l'effectif réel n'est pas connu : sinon un
+   * planning généré quand la cellule comptait 44 agents continuait d'afficher 44 alors que la
+   * cellule est vide, et la grille restait désespérément vide.
+   */
   headcountForPrime(primeId: string): number {
-    const planned = this.itemForPrime(primeId)?.totalEffectif ?? 0;
-    if (planned > 0) return planned;
-    return this.liveByPrime.get(this.normPrimeId(primeId)) ?? 0;
+    const reel = this.liveByPrime.get(this.normPrimeId(primeId));
+    if (reel !== undefined) return reel;
+    return this.itemForPrime(primeId)?.totalEffectif ?? 0;
+  }
+
+  /** Effectif figé dans le planning, quand il diffère de l'effectif réel (sinon null). */
+  effectifPlanningDifferent(primeId: string): number | null {
+    const reel = this.liveByPrime.get(this.normPrimeId(primeId));
+    const planning = this.itemForPrime(primeId)?.totalEffectif ?? 0;
+    if (reel === undefined || planning <= 0 || planning === reel) return null;
+    return planning;
   }
 
   selectDept(md: OperationalDepartmentNode): void {
