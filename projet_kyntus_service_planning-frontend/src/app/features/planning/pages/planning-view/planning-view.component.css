@@ -2836,3 +2836,17 @@
   color: var(--text-muted);
   white-space: nowrap;
 }
+
+/* v52 — Action dans le bandeau « génération en échec ». */
+.pv-alerte-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.7rem;
+}
+
+.pv-alerte-aide {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}

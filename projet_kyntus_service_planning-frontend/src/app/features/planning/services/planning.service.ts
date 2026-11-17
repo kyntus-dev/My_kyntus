@@ -215,6 +215,8 @@ export interface WeeklyPlanningResponse {
   /** v51 : raison du dernier échec de génération (null si la dernière a réussi). */
   generationErreur?: string | null;
   generationErreurLe?: string | null;
+  /** v52 : cellule à plusieurs modes sans plan de modes validé pour la semaine. */
+  modesEnAttente?: boolean;
 }
 
 /** Liste lÃ©gÃ¨re Planning Ã‰quipe (sans grille / coverage). */
@@ -490,6 +492,8 @@ export interface GeneratePlanningFromConfigDto {
   weeklyPlanningId: number;
   regenerateFromDate?: string;
   republishReason?: string;
+  /** v52 : générer sans attendre les modes du superviseur (modes de la dernière semaine repris). */
+  forcerModes?: boolean;
 }
 
 export interface PlanningWeekItem {

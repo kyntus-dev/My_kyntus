@@ -126,6 +126,8 @@ public class WeeklyPlanningResponseDto
     /// <summary>v51 : raison du dernier échec de génération (null si la dernière a réussi).</summary>
     public string? GenerationErreur { get; set; }
     public DateTime? GenerationErreurLe { get; set; }
+    /// <summary>v52 : cellule à plusieurs modes sans plan de modes validé pour cette semaine.</summary>
+    public bool ModesEnAttente { get; set; }
 }
 
 /// <summary>Liste légère pour Planning Équipe (superviseur) — sans grille ni coverage.</summary>
@@ -560,6 +562,12 @@ public class GeneratePlanningFromConfigDto
 
     /// <summary>Motif pour les notifications de republication soft.</summary>
     public string? RepublishReason { get; set; }
+
+    /// <summary>
+    /// v52 : cellule à plusieurs modes — générer sans attendre la date limite, en reprenant les modes
+    /// de la dernière semaine enregistrée (mode par défaut pour les agents sans mode).
+    /// </summary>
+    public bool ForcerModes { get; set; }
 }
 
 public class PlanningWeekItemDto

@@ -419,6 +419,57 @@ selectedHolidayShiftId      = 0;
     });
   }
 
+  /**
+   * v52 : cellule à plusieurs modes, modes de la semaine pas encore enregistrés par le superviseur.
+   * Action explicite : génère tout de suite en reprenant les modes de la dernière semaine
+   * enregistrée (mode par défaut pour les agents qui n'en ont pas).
+   */
+  async genererAvecModesRepris(): Promise<void> {
+    if (!this.planning || !this.canValidate || this.regenerating) return;
+    const ok = await this.confirmService.confirm({
+      title: 'Générer avec les modes repris',
+      message:
+        'Les modes de la semaine n\'ont pas été enregistrés par le superviseur.\n\n'
+        + 'La grille sera générée tout de suite en reprenant les modes de la dernière semaine '
+        + 'enregistrée ; les agents sans mode prennent le mode par défaut. Le superviseur pourra '
+        + 'toujours les modifier, puis vous régénérerez.',
+      confirmLabel: 'Générer',
+      variant: 'warning',
+    });
+    if (!ok) return;
+
+    this.regenerating = true;
+    this.error = '';
+    this.successMsg = '';
+    this.planningService.generateFromConfig({
+      subServiceId: this.planning.subServiceId,
+      weekCode: this.planning.weekCode,
+      weeklyPlanningId: this.planning.id,
+      forcerModes: true,
+    }).subscribe({
+      next: () => {
+        this.regenerating = false;
+        this.successMsg = 'Planning généré avec les modes repris — contrôlez la grille puis validez.';
+        this.loadPlanning(this.planning!.id);
+        setTimeout(() => { this.successMsg = ''; this.cdr.detectChanges(); }, 5000);
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.regenerating = false;
+        this.error = err.error?.message ?? 'Erreur de génération.';
+        if (this.planning) this.loadPlanning(this.planning.id);
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  /** v52 : le message rouge d'erreur répète le bandeau d'échec : on n'en affiche qu'un. */
+  get erreurDistincte(): string {
+    const e = (this.error ?? '').trim();
+    const g = (this.planning?.generationErreur ?? '').trim();
+    return e && g && e === g ? '' : e;
+  }
+
   get coverageWarnings(): string[] {
     return this.planning?.coverageReport?.warnings ?? [];
   }
@@ -639,6 +690,13 @@ selectedHolidayShiftId      = 0;
         texte: 'Le Planning ne compte aucun agent de production rattaché à cette cellule '
           + '(l\'encadrement n\'est jamais planifié). Affectez les agents dans Organisation RH, '
           + 'lancez « Synchro organisation », puis régénérez.',
+      };
+    }
+    if (planifie === 0 && this.planning.modesEnAttente) {
+      return {
+        titre: 'Modes de la semaine non enregistrés',
+        texte: 'Cette cellule fonctionne avec plusieurs modes : la génération attend que le '
+          + 'superviseur enregistre les modes de la semaine (ou, à défaut, la date limite).',
       };
     }
     if (planifie === 0) {

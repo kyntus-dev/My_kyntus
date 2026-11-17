@@ -778,7 +778,7 @@ public partial class PlanningService : IPlanningService
         if (subService?.MultiShiftModesEnabled == true)
         {
             await EnsureValidatedModePlanForWeekAsync(
-                subServiceId, weekCode, planning.WeekStartDate);
+                subServiceId, weekCode, planning.WeekStartDate, forcer: dto.ForcerModes);
             employeeModeMap = await ResolveEmployeeModeMapAsync(
                 subServiceId, weekCode, employees.Select(e => e.Id).ToList());
             var headcountByMode = employeeModeMap
@@ -2838,6 +2838,13 @@ public partial class PlanningService : IPlanningService
         var exceptionalApplied = await LoadExceptionalAppliedKeysAsync(
             planning.WeekCode, planning.SubServiceId);
 
+        // v52 : cellule à plusieurs modes sans plan de modes validé pour la semaine.
+        var modesEnAttente = planning.SubService.MultiShiftModesEnabled
+            && !await _context.WeeklyCellShiftModePlans.AsNoTracking()
+                .AnyAsync(p => p.SubServiceId == planning.SubServiceId
+                               && p.WeekCode == planning.WeekCode
+                               && p.IsValidated);
+
         // v51 : effectif planifiable actuel de la cellule (même règle que le générateur).
         var planifiables = await _context.Users
             .AsNoTracking()
@@ -2856,6 +2863,7 @@ public partial class PlanningService : IPlanningService
             PlanifiableEmployeeCount = planifiables,
             GenerationErreur = planning.GenerationErreur,
             GenerationErreurLe = planning.GenerationErreurLe,
+            ModesEnAttente = modesEnAttente,
             SaturdayGroupId = planning.SaturdayGroupId,
             SubServiceName = planning.SubService.Name,
             ShiftConfigs = shiftConfigs,

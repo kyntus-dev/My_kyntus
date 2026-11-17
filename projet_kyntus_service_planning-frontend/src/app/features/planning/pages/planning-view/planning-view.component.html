@@ -127,9 +127,9 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       {{ successMsg }}
     </div>
-    <div class="alert alert-error" *ngIf="error">
+    <div class="alert alert-error" *ngIf="erreurDistincte">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      {{ error }}
+      {{ erreurDistincte }}
     </div>
 
     <!-- ── Performance semaine ── -->
@@ -260,6 +260,17 @@
         <div>
           <strong>{{ alerteEffectif.titre }}</strong>
           <p>{{ alerteEffectif.texte }}</p>
+          @if (planning.modesEnAttente && canValidate && (planning.status === 'Draft' || planning.status === 'Published')) {
+            <div class="pv-alerte-actions">
+              <button type="button" class="ky-btn-primary" [disabled]="regenerating" (click)="genererAvecModesRepris()">
+                {{ regenerating ? 'Génération…' : 'Générer avec les modes repris' }}
+              </button>
+              <span class="pv-alerte-aide">
+                ou demandez au superviseur d'enregistrer les modes de la semaine
+                (Périmètre superviseur › Modes hebdomadaires).
+              </span>
+            </div>
+          }
         </div>
       </div>
     }
