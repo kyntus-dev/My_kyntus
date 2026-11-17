@@ -97,6 +97,19 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>
+    /// v51 : raison du dernier échec de génération d'un planning (grille vide jamais muette).
+    /// </summary>
+    public static async Task EnsurePlanningGenerationErreurAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "WeeklyPlannings" ADD COLUMN IF NOT EXISTS "GenerationErreur" character varying(500) NULL;
+            ALTER TABLE "WeeklyPlannings" ADD COLUMN IF NOT EXISTS "GenerationErreurLe" timestamp with time zone NULL;
+            """,
+            ct);
+    }
+
     /// <summary>v48 : type de formation (contractuel / non contractuel) et bibliothèque Process Bytel.</summary>
     public static async Task EnsureFormationEtProcessBytelAsync(AppDbContext db, CancellationToken ct = default)
     {

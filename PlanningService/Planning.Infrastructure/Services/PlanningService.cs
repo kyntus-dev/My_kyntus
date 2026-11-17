@@ -1337,6 +1337,10 @@ public partial class PlanningService : IPlanningService
             planning.ValidatedBy = null;
         }
 
+        // v51 : génération réussie → plus d'erreur affichée.
+        planning.GenerationErreur = null;
+        planning.GenerationErreurLe = null;
+
         await SavePlanningChangesAsync("Échec enregistrement du planning généré");
 
         if (tx != null)
@@ -1348,16 +1352,48 @@ public partial class PlanningService : IPlanningService
         return await GetPlanningByIdAsync(planning.Id)
             ?? throw new Exception("Erreur g�n�ration planning.");
         }
-        catch
+        catch (Exception ex)
         {
             if (tx != null)
+            {
                 await tx.RollbackAsync();
+                // v51 : la transaction annulée est libérée avant d'écrire la raison de l'échec,
+                // sinon l'écriture tenterait de passer par une transaction déjà terminée.
+                await tx.DisposeAsync();
+                tx = null;
+            }
+            // v51 : la raison reste attachée au planning (liste et vue l'affichent).
+            await EnregistrerErreurGenerationAsync(planning.Id, ex.Message);
             throw;
         }
         finally
         {
             if (tx != null)
                 await tx.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// v51 : mémorise la raison d'un échec de génération sur le planning. Le suivi des entités est
+    /// vidé d'abord : après un rollback, ses modifications en attente ne doivent pas être rejouées.
+    /// Ne lève jamais d'exception (l'erreur d'origine reste celle remontée à l'appelant).
+    /// </summary>
+    private async Task EnregistrerErreurGenerationAsync(int planningId, string? message)
+    {
+        try
+        {
+            _context.ChangeTracker.Clear();
+            var p = await _context.WeeklyPlannings.FirstOrDefaultAsync(x => x.Id == planningId);
+            if (p is null) return;
+            var texte = string.IsNullOrWhiteSpace(message) ? "Échec de génération." : message.Trim();
+            p.GenerationErreur = texte.Length > 500 ? texte[..500] : texte;
+            p.GenerationErreurLe = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            // PlanningService n'a pas de journal injecté : sortie d'erreur du conteneur.
+            Console.Error.WriteLine($"[planning] erreur de génération non enregistrée (planning {planningId}) : {ex.Message}");
         }
     }
 
@@ -2802,6 +2838,13 @@ public partial class PlanningService : IPlanningService
         var exceptionalApplied = await LoadExceptionalAppliedKeysAsync(
             planning.WeekCode, planning.SubServiceId);
 
+        // v51 : effectif planifiable actuel de la cellule (même règle que le générateur).
+        var planifiables = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.SubServiceId == planning.SubServiceId && u.IsActive)
+            .Where(PostesProduction.Planifiable)
+            .CountAsync();
+
         return new WeeklyPlanningResponseDto
         {
             Id = planning.Id,
@@ -2810,6 +2853,9 @@ public partial class PlanningService : IPlanningService
             WeekStartDate = planning.WeekStartDate,
             Status = planning.Status.ToString(),
             TotalEffectif = planning.TotalEffectif,
+            PlanifiableEmployeeCount = planifiables,
+            GenerationErreur = planning.GenerationErreur,
+            GenerationErreurLe = planning.GenerationErreurLe,
             SaturdayGroupId = planning.SaturdayGroupId,
             SubServiceName = planning.SubService.Name,
             ShiftConfigs = shiftConfigs,
@@ -4710,6 +4756,16 @@ public partial class PlanningService : IPlanningService
                 .ToListAsync())
             .ToDictionary(x => x.SubServiceId, x => x.Count);
 
+        // v51 : effectif planifiable (référence unique : celle du générateur).
+        var planifiableBySub = (await _context.Users
+                .AsNoTracking()
+                .Where(u => u.IsActive && u.SubServiceId != null)
+                .Where(PostesProduction.Planifiable)
+                .GroupBy(u => u.SubServiceId!.Value)
+                .Select(g => new { SubServiceId = g.Key, Count = g.Count() })
+                .ToListAsync())
+            .ToDictionary(x => x.SubServiceId, x => x.Count);
+
         var assignedByPlanning = new Dictionary<int, List<int>>();
         var manualModsByPlanning = new Dictionary<int, int>();
         if (plannings.Count > 0)
@@ -4767,7 +4823,9 @@ public partial class PlanningService : IPlanningService
                     : 0,
                 AssignedUserIds = planning != null
                     ? assignedByPlanning.GetValueOrDefault(planning.Id) ?? []
-                    : []
+                    : [],
+                PlanifiableEmployeeCount = planifiableBySub.GetValueOrDefault(ss.Id),
+                GenerationErreur = planning?.GenerationErreur
             });
         }
 
@@ -4896,7 +4954,11 @@ public partial class PlanningService : IPlanningService
                         continue;
                     }
 
-                    if (!forceDraftRefresh)
+                    // v51 : un brouillon resté vide (génération précédente en échec) est retenté à
+                    // chaque passage ; seul un brouillon déjà rempli est laissé tel quel.
+                    var brouillonVide = !string.IsNullOrEmpty(existing.GenerationErreur)
+                        || !await _context.ShiftAssignments.AnyAsync(a => a.WeeklyPlanningId == existing.Id);
+                    if (!forceDraftRefresh && !brouillonVide)
                     {
                         result.Skipped++;
                         result.Messages.Add($"SubService {subId}: brouillon existant — ignoré.");
@@ -4914,8 +4976,11 @@ public partial class PlanningService : IPlanningService
                     continue;
                 }
 
+                // v51 : même règle que le générateur (encadrement exclu).
                 var employeesCount = await _context.Users
-                    .CountAsync(u => u.SubServiceId == subId && u.IsActive);
+                    .Where(u => u.SubServiceId == subId && u.IsActive)
+                    .Where(PostesProduction.Planifiable)
+                    .CountAsync();
 
                 var created = await CreatePlanningAsync(new CreateWeeklyPlanningDto
                 {

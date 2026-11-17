@@ -83,6 +83,7 @@ public static class PlanningStartup
                 await TryPatch("formation-manquements", () => PlanningSchemaPatches.EnsureFormationEtManquementsAsync(db));
                 await TryPatch("presence-types", () => PlanningSchemaPatches.EnsurePresenceTypesAsync(db));
                 await TryPatch("formation-process-bytel", () => PlanningSchemaPatches.EnsureFormationEtProcessBytelAsync(db));
+                await TryPatch("planning-generation-erreur", () => PlanningSchemaPatches.EnsurePlanningGenerationErreurAsync(db));
                 await TryPatch("perf-indexes", () => PlanningSchemaPatches.EnsurePerfIndexesAsync(db));
                 Console.WriteLine("✅ Patches schéma Planning appliqués.");
             }

@@ -412,6 +412,8 @@ selectedHolidayShiftId      = 0;
       error: (err) => {
         this.regenerating = false;
         this.error = err.error?.message ?? 'Erreur régénération.';
+        // v51 : la raison est enregistrée sur le planning — on recharge pour l'afficher.
+        if (this.planning) this.loadPlanning(this.planning.id);
         this.cdr.detectChanges();
       },
     });
@@ -608,34 +610,59 @@ selectedHolidayShiftId      = 0;
     return ids.size;
   }
 
-  /** Effectif retenu par le générateur pour cette semaine (agents de la cellule). */
+  /** v51 : agents planifiables rattachés aujourd'hui à la cellule (ceux que la grille doit contenir). */
   get effectifCellule(): number {
-    return this.planning?.totalEffectif ?? 0;
+    return this.planning?.planifiableEmployeeCount ?? this.planning?.totalEffectif ?? 0;
   }
 
   /**
-   * Message d'incohérence entre l'effectif de la cellule, la grille et les quotas.
-   * null = tout est cohérent.
+   * v51 : diagnostic exact de la grille. Chaque cas a une cause et une action distinctes :
+   * génération en échec, cellule vide, grille pas encore générée, effectif sous les quotas,
+   * effectif modifié depuis la génération. null = tout est cohérent.
    */
-  get alerteEffectif(): string | null {
+  get alerteEffectif(): { titre: string; texte: string } | null {
     if (!this.planning) return null;
     const planifie = this.effectifPlanifie;
     const cellule = this.effectifCellule;
     const quotas = this.quotaTotal;
+    const erreur = (this.planning.generationErreur ?? '').trim();
 
+    if (erreur) {
+      return {
+        titre: 'La génération de cette semaine a échoué',
+        texte: `${erreur} Corrigez la cause, puis cliquez sur « Régénérer ».`,
+      };
+    }
+    if (planifie === 0 && cellule === 0) {
+      return {
+        titre: 'Aucun agent planifiable dans la cellule',
+        texte: 'Le Planning ne compte aucun agent de production rattaché à cette cellule '
+          + '(l\'encadrement n\'est jamais planifié). Affectez les agents dans Organisation RH, '
+          + 'lancez « Synchro organisation », puis régénérez.',
+      };
+    }
     if (planifie === 0) {
-      return 'Aucun agent dans la grille : la cellule ne compte aucun agent planifiable dans le '
-        + 'Planning. Vérifiez les affectations dans Organisation RH, lancez « Synchro organisation », '
-        + 'puis régénérez.';
+      return {
+        titre: 'Grille non générée',
+        texte: `${cellule} agent(s) planifiable(s) sont rattachés à la cellule, mais la grille de `
+          + 'cette semaine est vide. Cliquez sur « Régénérer » : en cas d\'échec, la raison '
+          + 's\'affichera ici.',
+      };
+    }
+    if (planifie !== cellule) {
+      return {
+        titre: 'Effectif modifié depuis la génération',
+        texte: `La grille contient ${planifie} agent(s), la cellule en compte ${cellule} aujourd'hui. `
+          + 'Régénérez pour repartir de l\'effectif actuel.',
+      };
     }
     if (quotas > 0 && planifie < quotas) {
-      return `Effectif insuffisant : ${planifie} agent(s) dans la cellule pour ${quotas} poste(s) `
-        + 'demandés par jour. Ajustez la configuration des shifts ou renforcez la cellule — '
-        + 'les cases « MANQUE » viennent de là.';
-    }
-    if (cellule > 0 && cellule !== planifie) {
-      return `Le planning a été généré avec ${cellule} agent(s) et la grille en contient ${planifie} : `
-        + 'régénérez pour repartir de l\'effectif actuel.';
+      return {
+        titre: 'Effectif inférieur aux quotas',
+        texte: `${planifie} agent(s) pour ${quotas} poste(s) demandés par jour : c'est l'origine des `
+          + 'cases « MANQUE ». Ajustez les quotas (Configuration des horaires › Répartir) ou '
+          + 'renforcez la cellule.',
+      };
     }
     return null;
   }

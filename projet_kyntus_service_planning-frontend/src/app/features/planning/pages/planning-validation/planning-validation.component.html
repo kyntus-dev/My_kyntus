@@ -317,7 +317,7 @@
             (change)="onHeaderCheck($event)" />
         </span>
         <span class="pv-col-org">Service</span>
-        <span class="pv-col-eff">Effectif</span>
+        <span class="pv-col-eff" title="Agents planifiables : ceux qui apparaissent dans la grille (encadrement exclu)">Planifiables</span>
         <span class="pv-col-mod" title="Affectations modifiées manuellement (hors demandes exceptionnelles / renforts)">
           Modifs. manuelles
         </span>
@@ -347,7 +347,7 @@
                 <span
                   class="status-dot"
                   [class.dot-ok]="statusForDept(md) === 'ok'"
-                  [class.dot-missing]="statusForDept(md) === 'missing'"
+                  [class.dot-missing]="estRouge(statusForDept(md))"
                   [class.dot-partial]="statusForDept(md) === 'partial'"
                   [class.dot-none]="statusForDept(md) === 'none'"
                   [attr.title]="statusTitle(statusForDept(md))"></span>
@@ -378,7 +378,7 @@
                       <span
                         class="status-dot"
                         [class.dot-ok]="statusForPole(pole) === 'ok'"
-                        [class.dot-missing]="statusForPole(pole) === 'missing'"
+                        [class.dot-missing]="estRouge(statusForPole(pole))"
                         [class.dot-partial]="statusForPole(pole) === 'partial'"
                         [class.dot-none]="statusForPole(pole) === 'none'"
                         [attr.title]="statusTitle(statusForPole(pole))"></span>
@@ -409,7 +409,7 @@
                             <span
                               class="status-dot"
                               [class.dot-ok]="statusForCellule(cell) === 'ok'"
-                              [class.dot-missing]="statusForCellule(cell) === 'missing'"
+                              [class.dot-missing]="estRouge(statusForCellule(cell))"
                               [class.dot-partial]="statusForCellule(cell) === 'partial'"
                               [class.dot-none]="statusForCellule(cell) === 'none'"
                               [attr.title]="statusTitle(statusForCellule(cell))"></span>
@@ -466,7 +466,7 @@
                     <span
                       class="status-dot"
                       [class.dot-ok]="statusForPole(pole) === 'ok'"
-                      [class.dot-missing]="statusForPole(pole) === 'missing'"
+                      [class.dot-missing]="estRouge(statusForPole(pole))"
                       [class.dot-partial]="statusForPole(pole) === 'partial'"
                       [class.dot-none]="statusForPole(pole) === 'none'"></span>
                     <span class="pv-stat-text">{{ statusTitle(statusForPole(pole)) }}</span>
@@ -495,7 +495,7 @@
                           <span
                             class="status-dot"
                             [class.dot-ok]="statusForCellule(cell) === 'ok'"
-                            [class.dot-missing]="statusForCellule(cell) === 'missing'"
+                            [class.dot-missing]="estRouge(statusForCellule(cell))"
                             [class.dot-partial]="statusForCellule(cell) === 'partial'"
                             [class.dot-none]="statusForCellule(cell) === 'none'"></span>
                           <span class="pv-stat-text">{{ statusTitle(statusForCellule(cell)) }}</span>
@@ -549,12 +549,17 @@
     <span class="pv-col-org">
       <span class="tree-indent"></span>
       <span class="badge badge-svc">Svc.</span>
-      <span class="tree-name">{{ svc.name }}</span>
+      <span class="tree-name">
+        {{ svc.name }}
+        @if (ecartBloquant(svc.id)) {
+          <small class="pv-ecart-texte">{{ ecartEffectif(svc.id) }}</small>
+        }
+      </span>
     </span>
-    <span class="pv-col-eff">
+    <span class="pv-col-eff" title="Agents planifiables : ceux qui apparaissent dans la grille (encadrement exclu)">
       {{ headcountForPrime(svc.id) || '—' }}
-      @if (effectifPlanningDifferent(svc.id); as fige) {
-        <span class="pv-eff-ecart" [title]="'Planning généré avec ' + fige + ' agent(s) — effectif réel : ' + headcountForPrime(svc.id) + '. Régénérez le planning.'">≠ {{ fige }}</span>
+      @if (ecartEffectif(svc.id); as ecart) {
+        <span class="pv-eff-ecart" [class.pv-eff-ecart--info]="!ecartBloquant(svc.id)" [title]="ecart">{{ ecartBloquant(svc.id) ? '!' : 'i' }}</span>
       }
     </span>
     <span class="pv-col-mod">

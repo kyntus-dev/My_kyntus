@@ -403,7 +403,9 @@
       <button type="button" class="oa-toggle" (click)="togglePole(p.id)" [attr.aria-expanded]="estOuvert(p.id)"
         [attr.aria-label]="(estOuvert(p.id) ? 'Replier ' : 'Déplier ') + p.name">{{ estOuvert(p.id) ? '▾' : '▸' }}</button>
       <span class="oa-name">{{ p.name }}</span>
-      <span class="oa-meta">{{ p.cellules.length }} cellule(s) · {{ effectifPole(p) }} personne(s)</span>
+      <span class="oa-meta" title="Planifiables : personnes présentes dans les plannings (encadrement exclu)">
+        {{ p.cellules.length }} cellule(s) · {{ effectifPole(p) }} personne(s) · {{ planifiablesPole(p) }} planifiable(s)
+      </span>
       <div class="oa-actions">
         <button type="button" class="oa-link" (click)="nouvelleCellule(p)" [disabled]="busy() || !peutModifier()">+ Cellule</button>
         <button type="button" class="oa-link" (click)="renommer('pole', p.id, '', p.name)" [disabled]="busy() || !peutModifier()">Renommer</button>
@@ -417,7 +419,9 @@
           <li class="oa-cellule">
             <div class="oa-row">
               <span class="oa-name">{{ c.name }}</span>
-              <span class="oa-meta">{{ effectifCellule(c) }} personne(s)</span>
+              <span class="oa-meta" title="Planifiables : personnes présentes dans le planning de la cellule (encadrement exclu)">
+                {{ effectifCellule(c) }} personne(s) · {{ planifiablesCellule(c) }} planifiable(s)
+              </span>
               <div class="oa-actions">
                 <button type="button" class="oa-link" (click)="nouveauService(c)" [disabled]="busy() || !peutModifier()">+ Service</button>
                 <button type="button" class="oa-link" (click)="renommer('cellule', c.id, p.id, c.name)" [disabled]="busy() || !peutModifier()">Renommer</button>

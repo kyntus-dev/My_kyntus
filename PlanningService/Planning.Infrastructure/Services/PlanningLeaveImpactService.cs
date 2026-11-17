@@ -33,17 +33,18 @@ public sealed class PlanningLeaveImpactService(
             return;
         }
 
-        var plannings = await db.WeeklyPlannings
-            .Include(p => p.ShiftAssignments)
-            .Include(p => p.SubService)
+        var planningIds = await db.WeeklyPlannings
+            .AsNoTracking()
             .Where(p =>
                 p.SubServiceId == subServiceId
                 && p.Status != PlanningStatus.Archived
                 && p.WeekStartDate <= end
                 && p.WeekStartDate.AddDays(5) >= start)
+            .OrderBy(p => p.WeekStartDate)
+            .Select(p => p.Id)
             .ToListAsync(ct);
 
-        if (plannings.Count == 0)
+        if (planningIds.Count == 0)
         {
             logger.LogDebug(
                 "Aucun planning existant à synchroniser pour user {UserId} ({Start}→{End}).",
@@ -51,8 +52,18 @@ public sealed class PlanningLeaveImpactService(
             return;
         }
 
-        foreach (var planning in plannings)
+        foreach (var planningId in planningIds)
         {
+            // v51 : chaque semaine est rechargée. Un échec de régénération sur une semaine vide le
+            // suivi des entités (aucune modification annulée ne doit être rejouée) : la semaine
+            // suivante doit repartir d'un état propre, sinon son marquage « Congé » serait perdu.
+            var planning = await db.WeeklyPlannings
+                .Include(p => p.ShiftAssignments)
+                .Include(p => p.SubService)
+                .FirstOrDefaultAsync(p => p.Id == planningId, ct);
+            if (planning is null)
+                continue;
+
             try
             {
                 await SyncOneWeekAsync(planning, userId, start, end, absenceRemoved, ct);
@@ -65,6 +76,8 @@ public sealed class PlanningLeaveImpactService(
                     planning.Id,
                     planning.WeekCode,
                     userId);
+                // Rien de la semaine en échec ne doit être rejoué par la suivante.
+                db.ChangeTracker.Clear();
             }
         }
     }
@@ -116,14 +129,40 @@ public sealed class PlanningLeaveImpactService(
                 regenerateFrom,
                 absenceRemoved);
 
-            await planningService.GeneratePlanningFromConfigAsync(new GeneratePlanningFromConfigDto
+            try
             {
-                SubServiceId = planning.SubServiceId,
-                WeekCode = planning.WeekCode,
-                WeeklyPlanningId = planning.Id,
-                RegenerateFromDate = regenerateFrom,
-                RepublishReason = reason
-            });
+                await planningService.GeneratePlanningFromConfigAsync(new GeneratePlanningFromConfigDto
+                {
+                    SubServiceId = planning.SubServiceId,
+                    WeekCode = planning.WeekCode,
+                    WeeklyPlanningId = planning.Id,
+                    RegenerateFromDate = regenerateFrom,
+                    RepublishReason = reason
+                });
+            }
+            catch (Exception ex)
+            {
+                // v51 : régénération impossible (modes non saisis, cellule vide…) — la raison est
+                // enregistrée sur le planning. L'absence est au moins posée sur tous les jours de la
+                // semaine : l'agent n'apparaît plus sur un shift qu'il ne fera pas, et le trou
+                // (« MANQUE ») est visible pour être couvert à la main.
+                logger.LogWarning(
+                    ex,
+                    "Congé → regen impossible planning {PlanningId} ({WeekCode}) : marquage Congé seul.",
+                    planning.Id,
+                    planning.WeekCode);
+                db.ChangeTracker.Clear();
+                var frais = await db.WeeklyPlannings
+                    .Include(p => p.ShiftAssignments)
+                    .FirstOrDefaultAsync(p => p.Id == planning.Id, ct);
+                if (frais is not null)
+                {
+                    if (absenceRemoved)
+                        await ApplySurgicalRestoreAsync(frais, userId, start, end, ct, onlyBefore: null);
+                    else
+                        await ApplySurgicalLeaveAsync(frais, userId, start, end, ct, onlyBefore: null);
+                }
+            }
             // Pas de republication auto : statut repasse en Draft, validation RH requise.
             return;
         }

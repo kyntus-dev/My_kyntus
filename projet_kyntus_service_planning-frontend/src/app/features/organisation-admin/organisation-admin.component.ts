@@ -49,6 +49,8 @@ type Onglet = 'structure' | 'agents' | 'archives';
  * « Archiver » ne supprime rien : le nœud reste en base avec son historique
  * (plannings, primes, congés, affectations clôturées) et disparaît des listes et des choix.
  */
+import { estPlanifiable } from '../../core/org/postes-production.util';
+
 @Component({
   selector: 'app-organisation-admin',
   standalone: true,
@@ -103,6 +105,9 @@ export class OrganisationAdminComponent implements OnInit {
   });
   readonly index = computed(() => buildCelluleIndex(this.depts(), this.unassigned()));
   readonly effectifs = computed(() => effectifsParCellule(this.agents()));
+  /** v51 : agents planifiables par cellule (même règle que le Planning : encadrement exclu). */
+  readonly planifiables = computed(() =>
+    effectifsParCellule(this.agents().filter((a) => estPlanifiable(a.role))));
   readonly codeParContrat = computed(() => new Map(this.contrats().map((c) => [c.id, c.code])));
   readonly contratsArchives = computed(() =>
     this.contrats().filter((c) => !c.isActive && (c.kind ?? '').toLowerCase() === 'operational'));
@@ -388,6 +393,15 @@ export class OrganisationAdminComponent implements OnInit {
 
   effectifPole(p: OrgPoleNode): number {
     return (p.cellules ?? []).reduce((n, c) => n + this.effectifCellule(c), 0);
+  }
+
+  /** v51 : personnes de la cellule qui apparaissent dans son planning (hors encadrement). */
+  planifiablesCellule(c: OrgCelluleNode): number {
+    return this.planifiables().get(c.id) ?? 0;
+  }
+
+  planifiablesPole(p: OrgPoleNode): number {
+    return (p.cellules ?? []).reduce((n, c) => n + this.planifiablesCellule(c), 0);
   }
 
   async nouveauContrat(): Promise<void> {

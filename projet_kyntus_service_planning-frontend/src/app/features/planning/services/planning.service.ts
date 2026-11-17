@@ -210,6 +210,11 @@ export interface WeeklyPlanningResponse {
   shiftConfigs:    ShiftConfig[];
   assignments:     EmployeePlanning[];
   coverageReport?: CoverageReport | null;
+  /** v51 : agents planifiables rattachés aujourd'hui à la cellule. */
+  planifiableEmployeeCount?: number;
+  /** v51 : raison du dernier échec de génération (null si la dernière a réussi). */
+  generationErreur?: string | null;
+  generationErreurLe?: string | null;
 }
 
 /** Liste lÃ©gÃ¨re Planning Ã‰quipe (sans grille / coverage). */
@@ -502,6 +507,10 @@ export interface PlanningWeekItem {
   manualModificationCount?: number;
   /** UserIds distincts affectés (si planning généré). */
   assignedUserIds?: number[];
+  /** v51 : agents planifiables rattachés aujourd'hui à la cellule. */
+  planifiableEmployeeCount?: number;
+  /** v51 : raison du dernier échec de génération (null si la dernière a réussi). */
+  generationErreur?: string | null;
 }
 
 export interface PlanningWeekList {

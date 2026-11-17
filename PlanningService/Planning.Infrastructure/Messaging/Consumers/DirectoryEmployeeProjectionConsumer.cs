@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Planning.Application.Abstractions;
 using Planning.Infrastructure.Persistence;
 using Planning.Domain.Entities;
+using Planning.Infrastructure.Services;
 
 namespace Planning.Infrastructure.Messaging.Consumers;
 
@@ -65,11 +66,10 @@ public sealed class DirectoryEmployeeProjectionConsumer(
             };
             if (!string.IsNullOrWhiteSpace(msg.ServiceId))
             {
-                var sub = await db.SubServices.FirstOrDefaultAsync(
-                    s => s.PrimeServiceId == msg.ServiceId,
-                    context.CancellationToken);
-                if (sub is not null)
-                    user.SubServiceId = sub.Id;
+                // v51 : service de référence (déterministe même en cas de doublon dans le miroir).
+                var subId = await SubServiceCanonique.ResoudreAsync(db, msg.ServiceId, context.CancellationToken);
+                if (subId is int sid)
+                    user.SubServiceId = sid;
             }
             else
             {
@@ -105,10 +105,9 @@ public sealed class DirectoryEmployeeProjectionConsumer(
             }
             if (!string.IsNullOrWhiteSpace(msg.ServiceId))
             {
-                var sub = await db.SubServices.FirstOrDefaultAsync(
-                    s => s.PrimeServiceId == msg.ServiceId,
-                    context.CancellationToken);
-                if (sub is not null) user.SubServiceId = sub.Id;
+                // v51 : service de référence (déterministe même en cas de doublon dans le miroir).
+                var subId = await SubServiceCanonique.ResoudreAsync(db, msg.ServiceId, context.CancellationToken);
+                if (subId is int sid) user.SubServiceId = sid;
             }
             else
             {

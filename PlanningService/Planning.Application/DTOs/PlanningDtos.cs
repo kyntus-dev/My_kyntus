@@ -121,6 +121,11 @@ public class WeeklyPlanningResponseDto
     public int SubServiceId { get; set; }
     public List<EmployeePlanningDto> Assignments { get; set; } = new();
     public CoverageReportDto? CoverageReport { get; set; }
+    /// <summary>v51 : agents planifiables rattachés aujourd'hui à la cellule (référence de l'effectif).</summary>
+    public int PlanifiableEmployeeCount { get; set; }
+    /// <summary>v51 : raison du dernier échec de génération (null si la dernière a réussi).</summary>
+    public string? GenerationErreur { get; set; }
+    public DateTime? GenerationErreurLe { get; set; }
 }
 
 /// <summary>Liste légère pour Planning Équipe (superviseur) — sans grille ni coverage.</summary>
@@ -576,6 +581,10 @@ public class PlanningWeekItemDto
     public int ManualModificationCount { get; set; }
     /// <summary>UserIds distincts affectés (si planning généré).</summary>
     public List<int> AssignedUserIds { get; set; } = new();
+    /// <summary>v51 : agents planifiables rattachés aujourd'hui à la cellule.</summary>
+    public int PlanifiableEmployeeCount { get; set; }
+    /// <summary>v51 : raison du dernier échec de génération (null si la dernière a réussi).</summary>
+    public string? GenerationErreur { get; set; }
 }
 
 public class PlanningWeekListDto
