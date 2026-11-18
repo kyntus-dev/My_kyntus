@@ -157,7 +157,7 @@ public static class PlatformAccessCatalog
 
         S("conges.self", "Mes congés", "Congés", View: Self),
         S("conges.equipe", "Congés de l'équipe", "Congés", View: TeamLead),
-        S("conges.validation", "Valider les congés", "Congés", View: ["Admin", "RH", "Manager", "Superviseur"], Validate: ["Admin", "RH", "Manager", "Superviseur"]),
+        S("conges.validation", "Valider les congés", "Congés", View: ["Admin", "RH", "Manager", "Superviseur", "RP"], Validate: ["Admin", "RH", "Manager", "Superviseur", "RP"]),
         S("conges.history", "Historique des congés", "Congés", View: AdminRh), // v24 : API réservée à Admin et RH
         // v29 : chef de projet = tout son département (Congés › Quotas).
         S("conges.quotas", "Quotas cellule / service", "Congés", View: ["Superviseur", "Admin", "RP"], Configure: ["Superviseur", "Admin", "RP"]),
