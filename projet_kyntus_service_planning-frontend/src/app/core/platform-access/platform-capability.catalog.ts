@@ -14,8 +14,9 @@ export const PLATFORM_ROLES = [
   KyntusRoleNames.Audit,
   KyntusRoleNames.Superviseur,
   KyntusRoleNames.ReferentTechnique,
+  // v54 — « Chef de projet » n'a plus de ligne à lui : c'est le même rôle que RP (alias côté
+  // serveur). Deux lignes faisaient qu'un droit coché sur l'une ne s'appliquait pas à l'autre.
   KyntusRoleNames.Rp,
-  KyntusRoleNames.ChefDeProjet,
   KyntusRoleNames.Pilote,
   KyntusRoleNames.Employee,
   KyntusRoleNames.Ingenieur,
@@ -63,13 +64,19 @@ const TEAM_LEAD = [
 const RH_CHEF_PROJET = [...ADMIN_RH, KyntusRoleNames.Rp, KyntusRoleNames.ChefDeProjet] as const;
 /** v48 — Dépôt des procédures « Process Bytel » : l'encadrement, superviseurs compris. */
 const PROCESS_DEPOT = [...RH_CHEF_PROJET, KyntusRoleNames.Superviseur, KyntusRoleNames.ReferentTechnique] as const;
+/**
+ * v54 — Le RP (chef de projet) a les mêmes pouvoirs qu'un superviseur sur son périmètre :
+ * configurer les horaires, enregistrer les modes de la semaine, valider et générer.
+ */
 const PLANNING_VALIDATION = [
   ...ADMIN_RH,
   KyntusRoleNames.Superviseur,
+  KyntusRoleNames.Rp,
 ] as const;
 const PLANNING_SHIFT_CONFIG = [
   ...ADMIN_RH,
   KyntusRoleNames.Superviseur,
+  KyntusRoleNames.Rp,
 ] as const;
 const PLANNING_GENERATE = [
   ...ADMIN_RH,

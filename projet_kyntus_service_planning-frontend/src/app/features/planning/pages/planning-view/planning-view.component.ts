@@ -85,6 +85,8 @@ export class PlanningViewComponent implements OnInit {
   hasConsulted  = false;
   consulting    = false;
   canValidate   = false;
+  /** v54 — Droit « Générer le planning › Agir » : régénérer ne demande pas le droit de valider. */
+  canGenerer    = false;
   /** Édition grille (overrides, commentaires) — Admin/RH, brouillon ou publié. */
   canEdit = false;
   /** Provenance navigation (retour liste). */
@@ -191,6 +193,10 @@ selectedHolidayShiftId      = 0;
     this.canValidate = isAdminRh
       || (this.access.hasCatalog()
         && (this.access.canValidate('planning.publish') || this.access.canValidate('planning.validation')));
+    // v54 : générer / régénérer relève du droit « Générer le planning », que le RP (chef de projet)
+    // possède sur son périmètre. La publication reste au droit de validation.
+    this.canGenerer = this.canValidate
+      || (this.access.hasCatalog() && this.access.canAct('planning.generate'));
 
     const qp = this.route.snapshot.queryParamMap;
     const from = (qp.get('from') || '').toLowerCase();
@@ -375,7 +381,8 @@ selectedHolidayShiftId      = 0;
 
   /** Régénère le brouillon (semaine entière) ou un Published (jours restants → Draft à revalider). */
   async regeneratePlanning(): Promise<void> {
-    if (!this.planning || !this.canValidate) return;
+    // v54 : droit « Générer le planning » (le RP l'a sur son périmètre), pas celui de valider.
+    if (!this.planning || !this.canGenerer) return;
     const isPublished = this.planning.status === 'Published';
     if (this.planning.status !== 'Draft' && !isPublished) return;
 
@@ -425,7 +432,7 @@ selectedHolidayShiftId      = 0;
    * enregistrée (mode par défaut pour les agents qui n'en ont pas).
    */
   async genererAvecModesRepris(): Promise<void> {
-    if (!this.planning || !this.canValidate || this.regenerating) return;
+    if (!this.planning || !this.canGenerer || this.regenerating) return;
     const ok = await this.confirmService.confirm({
       title: 'Générer avec les modes repris',
       message:

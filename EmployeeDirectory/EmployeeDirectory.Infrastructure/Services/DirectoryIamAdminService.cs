@@ -114,14 +114,31 @@ public sealed class DirectoryIamAdminService(DirectoryDbContext db) : IIamAdminS
         return count;
     }
 
+    /// <summary>
+    /// Droits par défaut — <b>uniquement à la toute première installation</b> (table vide).
+    /// <para>
+    /// v54 : sur une base déjà en service, plus rien n'est ajouté ni réécrit au démarrage. Avant,
+    /// chaque redémarrage recréait les lignes manquantes et réimposait le périmètre du Superviseur :
+    /// la configuration faite dans « Accès par rôle » revenait en arrière après chaque mise à jour.
+    /// Seule la fusion des anciens noms (Manager, Coach, Chef de projet) continue de s'exécuter :
+    /// elle reprend les droits sur le rôle cible et ne s'applique qu'une fois.
+    /// </para>
+    /// </summary>
     public async Task SeedDefaultsIfEmptyAsync(CancellationToken ct = default)
     {
         var existing = await db.IamPermissions
             .Select(p => p.Role + "\n" + p.Action + "\n" + p.Scope)
             .ToListAsync(ct);
         var keys = existing.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var premiereInstallation = existing.Count == 0;
 
         var rows = new List<IamPermission>();
+        if (!premiereInstallation)
+        {
+            await FusionnerAliasAsync(ct);
+            return;
+        }
+
         foreach (var role in PlatformAccessCatalog.Roles)
         {
             foreach (var (action, scope) in PlatformAccessCatalog.SeedRowsForRole(role))
@@ -161,7 +178,10 @@ public sealed class DirectoryIamAdminService(DirectoryDbContext db) : IIamAdminS
         var lignes = await db.IamPermissions.Where(p => anciens.Contains(p.Role)).ToListAsync(ct);
         if (lignes.Count == 0) return;
 
-        foreach (var ancienne in lignes.Where(p => p.IsAllowed && p.Role == "Coach"))
+        // v54 — Les droits cochés sur un ancien nom sont repris sur le rôle cible : rien n'est perdu
+        // (« Chef de projet » → « RP » notamment). Seul « Manager » reste sans reprise : ses droits
+        // n'ont jamais été ceux du Superviseur.
+        foreach (var ancienne in lignes.Where(p => p.IsAllowed && p.Role != "Manager"))
         {
             var cible = PlatformAccessCatalog.Alias[ancienne.Role];
             var existante = await db.IamPermissions.FirstOrDefaultAsync(

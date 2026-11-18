@@ -83,7 +83,7 @@
     </div>
 
     <!-- ── Actions RH (Valider / Régénérer) ── -->
-    <div class="pv-decision-bar" *ngIf="canValidate && (planning.status === 'Draft' || planning.status === 'Published')">
+    <div class="pv-decision-bar" *ngIf="(canValidate || canGenerer) && (planning.status === 'Draft' || planning.status === 'Published')">
       <div class="pv-decision-copy">
         <strong *ngIf="planning.status === 'Draft'">Aperçu brouillon</strong>
         <strong *ngIf="planning.status === 'Published'">Planning publié</strong>
@@ -106,7 +106,7 @@
         </button>
         <button type="button"
                 class="btn-validate-lg"
-                *ngIf="planning.status === 'Draft'"
+                *ngIf="canValidate && planning.status === 'Draft'"
                 [disabled]="publishing || regenerating || effectifPlanifie === 0"
                 [title]="effectifPlanifie === 0 ? 'Grille vide : régénérez avant de valider.' : 'Publier le planning'"
                 (click)="publishPlanning()">
@@ -260,7 +260,9 @@
         <div>
           <strong>{{ alerteEffectif.titre }}</strong>
           <p>{{ alerteEffectif.texte }}</p>
-          @if (planning.modesEnAttente && canValidate && (planning.status === 'Draft' || planning.status === 'Published')) {
+          <!-- v54 : générer dépend du droit « Générer le planning », pas de celui de valider :
+               le RP (chef de projet) n'attend plus le superviseur. -->
+          @if (planning.modesEnAttente && canGenerer && (planning.status === 'Draft' || planning.status === 'Published')) {
             <div class="pv-alerte-actions">
               <button type="button" class="ky-btn-primary" [disabled]="regenerating" (click)="genererAvecModesRepris()">
                 {{ regenerating ? 'Génération…' : 'Générer avec les modes repris' }}

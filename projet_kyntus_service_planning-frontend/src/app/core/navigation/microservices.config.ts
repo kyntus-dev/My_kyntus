@@ -165,13 +165,16 @@ export const MICROSERVICES: Microservice[] = [
     label: 'Périmètre superviseur',
     icon: ICONS.users,
     ouvertureIam: 'prime.module',
-    roles: ['Superviseur'],
+    // v54 — Le RP (chef de projet) encadre les mêmes cellules que ses superviseurs : il doit
+    // pouvoir enregistrer les modes de la semaine sans dépendre d'eux. Admin et RH y accèdent
+    // aussi, comme sur les autres écrans de pilotage.
+    roles: ['Superviseur', 'RP', 'Chef de projet', 'Admin', 'RH'],
     children: [
       {
         label: 'Périmètre superviseur',
         route: '/prime',
         primePath: '/superviseur/scope',
-        roles: ['Superviseur'],
+        roles: ['Superviseur', 'RP', 'Chef de projet', 'Admin', 'RH'],
         hat: 'team',
       },
     ],

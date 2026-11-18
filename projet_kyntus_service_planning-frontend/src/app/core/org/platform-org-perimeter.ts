@@ -57,6 +57,49 @@ export function resolveSuperviseurCelluleIds(
   return fallback ? [fallback] : [];
 }
 
+/**
+ * v54 — Cellules qu'une personne encadre dans « Périmètre superviseur » :
+ *
+ * - ses cellules de superviseur (inscrites dans Organisation RH) ;
+ * - **toutes les cellules des pôles dont elle est chef de projet / RP** : le RP n'a plus à
+ *   attendre le superviseur pour enregistrer les modes d'une semaine ;
+ * - **toutes les cellules** si son droit porte « Toute l'entreprise » (Admin, RH, ou un droit
+ *   accordé avec cette portée dans Accès par rôle).
+ *
+ * Le rattachement de la personne (sa propre cellule) ne sert que de secours, comme avant.
+ */
+export function resolveCellulesEncadrees(
+  userGuid: string,
+  employee: Pick<Employee, 'celluleId'>,
+  overview: OrgAssignmentsOverview | null,
+  arbre: { operationalDepartments?: readonly OperationalDepartmentNode[]; unassignedPoles?: readonly OrgPoleNode[] },
+  porteeGlobale = false,
+): string[] {
+  const poles: OrgPoleNode[] = [
+    ...(arbre.operationalDepartments ?? []).flatMap((d) => d.poles ?? []),
+    ...(arbre.unassignedPoles ?? []),
+  ];
+  if (porteeGlobale) {
+    return [...new Set(poles.flatMap((p) => (p.cellules ?? []).map((c) => c.id)).filter(Boolean))];
+  }
+
+  const guid = userGuid.trim().toLowerCase();
+  // Pôles pilotés : uniquement les responsabilités inscrites (pas le pôle de rattachement, qui
+  // ouvrirait tout le pôle à n'importe quel collaborateur).
+  const polesPilotes = new Set(
+    (overview?.managerEtage ?? [])
+      .filter((a) => a.userId.trim().toLowerCase() === guid)
+      .map((a) => (a.etageId ?? '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const cellulesDesPoles = poles
+    .filter((p) => polesPilotes.has(p.id.trim().toLowerCase()))
+    .flatMap((p) => (p.cellules ?? []).map((c) => c.id))
+    .filter(Boolean);
+
+  return [...new Set([...resolveSuperviseurCelluleIds(userGuid, employee, overview), ...cellulesDesPoles])];
+}
+
 /** Cellule du Superviseur : premier de la liste (compat). */
 export function resolveSuperviseurCelluleId(
   userGuid: string,

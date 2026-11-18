@@ -10,8 +10,8 @@ import {
   collectCelluleMemberOrgIds,
   dedupeEmployeesByEmail,
   employeesInSuperviseurCellule,
+  resolveCellulesEncadrees,
   resolvePlatformOrgLabels,
-  resolveSuperviseurCelluleIds,
 } from '../../../core/org/platform-org-perimeter';
 import { resolveUserGuid } from '../../../core/lib/user-guid.util';
 import { UserService } from '../../users/services/user.service';
@@ -32,6 +32,7 @@ import { PrimeService } from '../services/prime.service';
 import { RoleService } from '../state/role.service';
 import { PrimeScopeStore } from '../state/prime-scope.store';
 import { KyntusSessionService } from '../../../core/session/kyntus-session.service';
+import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 import { contractLevelLabel } from '../../../core/hr/user-hr-display.util';
 import { HttpErrorResponse } from '@angular/common/http';
 import type { OperationalDepartmentNode, OrgPoleNode } from '../models/org-tree.types';
@@ -1205,6 +1206,19 @@ export class SuperviseurScopePageComponent {
   private readonly planningService = inject(PlanningService);
   private readonly session = inject(KyntusSessionService);
   private readonly router = inject(Router);
+  private readonly access = inject(PlatformAccessService);
+
+  /**
+   * v54 — Portée « Toute l'entreprise » : Admin, RH, ou un droit des horaires / de validation
+   * accordé avec cette portée dans Accès par rôle. Ouvre toutes les cellules de l'écran.
+   */
+  private porteeGlobale(): boolean {
+    const role = (this.session.getRole() || '').trim().toLowerCase();
+    if (role === 'admin' || role === 'rh') return true;
+    return this.access.hasCatalog()
+      && (this.access.can('planning.shift-config', 'Configure', 'Global')
+        || this.access.can('planning.validation', 'Validate', 'Global'));
+  }
 
   readonly icons = { level: Award, saturday: CalendarDays, search: Search, history: History, special: Tag, formation: GraduationCap };
 
@@ -2148,7 +2162,15 @@ export class SuperviseurScopePageComponent {
         (orgTree.operationalDepartments?.length ?? 0) === 0 &&
         (orgTree.unassignedPoles?.length ?? 0) === 0;
       const legacyDepartments = useLegacyFallback ? await PrimeService.getDepartments() : [];
-      const celluleIds = resolveSuperviseurCelluleIds(current.id, current, overview ?? null);
+      // v54 — Superviseur : ses cellules. RP / chef de projet : toutes les cellules de ses pôles.
+      // Portée « Toute l'entreprise » (Admin, RH, ou droit accordé ainsi) : toutes les cellules.
+      const celluleIds = resolveCellulesEncadrees(
+        current.id,
+        current,
+        overview ?? null,
+        { operationalDepartments: orgTree.operationalDepartments ?? [], unassignedPoles: orgTree.unassignedPoles ?? [] },
+        this.porteeGlobale(),
+      );
       const options = celluleIds.map((id) => ({
         id,
         label: resolveCelluleLabel(

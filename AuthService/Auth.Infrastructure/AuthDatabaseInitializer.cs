@@ -49,7 +49,10 @@ public static class AuthDatabaseInitializer
             Console.WriteLine($"WARNING: SubjectId schema repair skipped: {ex.Message}");
         }
 
-        if (!db.Roles.Any())
+        // v54 — true seulement à la toute première installation : les rôles ne sont jamais recréés
+        // sur une base déjà en service.
+        var rolesSeedees = !db.Roles.Any();
+        if (rolesSeedees)
         {
             db.Roles.AddRange(
                 new Role { Id = 1, Name = "Employee", Description = "Employee du système", CreatedAt = DateTime.UtcNow },
@@ -88,23 +91,21 @@ public static class AuthDatabaseInitializer
             DeactivateLegacyMockUsers(db);
         }
 
-        try
+        // v54 — Les rôles de connexion ne sont plus créés ni renommés au démarrage d'une base déjà
+        // en service : l'organisation des rôles faite dans l'application doit tenir dans le temps.
+        // Ils ne sont posés qu'à la toute première installation (table des rôles vide ci-dessus).
+        if (rolesSeedees)
         {
-            EnsureRole(db, "Ingénieur", "Ingénieur — cellule IT");
-            EnsureRole(db, "Support IT", "Support IT — cellule IT");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"WARNING: rôles IT non ajoutés : {ex.Message}");
-        }
-
-        try
-        {
-            EnsureComptabiliteRole(db);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"WARNING: Comptabilité role seed skipped: {ex.Message}");
+            try
+            {
+                EnsureRole(db, "Ingénieur", "Ingénieur — cellule IT");
+                EnsureRole(db, "Support IT", "Support IT — cellule IT");
+                EnsureComptabiliteRole(db);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WARNING: rôles de base non ajoutés : {ex.Message}");
+            }
         }
 
         try

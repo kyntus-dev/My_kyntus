@@ -39,12 +39,33 @@ internal static class PlanningRoleSeed
         }),
         StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Catalogue posé <b>uniquement à la toute première installation</b> (table des rôles vide).
+    /// <para>
+    /// v54 : sur une base déjà en service, aucun rôle n'est créé, renommé ni réactivé au démarrage.
+    /// Avant, chaque redémarrage recréait les rôles du catalogue : l'organisation des rôles faite
+    /// dans l'application revenait en arrière après chaque mise à jour. Les rôles manquants sont
+    /// seulement signalés dans le journal, à la main de l'Admin.
+    /// </para>
+    /// </summary>
     internal static async Task EnsureCatalogAsync(AppDbContext context, CancellationToken ct = default)
     {
         var existing = await context.Roles
             .Select(r => r.Name)
             .ToListAsync(ct);
         var existingSet = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
+
+        if (existing.Count > 0)
+        {
+            var manquants = Catalog.Select(c => c.Name).Where(n => !existingSet.Contains(n)).ToList();
+            if (manquants.Count > 0)
+            {
+                Console.WriteLine(
+                    "ℹ Rôles du catalogue absents (non recréés, c'est voulu) : "
+                    + string.Join(", ", manquants));
+            }
+            return;
+        }
 
         var added = 0;
         foreach (var (name, description) in Catalog)
