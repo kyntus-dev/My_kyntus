@@ -143,8 +143,20 @@ if [ ${#A_FAIRE[@]} -gt 0 ]; then
     echo
     for s in "${ECHECS[@]}"; do
       echo "--- Erreurs de $s ---"
-      grep -E "error (CS|TS|NG)[0-9]+|ERROR in|error:" "/tmp/build_$s.log" | sed -E 's/^[#0-9. ]+//' | sort -u | head -20
+      CODE=$(grep -E "error (CS|TS|NG)[0-9]+|ERROR in|error:" "/tmp/build_$s.log" | sed -E 's/^[#0-9. ]+//' | sort -u | head -20)
+      if [ -n "$CODE" ]; then
+        echo "$CODE"
+      else
+        # v54.1 : pas d'erreur de code → la cause est l'environnement (disque, réseau, mémoire).
+        echo "  (aucune erreur de code : cause probable ci-dessous)"
+        grep -iE "no space left|quota exceeded|timeout|timed out|TLS handshake|temporary failure|could not resolve|connection reset|ECONNRESET|ETIMEDOUT|429 Too Many Requests|failed to solve|cannot allocate memory|killed" "/tmp/build_$s.log" | sort -u | head -6
+        echo "  --- 15 dernières lignes du journal ---"
+        tail -15 "/tmp/build_$s.log" | sed 's/^/  /'
+      fi
     done
+    echo
+    echo "--- Place disponible ---"
+    df -h / /var/lib/docker 2>/dev/null | sed 's/^/  /' | sort -u
     echo
     echo "ÉCHEC de construction : les services n'ont pas été remplacés."
     echo "Envoyez-moi les lignes « Erreurs » ci-dessus (journaux complets : /tmp/build_<service>.log). Pour retirer les correctifs :"
