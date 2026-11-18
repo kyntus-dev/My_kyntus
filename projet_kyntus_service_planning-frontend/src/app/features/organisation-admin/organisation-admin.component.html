@@ -55,10 +55,17 @@
               </ul>
             }
             @if (arAgents().encadrement.length) {
-              <p class="oa-rg-pole">Responsables : non déplacés, à corriger dans leur fiche ({{ arAgents().encadrement.length }})</p>
+              <!-- v53 — Ce n'est pas une anomalie de leur fiche : l'encadrement n'est jamais déplacé
+                   comme un pilote. On le dit clairement, avec la marche à suivre pour le déplacer. -->
+              <p class="oa-rg-pole">Encadrement — non déplacé ({{ arAgents().encadrement.length }})</p>
               <ul class="oa-ar-liste oa-ar-liste--warn">
                 @for (a of arAgents().encadrement; track a.id) { <li>{{ a.lastName }} {{ a.firstName }} <span class="oa-meta">{{ a.role }}</span></li> }
               </ul>
+              <p class="oa-meta">
+                C'est normal : seuls les pilotes sont réaffectés. Pour les rattacher ailleurs,
+                modifiez leur fiche (Organisation RH › Responsables, ou la fiche du collaborateur) —
+                à faire avant l'archivage, sinon ils resteront rattachés à un nœud archivé.
+              </p>
             }
           </div>
           <div class="oa-rg-cible">
