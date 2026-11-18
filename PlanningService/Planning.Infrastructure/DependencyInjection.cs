@@ -126,6 +126,9 @@ public static class DependencyInjection
                 client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Service-Key", apiKey);
             }
         });
+        // v56 : « mot de passe oublié » (écran de connexion) et API publique des employés.
+        services.AddScoped<IMotDePasseOublieService, MotDePasseOublieService>();
+        services.AddScoped<IPublicEmployesService, PublicEmployesService>();
         services.AddScoped<IContractService, ContractService>();
         services.AddScoped<IPlanningOrgMirrorService, PlanningOrgMirrorService>();
         services.AddScoped<IOrgReconciliationService, OrgReconciliationService>();

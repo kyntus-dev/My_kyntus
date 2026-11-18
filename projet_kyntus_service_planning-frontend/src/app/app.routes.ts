@@ -91,6 +91,14 @@ export const routes: Routes = [
           import('./features/assistance/assistance.component')
             .then(m => m.AssistanceComponent),
       },
+      {
+        // v56 : chacun change son mot de passe, quel que soit son rôle.
+        path: 'mon-mot-de-passe',
+        canActivate: [AuthGuard],
+        loadComponent: () =>
+          import('./features/compte/mon-mot-de-passe.component')
+            .then(m => m.MonMotDePasseComponent),
+      },
 
       // ─── AIDE : guide de l'application (parcours par rôle) ──
       { path: 'aide', redirectTo: 'aide/guide', pathMatch: 'full' },
