@@ -163,7 +163,7 @@
         (dragleave)="onDragLeave()"
         (drop)="onDrop($event)"
         (click)="fileInput.click()">
-        <input #fileInput type="file" accept=".xlsx,.xls,.csv" hidden (change)="onFileSelected($event)" />
+        <input #fileInput type="file" hidden (change)="onFileSelected($event)" />
         <ng-container *ngIf="!selectedFile">
           <p class="drop-text">Glissez votre fichier ici ou cliquez pour parcourir</p>
         </ng-container>

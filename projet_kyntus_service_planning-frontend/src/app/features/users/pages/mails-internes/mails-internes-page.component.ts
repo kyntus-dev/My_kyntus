@@ -18,11 +18,11 @@ import {
   LIBELLE_STATUT,
   LigneMailImport,
   StatutMail,
-  lireCsv,
   lireMatriceMails,
   statutAttribuable,
   statutCocheParDefaut,
 } from '../../lib/mail-interne.util';
+import { lireFichierTabulaire } from '../../lib/lecture-tolerante.util';
 
 /**
  * v47 — Mails internes.
@@ -70,6 +70,8 @@ export class MailsInternesPageComponent implements OnInit {
   fichierNom = '';
   lignesLues: LigneMailImport[] = [];
   ignorees = 0;
+  /** v52 — Colonnes déduites du contenu : information, l'import n'est pas bloqué. */
+  avertissement: string | null = null;
   apercu: ApercuMailsResultDto | null = null;
   rapport: AppliquerMailsResultDto | null = null;
 
@@ -129,49 +131,25 @@ export class MailsInternesPageComponent implements OnInit {
     this.cdr.detectChanges();
 
     try {
-      const matrice = /\.csv$/i.test(file.name)
-        ? lireCsv(await file.text())
-        : await this.lireClasseur(file);
-      const lecture = lireMatriceMails(matrice);
+      // v52 — Tout fichier est accepté (Excel, CSV, texte) : seules les colonnes utiles sont lues.
+      const lecture = lireMatriceMails(await lireFichierTabulaire(file));
       if (lecture.erreur) {
         this.lectureErreur = lecture.erreur;
         this.analysing = false;
         this.cdr.detectChanges();
         return;
       }
-      if (lecture.lignes.length === 0) {
-        this.lectureErreur = 'Aucune ligne avec une adresse e-mail dans ce fichier.';
-        this.analysing = false;
-        this.cdr.detectChanges();
-        return;
-      }
       this.lignesLues = lecture.lignes;
       this.ignorees = lecture.ignorees;
+      this.avertissement = lecture.avertissement;
       this.analyser();
     } catch {
-      this.lectureErreur = 'Fichier illisible. Utilisez un fichier Excel (.xlsx) ou CSV.';
+      this.lectureErreur = 'Fichier illisible : enregistrez-le en .xlsx ou .csv, puis réessayez.';
       this.analysing = false;
       this.cdr.detectChanges();
     } finally {
       input.value = '';
     }
-  }
-
-  private async lireClasseur(file: File): Promise<unknown[][]> {
-    const mod = await import('exceljs');
-    const ExcelJS = ((mod as unknown) as { default?: typeof import('exceljs') }).default ?? mod;
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(await file.arrayBuffer());
-    const sheet = wb.worksheets[0];
-    if (!sheet) return [];
-    const matrice: unknown[][] = [];
-    sheet.eachRow({ includeEmpty: true }, (row, numero) => {
-      const values = row.values as unknown[];
-      // ExcelJS indexe les colonnes à partir de 1.
-      matrice[numero - 1] = Array.isArray(values) ? values.slice(1) : [];
-    });
-    for (let i = 0; i < matrice.length; i++) matrice[i] = matrice[i] ?? [];
-    return matrice;
   }
 
   private analyser(): void {
@@ -199,6 +177,7 @@ export class MailsInternesPageComponent implements OnInit {
     this.fichierNom = '';
     this.lignesLues = [];
     this.ignorees = 0;
+    this.avertissement = null;
     this.apercu = null;
     this.rapport = null;
     this.lectureErreur = null;

@@ -47,16 +47,18 @@
       <div>
         <h2>Importer les adresses</h2>
         <p>
-          Fichier Excel (.xlsx) ou CSV avec les colonnes <strong>Nom</strong>, <strong>Prénom</strong> et
-          <strong>E-mail</strong>. Chaque ligne est rapprochée du bon collaborateur par son nom et son
-          prénom. Rien n'est enregistré avant votre validation.
+          <strong>Tout fichier est accepté</strong> (Excel, CSV, texte) : seules les colonnes utiles
+          sont lues — <strong>Nom</strong>, <strong>Prénom</strong> et <strong>E-mail</strong> —, les
+          autres sont ignorées. Si les en-têtes sont différents, les colonnes sont reconnues à leur
+          contenu. Chaque ligne est rapprochée du bon collaborateur par son nom et son prénom. Rien
+          n'est enregistré avant votre validation.
         </p>
       </div>
     </div>
 
     <div class="depot">
       <label class="depot-zone">
-        <input type="file" accept=".xlsx,.xls,.csv" (change)="onFichier($event)" [disabled]="analysing || applying" />
+        <input type="file" (change)="onFichier($event)" [disabled]="analysing || applying" />
         <app-lucide-icon [icon]="icons.upload" className="w-5 h-5" />
         <span>{{ fichierNom || 'Choisir le fichier des adresses' }}</span>
       </label>
@@ -75,6 +77,13 @@
       <div class="alert alert-error">
         <app-lucide-icon [icon]="icons.warn" className="w-4 h-4" />
         <span>{{ lectureErreur }}</span>
+      </div>
+    }
+
+    @if (avertissement && !lectureErreur) {
+      <div class="alert alert-info">
+        <app-lucide-icon [icon]="icons.warn" className="w-4 h-4" />
+        <span>Fichier lu malgré des en-têtes inhabituels : {{ avertissement }} Vérifiez l'aperçu.</span>
       </div>
     }
 

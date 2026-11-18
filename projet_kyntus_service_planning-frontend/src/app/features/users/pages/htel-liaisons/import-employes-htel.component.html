@@ -3,8 +3,10 @@
     <div>
       <h2>Importer des employés (fichier RH)</h2>
       <p>
-        Fichier Excel (.xlsx) ou CSV : <strong>Nom</strong>, <strong>Prénom</strong>, CIN, date de
-        naissance, situation familiale, nombre d'enfants, adresse, e-mail personnel, téléphone.
+        <strong>Tout fichier est accepté</strong> (Excel, CSV, texte) : seules les colonnes utiles
+        sont lues — <strong>Nom</strong>, <strong>Prénom</strong>, CIN, date de naissance, situation
+        familiale, nombre d'enfants, adresse, e-mail personnel, téléphone —, les autres sont
+        ignorées. Une colonne « Nom complet » est séparée automatiquement.
         Les fiches sont créées sans mail interne — les adresses s'importent ensuite depuis
         <a routerLink="/users/mails-internes">Mails internes</a>.
       </p>
@@ -23,9 +25,25 @@
       </div>
     }
 
+    @if (avertissement && !erreur) {
+      <div class="alert alert-info">
+        <app-lucide-icon [icon]="icons.warn" className="w-4 h-4" />
+        <span>Fichier lu malgré des en-têtes inhabituels : {{ avertissement }} Vérifiez l'aperçu.</span>
+      </div>
+    }
+
+    @if (details.length > 0) {
+      <ul class="ie-details">
+        @for (d of details; track d) { <li>{{ d }}</li> }
+        @if (ignorees > details.length) {
+          <li>… et {{ ignorees - details.length }} autre(s) ligne(s) incomplète(s).</li>
+        }
+      </ul>
+    }
+
     <div class="ie-depot">
       <label class="ie-zone">
-        <input type="file" accept=".xlsx,.xls,.csv" (change)="onFichier($event)" [disabled]="analyse || envoi" />
+        <input type="file" (change)="onFichier($event)" [disabled]="analyse || envoi" />
         <app-lucide-icon [icon]="icons.upload" className="w-5 h-5" />
         <span>{{ fichierNom || 'Choisir le fichier des employés' }}</span>
       </label>
@@ -103,6 +121,9 @@
                   <span class="ie-nom">{{ l.nom }} {{ l.prenom }}</span>
                   @if (dejaPresent(l)) {
                     <span class="ie-badge ie-badge--warn">Déjà présent</span>
+                  }
+                  @if (l.suspecteEntete) {
+                    <span class="ie-badge ie-badge--warn">Peut-être l'en-tête du fichier</span>
                   }
                 </td>
                 <td class="muted-cell">{{ l.cin || '—' }}</td>

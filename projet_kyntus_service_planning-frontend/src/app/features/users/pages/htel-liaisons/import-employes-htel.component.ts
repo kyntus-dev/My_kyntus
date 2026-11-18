@@ -11,7 +11,7 @@ import { RoleOption, UserService } from '../../services/user.service';
 import { SubServiceService } from '../../../sub-services/services/sub-service.service';
 import type { SubService } from '../../../sub-services/sub-services-module';
 import { HtelApiService, HtelOrphanTechnicienDto } from '../../services/htel-api.service';
-import { lireCsv } from '../../lib/mail-interne.util';
+import { lireFichierTabulaire } from '../../lib/lecture-tolerante.util';
 import { LigneImportEmploye, cleNom, lireMatriceEmployes } from '../../lib/import-employes.util';
 import { findUniqueHtelMatch, scoreEmployeeToHtel } from '../../services/htel-name-match.util';
 
@@ -67,6 +67,9 @@ export class ImportEmployesHtelComponent implements OnInit {
   fichierNom = '';
   lignes: LigneImportEmploye[] = [];
   ignorees = 0;
+  /** v52 — Ce qui a été déduit du fichier, et les lignes écartées : information, pas un blocage. */
+  avertissement: string | null = null;
+  details: string[] = [];
 
   /** Décisions par ligne : à créer, et technicien HTEL à lier (0 = aucun). */
   retenue: Record<number, boolean> = {};
@@ -110,6 +113,8 @@ export class ImportEmployesHtelComponent implements OnInit {
     this.fichierNom = '';
     this.lignes = [];
     this.ignorees = 0;
+    this.avertissement = null;
+    this.details = [];
     this.retenue = {};
     this.technicien = {};
     this.resultats = null;
@@ -130,44 +135,29 @@ export class ImportEmployesHtelComponent implements OnInit {
     this.cdr.detectChanges();
 
     try {
-      const matrice = /\.csv$/i.test(file.name) ? lireCsv(await file.text()) : await this.lireClasseur(file);
-      const lecture = lireMatriceEmployes(matrice);
+      // v52 — Tout fichier est accepté (Excel, CSV, texte) : seules les colonnes utiles sont lues.
+      const lecture = lireMatriceEmployes(await lireFichierTabulaire(file));
+      this.details = lecture.details;
+      this.ignorees = lecture.ignorees;
       if (lecture.erreur) {
         this.erreur = lecture.erreur;
-      } else if (lecture.lignes.length === 0) {
-        this.erreur = 'Aucune ligne exploitable dans ce fichier.';
       } else {
         this.lignes = lecture.lignes;
-        this.ignorees = lecture.ignorees;
+        this.avertissement = lecture.avertissement;
         for (const l of this.lignes) {
           const deja = this.dejaPresent(l);
-          this.retenue[l.numero] = !deja;
+          // v52 — Une ligne qui pourrait être l'en-tête du fichier n'est jamais cochée d'office.
+          this.retenue[l.numero] = !deja && !l.suspecteEntete;
           this.technicien[l.numero] = deja ? 0 : findUniqueHtelMatch(l.prenom, l.nom, this.orphelins)?.idTechnicien ?? 0;
         }
       }
     } catch {
-      this.erreur = 'Fichier illisible. Utilisez un fichier Excel (.xlsx) ou CSV.';
+      this.erreur = 'Fichier illisible : enregistrez-le en .xlsx ou .csv, puis réessayez.';
     } finally {
       input.value = '';
       this.analyse = false;
       this.cdr.detectChanges();
     }
-  }
-
-  private async lireClasseur(file: File): Promise<unknown[][]> {
-    const mod = await import('exceljs');
-    const ExcelJS = ((mod as unknown) as { default?: typeof import('exceljs') }).default ?? mod;
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(await file.arrayBuffer());
-    const sheet = wb.worksheets[0];
-    if (!sheet) return [];
-    const matrice: unknown[][] = [];
-    sheet.eachRow({ includeEmpty: true }, (row, numero) => {
-      const values = row.values as unknown[];
-      matrice[numero - 1] = Array.isArray(values) ? values.slice(1) : [];
-    });
-    for (let i = 0; i < matrice.length; i++) matrice[i] = matrice[i] ?? [];
-    return matrice;
   }
 
   // ── Décisions ───────────────────────────────────────────────────────────────
@@ -196,7 +186,9 @@ export class ImportEmployesHtelComponent implements OnInit {
   }
 
   toutCocher(valeur: boolean): void {
-    for (const l of this.lignes) this.retenue[l.numero] = valeur && !this.dejaPresent(l);
+    for (const l of this.lignes) {
+      this.retenue[l.numero] = valeur && !this.dejaPresent(l) && !l.suspecteEntete;
+    }
     this.cdr.detectChanges();
   }
 

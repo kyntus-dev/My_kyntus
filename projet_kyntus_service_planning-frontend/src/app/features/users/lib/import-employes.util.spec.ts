@@ -5,6 +5,7 @@ import {
   dateIso,
   lireMatriceEmployes,
   nombreEnfants,
+  separerNomComplet,
   situationFamiliale,
   telephoneFr,
 } from './import-employes.util';
@@ -63,8 +64,75 @@ describe('lecture du fichier RH (v49)', () => {
     expect(lecture.ignorees).toBe(1);
   });
 
-  it('refuse un fichier sans colonnes Nom / Prénom', () => {
-    expect(lireMatriceEmployes([['Matricule', 'Service'], ['1', 'Support']]).erreur).toContain('Nom');
+  it('n’invente personne quand le fichier ne contient aucun nom (v52)', () => {
+    const lecture = lireMatriceEmployes([
+      ['Matricule', 'Service'],
+      ['1', 'Support'],
+      ['2', 'Support'],
+      ['3', 'Support'],
+    ]);
+
+    expect(lecture.lignes).toEqual([]);
+    expect(lecture.erreur).toContain('Aucune ligne complète');
+  });
+});
+
+describe('lecture tolérante du fichier (v52)', () => {
+  it('ignore les colonnes en trop et accepte des en-têtes inhabituels', () => {
+    const lecture = lireMatriceEmployes([
+      ['Matricule', 'NOM DE FAMILLE', 'Prénoms', 'Service', 'Manager', 'GSM'],
+      ['A12', 'ARBAOUI', 'Hanane', 'Support technicien', 'EL MAHI', '0706740478'],
+    ]);
+
+    expect(lecture.erreur).toBeNull();
+    expect(lecture.lignes[0]).toMatchObject({ nom: 'ARBAOUI', prenom: 'Hanane', telephone: '0706740478' });
+  });
+
+  it('sépare une colonne « Nom complet » et le signale', () => {
+    const lecture = lireMatriceEmployes([
+      ['Collaborateur', 'CIN'],
+      ['BELHADI Mohammed Amine', 'F690751'],
+      ['Hanane ARBAOUI', 'F568962'],
+    ]);
+
+    expect(lecture.erreur).toBeNull();
+    expect(lecture.lignes.map((l) => `${l.nom} / ${l.prenom}`)).toEqual([
+      'BELHADI / Mohammed Amine',
+      'ARBAOUI / Hanane',
+    ]);
+    expect(lecture.avertissement).toContain('séparés');
+  });
+
+  it('lit un fichier sans en-tête et ne coche pas la première ligne d’office', () => {
+    const lecture = lireMatriceEmployes([
+      ['ARBAOUI', 'Hanane'],
+      ['AZIZ', 'Nasreddine'],
+      ['BENSAID', 'Hnia'],
+    ]);
+
+    expect(lecture.erreur).toBeNull();
+    expect(lecture.lignes).toHaveLength(3);
+    expect(lecture.lignes[0].suspecteEntete).toBe(true);
+    expect(lecture.lignes[1].suspecteEntete).toBeUndefined();
+    expect(lecture.avertissement).toContain('en-tête');
+  });
+
+  it('liste les lignes incomplètes au lieu de bloquer l’import', () => {
+    const lecture = lireMatriceEmployes([
+      ENTETE,
+      ['1', 'BELARBI', 'Ouissal', '', '', '', '', '', '', ''],
+      ['2', 'SANSPRENOM', '', '', '', '', '', '', '', ''],
+    ]);
+
+    expect(lecture.lignes.map((l) => l.nom)).toEqual(['BELARBI']);
+    expect(lecture.details).toEqual(['ligne 3 : SANSPRENOM — prénom manquant']);
+  });
+
+  it('sépare un nom complet en plaçant le mot en majuscules comme nom', () => {
+    expect(separerNomComplet('BELHADI Mohammed Amine')).toEqual({ nom: 'BELHADI', prenom: 'Mohammed Amine' });
+    expect(separerNomComplet('Hanane ARBAOUI')).toEqual({ nom: 'ARBAOUI', prenom: 'Hanane' });
+    expect(separerNomComplet('Omar El Mahi')).toEqual({ nom: 'Omar', prenom: 'El Mahi' });
+    expect(separerNomComplet('')).toEqual({ nom: '', prenom: '' });
   });
 });
 

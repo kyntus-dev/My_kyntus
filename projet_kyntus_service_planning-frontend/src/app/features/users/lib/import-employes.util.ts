@@ -5,7 +5,18 @@
  * Nombre d'enfants, Adresse, Email (personnel), Téléphone. « Non renseigné » vaut vide.
  * L'adresse de connexion (mail interne) n'est pas dans ce fichier : les employés sont créés sans,
  * puis les adresses s'importent depuis Utilisateurs › Mails internes (v47).
+ *
+ * v52 — Lecture tolérante : tout fichier est accepté et seules les colonnes utiles sont lues
+ * (voir `lecture-tolerante.util.ts`).
  */
+
+import {
+  cleEntete,
+  colonneParContenu,
+  ressembleEmail,
+  ressembleNom,
+  trouverEntete,
+} from './lecture-tolerante.util';
 
 export interface LigneImportEmploye {
   numero: number;
@@ -18,17 +29,23 @@ export interface LigneImportEmploye {
   adresse: string;
   emailPersonnel: string;
   telephone: string;
+  /** v52 — Ligne reprise alors qu'elle pourrait être l'en-tête du fichier : non cochée d'office. */
+  suspecteEntete?: boolean;
 }
 
 export interface LectureFichierEmployes {
   lignes: LigneImportEmploye[];
   erreur: string | null;
   ignorees: number;
+  /** v52 — Ce qui a été déduit du fichier (information : l'import n'est pas bloqué). */
+  avertissement: string | null;
+  /** v52 — Lignes écartées, avec la raison (10 au plus). */
+  details: string[];
 }
 
 const VIDES = ['', '-', '—', 'non renseigne', 'non renseignee', 'n/a', 'na', 'néant', 'neant', 'null'];
 
-const ENTETES: Record<keyof Omit<LigneImportEmploye, 'numero'>, string[]> = {
+const ENTETES: Record<keyof Omit<LigneImportEmploye, 'numero' | 'suspecteEntete'>, string[]> = {
   nom: ['nom', 'last name', 'lastname', 'nom de famille'],
   prenom: ['prenom', 'prenom(s)', 'prenoms', 'first name', 'firstname'],
   cin: ['cin', 'cin / piece', 'cin/piece', 'piece', 'cni', 'carte identite', 'cin / pièce'],
@@ -40,14 +57,13 @@ const ENTETES: Record<keyof Omit<LigneImportEmploye, 'numero'>, string[]> = {
   telephone: ['telephone', 'tel', 'gsm', 'portable', 'numero de telephone'],
 };
 
-function cle(value: unknown): string {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
+/** En-têtes qui portent le nom et le prénom dans la même colonne. */
+const ENTETES_NOM_COMPLET = [
+  'nom complet', 'nom et prenom', 'nom prenom', 'prenom et nom', 'collaborateur',
+  'technicien', 'agent', 'employe', 'salarie', 'full name', 'name',
+];
+
+const cle = cleEntete;
 
 /** Texte d'une cellule : « Non renseigné » et variantes valent vide. */
 export function cellule(value: unknown): string {
@@ -114,63 +130,117 @@ export function nombreEnfants(value: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : null;
 }
 
-function trouverColonne(entetes: string[], attendus: string[]): number {
-  const exact = entetes.findIndex((e) => attendus.includes(e));
-  if (exact >= 0) return exact;
-  return entetes.findIndex((e) => e.length > 0 && attendus.some((a) => e.startsWith(a) || a.startsWith(e)));
-}
+const trouverColonne = trouverEntete;
 
+/** Première ligne qui ressemble à un en-tête : un libellé de nom ou de prénom reconnu. */
 function indexEntete(matrice: unknown[][]): number {
-  for (let i = 0; i < Math.min(matrice.length, 10); i++) {
+  for (let i = 0; i < Math.min(matrice.length, 15); i++) {
     const entetes = (matrice[i] ?? []).map(cle);
-    if (trouverColonne(entetes, ENTETES.nom) >= 0 && trouverColonne(entetes, ENTETES.prenom) >= 0) return i;
+    if (
+      trouverColonne(entetes, ENTETES.nom) >= 0 ||
+      trouverColonne(entetes, ENTETES.prenom) >= 0 ||
+      trouverColonne(entetes, ENTETES_NOM_COMPLET) >= 0
+    ) {
+      return i;
+    }
   }
   return -1;
 }
 
 /**
- * Lit la matrice du fichier. Seuls le nom et le prénom sont obligatoires ; tout le reste est
- * repris s'il est présent. Le numéro renvoyé est celui de la ligne dans le fichier.
+ * Sépare un nom complet. Le mot entièrement en majuscules est pris pour le nom de famille
+ * (usage des fichiers RH : « BELHADI Mohammed Amine ») ; à défaut, le premier mot.
+ */
+export function separerNomComplet(valeur: unknown): { nom: string; prenom: string } {
+  const mots = cellule(valeur).split(/\s+/).filter(Boolean);
+  if (mots.length === 0) return { nom: '', prenom: '' };
+  if (mots.length === 1) return { nom: mots[0], prenom: '' };
+  const majuscules = mots.filter((m) => m.length > 1 && m === m.toUpperCase() && /\p{L}/u.test(m));
+  if (majuscules.length === 1) {
+    const nom = majuscules[0];
+    return { nom, prenom: mots.filter((m) => m !== nom).join(' ') };
+  }
+  return { nom: mots[0], prenom: mots.slice(1).join(' ') };
+}
+
+/**
+ * Lit la matrice du fichier.
+ *
+ * v52 — **Rien ne bloque l'import.** Tout fichier est accepté : les colonnes utiles sont reconnues
+ * par leur en-tête, puis — à défaut — déduites du contenu (colonnes de texte pour les noms, « @ »
+ * pour l'e-mail) ; les colonnes en trop sont ignorées. Une colonne « Nom complet » (ou une seule
+ * colonne de nom) est séparée automatiquement. Seul le couple nom + prénom est nécessaire pour
+ * créer une fiche : les lignes incomplètes sont listées, le reste s'importe.
  */
 export function lireMatriceEmployes(matrice: unknown[][]): LectureFichierEmployes {
   const entete = indexEntete(matrice);
-  if (entete < 0) {
+  const entetes = entete >= 0 ? (matrice[entete] ?? []).map(cle) : [];
+  const debut = entete + 1;
+  const notes: string[] = [];
+  const col = (champ: keyof typeof ENTETES) => (entete >= 0 ? trouverColonne(entetes, ENTETES[champ]) : -1);
+
+  let iNom = col('nom');
+  let iPrenom = col('prenom');
+  const iComplet = entete >= 0 ? trouverColonne(entetes, ENTETES_NOM_COMPLET) : -1;
+  if (iNom < 0 && iComplet >= 0) iNom = iComplet;
+
+  if (iNom < 0) {
+    // Deux cellules au moins : une colonne ne se déduit pas d'un seul libellé d'en-tête.
+    const minimum = matrice.length - debut >= 3 ? 2 : 1;
+    iNom = colonneParContenu(matrice, debut, ressembleNom, [], minimum);
+    if (iNom >= 0) {
+      notes.push('aucun en-tête reconnu : les colonnes ont été déduites du contenu et la première '
+        + 'ligne est reprise comme une donnée (décochez-la si c’est un en-tête)');
+      if (iPrenom < 0) iPrenom = colonneParContenu(matrice, debut, ressembleNom, [iNom], minimum);
+    }
+  }
+  if (iNom < 0) {
     return {
       lignes: [],
-      erreur: 'Colonnes « Nom » et « Prénom » introuvables : vérifiez la première ligne du fichier.',
+      erreur: "Aucun nom exploitable dans ce fichier : vérifiez qu'une colonne contient les noms "
+        + "(n'importe quel en-tête est accepté).",
       ignorees: 0,
+      avertissement: null,
+      details: [],
     };
   }
 
-  const entetes = (matrice[entete] ?? []).map(cle);
-  const col = (champ: keyof typeof ENTETES) => trouverColonne(entetes, ENTETES[champ]);
-  const iNom = col('nom');
-  const iPrenom = col('prenom');
+  // Une seule colonne de nom : elle contient le nom complet, on la sépare.
+  const separer = iPrenom < 0 || iPrenom === iNom;
+  if (separer) notes.push('nom et prénom séparés automatiquement — vérifiez l’aperçu');
+
   const iCin = col('cin');
   const iNaissance = col('dateNaissance');
   const iSituation = col('situationFamiliale');
   const iEnfants = col('nombreEnfants');
   const iAdresse = col('adresse');
-  const iEmail = col('emailPersonnel');
+  let iEmail = col('emailPersonnel');
   const iTel = col('telephone');
+  if (iEmail < 0) iEmail = colonneParContenu(matrice, debut, ressembleEmail, [iNom, iPrenom]);
 
   const lignes: LigneImportEmploye[] = [];
+  const details: string[] = [];
   let ignorees = 0;
   const vu = (r: unknown[], i: number) => (i >= 0 ? r[i] : undefined);
 
-  for (let i = entete + 1; i < matrice.length; i++) {
+  for (let i = Math.max(debut, 0); i < matrice.length; i++) {
     const r = matrice[i] ?? [];
-    const nom = cellule(vu(r, iNom));
-    const prenom = cellule(vu(r, iPrenom));
+    const brutNom = cellule(vu(r, iNom));
+    const brutPrenom = separer ? '' : cellule(vu(r, iPrenom));
+    const { nom, prenom } = separer ? separerNomComplet(brutNom) : { nom: brutNom, prenom: brutPrenom };
     if (!nom && !prenom) continue;
     if (!nom || !prenom) {
       ignorees++;
+      if (details.length < 10) {
+        details.push(`ligne ${i + 1} : ${nom || prenom} — ${nom ? 'prénom' : 'nom'} manquant`);
+      }
       continue;
     }
     lignes.push({
       numero: i + 1,
       nom,
       prenom,
+      suspecteEntete: entete < 0 && i === 0 ? true : undefined,
       cin: cellule(vu(r, iCin)),
       dateNaissance: dateIso(vu(r, iNaissance)),
       situationFamiliale: situationFamiliale(vu(r, iSituation)),
@@ -181,7 +251,23 @@ export function lireMatriceEmployes(matrice: unknown[][]): LectureFichierEmploye
     });
   }
 
-  return { lignes, erreur: null, ignorees };
+  if (lignes.length === 0) {
+    return {
+      lignes: [],
+      erreur: 'Aucune ligne complète (nom et prénom) dans ce fichier.',
+      ignorees,
+      avertissement: null,
+      details,
+    };
+  }
+
+  return {
+    lignes,
+    erreur: null,
+    ignorees,
+    avertissement: notes.length > 0 ? `${notes.join(' ; ')}.` : null,
+    details,
+  };
 }
 
 /** Clé de comparaison d'un nom complet (ordre indifférent). */

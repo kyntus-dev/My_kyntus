@@ -282,3 +282,17 @@
   padding: 0.3rem 0.65rem;
   font-size: 0.82rem;
 }
+
+/* v52 — Lecture tolérante : information (colonnes déduites, lignes écartées), pas un blocage. */
+.alert-info {
+  background: color-mix(in srgb, #0ea5e9 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #0ea5e9 35%, var(--border-color));
+  color: #0369a1;
+}
+
+.ie-details {
+  margin: -0.4rem 0 0.9rem;
+  padding-left: 1.2rem;
+  font-size: 0.82rem;
+  color: var(--text-muted, #64748b);
+}

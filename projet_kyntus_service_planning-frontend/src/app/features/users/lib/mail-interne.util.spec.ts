@@ -64,10 +64,10 @@ describe('lecture du fichier d’adresses (v47)', () => {
     ]);
   });
 
-  it('refuse un fichier sans colonne e-mail', () => {
+  it('refuse seulement un fichier sans aucune adresse', () => {
     const lecture = lireMatriceMails([['Nom', 'Prénom'], ['ARBAOUI', 'Hanane']]);
     expect(lecture.lignes).toEqual([]);
-    expect(lecture.erreur).toContain('E-mail');
+    expect(lecture.erreur).toContain('Aucune adresse');
   });
 
   it('lit un CSV avec point-virgule, guillemets et BOM', () => {
@@ -78,6 +78,56 @@ describe('lecture du fichier d’adresses (v47)', () => {
     const lecture = lireMatriceMails(matrice);
     expect(lecture.lignes).toEqual([
       { numero: 2, nom: 'BENMHAMMED', prenom: 'Kaouthar', email: 'k.benmhammed@kyntus.com' },
+    ]);
+  });
+});
+
+describe('lecture tolérante du fichier d’adresses (v52)', () => {
+  it('reconnaît les colonnes au contenu quand les en-têtes sont inconnus', () => {
+    const lecture = lireMatriceMails([
+      ['Matricule', 'Identité', 'Boîte', 'Site'],
+      ['A12', 'ARBAOUI Hanane', 'hanane.arbaoui@kyntus.com', 'Oujda'],
+      ['A13', 'AZIZ Nasreddine', 'n.aziz@kyntus.com', 'Oujda'],
+    ]);
+
+    expect(lecture.erreur).toBeNull();
+    expect(lecture.lignes.map((l) => l.email)).toEqual([
+      'hanane.arbaoui@kyntus.com',
+      'n.aziz@kyntus.com',
+    ]);
+    expect(lecture.lignes[0].nom).toBe('ARBAOUI Hanane');
+    expect(lecture.avertissement).toContain('contenu');
+  });
+
+  it('accepte un fichier sans en-tête et une adresse écrite « Nom <adresse> »', () => {
+    const lecture = lireMatriceMails([
+      ['ARBAOUI', 'Hanane', 'Hanane ARBAOUI <hanane.arbaoui@kyntus.com>'],
+      ['AZIZ', 'Nasreddine', 'mailto:n.aziz@kyntus.com'],
+    ]);
+
+    expect(lecture.erreur).toBeNull();
+    expect(lecture.lignes).toEqual([
+      { numero: 1, nom: 'ARBAOUI', prenom: 'Hanane', email: 'hanane.arbaoui@kyntus.com' },
+      { numero: 2, nom: 'AZIZ', prenom: 'Nasreddine', email: 'n.aziz@kyntus.com' },
+    ]);
+  });
+
+  it('ignore les colonnes en trop et les lignes sans adresse sans bloquer', () => {
+    const lecture = lireMatriceMails([
+      ['Nom', 'Prénom', 'Service', 'E-mail', 'Commentaire'],
+      ['ARBAOUI', 'Hanane', 'Support', 'hanane.arbaoui@kyntus.com', 'RAS'],
+      ['BENSAID', 'Hnia', 'Support', '', 'à fournir'],
+    ]);
+
+    expect(lecture.erreur).toBeNull();
+    expect(lecture.lignes).toHaveLength(1);
+    expect(lecture.ignorees).toBe(1);
+  });
+
+  it('lit un texte tabulé comme un CSV', () => {
+    const matrice = lireCsv('Nom\tPrénom\tMail\nAZIZ\tNasreddine\tn.aziz@kyntus.com\n');
+    expect(lireMatriceMails(matrice).lignes).toEqual([
+      { numero: 2, nom: 'AZIZ', prenom: 'Nasreddine', email: 'n.aziz@kyntus.com' },
     ]);
   });
 });
