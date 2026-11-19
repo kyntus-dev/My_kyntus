@@ -29,6 +29,39 @@
       <span class="ku-kpi-sub">éléments variables de la période</span></div>
   </div>
 
+  <!-- v58 : validation du tableau de paie — réservée au RH, visible de tous. -->
+  <section class="ku-card pze-validation" [class.pze-validation--ok]="verrouille()">
+    <div class="pze-validation-texte">
+      @if (verrouille()) {
+        <strong>Tableau de paie validé</strong>
+        <p>
+          Validé par <strong>{{ validation()?.valideParNom }}</strong>
+          le {{ dateFr(validation()?.valideLe) }}.
+          La période est verrouillée : présences et montants n’y sont plus modifiables.
+        </p>
+      } @else {
+        <strong>Tableau de paie non validé</strong>
+        <p>
+          La validation est réservée au service RH. Tant qu’elle n’est pas faite, les responsables
+          peuvent encore corriger les présences et les montants de la période.
+        </p>
+      }
+    </div>
+    @if (estRh()) {
+      <div class="pze-validation-actions">
+        @if (verrouille()) {
+          <button type="button" class="ku-btn" [disabled]="validationEnCours()" (click)="rouvrirPaie()">
+            {{ validationEnCours() ? 'Réouverture…' : 'Rouvrir la période' }}
+          </button>
+        } @else {
+          <button type="button" class="ku-btn ku-btn--primary" [disabled]="validationEnCours() || loading()" (click)="validerPaie()">
+            {{ validationEnCours() ? 'Validation…' : 'Valider le tableau de paie' }}
+          </button>
+        }
+      </div>
+    }
+  </section>
+
   <section class="ku-card pze-verif" [class.pze-ok]="synthese().alertes === 0">
     <div class="pze-verif-tete">
       <div>
@@ -95,6 +128,8 @@
         <option value="formation">En formation ou intégrés ({{ synthese().horsPaieFormation + synthese().integres }})</option>
         <option value="en-formation">En formation – hors paie</option>
         <option value="integre">Formation terminée (prorata)</option>
+        <option value="contractuel">Formation contractuelle</option>
+        <option value="non-contractuel">Formation non contractuelle</option>
         <option value="production">Production seulement</option>
       </select>
       <label class="ku-check"><input type="checkbox" [ngModel]="alertesSeulement()" (ngModelChange)="alertesSeulement.set($event)" /> À vérifier seulement</label>
@@ -156,8 +191,8 @@
               <tr [class.pze-formation]="l.etatFormation === 'en-formation'" [class.pze-integre]="l.etatFormation === 'integre'">
                 <th class="pz-agent" scope="row">
                   <b>{{ l.pilote }}</b>
-                  @if (l.etatFormation === 'en-formation') { <span class="pze-badge pze-badge--formation">En formation</span> }
-                  @if (l.etatFormation === 'integre') { <span class="pze-badge pze-badge--integre">Fin de formation</span> }
+                  @if (l.etatFormation === 'en-formation') { <span class="pze-badge pze-badge--formation">{{ l.typeFormation || 'En formation' }}</span> }
+                  @if (l.etatFormation === 'integre') { <span class="pze-badge pze-badge--integre">Fin de formation{{ l.typeFormation ? ' · ' + l.typeFormation : '' }}</span> }
                   <small>{{ l.affectation || '—' }} · {{ l.type }}</small>
                 </th>
                 @if (voirJours()) {

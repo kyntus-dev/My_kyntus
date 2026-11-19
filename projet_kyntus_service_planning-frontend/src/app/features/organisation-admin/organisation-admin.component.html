@@ -55,10 +55,17 @@
               </ul>
             }
             @if (arAgents().encadrement.length) {
-              <p class="oa-rg-pole">Responsables : non déplacés, à corriger dans leur fiche ({{ arAgents().encadrement.length }})</p>
+              <!-- v53 — Ce n'est pas une anomalie de leur fiche : l'encadrement n'est jamais déplacé
+                   comme un pilote. On le dit clairement, avec la marche à suivre pour le déplacer. -->
+              <p class="oa-rg-pole">Encadrement — non déplacé ({{ arAgents().encadrement.length }})</p>
               <ul class="oa-ar-liste oa-ar-liste--warn">
                 @for (a of arAgents().encadrement; track a.id) { <li>{{ a.lastName }} {{ a.firstName }} <span class="oa-meta">{{ a.role }}</span></li> }
               </ul>
+              <p class="oa-meta">
+                C'est normal : seuls les pilotes sont réaffectés. Pour les rattacher ailleurs,
+                modifiez leur fiche (Organisation RH › Responsables, ou la fiche du collaborateur) —
+                à faire avant l'archivage, sinon ils resteront rattachés à un nœud archivé.
+              </p>
             }
           </div>
           <div class="oa-rg-cible">
@@ -163,6 +170,22 @@
               <span class="oa-meta">{{ codeParContrat().get(d.id) || d.code }} · {{ d.poles.length }} pôle(s)</span>
             </div>
             <div class="oa-actions">
+              @if (estFormationQualite(d)) {
+                <!-- v48 : cellules Formateurs / Contrôleurs de qualité / Agents en formation. -->
+                <button
+                  type="button"
+                  class="oa-link"
+                  [disabled]="busy() || !peutModifier() || cellulesFormationManquantes(d).length === 0"
+                  [title]="cellulesFormationManquantes(d).length === 0
+                    ? 'Les cellules Formateurs, Contrôleurs de qualité et Agents en formation existent déjà.'
+                    : 'Créer : ' + cellulesFormationManquantes(d).join(', ')"
+                  (click)="creerCellulesFormation(d)"
+                >
+                  {{ cellulesFormationManquantes(d).length === 0
+                    ? 'Cellules formation : complètes'
+                    : 'Créer les cellules formation (' + cellulesFormationManquantes(d).length + ')' }}
+                </button>
+              }
               <button type="button" class="oa-link" (click)="nouveauPole(d)" [disabled]="busy() || !peutModifier()">+ Pôle</button>
               <button type="button" class="oa-link" (click)="renommerContrat(d)" [disabled]="busy() || !peutModifier()">Renommer</button>
               <button type="button" class="oa-link oa-link--warn" (click)="archiverContrat(d)" [disabled]="busy() || !peutModifier()">Archiver</button>
@@ -387,7 +410,9 @@
       <button type="button" class="oa-toggle" (click)="togglePole(p.id)" [attr.aria-expanded]="estOuvert(p.id)"
         [attr.aria-label]="(estOuvert(p.id) ? 'Replier ' : 'Déplier ') + p.name">{{ estOuvert(p.id) ? '▾' : '▸' }}</button>
       <span class="oa-name">{{ p.name }}</span>
-      <span class="oa-meta">{{ p.cellules.length }} cellule(s) · {{ effectifPole(p) }} personne(s)</span>
+      <span class="oa-meta" title="Planifiables : personnes présentes dans les plannings (encadrement exclu)">
+        {{ p.cellules.length }} cellule(s) · {{ effectifPole(p) }} personne(s) · {{ planifiablesPole(p) }} planifiable(s)
+      </span>
       <div class="oa-actions">
         <button type="button" class="oa-link" (click)="nouvelleCellule(p)" [disabled]="busy() || !peutModifier()">+ Cellule</button>
         <button type="button" class="oa-link" (click)="renommer('pole', p.id, '', p.name)" [disabled]="busy() || !peutModifier()">Renommer</button>
@@ -401,7 +426,9 @@
           <li class="oa-cellule">
             <div class="oa-row">
               <span class="oa-name">{{ c.name }}</span>
-              <span class="oa-meta">{{ effectifCellule(c) }} personne(s)</span>
+              <span class="oa-meta" title="Planifiables : personnes présentes dans le planning de la cellule (encadrement exclu)">
+                {{ effectifCellule(c) }} personne(s) · {{ planifiablesCellule(c) }} planifiable(s)
+              </span>
               <div class="oa-actions">
                 <button type="button" class="oa-link" (click)="nouveauService(c)" [disabled]="busy() || !peutModifier()">+ Service</button>
                 <button type="button" class="oa-link" (click)="renommer('cellule', c.id, p.id, c.name)" [disabled]="busy() || !peutModifier()">Renommer</button>

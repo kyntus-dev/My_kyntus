@@ -122,6 +122,31 @@ public sealed class PointageController(
     /// Production mémorisée pour « Heure de sortie » : « 0840 » (08h40, 07h40 le vendredi), « 0740 » ou null.
     /// Réservé aux comptes ayant accès à « Heure de sortie ».
     /// </summary>
+    /// <summary>v42 : choix de production faits jour par jour (solde des heures depuis le 24).</summary>
+    [HttpGet("heure-sortie/choix")]
+    public async Task<ActionResult<IReadOnlyList<ChoixProductionJourDto>>> MesChoixProduction([FromQuery] DateOnly? au, CancellationToken ct) =>
+        Ok(await query.GetMesChoixProductionAsync(Viewer(), au ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1), ct));
+
+    /// <summary>v45 : choix d'une journée (correction d'un jour passé depuis le 24, ou aujourd'hui).</summary>
+    [HttpPut("heure-sortie/choix/{jour}")]
+    public async Task<IActionResult> ChoixProductionJour(DateOnly jour, [FromBody] ChoixProductionRequest body, CancellationToken ct)
+    {
+        try
+        {
+            return await query.EnregistrerChoixProductionJourAsync(Viewer(), jour, body.Choix, ct)
+                ? Ok(new { jour, choix = body.Choix })
+                : StatusCode(StatusCodes.Status403Forbidden, new { message = "« Heure de sortie » n'est pas ouvert à votre compte." });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
     [HttpPut("heure-sortie/choix")]
     public async Task<IActionResult> ChoixProduction([FromBody] ChoixProductionRequest body, CancellationToken ct)
     {
@@ -134,6 +159,11 @@ public sealed class PointageController(
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // v43 : journée à 07h40 déjà prise cette semaine.
+            return Conflict(new { message = ex.Message });
         }
     }
 

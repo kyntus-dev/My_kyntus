@@ -31,6 +31,8 @@ export class HeureSortieAccesComponent implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
+  /** v43 : compte dont l'horaire de base est en cours d'enregistrement. */
+  readonly baseEnCours = signal<number | null>(null);
 
   readonly etat = (c: HeureSortieAccesDto): boolean => this.modifs().get(c.userId) ?? c.acces;
   readonly groupes = computed(() => grouperParRole(this.comptes(), this.recherche(), this.etat, this.seulementAvecAcces()));
@@ -102,6 +104,23 @@ export class HeureSortieAccesComponent implements OnInit {
       error: (err) => {
         this.saving.set(false);
         this.toast.error(err?.error?.message ?? 'Enregistrement impossible.');
+      },
+    });
+  }
+
+  /** v43 : horaire de base, enregistré tout de suite (08h40 avec une journée à 07h40 par semaine, ou 07h40). */
+  changerBase(c: HeureSortieAccesDto, base: '0840' | '0740'): void {
+    this.baseEnCours.set(c.userId);
+    this.svc.setBaseHeureSortie(c.userId, base).subscribe({
+      next: () => {
+        this.baseEnCours.set(null);
+        this.comptes.update((liste) => liste.map((x) => (x.userId === c.userId ? { ...x, productionBase: base } : x)));
+        this.toast.success(`${c.collaborateur} : horaire ${base === '0840' ? '08h40' : '07h40'}.`);
+      },
+      error: (err) => {
+        this.baseEnCours.set(null);
+        this.toast.error(err?.error?.message ?? 'Enregistrement de l’horaire impossible.');
+        this.load();
       },
     });
   }

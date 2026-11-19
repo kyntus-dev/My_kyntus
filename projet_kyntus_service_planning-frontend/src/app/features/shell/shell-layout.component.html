@@ -106,6 +106,11 @@
         <app-lucide-icon [icon]="icons.settings" className="w-4 h-4" />
         Paramètres
       </button>
+      <!-- v56 : chacun change son mot de passe, quel que soit son rôle. -->
+      <button type="button" class="ks-quick-btn" (click)="ouvrirMonMotDePasse()">
+        <app-lucide-icon [icon]="icons.settings" className="w-4 h-4" />
+        Mon mot de passe
+      </button>
     </div>
 
     <div class="ks-sidebar-footer">

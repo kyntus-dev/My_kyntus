@@ -12,12 +12,28 @@ export interface LigneEffectif {
   services: number;
   /** Pilotes (déplaçables). */
   pilotes: number;
-  /** Superviseurs, référents… placés dans la cellule (non déplacés comme pilotes). */
+  /** Superviseurs, référents… rattachés à la cellule (jamais déplacés comme des pilotes). */
   encadrement: number;
+  /** v53 — Qui sont ces encadrants : nom et responsabilité, pour les nommer à l'écran. */
+  encadrants: EncadrantCellule[];
   total: number;
 }
 
+/** v53 — Un encadrant d'une cellule, tel qu'il est affiché. */
+export interface EncadrantCellule {
+  id: string;
+  nom: string;
+  role: string;
+}
+
+/** v53 — « BENABDERAHMANE Mohamed (Référent technique), LABIYED Ghita (Référent technique) ». */
+export function libelleEncadrants(encadrants: readonly EncadrantCellule[]): string {
+  return encadrants.map((e) => `${e.nom} (${e.role})`).join(', ');
+}
+
 export const SANS_CONTRAT = '__sans_contrat__';
+
+const cmpFr = (a: string, b: string) => a.localeCompare(b, 'fr', { sensitivity: 'base' });
 
 export function lignesEffectifs(
   depts: readonly OperationalDepartmentNode[],
@@ -34,16 +50,20 @@ export function lignesEffectifs(
     for (const c of p.cellules ?? []) {
       const membres = parCellule.get(c.id) ?? [];
       const pilotes = membres.filter((a) => isMovableAgent(a)).length;
+      const encadrants = membres
+        .filter((a) => !isMovableAgent(a))
+        .map((a) => ({ id: a.id, nom: `${a.lastName} ${a.firstName}`.trim(), role: a.role }))
+        .sort((x, y) => cmpFr(x.nom, y.nom));
       lignes.push({
         contratId, contrat, poleId: p.id, pole: p.name, celluleId: c.id, cellule: c.name,
-        services: (c.services ?? []).length, pilotes, encadrement: membres.length - pilotes, total: membres.length,
+        services: (c.services ?? []).length, pilotes, encadrement: encadrants.length, encadrants,
+        total: membres.length,
       });
     }
   };
   for (const d of depts) for (const p of d.poles ?? []) ajouter(d.id, d.name, p);
   for (const p of sansContrat) ajouter(SANS_CONTRAT, 'Sans contrat', p);
-  const cmp = (a: string, b: string) => a.localeCompare(b, 'fr', { sensitivity: 'base' });
-  return lignes.sort((a, b) => cmp(a.contrat, b.contrat) || cmp(a.pole, b.pole) || cmp(a.cellule, b.cellule));
+  return lignes.sort((a, b) => cmpFr(a.contrat, b.contrat) || cmpFr(a.pole, b.pole) || cmpFr(a.cellule, b.cellule));
 }
 
 export interface FiltresEffectifs { contrat: string; pole: string; recherche: string; videsSeulement: boolean }
@@ -59,11 +79,15 @@ export function filtrerEffectifs(lignes: readonly LigneEffectif[], f: FiltresEff
     && (!q || norm(`${l.contrat} ${l.pole} ${l.cellule}`).includes(q)));
 }
 
-export function totauxEffectifs(lignes: readonly LigneEffectif[]): { cellules: number; agents: number; pilotes: number; vides: number } {
+export function totauxEffectifs(
+  lignes: readonly LigneEffectif[],
+): { cellules: number; agents: number; pilotes: number; encadrement: number; vides: number } {
   return {
     cellules: lignes.length,
     agents: lignes.reduce((s, l) => s + l.total, 0),
     pilotes: lignes.reduce((s, l) => s + l.pilotes, 0),
+    // v53 — Affiché à côté des pilotes : c'est ce qui explique l'écart avec le total.
+    encadrement: lignes.reduce((s, l) => s + l.encadrement, 0),
     vides: lignes.filter((l) => l.total === 0).length,
   };
 }

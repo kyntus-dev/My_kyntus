@@ -32,6 +32,12 @@ public interface IPointageQueryService
     /// </summary>
     Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default);
 
+    /// <summary>v45 : choix de production d'une journée (aujourd'hui, ou une journée passée depuis le 24).</summary>
+    Task<bool> EnregistrerChoixProductionJourAsync(PointageViewer viewer, DateOnly jour, string? choix, CancellationToken ct = default);
+
+    /// <summary>v42 : choix de production faits jour par jour par le collaborateur connecté, jusqu'au jour donné.</summary>
+    Task<IReadOnlyList<ChoixProductionJourDto>> GetMesChoixProductionAsync(PointageViewer viewer, DateOnly au, CancellationToken ct = default);
+
     /// <summary>Journée en cours du collaborateur connecté (page « Heure de sortie », tableau de bord).</summary>
     Task<PointageAujourdhuiDto?> GetAujourdhuiAsync(PointageViewer viewer, CancellationToken ct = default);
 
@@ -62,6 +68,8 @@ public interface IRegimeHoraireService
     /// <summary>Donne ou retire l'accès à une liste de comptes ; retourne le nombre de comptes modifiés.</summary>
     Task<int> SetAccesHeureSortieAsync(HeureSortieAccesRequest request, int? by, CancellationToken ct = default);
     Task<bool> ADroitHeureSortieAsync(int userId, CancellationToken ct = default);
+    /// <summary>v43 : fixe l'horaire de base d'un compte ayant accès (false : pas d'accès).</summary>
+    Task<bool> SetBaseHeureSortieAsync(int userId, string productionBase, CancellationToken ct = default);
     /// <summary>Régime effectif de chaque collaborateur demandé (absent : aucun régime).</summary>
     Task<IReadOnlyDictionary<int, RegimeEffectif>> ResoudreAsync(IReadOnlyCollection<int> userIds, CancellationToken ct = default);
 }

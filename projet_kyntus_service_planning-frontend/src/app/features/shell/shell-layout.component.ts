@@ -644,6 +644,13 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
     void this.router.navigate(['/settings']);
   }
 
+  /** v56 — Changer son propre mot de passe : ouvert à tous les rôles. */
+  ouvrirMonMotDePasse(): void {
+    this.sidebarOpen = false;
+    this.shellUi.closeDropdown();
+    void this.router.navigate(['/mon-mot-de-passe']);
+  }
+
   goToPersonalSpace(): void {
     this.workspace.setHat('self');
     this.sidebarOpen = false;

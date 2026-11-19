@@ -66,10 +66,9 @@ public sealed class PlanningOrgMirrorService(
         EmployeeImportOrgOverview overview,
         CancellationToken ct)
     {
-        var primeToSub = await db.SubServices
-            .AsNoTracking()
-            .Where(s => s.PrimeServiceId != null && s.PrimeServiceId != "")
-            .ToDictionaryAsync(s => s.PrimeServiceId!, s => s.Id, StringComparer.OrdinalIgnoreCase, ct);
+        // v51 : un service de référence par service d'Organisation. ToDictionary échouait dès qu'un
+        // doublon existait dans le miroir — et la synchro ne réalignait alors aucun agent.
+        var primeToSub = await SubServiceCanonique.TableAsync(db, ct);
 
         if (primeToSub.Count == 0)
             return 0;

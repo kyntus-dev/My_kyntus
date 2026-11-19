@@ -578,6 +578,30 @@ label {
   color: color-mix(in srgb, var(--danger) 80%, var(--text-primary));
 }
 
+/* v47 : employé créé sans mail interne — rappel dans le panneau de confirmation. */
+.alert-sans-mail {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border-color));
+  color: var(--text-primary);
+}
+
+.alert-sans-mail a {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+/* v47 : mail interne facultatif — rappel discret sous le champ. */
+.input-note {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .level-selector {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -892,6 +916,28 @@ label {
 }
 
 .checkbox-label input {
+  width: 16px;
+  height: 16px;
+  min-height: auto;
+}
+
+/* v48 : type de formation (contractuel / non contractuel). */
+.type-formation {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.radio-label input {
   width: 16px;
   height: 16px;
   min-height: auto;

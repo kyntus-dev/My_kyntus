@@ -229,7 +229,8 @@ export function compressHeldNodes(
 /**
  * v33 : activité d'un contrat (sous-activité) = premier mot de son nom, comme dans l'annuaire :
  * « Bytel Kyntus » et « Bytel TISSEO » → Bytel ; « bouygues » et « TISSEO » sont aussi rangés dans Bytel.
- * Un chef de projet couvre toute son activité.
+ * v57 : sert au regroupement d'affichage et à cocher une activité entière d'un geste ; le périmètre
+ * accordé reste exactement ce qui est coché.
  */
 export function cleActivite(nom: string | null | undefined): string {
   const mot = (nom ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().match(/[a-z0-9]+/)?.[0] ?? '';

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, injec
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { catchError, forkJoin, of } from 'rxjs';
 import { PointageService } from '../../../../core/services/pointage.service';
 import type { PointageAujourdhuiDto } from '../../../../core/models/pointage.models';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
@@ -16,6 +17,9 @@ import {
   formatHms,
   debutPeriodePaie,
   detailSolde,
+  prevueDuChoix,
+  courteDejaPriseSemaine,
+  type ChoixJour,
   type LigneSolde,
   productionDuChoix,
   productionExcel,
@@ -66,7 +70,15 @@ export class PointageHeureSortieComponent implements OnInit {
   /** Production du planning ou du régime (en attendant le choix du jour). */
   readonly productionPlanning = computed(() => this.jour()?.productionPrevueMinutes ?? productionExcel(this.now()));
   /** B3 : production du jour. */
-  readonly productionMinutes = computed(() => productionDuChoix(this.choix(), this.now()) ?? this.productionPlanning());
+  /** v43 : horaire de base fixé par l'Admin (08h40 avec une journée à 07h40 par semaine, ou 07h40). */
+  readonly base = computed(() => this.jour()?.productionBase ?? null);
+  /** v43 : journée à 07h40 de la semaine déjà prise un autre jour (horaire 08h40). */
+  readonly courteDejaPrise = computed(() => {
+    const j = this.jour()?.jour0740Semaine;
+    return j && this.choix() !== '0740' ? j : null;
+  });
+  readonly productionMinutes = computed(() =>
+    productionDuChoix(this.choix(), this.now()) ?? productionDuChoix(this.base()) ?? this.productionPlanning());
   /** I4 : pauses forfaitaires. */
   readonly pauseForfaitMinutes = computed(() => this.jour()?.pauseAutoriseeMinutes ?? PAUSE_FORFAIT_EXCEL);
   readonly premierPointage = computed(() => this.jour()?.pointages?.[0] ?? null);
@@ -102,6 +114,9 @@ export class PointageHeureSortieComponent implements OnInit {
   /** v41 : détail jour par jour du solde (clic sur « Solde depuis le 24 »). */
   readonly detail = signal<LigneSolde[]>([]);
   readonly detailOuvert = signal(false);
+  /** v45 : choix enregistrés jour par jour (correction des journées passées dans le détail). */
+  readonly choixJours = signal<ChoixJour[]>([]);
+  readonly correctionEnCours = signal<string | null>(null);
   readonly periodeDu = signal('');
   readonly periodeVeille = signal('');
   /** Écart du jour en secondes : négatif tant que la production n'est pas atteinte. */
@@ -144,14 +159,7 @@ export class PointageHeureSortieComponent implements OnInit {
       next: (j) => {
         this.jour.set(j);
         this.choix.set(j.choixProduction ?? null);
-        this.svc.monSuivi(du, au).subscribe({
-          // v40 : le solde des jours précédents ne dépend pas du choix du jour (planning ou régime de chaque jour).
-          next: (s) => {
-            this.solde.set(soldeHeures(s.jours, au, () => null));
-            this.detail.set(detailSolde(s.jours, au));
-          },
-          error: () => { this.solde.set(null); this.detail.set([]); },
-        });
+        this.chargerSolde(du, au);
         if (!this.entree() && j.pointages.length) this.entree.set(j.pointages[0]);
         if (!j.pointages.length) this.mode.set('manuel');
         this.loading.set(false);
@@ -159,6 +167,33 @@ export class PointageHeureSortieComponent implements OnInit {
       error: (err) => {
         this.loading.set(false);
         this.error.set(err?.error?.message ?? 'Impossible de charger votre journée.');
+      },
+    });
+  }
+
+  /** v45 : choix enregistré pour une journée passée (null : horaire de base). */
+  choixDuJour(jour: string): ChoixProduction | null {
+    return this.choixJours().find((c) => c.jour.slice(0, 10) === jour)?.choix ?? null;
+  }
+
+  /** v45 : 07h40 impossible ce jour-là (horaire 08h40 : journée à 07h40 déjà prise dans la semaine). */
+  courteBloquee(jour: string): boolean {
+    return this.choixDuJour(jour) !== '0740' && !!courteDejaPriseSemaine(jour, this.choixJours(), this.base());
+  }
+
+  /** v45 : corrige la production prévue d'une journée passée (ex. un vendredi fait à 07h40). */
+  corrigerJour(jour: string, valeur: ChoixProduction): void {
+    if (this.correctionEnCours() || this.choixDuJour(jour) === valeur) return;
+    this.correctionEnCours.set(jour);
+    this.svc.choisirProductionJour(jour, valeur).subscribe({
+      next: () => {
+        this.correctionEnCours.set(null);
+        this.toast.success(`${this.dateCourte(jour)} : production prévue ${valeur === '0840' ? '08h40' : '07h40'}.`);
+        this.chargerSolde(this.periodeDu(), new Date().toLocaleDateString('sv-SE'));
+      },
+      error: (err) => {
+        this.correctionEnCours.set(null);
+        this.toast.error(err?.error?.message ?? 'Correction impossible.');
       },
     });
   }
@@ -193,6 +228,25 @@ export class PointageHeureSortieComponent implements OnInit {
     return h ? h.slice(0, 5) : '—';
   }
 
+  /**
+   * v42 : solde depuis le 24, journée sur journée : chaque jour est comparé à la production choisie
+   * ce jour-là (07h40 ou 08h40) ; un jour sans choix reprend le dernier choix connu.
+   */
+  private chargerSolde(du: string, au: string): void {
+    forkJoin({
+      suivi: this.svc.monSuivi(du, au),
+      choix: this.svc.mesChoixProduction(au).pipe(catchError(() => of([] as ChoixJour[]))),
+    }).subscribe({
+      next: ({ suivi, choix }) => {
+        this.choixJours.set(choix);
+        const prevue = (d: Date) => prevueDuChoix(d.toLocaleDateString('sv-SE'), choix, this.base());
+        this.solde.set(soldeHeures(suivi.jours, au, prevue));
+        this.detail.set(detailSolde(suivi.jours, au, prevue));
+      },
+      error: () => { this.solde.set(null); this.detail.set([]); },
+    });
+  }
+
   abs(v: number): number {
     return Math.abs(v);
   }
@@ -205,8 +259,11 @@ export class PointageHeureSortieComponent implements OnInit {
     this.enregistrementChoix.set(true);
     this.svc.enregistrerChoixProduction(valeur).subscribe({
       next: () => {
+        this.jour.update((j) => (j ? { ...j, choixProduction: valeur } : j));
         this.enregistrementChoix.set(false);
         this.toast.success(`Production du jour : ${valeur === '0840' ? '08h40' : '07h40'}.`);
+        // Le 1er choix sert aussi aux jours précédents sans choix : solde recalculé.
+        this.chargerSolde(this.periodeDu(), new Date().toLocaleDateString('sv-SE'));
       },
       error: (err) => {
         this.choix.set(avant);

@@ -66,3 +66,18 @@
 .pze-badge--formation { background: #2563eb; color: #fff; }
 .pze-badge--integre { background: #0d9488; color: #fff; }
 .pze-table tbody .pz-f-formation { background: #60a5fa !important; color: #fff !important; border-color: #3b82f6 !important; }
+
+/* v58 — Validation du tableau de paie (bandeau visible par tous, boutons réservés au RH). */
+.pze-validation {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  border-left: 4px solid var(--warning-border, #f59e0b);
+}
+
+.pze-validation--ok { border-left-color: #16a34a; }
+.pze-validation-texte strong { display: block; font-size: 0.95rem; }
+.pze-validation-texte p { margin: 4px 0 0; font-size: 0.84rem; color: var(--text-muted); max-width: 70ch; }
+.pze-validation-actions { display: flex; gap: 8px; }

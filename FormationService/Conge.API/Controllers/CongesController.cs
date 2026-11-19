@@ -1,4 +1,4 @@
-using Conge.Application.Abstractions;
+﻿using Conge.Application.Abstractions;
 using Conge.Application.Commands.AnnulerConge;
 using Conge.Application.Commands.ConfigConge;
 using Conge.Application.Commands.DemanderConge;
@@ -359,7 +359,7 @@ public class CongesController : ControllerBase
 
     /// <summary>PUT /api/conges/{id}/valider-superviseur</summary>
     [HttpPut("{id:guid}/valider-superviseur")]
-    [Authorize(Roles = "Admin,RH,Superviseur,Manager")]
+    [Authorize(Roles = "Admin,RH,Superviseur,Manager,RP,Chef de projet")]
     public async Task<IActionResult> ValiderSuperviseur(
         Guid id,
         [FromBody] ValiderCongeRequest? request,
@@ -410,7 +410,7 @@ public class CongesController : ControllerBase
 
     /// <summary>PUT /api/conges/{id}/valider — Compat (oriente selon statut)</summary>
     [HttpPut("{id:guid}/valider")]
-    [Authorize(Roles = "Admin,RH,Superviseur,Manager")]
+    [Authorize(Roles = "Admin,RH,Superviseur,Manager,RP,Chef de projet")]
     public async Task<IActionResult> Valider(
         Guid id,
         [FromBody] ValiderCongeRequest? request,
@@ -452,7 +452,7 @@ public class CongesController : ControllerBase
 
     /// <summary>PUT /api/conges/{id}/refuser — Refuser une demande</summary>
     [HttpPut("{id:guid}/refuser")]
-    [Authorize(Roles = "Admin,RH,Superviseur,Manager")]
+    [Authorize(Roles = "Admin,RH,Superviseur,Manager,RP,Chef de projet")]
     public async Task<IActionResult> Refuser(
         Guid id,
         [FromBody] RefuserCongeRequest request,

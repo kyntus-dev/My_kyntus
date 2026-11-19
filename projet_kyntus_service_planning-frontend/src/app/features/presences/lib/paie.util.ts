@@ -2,6 +2,7 @@ import type { EvpDto, PresenceAgentDto } from '../../../core/models/presence.mod
 import { dateIntegration, estJourFormation, estJourProduction, plageFormation } from './formation.util';
 import { LIBELLES_RANG, REFERENTIEL, manquement, type OccurrencePenalite, type PenaliteAgent } from './manquements.util';
 import { joursDeLaPeriode } from './presence.util';
+import { libelleTypeFormation } from '../../../core/hr/type-formation.util';
 
 /**
  * Export paie : reproduit le fichier « recap_absences » (mêmes colonnes, même ordre, mêmes règles).
@@ -27,6 +28,8 @@ export const CODES_NON_DEDUITS = ['ABS', 'CP', 'DF', 'REC'] as const;
 
 export const COLONNES_FIN = [
   'Formation',
+  // v48 : contractuel / non contractuel (vide hors formation).
+  'Type de formation',
   'Date entrée',
   'Abs. partielle',
   ...CODES_DEDUITS.map((c) => `${c} (déduit)`),
@@ -76,6 +79,8 @@ export interface LignePaie {
   joursProduction: number;
   /** v37 : en formation (hors paie), formation puis production (prorata), ou production. */
   etatFormation: EtatFormation;
+  /** v48 : « Contractuel » / « Non contractuel » (vide hors formation). */
+  typeFormation: string;
   /** v37 : retards et manquements pénalisés, un par ligne dans la feuille « Détail pénalités ». */
   occurrences: OccurrencePenalite[];
   /** Points à vérifier avant l'envoi (non exportés). */
@@ -248,6 +253,7 @@ export function lignePaie(
     statutPaie,
     joursProduction,
     etatFormation: etatFormation(formation, joursProduction),
+    typeFormation: agent.enFormation || formation > 0 ? libelleTypeFormation(agent.typeFormation) : '',
     occurrences: penalites?.occurrences ?? [],
     alertes,
   };
@@ -265,6 +271,7 @@ export function valeursPaie(l: LignePaie): (string | number)[] {
     l.pilote,
     ...l.jours,
     l.formation,
+    l.typeFormation,
     l.dateEntree,
     l.absPartielle,
     ...CODES_DEDUITS.map((c) => l.deduits[c]),
@@ -373,7 +380,7 @@ export async function classeurExportPaie(lignes: readonly LignePaie[], du: strin
   const premiereFin = 4 + nbJours; // 1re colonne après les jours
   const colonneFin = (nom: string) => premiereFin + COLONNES_FIN.indexOf(nom as (typeof COLONNES_FIN)[number]);
   const colonnesMontant = new Set([colonneFin('Total EVP'), colonneFin('Montant pénalité')]);
-  const colonnesTexte = new Set(['Date entrée', 'Cumul retards', 'Commentaire Présence', 'Éléments Variables de Paie', 'Origine pénalité', 'Sortie (AR)', 'Statut paie'].map(colonneFin));
+  const colonnesTexte = new Set(['Type de formation', 'Date entrée', 'Cumul retards', 'Commentaire Présence', 'Éléments Variables de Paie', 'Origine pénalité', 'Sortie (AR)', 'Statut paie'].map(colonneFin));
   const colonnesDeduites = new Set([...CODES_DEDUITS.map((c) => colonneFin(`${c} (déduit)`)), colonneFin('Total des absences')]);
   const colJrs = colonneFin('Jrs travaillés');
   const codesDeduits = new Set<string>(CODES_DEDUITS);

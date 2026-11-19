@@ -53,3 +53,6 @@
 @media (max-width: 520px) {
   .rh-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+/* v44 : arrivée selon le planning */
+.rh-arrivee { font-size: 0.72rem; }

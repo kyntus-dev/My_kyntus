@@ -1,0 +1,208 @@
+<section class="card ky-card ie-card">
+  <div class="section-heading">
+    <div>
+      <h2>Importer des employés (fichier RH)</h2>
+      <p>
+        <strong>Tout fichier est accepté</strong> (Excel, CSV, texte) : seules les colonnes utiles
+        sont lues — <strong>Nom</strong>, <strong>Prénom</strong>, CIN, date de naissance, situation
+        familiale, nombre d'enfants, adresse, e-mail personnel, téléphone —, les autres sont
+        ignorées. Une colonne « Nom complet » est séparée automatiquement.
+        Les fiches sont créées sans mail interne — les adresses s'importent ensuite depuis
+        <a routerLink="/users/mails-internes">Mails internes</a>.
+      </p>
+    </div>
+    <button type="button" class="ky-btn-primary" (click)="basculer()">
+      <app-lucide-icon [icon]="icons.sheet" className="w-4 h-4" />
+      {{ ouvert ? 'Fermer' : 'Importer un fichier' }}
+    </button>
+  </div>
+
+  @if (ouvert) {
+    @if (erreur) {
+      <div class="alert alert-error">
+        <app-lucide-icon [icon]="icons.warn" className="w-4 h-4" />
+        <span>{{ erreur }}</span>
+      </div>
+    }
+
+    @if (avertissement && !erreur) {
+      <div class="alert alert-info">
+        <app-lucide-icon [icon]="icons.warn" className="w-4 h-4" />
+        <span>Fichier lu malgré des en-têtes inhabituels : {{ avertissement }} Vérifiez l'aperçu.</span>
+      </div>
+    }
+
+    @if (details.length > 0) {
+      <ul class="ie-details">
+        @for (d of details; track d) { <li>{{ d }}</li> }
+        @if (ignorees > details.length) {
+          <li>… et {{ ignorees - details.length }} autre(s) ligne(s) incomplète(s).</li>
+        }
+      </ul>
+    }
+
+    <div class="ie-depot">
+      <label class="ie-zone">
+        <input type="file" (change)="onFichier($event)" [disabled]="analyse || envoi" />
+        <app-lucide-icon [icon]="icons.upload" className="w-5 h-5" />
+        <span>{{ fichierNom || 'Choisir le fichier des employés' }}</span>
+      </label>
+      @if (analyse) { <span class="ie-etat">Lecture…</span> }
+      @if (fichierNom && !analyse) {
+        <button type="button" class="ky-btn-secondary btn-sm" (click)="reinitialiser()">
+          <app-lucide-icon [icon]="icons.clear" className="w-3.5 h-3.5" />
+          Retirer
+        </button>
+      }
+    </div>
+
+    @if (lignes.length > 0 && !resultats) {
+      <!-- Réglages communs à tout le lot -->
+      <div class="ie-reglages">
+        <div class="ie-champ">
+          <label for="ieRole">Rôle <span class="requis">*</span></label>
+          <select class="ky-input" id="ieRole" name="ieRole" [(ngModel)]="roleId">
+            @for (r of roles; track r.id) { <option [ngValue]="r.id">{{ r.name }}</option> }
+          </select>
+        </div>
+        <div class="ie-champ">
+          <label for="ieDate">Date d'embauche <span class="requis">*</span></label>
+          <input class="ky-input" id="ieDate" name="ieDate" type="date" [(ngModel)]="dateEmbauche" />
+        </div>
+        <div class="ie-champ ie-champ--large">
+          <label for="ieService">Service (facultatif)</label>
+          <select class="ky-input" id="ieService" name="ieService" [(ngModel)]="subServiceId">
+            <option [ngValue]="null">— À affecter plus tard —</option>
+            @for (s of services; track s.id) {
+              <option [ngValue]="s.id">{{ s.serviceName }} · {{ s.name }}</option>
+            }
+          </select>
+        </div>
+        <div class="ie-champ ie-champ--large">
+          <label class="ie-check">
+            <input type="checkbox" name="ieFormation" [(ngModel)]="enFormation" />
+            <span>Tous en formation</span>
+          </label>
+          @if (enFormation) {
+            <select class="ky-input" name="ieTypeFormation" [(ngModel)]="typeFormation">
+              <option value="contractuel">Formation contractuelle</option>
+              <option value="non-contractuel">Formation non contractuelle</option>
+            </select>
+          }
+        </div>
+      </div>
+
+      <p class="ie-note">
+        {{ lignes.length }} ligne(s) lue(s)@if (ignorees > 0) { <span>, {{ ignorees }} sans nom ou prénom ignorée(s)</span> }.
+        Le technicien HTEL est proposé automatiquement d'après le nom — vérifiez-le avant de créer.
+      </p>
+
+      <div class="table-wrap">
+        <table class="prime-table ie-table">
+          <thead>
+            <tr>
+              <th class="ie-col-check">
+                <input type="checkbox" checked (change)="toutCocher($any($event.target).checked)" title="Tout cocher" />
+              </th>
+              <th>Employé</th>
+              <th>CIN</th>
+              <th>Naissance</th>
+              <th>Contact</th>
+              <th>Technicien HTEL</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of lignes; track l.numero) {
+              <tr [class.ie-row--off]="!retenue[l.numero]">
+                <td class="ie-col-check">
+                  <input type="checkbox" [checked]="retenue[l.numero]" (change)="basculerLigne(l)" />
+                </td>
+                <td>
+                  <span class="ie-nom">{{ l.nom }} {{ l.prenom }}</span>
+                  @if (dejaPresent(l)) {
+                    <span class="ie-badge ie-badge--warn">Déjà présent</span>
+                  }
+                  @if (l.suspecteEntete) {
+                    <span class="ie-badge ie-badge--warn">Peut-être l'en-tête du fichier</span>
+                  }
+                </td>
+                <td class="muted-cell">{{ l.cin || '—' }}</td>
+                <td class="muted-cell">{{ l.dateNaissance || '—' }}</td>
+                <td class="muted-cell">
+                  {{ l.emailPersonnel || '—' }}
+                  @if (l.telephone) { <small class="ie-sous">{{ l.telephone }}</small> }
+                </td>
+                <td>
+                  <select
+                    class="ky-input ie-select"
+                    [name]="'tech-' + l.numero"
+                    (change)="choisirTechnicien(l, $any($event.target).value)"
+                  >
+                    <option [value]="0" [selected]="!technicien[l.numero]">— Aucun —</option>
+                    @for (t of techniciensPour(l); track t.idTechnicien) {
+                      <option [value]="t.idTechnicien" [selected]="t.idTechnicien === technicien[l.numero]">
+                        {{ t.technicien }} ({{ t.idTechnicien }})
+                      </option>
+                    }
+                  </select>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="ie-actions">
+        @if (conflitTechnicien) {
+          <span class="ie-conflit">Le même technicien HTEL est choisi sur deux lignes.</span>
+        }
+        <button type="button" class="ky-btn-primary" [disabled]="envoi || !pret" (click)="importer()">
+          <app-lucide-icon [icon]="icons.ok" className="w-4 h-4" />
+          {{ envoi ? 'Création…' : 'Créer ' + retenues.length + ' employé(s)' }}
+        </button>
+      </div>
+    }
+
+    <!-- Rapport -->
+    @if (resultats) {
+      <div class="ie-rapport">
+        <p class="ie-resume">
+          <strong>{{ crees.length }}</strong> employé(s) créé(s), <strong>{{ liaisonsFaites }}</strong> lié(s) à HTEL,
+          <strong>{{ echecs.length }}</strong> en échec.
+          Complétez le service et la formation depuis chaque fiche, puis importez les adresses depuis
+          <a routerLink="/users/mails-internes">Mails internes</a>.
+        </p>
+        <div class="table-wrap">
+          <table class="prime-table">
+            <thead>
+              <tr><th>Employé</th><th>État</th><th class="col-actions">Fiche</th></tr>
+            </thead>
+            <tbody>
+              @for (r of resultats; track r.numero) {
+                <tr>
+                  <td><span class="ie-nom">{{ r.nom }} {{ r.prenom }}</span></td>
+                  <td>
+                    @if (r.ok) {
+                      <span class="ie-badge ie-badge--ok">Créé</span>
+                    } @else {
+                      <span class="ie-badge ie-badge--ko">Échec</span>
+                    }
+                    @if (r.message) { <small class="ie-sous">{{ r.message }}</small> }
+                  </td>
+                  <td class="col-actions">
+                    @if (r.ok && r.userId) {
+                      <a class="ky-btn-secondary btn-sm" [routerLink]="['/users/edit', r.userId]">Compléter</a>
+                    } @else {
+                      <span class="muted-cell">—</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="ky-btn-secondary" (click)="reinitialiser()">Importer un autre fichier</button>
+      </div>
+    }
+  }
+</section>

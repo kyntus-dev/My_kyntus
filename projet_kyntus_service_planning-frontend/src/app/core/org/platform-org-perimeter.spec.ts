@@ -4,6 +4,7 @@ import {
   filterOrgTreeToCelluleIds,
   employeesInReferentTechniqueService,
   employeesInSuperviseurCellule,
+  resolveCellulesEncadrees,
   resolveReferentTechniqueServiceIds,
 } from './platform-org-perimeter';
 import type { Employee } from '../../features/prime/models';
@@ -120,5 +121,48 @@ describe('superviseur cellule perimeter', () => {
     const filtered = filterOrgTreeToCelluleIds(tree, [], ['cell-bte']);
     expect(filtered.operationalDepartments).toHaveLength(1);
     expect(filtered.operationalDepartments[0].poles[0].cellules.map((c) => c.id)).toEqual(['cell-bte']);
+  });
+});
+
+describe('cellules encadrées — RP et portée globale (v54)', () => {
+  const arbre = {
+    operationalDepartments: [
+      {
+        id: 'bytel',
+        name: 'Bytel Kyntus',
+        poles: [
+          { id: 'p1', name: 'Pôle technique', cellules: [{ id: 'c1', name: 'Support technicien' }, { id: 'c2', name: 'Prestations' }] },
+          { id: 'p2', name: 'Pôle escalade', cellules: [{ id: 'c3', name: 'Escalade' }] },
+        ],
+      },
+    ],
+    unassignedPoles: [{ id: 'p9', name: 'Isolé', cellules: [{ id: 'c9', name: 'Seule' }] }],
+  } as never;
+
+  it('ajoute toutes les cellules des pôles dont la personne est chef de projet', () => {
+    const overview = {
+      managerEtage: [{ id: 'a', userId: 'rp-1', etageId: 'p1' }],
+      supervisorService: [],
+    } as unknown as OrgAssignmentsOverview;
+
+    expect(resolveCellulesEncadrees('rp-1', { celluleId: '' }, overview, arbre)).toEqual(['c1', 'c2']);
+  });
+
+  it('cumule les cellules du superviseur et celles de ses pôles, sans doublon', () => {
+    const overview = {
+      managerEtage: [{ id: 'a', userId: 'u1', etageId: 'p1' }],
+      supervisorService: [{ id: 's', userId: 'u1', celluleId: 'c3', serviceId: 'svc' }],
+    } as unknown as OrgAssignmentsOverview;
+
+    expect(resolveCellulesEncadrees('u1', { celluleId: 'c1' }, overview, arbre).sort()).toEqual(['c1', 'c2', 'c3']);
+  });
+
+  it('ouvre toutes les cellules quand la portée est « Toute l’entreprise »', () => {
+    expect(resolveCellulesEncadrees('x', { celluleId: '' }, null, arbre, true)).toEqual(['c1', 'c2', 'c3', 'c9']);
+  });
+
+  it('n’ouvre pas le pôle de rattachement d’un collaborateur sans responsabilité', () => {
+    const overview = { managerEtage: [], supervisorService: [] } as unknown as OrgAssignmentsOverview;
+    expect(resolveCellulesEncadrees('pilote-1', { celluleId: 'c1' }, overview, arbre)).toEqual(['c1']);
   });
 });

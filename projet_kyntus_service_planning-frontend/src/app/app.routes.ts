@@ -91,6 +91,14 @@ export const routes: Routes = [
           import('./features/assistance/assistance.component')
             .then(m => m.AssistanceComponent),
       },
+      {
+        // v56 : chacun change son mot de passe, quel que soit son rôle.
+        path: 'mon-mot-de-passe',
+        canActivate: [AuthGuard],
+        loadComponent: () =>
+          import('./features/compte/mon-mot-de-passe.component')
+            .then(m => m.MonMotDePasseComponent),
+      },
 
       // ─── AIDE : guide de l'application (parcours par rôle) ──
       { path: 'aide', redirectTo: 'aide/guide', pathMatch: 'full' },
@@ -416,6 +424,15 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/planning/pages/conge-manager/conge-manager.component')
             .then(m => m.CongeManagerComponent),
+      },
+      {
+        // v48 : Process Bytel — procédures partagées (dépôt par l'encadrement, lecture par les agents).
+        path: 'process-bytel',
+        canActivate: [AuthGuard],
+        data: { ouvertureIam: 'process-bytel' },
+        loadComponent: () =>
+          import('./features/process-bytel/process-bytel-page.component')
+            .then(m => m.ProcessBytelPageComponent),
       },
       {
         // Présences et paie : tableau des présences (pointage + saisies), retards et autorisations.

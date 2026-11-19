@@ -1,4 +1,4 @@
-namespace EmployeeDirectory.Application.Iam;
+﻿namespace EmployeeDirectory.Application.Iam;
 
 public static class PlatformAccessCatalog
 {
@@ -8,12 +8,14 @@ public static class PlatformAccessCatalog
     public static readonly string[] Roles =
     [
         "Admin", "RH", "Audit", "Superviseur", "Référent technique",
-        "RP", "Chef de projet", "Pilote", "Employee", "Formateur", "Equipe_Formation",
+        "RP", "Pilote", "Employee", "Formateur", "Equipe_Formation",
         "Qualiticien", "Comptabilité", "Ingénieur", "Support IT"
     ];
 
     /// <summary>
-    /// Anciens noms de connexion fusionnés : « Manager » = Superviseur, « Coach » = Référent technique.
+    /// Anciens noms de connexion fusionnés : « Manager » = Superviseur, « Coach » = Référent technique,
+    /// et depuis la v54 « Chef de projet » = RP (une seule ligne dans Accès par rôle : les deux
+    /// désignaient la même personne, et les droits cochés sur l'une ne s'appliquaient pas à l'autre).
     /// Ils ne sont plus proposés ; leurs comptes utilisent les droits du rôle cible.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> Alias =
@@ -21,6 +23,8 @@ public static class PlatformAccessCatalog
         {
             ["Manager"] = "Superviseur",
             ["Coach"] = "Référent technique",
+            ["Chef de projet"] = "RP",
+            ["ChefDeProjet"] = "RP",
         };
 
     /// <summary>Rôle créé par l'Admin : lettres, chiffres, espaces, - _ . ' (2 à 50 caractères).</summary>
@@ -36,54 +40,62 @@ public static class PlatformAccessCatalog
     private static readonly string[] AdminAudit = ["Admin", "Audit"];
     private static readonly string[] TeamLead =
     [
-        "Admin", "RH", "Manager", "Superviseur", "Coach", "Référent technique", "RP", "Chef de projet"
+        "Admin", "RH", "Manager", "Superviseur", "Coach", "Référent technique", "RP"
     ];
     /// <summary>Dossier administratif et export paie : RH, Admin et chefs de projet.</summary>
-    private static readonly string[] RhChefProjet = ["Admin", "RH", "RP", "Chef de projet"];
+    private static readonly string[] RhChefProjet = ["Admin", "RH", "RP"];
+    /// <summary>v48 — Dépôt des procédures « Process Bytel » : l'encadrement, superviseurs compris.</summary>
+    private static readonly string[] ProcessDepot =
+        ["Admin", "RH", "RP", "Superviseur", "Référent technique"];
     private static readonly string[] PlanningGenerate =
     [
-        "Admin", "RH", "Manager", "Coach", "Référent technique", "RP", "Chef de projet",
+        "Admin", "RH", "Manager", "Coach", "Référent technique", "RP",
         "Pilote", "Employee", "Audit", "Equipe_Formation", "Superviseur", "Ingénieur", "Support IT"
     ];
+    /// <summary>
+    /// v54 — Le RP (chef de projet) a les mêmes pouvoirs qu'un superviseur sur son périmètre :
+    /// configurer les horaires, enregistrer les modes de la semaine, valider et générer. Un
+    /// planning ne dépend donc plus de la seule disponibilité du superviseur.
+    /// </summary>
     private static readonly string[] PlanningValidation =
     [
-        "Admin", "RH", "Superviseur"
+        "Admin", "RH", "Superviseur", "RP"
     ];
     private static readonly string[] PlanningShiftConfig =
     [
-        "Admin", "RH", "Superviseur"
+        "Admin", "RH", "Superviseur", "RP"
     ];
     private static readonly string[] Self =
     [
-        "Admin", "RH", "Manager", "Coach", "Référent technique", "RP", "Chef de projet",
+        "Admin", "RH", "Manager", "Coach", "Référent technique", "RP",
         "Pilote", "Employee", "Audit", "Formateur", "Equipe_Formation", "Superviseur",
         "Qualiticien", "Comptabilité", "Ingénieur", "Support IT"
     ];
 
     // v23 : entrées de menu qui n'avaient pas encore de rubrique (mêmes rôles qu'avant).
     private static readonly string[] SelfSansCompta = [.. Self.Where(r => r != "Comptabilité")];
-    private static readonly string[] FormationPlanif = ["Admin", "RH", "RP", "Chef de projet", "Superviseur", "Qualiticien"];
+    private static readonly string[] FormationPlanif = ["Admin", "RH", "RP", "Superviseur", "Qualiticien"];
     private static readonly string[] FormationSuivi = ["Admin", "Equipe_Formation", "Formateur"];
     private static readonly string[] ReclamationsSelf =
     [
         // v24 : comme le serveur des réclamations (ni Superviseur, ni Formateur).
-        "Admin", "RH", "Audit", "Manager", "Coach", "Référent technique", "RP", "Chef de projet",
+        "Admin", "RH", "Audit", "Manager", "Coach", "Référent technique", "RP",
         "Pilote", "Employee", "Equipe_Formation", "Ingénieur", "Support IT"
     ];
     private static readonly string[] CqEvaluations =
     [
-        "Qualiticien", "Admin", "RH", "Superviseur", "Coach", "Référent technique", "Manager", "RP", "Chef de projet"
+        "Qualiticien", "Admin", "RH", "Superviseur", "Coach", "Référent technique", "Manager", "RP"
     ];
     private static readonly string[] CqCoaching = ["Qualiticien", "Admin", "RH", "Superviseur", "Coach", "Référent technique"];
     private static readonly string[] Pilotes = ["Pilote", "Employee"];
     private static readonly string[] PrimeModule =
     [
-        "Admin", "RH", "Manager", "Coach", "Référent technique", "RP", "Chef de projet", "Pilote", "Employee",
+        "Admin", "RH", "Manager", "Coach", "Référent technique", "RP", "Pilote", "Employee",
         "Ingénieur", "Support IT", "Audit", "Superviseur", "Comptabilité"
     ];
     private static readonly string[] ParrainageModule =
     [
-        "Admin", "RH", "Manager", "Pilote", "Employee", "Audit", "Coach", "Référent technique", "RP", "Chef de projet", "Superviseur",
+        "Admin", "RH", "Manager", "Pilote", "Employee", "Audit", "Coach", "Référent technique", "RP", "Superviseur",
         "Ingénieur", "Support IT"
     ];
 
@@ -145,13 +157,16 @@ public static class PlatformAccessCatalog
 
         S("conges.self", "Mes congés", "Congés", View: Self),
         S("conges.equipe", "Congés de l'équipe", "Congés", View: TeamLead),
-        S("conges.validation", "Valider les congés", "Congés", View: ["Admin", "RH", "Manager", "Superviseur"], Validate: ["Admin", "RH", "Manager", "Superviseur"]),
+        S("conges.validation", "Valider les congés", "Congés", View: ["Admin", "RH", "Manager", "Superviseur", "RP"], Validate: ["Admin", "RH", "Manager", "Superviseur", "RP"]),
         S("conges.history", "Historique des congés", "Congés", View: AdminRh), // v24 : API réservée à Admin et RH
         // v29 : chef de projet = tout son département (Congés › Quotas).
-        S("conges.quotas", "Quotas cellule / service", "Congés", View: ["Superviseur", "Admin", "RP", "Chef de projet"], Configure: ["Superviseur", "Admin", "RP", "Chef de projet"]),
+        S("conges.quotas", "Quotas cellule / service", "Congés", View: ["Superviseur", "Admin", "RP"], Configure: ["Superviseur", "Admin", "RP"]),
         S("conges.periodes", "Périodes interdites", "Congés", View: AdminRh, Configure: AdminRh),
 
         S("documentation.module", "Module Documentation (accès au menu)", "Documentation", View: Self),
+        // v48 : Process Bytel — tout le monde consulte (selon la visibilité du document) ;
+        // l'encadrement dépose (superviseurs compris). « Agir » s'accorde à d'autres rôles ici.
+        S("process-bytel", "Process Bytel (documents partagés)", "Documentation", View: Self, Act: ProcessDepot),
         S("documentation.admin-config", "Configuration documentation", "Documentation", View: Admin, Configure: Admin),
         S("documentation.doc-types", "Types de documents", "Documentation", View: Admin, Configure: Admin),
         S("documentation.permissions", "Permissions documents", "Documentation", View: Admin, Configure: Admin),

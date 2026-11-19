@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 
 namespace Planning.Infrastructure.Persistence;
 
@@ -93,6 +93,73 @@ public static class PlanningSchemaPatches
         await db.Database.ExecuteSqlRawAsync(
             """
             ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "DateDebutFormation" date NULL;
+            """,
+            ct);
+    }
+
+    /// <summary>
+    /// v51 : raison du dernier échec de génération d'un planning (grille vide jamais muette).
+    /// </summary>
+    public static async Task EnsurePlanningGenerationErreurAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "WeeklyPlannings" ADD COLUMN IF NOT EXISTS "GenerationErreur" character varying(500) NULL;
+            ALTER TABLE "WeeklyPlannings" ADD COLUMN IF NOT EXISTS "GenerationErreurLe" timestamp with time zone NULL;
+            """,
+            ct);
+    }
+
+    /// <summary>
+    /// v58 : validation du tableau de paie par les RH. La table garde qui a validé et quand ;
+    /// tant qu'une période est validée et non rouverte, elle est verrouillée.
+    /// </summary>
+    public static async Task EnsurePaieValidationAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PaiePeriodeValidations" (
+                "Id" bigserial PRIMARY KEY,
+                "PeriodeDu" date NOT NULL,
+                "PeriodeAu" date NOT NULL,
+                "ValideParUserId" integer NOT NULL,
+                "ValideParNom" character varying(160) NOT NULL,
+                "ValideLe" timestamp with time zone NOT NULL DEFAULT now(),
+                "Commentaire" character varying(500) NULL,
+                "RouvertLe" timestamp with time zone NULL,
+                "RouvertParUserId" integer NULL,
+                "RouvertParNom" character varying(160) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_PaiePeriodeValidations_Periode"
+                ON "PaiePeriodeValidations" ("PeriodeDu", "PeriodeAu");
+            """,
+            ct);
+    }
+
+    /// <summary>v48 : type de formation (contractuel / non contractuel) et bibliothèque Process Bytel.</summary>
+    public static async Task EnsureFormationEtProcessBytelAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "TypeFormation" character varying(32) NULL;
+
+            CREATE TABLE IF NOT EXISTS "ProcessDocuments" (
+                "Id" bigserial PRIMARY KEY,
+                "Dossier" character varying(80) NOT NULL DEFAULT 'ITs',
+                "Titre" character varying(200) NOT NULL,
+                "NomFichier" character varying(255) NOT NULL,
+                "ContentType" character varying(120) NOT NULL,
+                "Taille" bigint NOT NULL,
+                "Contenu" bytea NOT NULL,
+                "Commentaire" character varying(1000) NULL,
+                "PourTous" boolean NOT NULL DEFAULT true,
+                "Activites" character varying(600) NOT NULL DEFAULT '',
+                "Poles" character varying(2000) NOT NULL DEFAULT '',
+                "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "CreatedBy" integer NULL,
+                "CreatedByNom" character varying(120) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_ProcessDocuments_Dossier" ON "ProcessDocuments" ("Dossier");
             """,
             ct);
     }
@@ -919,6 +986,31 @@ public static class PlanningSchemaPatches
             );
             ALTER TABLE "HeureSortieAcces" ADD COLUMN IF NOT EXISTS "ChoixProduction" varchar(16) NULL;
             ALTER TABLE "HeureSortieAcces" ADD COLUMN IF NOT EXISTS "ChoixModifieLe" timestamp with time zone NULL;
+
+            -- v43 : horaire de base (08h40 + une journée à 07h40 par semaine, ou 07h40 tous les jours).
+            -- Reprise : 07h40 pour ceux dont le dernier choix était 07h40, sinon 08h40.
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'HeureSortieAcces' AND column_name = 'ProductionBase') THEN
+                    ALTER TABLE "HeureSortieAcces" ADD COLUMN "ProductionBase" varchar(4) NOT NULL DEFAULT '0840';
+                    UPDATE "HeureSortieAcces" SET "ProductionBase" = '0740' WHERE "ChoixProduction" = '0740';
+                END IF;
+            END $$;
+
+            -- v42 : choix de production jour par jour (solde des heures) ; reprise du dernier choix connu.
+            CREATE TABLE IF NOT EXISTS "HeureSortieChoixJours" (
+                "UserId" integer NOT NULL REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                "Jour" date NOT NULL,
+                "Choix" varchar(4) NOT NULL,
+                "ModifieLe" timestamp with time zone NOT NULL DEFAULT now(),
+                PRIMARY KEY ("UserId", "Jour")
+            );
+            INSERT INTO "HeureSortieChoixJours" ("UserId", "Jour", "Choix", "ModifieLe")
+            SELECT a."UserId", (a."ChoixModifieLe" AT TIME ZONE 'Africa/Casablanca')::date, a."ChoixProduction", a."ChoixModifieLe"
+            FROM "HeureSortieAcces" a
+            WHERE a."ChoixProduction" IN ('0740', '0840') AND a."ChoixModifieLe" IS NOT NULL
+            ON CONFLICT ("UserId", "Jour") DO NOTHING;
             """,
             ct);
     }

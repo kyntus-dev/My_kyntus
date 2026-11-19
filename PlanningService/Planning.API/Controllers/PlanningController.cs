@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Kyntus.Iam;
 using Kyntus.Identity.Jwt;
@@ -48,10 +48,44 @@ public class PlanningController(
         return user is null ? null : (user.Id, user.Guid);
     }
 
-    private async Task<IActionResult?> ForbidOutsidePerimeterAsync(int subServiceId)
+    /// <summary>
+    /// v52 : libellés des droits tels qu'ils apparaissent dans « Accès par rôle », pour qu'un refus
+    /// dise exactement quelle case manque (au lieu d'un « Erreur serveur » muet).
+    /// </summary>
+    private static readonly Dictionary<string, (string Ecran, string Verbe)> LibellesDroits = new()
+    {
+        [CapShiftConfigure] = ("Configuration des horaires", "Configurer"),
+        [CapGenerate] = ("Générer le planning", "Agir"),
+        [CapPublish] = ("Publier un planning (2e validation)", "Valider"),
+        [CapValidateSuperviseur] = ("Valider les plannings", "Valider"),
+    };
+
+    /// <summary>403 accompagné d'un message lisible (affiché tel quel par l'interface).</summary>
+    private ObjectResult Refus(string message) =>
+        StatusCode(StatusCodes.Status403Forbidden, new { message });
+
+    /// <summary>
+    /// Le rôle détient-il ce droit avec la portée « Toute l'entreprise » ? (ressource fictive :
+    /// seule la portée Global l'accepte, comme pour les réaffectations v28).
+    /// </summary>
+    private async Task<bool> PorteeGlobaleAsync(string action, CancellationToken ct = default)
+    {
+        var role = User.GetAuthRole() ?? "Employee";
+        var decision = await _policyEvaluator.EvaluateAsync(
+            new PolicyRequest(User.GetSubjectId() ?? Guid.Empty, role, action, "platform", "toute-l-entreprise"), ct);
+        return decision.Allowed;
+    }
+
+    private async Task<IActionResult?> ForbidOutsidePerimeterAsync(int subServiceId, string? action = null)
     {
         var viewerId = await ResolvePlanningUserIdAsync();
         if (viewerId is not > 0) return null;
+
+        // v52 : un droit accordé avec la portée « Toute l'entreprise » dans Accès par rôle vaut pour
+        // toutes les cellules, même sans responsabilité inscrite dans Organisation RH.
+        if (action is not null && await PorteeGlobaleAsync(action))
+            return null;
+
         try
         {
             await _planningService.EnsureViewerCanManageSubServiceAsync(viewerId.Value, subServiceId);
@@ -59,7 +93,10 @@ public class PlanningController(
         }
         catch (UnauthorizedAccessException)
         {
-            return Forbid();
+            return Refus(
+                "Cette cellule n'est pas dans votre périmètre. Inscrivez la responsabilité dans "
+                + "Organisation RH (Responsables : chef de projet du pôle, superviseur de la cellule), "
+                + "ou accordez ce droit avec la portée « Toute l'entreprise » dans Accès par rôle.");
         }
     }
 
@@ -69,7 +106,15 @@ public class PlanningController(
         var subjectId = User.GetSubjectId() ?? Guid.Empty;
         var decision = await _policyEvaluator.EvaluateAsync(
             new PolicyRequest(subjectId, role, action, "platform"), ct);
-        return decision.Allowed ? null : Forbid();
+        if (decision.Allowed) return null;
+
+        var (ecran, verbe) = LibellesDroits.TryGetValue(action, out var libelle)
+            ? libelle
+            : (action, "");
+        return Refus(
+            $"Accès refusé : le rôle « {role} » n'a pas le droit « {ecran} »"
+            + (verbe.Length > 0 ? $" › « {verbe} »" : "")
+            + ". Cochez-le dans Administration › Accès par rôle (ligne de ce rôle), puis reconnectez-vous.");
     }
 
     // ----------------------------------------------------
@@ -144,7 +189,7 @@ public class PlanningController(
     public async Task<IActionResult> SaveShiftConfig([FromBody] SaveShiftConfigDto dto)
     {
         if (await ForbidUnlessAsync(CapShiftConfigure) is { } denied) return denied;
-        if (await ForbidOutsidePerimeterAsync(dto.SubServiceId) is { } outside) return outside;
+        if (await ForbidOutsidePerimeterAsync(dto.SubServiceId, CapShiftConfigure) is { } outside) return outside;
         try
         {
             var result = await _planningService.SaveShiftConfigAsync(dto);
@@ -158,9 +203,16 @@ public class PlanningController(
 
     // GET api/planning/config/status — avancement modèles (rouge/vert)
     [HttpGet("config/status")]
-    public async Task<IActionResult> GetShiftConfigStatus()
+    public async Task<IActionResult> GetShiftConfigStatus(CancellationToken ct)
     {
-        return Ok(await _planningService.GetShiftConfigStatusAsync());
+        // v58 : chacun ne configure que son périmètre, comme dans « Valider les plannings ».
+        // RH, Admin et un droit accordé « Toute l'entreprise » voient toutes les cellules.
+        var role = User.GetAuthRole();
+        var voitTout = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase)
+            || await PorteeGlobaleAsync(CapShiftConfigure, ct);
+        var viewerId = voitTout ? null : await ResolvePlanningUserIdAsync();
+        return Ok(await _planningService.GetShiftConfigStatusAsync(viewerId));
     }
 
     // GET api/planning/config/3 — modèle permanent
@@ -416,7 +468,7 @@ public class PlanningController(
         [FromBody] GeneratePlanningFromConfigDto dto)
     {
         if (await ForbidUnlessAsync(CapGenerate) is { } denied) return denied;
-        if (await ForbidOutsidePerimeterAsync(dto.SubServiceId) is { } outside) return outside;
+        if (await ForbidOutsidePerimeterAsync(dto.SubServiceId, CapGenerate) is { } outside) return outside;
         try
         {
             var result = await _planningService.GeneratePlanningFromConfigAsync(dto);
@@ -439,7 +491,8 @@ public class PlanningController(
                 }
             }
 
-            return BadRequest(new { message = ex.Message });
+            // v52 : code stable — l'interface propose alors « Générer avec les modes repris ».
+            return BadRequest(new { message = ex.Message, code = "MODES_EN_ATTENTE" });
         }
         catch (PlanningValidationException ex)
         {

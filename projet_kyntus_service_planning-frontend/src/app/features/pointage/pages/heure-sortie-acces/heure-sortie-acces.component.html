@@ -58,6 +58,13 @@
                       <span class="hsa-who"><b>{{ c.collaborateur }}</b><small class="ku-muted">{{ c.email }}{{ c.cellule ? ' · ' + c.cellule : '' }}</small></span>
                     </label>
                     @if (etat(c) !== c.acces) { <span class="ku-chip ku-chip--warn ku-chip--plain">{{ etat(c) ? 'à ajouter' : 'à retirer' }}</span> }
+                    @if (c.acces) {
+                      <select class="ku-input hsa-base" [ngModel]="c.productionBase ?? '0840'" (ngModelChange)="changerBase(c, $event)"
+                              [disabled]="baseEnCours() === c.userId" aria-label="Horaire de base">
+                        <option value="0840">08h40 (+ 1 jour à 07h40 / semaine)</option>
+                        <option value="0740">07h40 tous les jours</option>
+                      </select>
+                    }
                   </li>
                 }
               </ul>

@@ -187,6 +187,8 @@ services:
       Auth__BaseUrl: http://kyntus_auth_backend:8080/
       InternalServices__ApiKey: ${KYNTUS_INTERNAL_SERVICE_API_KEY:?Définir KYNTUS_INTERNAL_SERVICE_API_KEY dans .env}
       Planning__Media__RootPath: /app/uploads/media
+      # v56 : clé de l'API publique des employés (GET /api/public/employes). Vide = API fermée.
+      PublicApi__Cles__0: ${KYNTUS_PUBLIC_API_KEY:-}
       Smtp__Host: ${KYNTUS_SMTP_HOST:-}
       Smtp__Port: ${KYNTUS_SMTP_PORT:-587}
       Smtp__User: ${KYNTUS_SMTP_USER:-}

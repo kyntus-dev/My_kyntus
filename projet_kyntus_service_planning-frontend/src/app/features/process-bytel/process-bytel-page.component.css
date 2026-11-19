@@ -1,0 +1,356 @@
+/* v48 — Process Bytel : procédures partagées par l'encadrement. */
+
+.card {
+  margin-bottom: 1.1rem;
+  padding: 1.15rem 1.25rem 1.25rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.section-heading p {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 70ch;
+}
+
+/* ── Dépôt ── */
+
+.depot-grille {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1rem;
+  align-items: end;
+}
+
+@media (max-width: 860px) {
+  .depot-grille {
+    grid-template-columns: 1fr;
+  }
+}
+
+.champ--large {
+  grid-column: 1 / -1;
+}
+
+.champ label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+  color: var(--text-primary);
+}
+
+.requis {
+  color: var(--danger, #dc2626);
+}
+
+.depot-zone {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border: 1px dashed color-mix(in srgb, var(--soft-blue) 55%, var(--border-color));
+  border-radius: var(--radius-card, 0.65rem);
+  background: color-mix(in srgb, var(--soft-blue) 7%, var(--bg-card));
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.depot-zone:hover {
+  background: color-mix(in srgb, var(--soft-blue) 13%, var(--bg-card));
+}
+
+.depot-zone input[type='file'] {
+  display: none;
+}
+
+.visibilite {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.visibilite-titre {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.radio-ligne,
+.check-ligne {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.87rem;
+  cursor: pointer;
+}
+
+.activites {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.1rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-card, 0.65rem);
+  background: color-mix(in srgb, var(--border-color) 18%, transparent);
+}
+
+.hint {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.actions-depot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+/* ── Dossiers ── */
+
+.dossiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.9rem 0 1rem;
+}
+
+.dossier {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  font-size: 0.87rem;
+  font-weight: 650;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.dossier:hover {
+  border-color: color-mix(in srgb, var(--soft-blue) 45%, var(--border-color));
+}
+
+.dossier.on {
+  background: color-mix(in srgb, var(--soft-blue) 18%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--soft-blue) 45%, var(--border-color));
+}
+
+.dossier-n {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* ── Tableau ── */
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 0 -0.25rem;
+}
+
+.prime-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 780px;
+  table-layout: fixed;
+}
+
+/* Largeurs : le nom de fichier revient à la ligne plutôt que de pousser les actions hors écran. */
+.prime-table th:nth-child(1) { width: 26%; }
+.prime-table th:nth-child(2) { width: 22%; }
+.prime-table th:nth-child(3) { width: 16%; }
+.prime-table th:nth-child(4) { width: 13%; }
+.prime-table th:nth-child(5) { width: 9%; }
+.prime-table th:nth-child(6) { width: 14%; }
+
+.prime-table td {
+  overflow-wrap: anywhere;
+  /* Les cellules héritaient d'un « nowrap » global : les titres longs débordaient sur la colonne voisine. */
+  white-space: normal;
+}
+
+.prime-table td .doc-titre,
+.prime-table td .doc-note,
+.prime-table td.muted-cell {
+  white-space: normal;
+}
+
+.prime-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.prime-table td {
+  padding: 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+
+.prime-table tbody tr:hover {
+  background: color-mix(in srgb, var(--soft-blue) 8%, transparent);
+}
+
+.col-actions {
+  white-space: normal;
+  text-align: right;
+}
+
+.col-actions .ky-btn-secondary {
+  margin: 0 0 0 0.3rem;
+}
+
+.doc-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+/* Sans min-width, un titre long déborde sur la colonne voisine (flex). */
+.doc-cell > div {
+  min-width: 0;
+}
+
+.doc-cell app-lucide-icon {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+}
+
+.doc-titre {
+  display: block;
+  font-weight: 650;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.doc-note {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.muted-cell {
+  color: var(--text-muted);
+}
+
+.pb-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 650;
+  background: color-mix(in srgb, #d97706 13%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #d97706 35%, var(--border-color));
+  color: #b45309;
+}
+
+.pb-badge--tous {
+  background: color-mix(in srgb, #16a34a 12%, var(--bg-card));
+  border-color: color-mix(in srgb, #16a34a 35%, var(--border-color));
+  color: #15803d;
+}
+
+/* ── Recherche, états ── */
+
+.search-box {
+  max-width: 560px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.9rem;
+}
+
+.search-icon {
+  color: var(--text-muted);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  min-width: 0;
+}
+
+.search-input:focus {
+  outline: none;
+}
+
+.search-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: 0.35rem;
+}
+
+.state-box {
+  padding: 1.8rem 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.95rem;
+  border-radius: var(--radius-card, 0.65rem);
+  font-size: 0.88rem;
+  margin-bottom: 0.9rem;
+}
+
+.alert-error {
+  background: color-mix(in srgb, #dc2626 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #dc2626 35%, var(--border-color));
+  color: #b91c1c;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.btn-danger {
+  color: #b91c1c;
+  margin-left: 0.4rem;
+}

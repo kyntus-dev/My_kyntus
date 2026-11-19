@@ -30,8 +30,10 @@ import {
       </p>
 
       @if (kind === 'ChefDeProjet') {
-        <p class="scope-tree__hint scope-tree__hint--info">Un chef de projet couvre automatiquement toute son activité
-          (ex. Bytel Kyntus et Bytel TISSEO) : congés, quotas, fiches, absences, plannings.</p>
+        <!-- v57 : plus d'élargissement implicite — le périmètre est exactement ce qui est coché ici. -->
+        <p class="scope-tree__hint scope-tree__hint--info">Le chef de projet couvre exactement les contrats et pôles
+          cochés ici : congés, quotas, fiches, absences, plannings. Pour deux contrats d'une même activité
+          (ex. Bytel Kyntus et Bytel TISSEO), cochez les deux.</p>
       }
 
       @for (g of groupes; track g.cle) {

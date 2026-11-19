@@ -1,4 +1,4 @@
-using Kyntus.Caching;
+﻿using Kyntus.Caching;
 using Kyntus.Iam;
 using Kyntus.Messaging.Contracts;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +16,8 @@ namespace Planning.Infrastructure.Services;
 /// (Floor.PrimePoleId) qu'il détient dans Employee Directory — la projection ne créait
 /// aucun lien Planning pour ce rôle, d'où un périmètre vide.
 /// Interrupteur : Planning__ChefDeProjetPerimeterFromPoles=false.
+/// v57 : le périmètre n'est gardé en cache qu'une minute (au lieu de cinq) et il est effacé dès
+/// qu'une responsabilité change (message Organisation RH) : un contrat retiré disparaît aussitôt.
 /// v25 : de même, un Superviseur couvre les cellules et un Référent technique les services dont il
 /// est responsable dans Organisation RH. Les liens Planning (UserManagedServices / UserSubServices)
 /// sont effacés à chaque enregistrement de la fiche employé, d'où un périmètre vide après un
@@ -48,7 +50,7 @@ public sealed class PlanningPerimeterResolver(
         var cached = await cache.GetOrCreateAsync(
             KyntusCacheKeys.PlanningPerimeter(manager.Id),
             token => LoadManagedIdsAsync(manager, token),
-            KyntusCacheTtl.Entity,
+            KyntusCacheTtl.Short,
             ct);
         return await WithChefDeProjetPolesAsync(manager, cached.ToHashSet(), ct);
     }
@@ -76,7 +78,7 @@ public sealed class PlanningPerimeterResolver(
                 if (user is null) return [];
                 return await LoadManagedIdsAsync(user, token);
             },
-            KyntusCacheTtl.Entity,
+            KyntusCacheTtl.Short,
             ct);
         var set = cached.ToHashSet();
         if (rebac is null || (!ChefDeProjetPerimeterEnabled && !PerimetreAnnuaireActif))
@@ -148,7 +150,7 @@ public sealed class PlanningPerimeterResolver(
                         .ToListAsync(ct),
                 };
                 if (cache is not null)
-                    await cache.SetAsync(cacheKey, depuisAnnuaire, KyntusCacheTtl.Entity, ct);
+                    await cache.SetAsync(cacheKey, depuisAnnuaire, KyntusCacheTtl.Short, ct);
             }
             catch (Exception ex)
             {

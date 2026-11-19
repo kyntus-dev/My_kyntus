@@ -1,7 +1,8 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../services/auth.service';
 import { KyntusThemeService } from '../../core/kyntus-theme.service';
 import { brandLogoSrc } from '../../core/brand-logo';
@@ -26,7 +27,7 @@ function sanitizeReturnUrl(raw: string | null | undefined): string | null {
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterModule, ThemeToggleButtonComponent],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterModule, ThemeToggleButtonComponent],
   templateUrl: './login.html',
   styleUrls: ['./login.css']
 })
@@ -39,6 +40,53 @@ export class LoginComponent implements OnInit {
   showPassword: boolean = false;
   /** Conservé hors localStorage (clear tokens ne l’efface pas). */
   private returnUrl: string | null = null;
+
+  // v56 — « Mot de passe oublié » : un nouveau mot de passe est envoyé à l'adresse
+  // professionnelle de la fiche. Rien ne s'affiche à l'écran, et la réponse est la même
+  // que l'adresse existe ou non.
+  private readonly http = inject(HttpClient);
+  oublieOuvert = false;
+  oublieEnvoi = false;
+  emailOublie = '';
+  oublieMessage = '';
+  oublieErreur = '';
+
+  ouvrirMotDePasseOublie(): void {
+    this.oublieOuvert = true;
+    this.oublieMessage = '';
+    this.oublieErreur = '';
+    this.emailOublie = this.loginForm?.get('email')?.value ?? '';
+  }
+
+  fermerMotDePasseOublie(): void {
+    this.oublieOuvert = false;
+    this.oublieEnvoi = false;
+    this.oublieMessage = '';
+    this.oublieErreur = '';
+  }
+
+  envoyerMotDePasseOublie(): void {
+    const email = (this.emailOublie || '').trim();
+    this.oublieMessage = '';
+    this.oublieErreur = '';
+    if (!email || !email.includes('@')) {
+      this.oublieErreur = 'Saisissez votre adresse professionnelle.';
+      return;
+    }
+    this.oublieEnvoi = true;
+    this.http.post<{ message: string }>('/api/mot-de-passe/oublie', { email }).subscribe({
+      next: (r) => {
+        this.oublieEnvoi = false;
+        this.oublieMessage = r?.message
+          ?? 'Si cette adresse correspond à un compte actif, un nouveau mot de passe vient d’y être envoyé.';
+      },
+      error: (err) => {
+        this.oublieEnvoi = false;
+        this.oublieErreur = err?.error?.message
+          ?? 'Demande impossible pour le moment : contactez les RH.';
+      },
+    });
+  }
 
   /** Logo selon thème (page login entièrement claire en mode light) */
   get logoSrc(): string {

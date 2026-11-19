@@ -123,7 +123,10 @@
             <label class="check-label">
               <input type="checkbox" /> Se souvenir de moi
             </label>
-            <a routerLink="/assistance" class="forgot">Aide — Assistance</a>
+            <!-- v56 : chacun peut demander un nouveau mot de passe, sans passer par un administrateur. -->
+            <button type="button" class="forgot forgot-btn" (click)="ouvrirMotDePasseOublie()">
+              Mot de passe oublié ?
+            </button>
           </div>
 
           <button type="submit" class="btn-login" [disabled]="loading || loginForm.invalid">
@@ -131,6 +134,33 @@
             <span *ngIf="loading">Connexion en cours…</span>
           </button>
         </form>
+
+        <!-- v56 : demande de nouveau mot de passe — envoi sur l'adresse professionnelle. -->
+        <div class="mdp-oublie" *ngIf="oublieOuvert">
+          <h2>Mot de passe oublié</h2>
+          <p>Saisissez votre adresse professionnelle : un nouveau mot de passe vous y sera envoyé.</p>
+          <div class="field">
+            <label for="emailOublie">Adresse professionnelle</label>
+            <input
+              type="email"
+              id="emailOublie"
+              [(ngModel)]="emailOublie"
+              [ngModelOptions]="{ standalone: true }"
+              placeholder="prenom.nom@kyntus.com"
+              (keyup.enter)="envoyerMotDePasseOublie()"
+            />
+          </div>
+          <div class="alert-error" *ngIf="oublieErreur">
+            <span>Erreur</span> {{ oublieErreur }}
+          </div>
+          <div class="alert-ok" *ngIf="oublieMessage">{{ oublieMessage }}</div>
+          <div class="mdp-actions">
+            <button type="button" class="btn-login" [disabled]="oublieEnvoi" (click)="envoyerMotDePasseOublie()">
+              {{ oublieEnvoi ? 'Envoi…' : 'Envoyer' }}
+            </button>
+            <button type="button" class="btn-annuler" (click)="fermerMotDePasseOublie()">Annuler</button>
+          </div>
+        </div>
 
         <div class="card-footer">
           <p>Besoin d’aide ? Consultez <a routerLink="/assistance">Assistance</a>.</p>

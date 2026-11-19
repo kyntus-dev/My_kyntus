@@ -28,8 +28,10 @@ import type {
 import { findOperationalSelectionByServiceId } from '../../../../core/org/operational-org-picker';
 import {
   filterOrgTreeToCelluleIds,
+  filterOrgTreeToServiceIds,
   resolveSuperviseurCelluleIds,
 } from '../../../../core/org/platform-org-perimeter';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import { KyntusRoleNames } from '../../../../core/org/kyntus-role-names';
 import { resolveCurrentUserGuid } from '../../../../core/lib/user-guid.util';
@@ -160,11 +162,24 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
     private orgApi: PrimeOrgApiService,
     private http: HttpClient,
     private session: KyntusSessionService,
+    private access: PlatformAccessService,
     private cdr: ChangeDetectorRef,
   ) {}
 
   private isSuperviseur(): boolean {
     return (this.session.getRole() ?? '') === KyntusRoleNames.Superviseur;
+  }
+
+  /**
+   * v58 — Voit toute l'organisation : RH, Admin, ou un droit « Configuration des horaires »
+   * accordé avec la portée « Toute l'entreprise ». Sinon, l'écran se limite au périmètre que le
+   * serveur a renvoyé.
+   */
+  private voitToutLOrganisation(): boolean {
+    const role = (this.session.getRole() ?? '').trim().toLowerCase();
+    if (role === 'admin' || role === 'rh') return true;
+    return this.access.hasCatalog()
+      && this.access.can('planning.shift-config', 'Configure', 'Global');
   }
 
   ngOnInit(): void {
@@ -581,7 +596,17 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
       next: ({ subServices, departments, overview, status }) => {
         let ops = overview.operationalDepartments ?? [];
         let unassigned = overview.unassignedPoles ?? [];
-        if (this.isSuperviseur()) {
+        // v58 : comme dans « Valider les plannings », l'arbre se limite aux services renvoyés par
+        // le serveur, c'est-à-dire au périmètre du compte (RH, Admin et portée « Toute
+        // l'entreprise » les reçoivent tous).
+        const autorises = (status.items ?? [])
+          .map((i) => (i.primeServiceId ?? '').trim())
+          .filter(Boolean);
+        if (!this.voitToutLOrganisation()) {
+          const scoped = filterOrgTreeToServiceIds(ops, unassigned, autorises);
+          ops = scoped.operationalDepartments;
+          unassigned = scoped.unassignedPoles;
+        } else if (this.isSuperviseur()) {
           const guid = (this.session.getSubjectId() ?? resolveCurrentUserGuid()).trim();
           const me = (overview.employees ?? []).find(
             (e) => (e.id ?? '').trim().toLowerCase() === guid.toLowerCase(),
@@ -593,7 +618,7 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
         }
         this.operationalDepartments = ops;
         this.unassignedPoles = unassigned;
-        this.legacyDepartments = this.isSuperviseur()
+        this.legacyDepartments = !this.voitToutLOrganisation()
           ? []
           : departments?.length
             ? departments
@@ -631,7 +656,8 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
       id: s.id,
       name: s.name,
       orgLabel: s.name,
-      employeesCount: st?.activeEmployeeCount ?? s.employeesCount ?? 0,
+      // v50 : l'effectif affiché est celui que le générateur retient (postes planifiables).
+      employeesCount: st?.planifiableEmployeeCount ?? st?.activeEmployeeCount ?? s.employeesCount ?? 0,
       primeServiceId: s.primeServiceId?.trim() || null,
       hasTemplate: st?.hasTemplate ?? false,
     };
@@ -714,8 +740,9 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
         }
         for (const opt of this.subServiceOptions) {
           opt.hasTemplate = this.statusBySubId.get(opt.id)?.hasTemplate ?? false;
+          const st = this.statusBySubId.get(opt.id);
           opt.employeesCount =
-            this.statusBySubId.get(opt.id)?.activeEmployeeCount ?? opt.employeesCount;
+            st?.planifiableEmployeeCount ?? st?.activeEmployeeCount ?? opt.employeesCount;
         }
         const inTree = this.subServiceOptions.filter((opt) => this.isLinkedToTree(opt));
         this.totalServiceCount = inTree.length;

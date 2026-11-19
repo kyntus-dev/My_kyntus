@@ -52,7 +52,10 @@ public sealed record PointageAujourdhuiDto(
     string Statut,
     DateTime? DerniereSynchro,
     // Production mémorisée par le collaborateur : « 0840 », « 0740 » ou null (v18).
-    string? ChoixProduction = null);
+    string? ChoixProduction = null,
+    // v43 : horaire de base (« 0840 » ou « 0740 ») et jour de la semaine où la journée à 07h40 a déjà été prise.
+    string? ProductionBase = null,
+    DateOnly? Jour0740Semaine = null);
 
 /// <summary>
 /// Choix de production proposés dans « Heure de sortie ». v40 : deux valeurs fixes, 07h40 ou 08h40,
@@ -76,12 +79,32 @@ public static class ChoixProductionSortie
         _ => null,
     };
 
+    /// <summary>
+    /// v43 : un horaire 08h40 a droit à une seule journée à 07h40 par semaine, du lundi au vendredi.
+    /// Renvoie le jour (autre qu'aujourd'hui) où elle a déjà été prise, ou null si elle est disponible.
+    /// Le samedi n'est pas concerné.
+    /// </summary>
+    public static DateOnly? JourneeCourteDejaPrise(string? productionBase, DateOnly aujourdhui, IEnumerable<(DateOnly Jour, string Choix)> choixSemaine)
+    {
+        if (productionBase == Court) return null;
+        if (aujourdhui.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) return null;
+        var lundi = aujourdhui.AddDays(-(((int)aujourdhui.DayOfWeek + 6) % 7));
+        var vendredi = lundi.AddDays(4);
+        foreach (var (jour, choix) in choixSemaine)
+            if (jour >= lundi && jour <= vendredi && jour != aujourdhui && choix == Court)
+                return jour;
+        return null;
+    }
+
     /// <summary>v40 : un choix ne vaut que pour le jour où il a été fait (date locale).</summary>
     public static string? ChoixDuJour(string? choix, DateOnly? choisiLe, DateOnly aujourdhui) =>
         choisiLe == aujourdhui && EstValide(choix) ? choix : null;
 }
 
 public sealed record ChoixProductionRequest(string? Choix);
+
+/// <summary>v42 : choix fait pour une journée (« 0740 » ou « 0840 »).</summary>
+public sealed record ChoixProductionJourDto(DateOnly Jour, string Choix);
 
 /// <summary>Résolution des régimes : la cible la plus précise l'emporte.</summary>
 public static class RegimeResolver
@@ -112,8 +135,10 @@ public static class RegimeResolver
     public static PlanningJour? PlanningDuJour(RegimeEffectif regime, DateOnly jour)
     {
         var iso = jour.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)jour.DayOfWeek;
+        // v44 : l'heure d'arrivée vient du planning publié, jamais du régime : le régime ne fixe que la
+        // production et la pause. Sans planning publié, aucun retard d'arrivée n'est calculé.
         return regime.Jours.TryGetValue(iso, out var j)
-            ? new PlanningJour(j.Arrivee, regime.PauseAutoriseeMinutes, false, false, regime.Nom, j.ProductionMinutes, PlanningSources.Regime)
+            ? new PlanningJour(null, regime.PauseAutoriseeMinutes, false, false, regime.Nom, j.ProductionMinutes, PlanningSources.Regime)
             : null;
     }
 
@@ -167,7 +192,9 @@ public static class RegimeResolver
         {
             if (j.JourSemaine is < 1 or > 7)
                 return "Jour de la semaine invalide (1 = lundi … 7 = dimanche).";
-            if (!TimeOnly.TryParse(j.Arrivee, System.Globalization.CultureInfo.InvariantCulture, out _))
+            // v44 : l'arrivée vient du planning ; une valeur vide est acceptée.
+            if (!string.IsNullOrWhiteSpace(j.Arrivee)
+                && !TimeOnly.TryParse(j.Arrivee, System.Globalization.CultureInfo.InvariantCulture, out _))
                 return $"Heure d'arrivée invalide : « {j.Arrivee} ».";
             if (j.ProductionMinutes is <= 0 or > 16 * 60)
                 return "La production d'un jour doit être comprise entre 1 minute et 16 h.";
@@ -177,6 +204,9 @@ public static class RegimeResolver
 }
 
 /// <summary>Compte et son accès à « Heure de sortie ».</summary>
-public sealed record HeureSortieAccesDto(int UserId, string Collaborateur, string? Email, string? Role, string? Cellule, bool Acces);
+public sealed record HeureSortieAccesDto(int UserId, string Collaborateur, string? Email, string? Role, string? Cellule, bool Acces, string? ProductionBase = null);
+
+/// <summary>v43 : horaire de base d'un compte (« 0840 » ou « 0740 »).</summary>
+public sealed record HeureSortieBaseRequest(string Base);
 
 public sealed record HeureSortieAccesRequest(IReadOnlyList<int> UserIds, bool Acces);

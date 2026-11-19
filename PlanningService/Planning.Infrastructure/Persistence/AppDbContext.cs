@@ -1,4 +1,4 @@
-using Kyntus.Messaging.Outbox;
+﻿using Kyntus.Messaging.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Planning.Infrastructure.Persistence;
 using Planning.Domain.Entities;
@@ -64,6 +64,7 @@ public class AppDbContext : DbContext
     public DbSet<RegimeHoraireJour> RegimeHoraireJours { get; set; } = null!;
     public DbSet<RegimeHoraireAffectation> RegimeHoraireAffectations { get; set; } = null!;
     public DbSet<HeureSortieAcces> HeureSortieAcces { get; set; } = null!;
+    public DbSet<HeureSortieChoixJour> HeureSortieChoixJours { get; set; } = null!;
     public DbSet<ReaffectationAgent> ReaffectationsAgents { get; set; } = null!;
     public DbSet<PlanningItHoraire> PlanningItHoraires { get; set; } = null!;
     public DbSet<PlanningItCommentaire> PlanningItCommentaires { get; set; } = null!;
@@ -72,7 +73,11 @@ public class AppDbContext : DbContext
     public DbSet<Avertissement> Avertissements { get; set; } = null!;
     public DbSet<PresenceTypePersonnalise> PresenceTypesPersonnalises { get; set; } = null!;
     public DbSet<ElementVariablePaie> ElementsVariablesPaie { get; set; } = null!;
+    /// <summary>v58 : validation du tableau de paie par les RH (verrouillage de la période).</summary>
+    public DbSet<PaiePeriodeValidation> PaiePeriodeValidations { get; set; } = null!;
     public DbSet<DossierDocument> DossierDocuments { get; set; } = null!;
+    /// <summary>v48 : bibliothèque « Process Bytel » (procédures partagées aux agents).</summary>
+    public DbSet<ProcessDocument> ProcessDocuments { get; set; } = null!;
 
     // 🆕 Ajouter le DbSet
     public DbSet<UserManagedService> UserManagedServices { get; set; } = null!;
@@ -685,6 +690,14 @@ public class AppDbContext : DbContext
             e.HasKey(x => x.UserId);
             e.Property(x => x.UserId).ValueGeneratedNever();
             e.Property(x => x.ChoixProduction).HasMaxLength(16);
+            e.Property(x => x.ProductionBase).HasMaxLength(4);
+        });
+
+        modelBuilder.Entity<HeureSortieChoixJour>(e =>
+        {
+            e.ToTable("HeureSortieChoixJours");
+            e.HasKey(x => new { x.UserId, x.Jour });
+            e.Property(x => x.Choix).HasMaxLength(4);
         });
 
         // Planning IT : horaires saisis par les membres de la cellule IT.
@@ -732,6 +745,16 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.UserId, x.Date });
         });
 
+        modelBuilder.Entity<PaiePeriodeValidation>(e =>
+        {
+            e.ToTable("PaiePeriodeValidations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ValideParNom).HasMaxLength(160).IsRequired();
+            e.Property(x => x.Commentaire).HasMaxLength(500);
+            e.Property(x => x.RouvertParNom).HasMaxLength(160);
+            e.HasIndex(x => new { x.PeriodeDu, x.PeriodeAu });
+        });
+
         modelBuilder.Entity<DossierDocument>(e =>
         {
             e.ToTable("DossierDocuments");
@@ -742,6 +765,21 @@ public class AppDbContext : DbContext
             e.Property(x => x.Commentaire).HasMaxLength(500);
             e.Property(x => x.CreatedByNom).HasMaxLength(120);
             e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<ProcessDocument>(e =>
+        {
+            e.ToTable("ProcessDocuments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Dossier).HasMaxLength(80).IsRequired();
+            e.Property(x => x.Titre).HasMaxLength(200).IsRequired();
+            e.Property(x => x.NomFichier).HasMaxLength(255).IsRequired();
+            e.Property(x => x.ContentType).HasMaxLength(120).IsRequired();
+            e.Property(x => x.Commentaire).HasMaxLength(1000);
+            e.Property(x => x.Activites).HasMaxLength(600).IsRequired();
+            e.Property(x => x.Poles).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.CreatedByNom).HasMaxLength(120);
+            e.HasIndex(x => x.Dossier);
         });
 
         modelBuilder.Entity<PlanningItHoraire>(e =>

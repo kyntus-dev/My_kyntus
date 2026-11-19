@@ -37,7 +37,7 @@
           <p class="header-sub">
             <span class="sub-item">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-              {{ planning.assignments.length }} employés planifiés
+              {{ effectifPlanifie }} / {{ effectifCellule }} agents planifiés
             </span>
             <span class="sub-sep">·</span>
             <span class="sub-item">
@@ -83,7 +83,7 @@
     </div>
 
     <!-- ── Actions RH (Valider / Régénérer) ── -->
-    <div class="pv-decision-bar" *ngIf="canValidate && (planning.status === 'Draft' || planning.status === 'Published')">
+    <div class="pv-decision-bar" *ngIf="(canValidate || canGenerer) && (planning.status === 'Draft' || planning.status === 'Published')">
       <div class="pv-decision-copy">
         <strong *ngIf="planning.status === 'Draft'">Aperçu brouillon</strong>
         <strong *ngIf="planning.status === 'Published'">Planning publié</strong>
@@ -106,8 +106,9 @@
         </button>
         <button type="button"
                 class="btn-validate-lg"
-                *ngIf="planning.status === 'Draft'"
-                [disabled]="publishing || regenerating"
+                *ngIf="canValidate && planning.status === 'Draft'"
+                [disabled]="publishing || regenerating || effectifPlanifie === 0"
+                [title]="effectifPlanifie === 0 ? 'Grille vide : régénérez avant de valider.' : 'Publier le planning'"
                 (click)="publishPlanning()">
           <ng-container *ngIf="!publishing">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -126,9 +127,9 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       {{ successMsg }}
     </div>
-    <div class="alert alert-error" *ngIf="error">
+    <div class="alert alert-error" *ngIf="erreurDistincte">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      {{ error }}
+      {{ erreurDistincte }}
     </div>
 
     <!-- ── Performance semaine ── -->
@@ -243,11 +244,38 @@
           <span class="kpi-shift-tag shift-total-tag">Total</span>
           <span class="kpi-pct">100%</span>
         </div>
-        <div class="kpi-val">{{ planning.totalEffectif }}</div>
-        <div class="kpi-desc">effectif total</div>
+        <div class="kpi-val">{{ effectifPlanifie }}</div>
+        <div class="kpi-desc">
+          agents dans la grille
+          <span class="kpi-quota-hint">· {{ effectifCellule }} planifiables · quotas {{ quotaTotal }}/jour</span>
+        </div>
         <div class="kpi-bar-fill kpi-bar-total" style="width:100%"></div>
       </div>
     </div>
+
+    <!-- v50 : cohérence effectif cellule / grille / quotas -->
+    @if (alerteEffectif) {
+      <div class="pv-alerte-effectif">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div>
+          <strong>{{ alerteEffectif.titre }}</strong>
+          <p>{{ alerteEffectif.texte }}</p>
+          <!-- v54 : générer dépend du droit « Générer le planning », pas de celui de valider :
+               le RP (chef de projet) n'attend plus le superviseur. -->
+          @if (planning.modesEnAttente && canGenerer && (planning.status === 'Draft' || planning.status === 'Published')) {
+            <div class="pv-alerte-actions">
+              <button type="button" class="ky-btn-primary" [disabled]="regenerating" (click)="genererAvecModesRepris()">
+                {{ regenerating ? 'Génération…' : 'Générer avec les modes repris' }}
+              </button>
+              <span class="pv-alerte-aide">
+                ou demandez au superviseur d'enregistrer les modes de la semaine
+                (Périmètre superviseur › Modes hebdomadaires).
+              </span>
+            </div>
+          }
+        </div>
+      </div>
+    }
 
     <!-- ══════════════ GRILLE ══════════════ -->
     <div class="grid-container">

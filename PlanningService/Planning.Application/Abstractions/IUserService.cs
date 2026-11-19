@@ -73,6 +73,28 @@ public interface IUserService
         Guid? subjectId,
         CancellationToken ct = default);
     Task<bool> IsEmailUniqueAsync(string email, int? excludeId = null);
+
+    /// <summary>v47 — Collaborateurs créés sans mail interne (adresse provisoire).</summary>
+    Task<List<AgentSansMailDto>> ListerAgentsSansMailAsync(CancellationToken ct = default);
+
+    /// <summary>v47 — Adresses réelles déjà prises (clé minuscule → nom du titulaire).</summary>
+    Task<Dictionary<string, string>> ListerMailsUtilisesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// v47 — Attribue son mail interne à un collaborateur créé sans adresse : annuaire et
+    /// compte de connexion suivent. Renvoie le mot de passe provisoire si un compte est créé.
+    /// </summary>
+    Task<AttributionMailResultDto> AttribuerMailInterneAsync(
+        int userId,
+        string email,
+        bool creerCompte,
+        CancellationToken ct = default);
+
+    /// <summary>v49 — Création en lot depuis le fichier RH (écran « Liaisons HTEL »).</summary>
+    Task<ImportEmployesResultDto> ImporterEmployesAsync(
+        ImportEmployesRequest request,
+        CancellationToken ct = default);
+
     Task SyncAllEmployesToCongeAsync();
     Task<List<UserDto>> GetManagersBySubServiceAsync(int subServiceId, CancellationToken ct = default);
     Task<SetNewEmployeeStatusResultDto?> SetNewEmployeeStatusAsync(

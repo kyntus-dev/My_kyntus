@@ -25,6 +25,9 @@ public static class PilotPlanningEmailComposer
         var value = email?.Trim() ?? string.Empty;
         if (value.Length < 5 || value.Length > 160)
             return false;
+        // v47 : adresse provisoire (collaborateur sans mail interne) — jamais d'envoi.
+        if (value.EndsWith("@" + Users.MailInterne.DomaineProvisoire, StringComparison.OrdinalIgnoreCase))
+            return false;
         var at = value.IndexOf('@');
         return at > 0 && at < value.Length - 3 && value.IndexOf('@', at + 1) < 0;
     }

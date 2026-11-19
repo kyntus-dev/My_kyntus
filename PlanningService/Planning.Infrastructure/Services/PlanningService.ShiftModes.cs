@@ -678,7 +678,8 @@ public partial class PlanningService
         int subServiceId,
         string weekCode,
         DateOnly weekStartDate,
-        DateTime? utcNow = null)
+        DateTime? utcNow = null,
+        bool forcer = false)
     {
         var subService = await _context.SubServices.FindAsync(subServiceId)
             ?? throw new InvalidOperationException("Sous-service introuvable.");
@@ -700,7 +701,10 @@ public partial class PlanningService
         if (await IsModePlanCompleteAsync(weekCode, subServiceId, activeEmployeeIds))
             return;
 
-        var shouldBlock = ShiftModePlanDeadline.ShouldBlockUntilSupervisorSave(
+        // v52 : « Générer avec les modes repris » (action explicite RH / chef de projet) n'attend
+        // pas la date limite : les modes de la dernière semaine enregistrée sont repris, et le mode
+        // par défaut est donné aux agents qui n'en ont pas.
+        var shouldBlock = !forcer && ShiftModePlanDeadline.ShouldBlockUntilSupervisorSave(
             settings, weekStartDate, todayLocal, nowLocal);
         if (shouldBlock)
             throw new SupervisorModesPendingException(

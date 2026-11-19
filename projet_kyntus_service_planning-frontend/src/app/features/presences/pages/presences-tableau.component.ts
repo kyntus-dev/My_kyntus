@@ -5,16 +5,22 @@ import { HttpClient } from '@angular/common/http';
 import { PresenceService } from '../../../core/services/presence.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { peutSaisirFormation } from '../lib/formation.util';
+import { badgeTypeFormation, normaliserTypeFormation } from '../../../core/hr/type-formation.util';
 import type {
   PresenceAgentDto,
   PresenceCodeDto,
   PresenceGrilleDto,
   PresenceJourDto,
 } from '../../../core/models/presence.models';
+import { DirectoryFacadeService } from '../../../core/directory/directory-facade.service';
+import { ActiviteStructure, optionsActivites, optionsOrganisation } from '../lib/presence.util';
 import { PresencesNavComponent } from '../components/presences-nav.component';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import {
   FILTRES_VIDES,
+  TYPES_CONTRAT,
+  estReferentTechnique,
+  estSuperviseur,
   type FiltresPresence,
   enteteJour,
   familleCode,
@@ -60,8 +66,16 @@ export class PresencesTableauComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly toast = inject(KyntusToastService);
   private readonly auth = inject(AuthService);
+  private readonly annuaire = inject(DirectoryFacadeService);
   /** v37 : agents en formation visibles, saisie réservée à l'équipe formation, aux RH et aux Admin. */
   readonly saisieFormation = computed(() => peutSaisirFormation(this.auth.getRole()));
+  /** v46 : chef de projet (ou RP) : listes « Superviseurs » et « Référents techniques ». */
+  readonly estChefDeProjet = computed(() => {
+    const r = (this.auth.getRole() || '').trim().toLowerCase();
+    return r === 'chef de projet' || r === 'rp';
+  });
+  /** v46 : superviseurs et référents techniques n'autorisent pas les retards (le serveur le refuse aussi). */
+  readonly peutAutoriserRetard = computed(() => this.data()?.peutAutoriserRetard !== false);
 
   readonly enteteJour = enteteJour;
   readonly familleCode = familleCode;
@@ -75,6 +89,8 @@ export class PresencesTableauComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly filtres = signal<FiltresPresence>({ ...FILTRES_VIDES });
   readonly activites = signal<Activite[]>([]);
+  /** v48.1 : pôles et cellules déclarés dans l'organisation (filtres même sans agent présent). */
+  readonly structure = signal<ActiviteStructure[]>([]);
   readonly edition = signal<Edition | null>(null);
   readonly enregistrement = signal(false);
   @ViewChild('panneau') private panneau?: ElementRef<HTMLDialogElement>;
@@ -95,25 +111,64 @@ export class PresencesTableauComponent implements OnInit {
     }
     return m;
   });
-  readonly activiteDuPole = (poleId: string | null): string | null =>
-    poleId ? this.activiteParPole().get(poleId) ?? null : null;
+  /** v46 : « Formation & Qualité » : nom du contrat de ce nom s'il existe, sinon ce libellé. */
+  readonly activiteFormation = computed(() =>
+    this.activites().find((a) => a.isActive && /formation/i.test(a.name))?.name ?? 'Formation & Qualité');
+  /** Activité d'un agent : celle de son pôle ; v46 : un agent en formation sans pôle relève de Formation & Qualité. */
+  readonly activiteDuPole = (poleId: string | null, agent?: PresenceAgentDto): string | null =>
+    (poleId ? this.activiteParPole().get(poleId) ?? null : null)
+    ?? (agent?.enFormation ? this.activiteFormation() : null);
 
   readonly options = computed(() => {
     const agents = this.data()?.agents ?? [];
     const uniq = (xs: (string | null)[]) =>
       [...new Set(xs.filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
     const f = this.filtres();
-    const dansActivite = agents.filter((a) => !f.activite || this.activiteDuPole(a.poleId) === f.activite);
+    const dansActivite = agents.filter((a) => !f.activite || this.activiteDuPole(a.poleId, a) === f.activite);
     const dansPole = dansActivite.filter((a) => !f.pole || a.pole === f.pole);
+    // v58 : l'organisation fait foi — pas de doublon, hiérarchie respectée, rien qui n'existe plus.
+    const listes = optionsOrganisation(this.structure(), f.activite, f.pole, {
+      poles: dansActivite.map((a) => a.pole),
+      cellules: dansPole.map((a) => a.cellule),
+    });
+    const personnes = (test: (r?: string | null) => boolean) => agents
+      .filter((a) => test(a.role))
+      .map((a) => ({ id: String(a.userId), nom: a.nom }))
+      .sort((x, y) => x.nom.localeCompare(y.nom, 'fr', { sensitivity: 'base' }));
     return {
-      activites: uniq(agents.map((a) => this.activiteDuPole(a.poleId))),
-      poles: uniq(dansActivite.map((a) => a.pole)),
-      cellules: uniq(dansPole.map((a) => a.cellule)),
-      types: uniq(agents.map((a) => a.type)),
+      // v46 : Formation & Qualité toujours proposée.
+      activites: optionsActivites(this.structure(), [
+        ...agents.map((a) => this.activiteDuPole(a.poleId, a)),
+        this.activiteFormation(),
+      ]),
+      // v48.1 : complétées par l'organisation — une activité sans agent propose quand même
+      // ses pôles et ses cellules (ex. Formation & Qualité).
+      poles: listes.poles,
+      cellules: listes.cellules,
+      // v46 : Salarié et Sous-traitant toujours proposés.
+      types: [...TYPES_CONTRAT] as string[],
+      superviseurs: personnes(estSuperviseur),
+      referents: personnes(estReferentTechnique),
     };
   });
 
-  readonly agents = computed(() => filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole));
+  readonly agents = computed(() =>
+    filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole, this.estChefDeProjet()));
+  /** v46 : nombre d'agents en formation dans les données (filtre « Formation »). */
+  readonly nbFormation = computed(() => (this.data()?.agents ?? []).filter((a) => a.enFormation).length);
+  // v48 : nombre d'agents par type de formation (libellés des filtres).
+  private nbParType(type: string): number {
+    return (this.data()?.agents ?? [])
+      .filter((a) => a.enFormation && normaliserTypeFormation(a.typeFormation) === type).length;
+  }
+  readonly nbFormationContractuel = computed(() => this.nbParType('contractuel'));
+  readonly nbFormationNonContractuel = computed(() => this.nbParType('non-contractuel'));
+  /** Badge de la ligne : « Formation contractuelle », « non contractuelle » ou « En formation ». */
+  badgeFormation(type: string | null | undefined): string {
+    return badgeTypeFormation(type);
+  }
+  readonly estSuperviseur = estSuperviseur;
+  readonly estReferentTechnique = estReferentTechnique;
 
   /** En-têtes calculés une fois par période (et non à chaque rafraîchissement de l'écran). */
   readonly entetes = computed(() => this.jours().map((j) => ({ jour: j, ...enteteJour(j), today: j === this.aujourdhui })));
@@ -164,6 +219,10 @@ export class PresencesTableauComponent implements OnInit {
       next: (a) => this.activites.set(a ?? []),
       error: () => this.activites.set([]),
     });
+    this.annuaire.getOrgOverview<{ operationalDepartments?: ActiviteStructure[] }>().subscribe({
+      next: (o) => this.structure.set(o?.operationalDepartments ?? []),
+      error: () => this.structure.set([]),
+    });
   }
 
   changerPeriode(delta: number): void {
@@ -194,6 +253,9 @@ export class PresencesTableauComponent implements OnInit {
     // Cascade : changer d'activité ou de pôle remet à zéro les niveaux en dessous.
     if ('activite' in patch) { next.pole = ''; next.cellule = ''; }
     if ('pole' in patch) next.cellule = '';
+    // v46.1 : un seul tableau à la fois : superviseurs OU référents techniques (OU les agents).
+    if (patch.superviseurs) next.referents = '';
+    if (patch.referents) next.superviseurs = '';
     this.filtres.set(next);
   }
 

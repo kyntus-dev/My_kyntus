@@ -1,4 +1,4 @@
-using EmployeeDirectory.Application.Abstractions;
+﻿using EmployeeDirectory.Application.Abstractions;
 using EmployeeDirectory.Application.Dtos;
 using EmployeeDirectory.Domain.Entities;
 using EmployeeDirectory.Domain.Enums;
@@ -394,7 +394,7 @@ public sealed class DirectoryReadService(
         if (!Enum.TryParse<OrgAssignmentKind>(kind, true, out var k))
             k = OrgAssignmentKind.Superviseur;
 
-        // v32 : un chef de projet couvre toute son activité (ex. Bytel Kyntus + Bytel TISSEO).
+        // v57 : un chef de projet couvre ses pôles inscrits et ceux de ses contrats — rien de plus.
         var nodes = k == OrgAssignmentKind.ChefDeProjet
             ? await PerimetreActivite.PolesChefDeProjetAsync(db, employeeId, ct)
             : await db.OrgAssignments.AsNoTracking()

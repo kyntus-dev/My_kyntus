@@ -1,4 +1,5 @@
 import type { PresenceAgentDto, PresenceJourDto } from '../../../core/models/presence.models';
+import { normaliserTypeFormation } from '../../../core/hr/type-formation.util';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 export const ymd = (d: Date): string => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -61,9 +62,41 @@ export interface FiltresPresence {
   cellule: string;
   type: string;
   aTraiter: boolean;
+  /**
+   * v46 : '' tous ; 'oui' en formation seulement ; 'non' hors formation.
+   * v48 : 'contractuel' / 'non-contractuel' — en formation du type choisi.
+   */
+  formation: '' | 'oui' | 'non' | 'contractuel' | 'non-contractuel';
+  /** v46 (chef de projet) : superviseurs / référents techniques affichés : '' aucun, '*' tous, sinon un userId. */
+  superviseurs: string;
+  referents: string;
 }
 
-export const FILTRES_VIDES: FiltresPresence = { recherche: '', activite: '', pole: '', cellule: '', type: '', aTraiter: false };
+export const FILTRES_VIDES: FiltresPresence = {
+  recherche: '', activite: '', pole: '', cellule: '', type: '', aTraiter: false, formation: '', superviseurs: '', referents: '',
+};
+
+/** v46 : contrats proposés dans le filtre (toujours les deux, même si le périmètre n'en a qu'un). */
+export const TYPES_CONTRAT = ['Salarié', 'Sous-traitant'] as const;
+
+const sansAccent = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export const estSuperviseur = (role?: string | null) => sansAccent(role ?? '').trim() === 'superviseur';
+export const estReferentTechnique = (role?: string | null) => {
+  const r = sansAccent(role ?? '').replace(/[_\s]/g, '');
+  return r === 'referenttechnique' || r === 'coach';
+};
+export const estEncadrement = (role?: string | null) => estSuperviseur(role) || estReferentTechnique(role);
+
+/**
+ * v48 — Le filtre « Formation » : tous, en formation (tous types), hors formation, ou l'un des
+ * deux types (contractuel / non contractuel).
+ */
+export function correspondFormation(choix: FiltresPresence['formation'], a: PresenceAgentDto): boolean {
+  if (!choix) return true;
+  if (choix === 'oui') return !!a.enFormation;
+  if (choix === 'non') return !a.enFormation;
+  return !!a.enFormation && normaliserTypeFormation(a.typeFormation) === choix;
+}
 
 /** Un agent « à traiter » : absence non qualifiée, retard non autorisé ou pointage manquant. */
 export function aTraiter(a: PresenceAgentDto): boolean {
@@ -73,15 +106,30 @@ export function aTraiter(a: PresenceAgentDto): boolean {
 export function filtrerAgents(
   agents: readonly PresenceAgentDto[],
   f: FiltresPresence,
-  activiteDuPole: (poleId: string | null) => string | null,
+  activiteDuPole: (poleId: string | null, agent?: PresenceAgentDto) => string | null,
+  /**
+   * v46.1 (chef de projet) : chacun son tableau. Sans choix dans « Superviseurs » ni « Référents
+   * techniques » : les agents seulement. Un choix dans l'une de ces listes : uniquement les personnes
+   * choisies (tous les superviseurs, un superviseur, tous les référents ou un référent).
+   */
+  encadrementSurDemande = false,
 ): PresenceAgentDto[] {
   const q = f.recherche.trim().toLowerCase();
+  const correspond = (choix: string, a: PresenceAgentDto) => choix === '*' || choix === String(a.userId);
+  if (encadrementSurDemande && (f.superviseurs || f.referents)) {
+    return agents.filter((a) =>
+      ((f.superviseurs && estSuperviseur(a.role) && correspond(f.superviseurs, a))
+        || (f.referents && estReferentTechnique(a.role) && correspond(f.referents, a)))
+      && (!q || a.nom.toLowerCase().includes(q)));
+  }
   return agents.filter((a) =>
-    (!q || a.nom.toLowerCase().includes(q))
-    && (!f.activite || activiteDuPole(a.poleId) === f.activite)
+    (!encadrementSurDemande || !estEncadrement(a.role))
+    && (!q || a.nom.toLowerCase().includes(q))
+    && (!f.activite || activiteDuPole(a.poleId, a) === f.activite)
     && (!f.pole || a.pole === f.pole)
     && (!f.cellule || a.cellule === f.cellule)
     && (!f.type || a.type === f.type)
+    && correspondFormation(f.formation, a)
     && (!f.aTraiter || aTraiter(a)));
 }
 
@@ -144,4 +192,95 @@ export function lignesExportRetards(lignes: readonly LigneRetard[]): (string | n
       formatMinutes(l.retardEntree), formatMinutes(l.retardPause), formatMinutes(l.total), l.statut, l.motif,
     ]),
   ];
+}
+
+// ── v48.1 : pôles et cellules proposés même sans agent présent ────────────────
+
+/** Nœud « activité » de l'organisation (GET /api/directory/org/overview). */
+export interface ActiviteStructure {
+  name: string;
+  isActive?: boolean;
+  poles: readonly { name: string; cellules: readonly { name: string }[] }[];
+}
+
+const memeNom = (a: string | null | undefined, b: string | null | undefined): boolean =>
+  (a ?? '').trim().localeCompare((b ?? '').trim(), 'fr', { sensitivity: 'base' }) === 0;
+
+/** v58 — Clé de comparaison d'un libellé d'organisation : sans accents, sans casse, espaces réduits. */
+export function cleLibelle(valeur: string | null | undefined): string {
+  return (valeur ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** v58 — Dédoublonne des libellés sur cette clé (le premier rencontré donne l'orthographe) et trie. */
+export function libellesUniques(valeurs: Iterable<string | null | undefined>): string[] {
+  const parCle = new Map<string, string>();
+  for (const v of valeurs) {
+    const libelle = (v ?? '').trim();
+    if (!libelle) continue;
+    const cle = cleLibelle(libelle);
+    if (!parCle.has(cle)) parCle.set(cle, libelle);
+  }
+  return [...parCle.values()].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+}
+
+/**
+ * v58 — Listes déroulantes « Pôle » et « Cellule » des modules Présence et Paie.
+ *
+ * L'organisation de l'application fait foi : seuls les pôles de l'activité choisie et les cellules
+ * du pôle choisi sont proposés, sans doublon (« Support technicien » et « support technicien  »
+ * ne font qu'une entrée). Les libellés venus des agents ne servent qu'à compléter une structure
+ * encore vide ; dès que l'organisation déclare quelque chose pour ce niveau, elle seule est
+ * retenue — un pôle ou une cellule qui n'existe plus ne reste donc pas dans les filtres.
+ */
+export function optionsOrganisation(
+  activites: readonly ActiviteStructure[],
+  activite: string,
+  pole: string,
+  depuisLesAgents: { poles: Iterable<string | null | undefined>; cellules: Iterable<string | null | undefined> },
+): { poles: string[]; cellules: string[] } {
+  const declarees = structureDeLActivite(activites, activite, pole);
+  return {
+    poles: declarees.poles.length > 0
+      ? libellesUniques(declarees.poles)
+      : libellesUniques(depuisLesAgents.poles),
+    cellules: declarees.cellules.length > 0
+      ? libellesUniques(declarees.cellules)
+      : libellesUniques(depuisLesAgents.cellules),
+  };
+}
+
+/** v58 — Activités proposées : celles déclarées dans l'organisation, puis celles vues sur les agents. */
+export function optionsActivites(
+  activites: readonly ActiviteStructure[],
+  depuisLesAgents: Iterable<string | null | undefined>,
+): string[] {
+  const declarees = activites.filter((a) => a.isActive !== false).map((a) => a.name);
+  return libellesUniques([...declarees, ...depuisLesAgents]);
+}
+
+/**
+ * Pôles et cellules déclarés dans l'organisation pour l'activité choisie. Les listes des filtres
+ * étaient construites à partir des seuls agents présents : une activité sans agent (Formation &
+ * Qualité juste après la création de ses cellules) n'en proposait aucun.
+ * v58 : les doublons sont retirés et la hiérarchie respectée (cellules du pôle choisi seulement).
+ */
+export function structureDeLActivite(
+  activites: readonly ActiviteStructure[],
+  activite: string,
+  pole: string,
+): { poles: string[]; cellules: string[] } {
+  if (!activite) return { poles: [], cellules: [] };
+  const dept = activites.find((a) => a.isActive !== false && memeNom(a.name, activite));
+  if (!dept) return { poles: [], cellules: [] };
+  return {
+    poles: libellesUniques(dept.poles.map((p) => p.name)),
+    cellules: libellesUniques(dept.poles
+      .filter((p) => !pole || memeNom(p.name, pole))
+      .flatMap((p) => p.cellules.map((c) => c.name))),
+  };
 }

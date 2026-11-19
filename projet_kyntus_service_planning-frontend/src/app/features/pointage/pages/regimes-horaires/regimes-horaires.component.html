@@ -4,8 +4,8 @@
       <p class="ku-hero-eyebrow">Pointage · Administration</p>
       <h1 class="ku-hero-title">Régimes horaires</h1>
       <p class="ku-hero-sub">
-        Heures fixes par jour (ex. 8 h 40 du lundi au jeudi, 7 h 40 le vendredi) et pause autorisée.
-        Ils servent de planning les jours où aucun planning n’est publié pour la personne.
+        Production prévue par jour (ex. 8 h 40) et pause autorisée. L’heure d’arrivée vient toujours du planning publié.
+        La journée à 7 h 40 n’est pas fixée ici : chacun la choisit dans « Heure de sortie » (horaire 08h40 : une par semaine, du lundi au vendredi).
       </p>
     </div>
     <div class="ku-hero-actions">
@@ -51,9 +51,7 @@
             <label class="ku-check"><input type="checkbox" [ngModel]="j.travaille" (ngModelChange)="majJour(j.iso, { travaille: $event })" />
               {{ jours[j.iso - 1].long }}</label>
             @if (j.travaille) {
-              <label class="ku-field"><span>Arrivée</span>
-                <input class="ku-input" type="time" [ngModel]="j.arrivee" (ngModelChange)="majJour(j.iso, { arrivee: $event })" />
-              </label>
+              <span class="ku-muted rh-arrivee">Arrivée : selon le planning</span>
               <label class="ku-field"><span>Production</span>
                 <input class="ku-input ku-mono" [ngModel]="j.production" (ngModelChange)="majJour(j.iso, { production: $event })" placeholder="08:40" />
               </label>
@@ -102,7 +100,6 @@
               <span class="rh-cell-day">{{ d.court }}</span>
               @if (jourDe(r, d.iso); as j) {
                 <b class="ku-mono">{{ minutesVersDuree(j.productionMinutes) }}</b>
-                <span class="ku-muted">dès {{ j.arrivee }}</span>
               } @else {
                 <span class="ku-muted">—</span>
               }

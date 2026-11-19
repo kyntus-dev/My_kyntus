@@ -40,7 +40,9 @@ interface AgentOption {
   label: string;
 }
 
-type ValidationDot = 'ok' | 'partial' | 'missing' | 'none';
+type ValidationDot = 'ok' | 'partial' | 'missing' | 'vide' | 'none';
+
+import { estPlanifiable } from '../../../../core/org/postes-production.util';
 
 @Component({
   selector: 'app-planning-validation',
@@ -84,6 +86,10 @@ export class PlanningValidationComponent implements OnInit {
   unassignedPoles: OrgPoleNode[] = [];
   private byPrimeId = new Map<string, PlanningWeekItem>();
   private liveByPrime = new Map<string, number>();
+  /** v51 : planifiables selon l'Organisation (annuaire), par service. */
+  private orgByPrime = new Map<string, number>();
+  /** v51 : toutes les personnes du service selon l'Organisation (encadrement compris). */
+  private orgTotalByPrime = new Map<string, number>();
   private expandedDepts = new Set<string>();
   private expandedPoles = new Set<string>();
   private expandedCellules = new Set<string>();
@@ -277,20 +283,31 @@ export class PlanningValidationComponent implements OnInit {
     return (id ?? '').trim().toLowerCase();
   }
 
+  /**
+   * v51 : une seule définition de l'effectif — les agents **planifiables** (encadrement exclu),
+   * exactement ceux que le générateur place dans la grille. Deux sources sont tenues à côté :
+   * le Planning (référence de la génération) et l'Organisation (annuaire), pour signaler un écart.
+   * Plusieurs services Planning reliés au même service d'Organisation sont additionnés.
+   */
   private rebuildLiveHeadcount(statusItems: ShiftConfigStatusItem[], employees: Employee[]): void {
     this.liveByPrime.clear();
     for (const st of statusItems) {
       const key = this.normPrimeId(st.primeServiceId);
       if (!key) continue;
-      this.liveByPrime.set(key, st.activeEmployeeCount ?? 0);
+      const n = st.planifiableEmployeeCount ?? st.activeEmployeeCount ?? 0;
+      this.liveByPrime.set(key, (this.liveByPrime.get(key) ?? 0) + n);
     }
-    const fromDirectory = new Map<string, number>();
+    this.orgByPrime.clear();
+    this.orgTotalByPrime.clear();
     for (const emp of employees) {
       const key = this.normPrimeId(emp.serviceId);
       if (!key) continue;
-      fromDirectory.set(key, (fromDirectory.get(key) ?? 0) + 1);
+      this.orgTotalByPrime.set(key, (this.orgTotalByPrime.get(key) ?? 0) + 1);
+      if (estPlanifiable(String(emp.role ?? ''))) {
+        this.orgByPrime.set(key, (this.orgByPrime.get(key) ?? 0) + 1);
+      }
     }
-    for (const [key, n] of fromDirectory) {
+    for (const [key, n] of this.orgByPrime) {
       if (!this.liveByPrime.has(key)) this.liveByPrime.set(key, n);
     }
   }
@@ -547,10 +564,49 @@ export class PlanningValidationComponent implements OnInit {
     return this.byPrimeId.get(this.normPrimeId(primeId));
   }
 
+  /**
+   * v51 : effectif affiché = agents planifiables de la cellule côté Planning (ceux que la grille
+   * contiendra). Le chiffre figé lors d'une ancienne génération n'est plus jamais affiché.
+   */
   headcountForPrime(primeId: string): number {
-    const planned = this.itemForPrime(primeId)?.totalEffectif ?? 0;
-    if (planned > 0) return planned;
-    return this.liveByPrime.get(this.normPrimeId(primeId)) ?? 0;
+    const key = this.normPrimeId(primeId);
+    const reel = this.liveByPrime.get(key);
+    if (reel !== undefined) return reel;
+    return this.itemForPrime(primeId)?.planifiableEmployeeCount ?? 0;
+  }
+
+  /**
+   * v51 : explication d'un écart, ou null si tout concorde. Couvre les trois causes de confusion :
+   * Organisation ≠ Planning, grille vide, génération en échec.
+   */
+  ecartEffectif(primeId: string): string | null {
+    const key = this.normPrimeId(primeId);
+    const planning = this.headcountForPrime(primeId);
+    const org = this.orgByPrime.get(key);
+    const total = this.orgTotalByPrime.get(key);
+    const item = this.itemForPrime(primeId);
+
+    if (item?.generationErreur) {
+      return `Génération en échec : ${item.generationErreur}`;
+    }
+    if (org !== undefined && org !== planning) {
+      return `Organisation : ${org} planifiable(s) · Planning : ${planning}. `
+        + 'Lancez « Synchro organisation » (Administration) pour aligner.';
+    }
+    if (item?.planningId && planning > 0 && (item.assignedUserIds?.length ?? 0) === 0) {
+      return `${planning} agent(s) planifiable(s) mais la grille est vide : régénérez le planning.`;
+    }
+    if (total !== undefined && total > planning) {
+      return `${total} personne(s) dans l'Organisation, dont ${total - planning} en encadrement `
+        + '(superviseur, référent, chef de projet…) : non planifiées, c\'est normal.';
+    }
+    return null;
+  }
+
+  /** Écart bloquant (affiché en orange) ; l'encadrement seul n'en est pas un. */
+  ecartBloquant(primeId: string): boolean {
+    const msg = this.ecartEffectif(primeId);
+    return !!msg && !msg.includes('c\'est normal');
   }
 
   selectDept(md: OperationalDepartmentNode): void {
@@ -668,9 +724,16 @@ export class PlanningValidationComponent implements OnInit {
     return this.selectedPrimeServiceId === primeId;
   }
 
+  /** v51 : planning créé mais grille vide ou génération en échec. */
+  private grilleVide(item: PlanningWeekItem | undefined): boolean {
+    return !!item?.planningId
+      && (!!item.generationErreur || (item.assignedUserIds?.length ?? 0) === 0);
+  }
+
   private dotForItem(item: PlanningWeekItem | undefined): ValidationDot {
     if (!item) return 'none';
     if (!item.hasTemplate) return 'missing';
+    if (this.grilleVide(item)) return 'vide';
     if (item.status === 'Published') return 'ok';
     if (item.status === 'Draft') return 'partial';
     if (!item.planningId) return 'none';
@@ -686,7 +749,14 @@ export class PlanningValidationComponent implements OnInit {
     if (dots.length === 0) return 'none';
     if (dots.every((d) => d === 'ok')) return 'ok';
     if (dots.every((d) => d === 'missing')) return 'missing';
+    // v51 : une grille vide se signale dès qu'un service de la branche est concerné.
+    if (dots.some((d) => d === 'vide')) return 'vide';
     return 'partial';
+  }
+
+  /** v51 : pastille rouge (config manquante ou grille vide). */
+  estRouge(status: ValidationDot): boolean {
+    return status === 'missing' || status === 'vide';
   }
 
   statusForCellule(cell: OrgCelluleNode): ValidationDot {
@@ -707,6 +777,8 @@ export class PlanningValidationComponent implements OnInit {
         return 'À valider / partiel';
       case 'missing':
         return 'Config manquante';
+      case 'vide':
+        return 'Grille vide';
       default:
         return 'Non généré ou hors semaine';
     }
@@ -715,6 +787,7 @@ export class PlanningValidationComponent implements OnInit {
   statusLabel(item: PlanningWeekItem): string {
     if (!item.hasTemplate) return 'Config manquante';
     if (!item.planningId) return 'Non généré';
+    if (this.grilleVide(item)) return 'Grille vide';
     if (item.status === 'Draft') return 'À valider';
     if (item.status === 'Published') return 'Validé';
     return item.status ?? '—';
@@ -723,6 +796,7 @@ export class PlanningValidationComponent implements OnInit {
   statusClass(item: PlanningWeekItem): string {
     if (!item.hasTemplate) return 'st-missing-cfg';
     if (!item.planningId) return 'st-missing';
+    if (this.grilleVide(item)) return 'st-missing';
     if (item.status === 'Draft') return 'st-draft';
     if (item.status === 'Published') return 'st-published';
     return '';
@@ -784,7 +858,8 @@ export class PlanningValidationComponent implements OnInit {
   }
 
   isSelectable(item: PlanningWeekItem): boolean {
-    return !!item.planningId && item.hasTemplate && item.status === 'Draft';
+    // v51 : une grille vide (génération en échec) ne se valide pas.
+    return !!item.planningId && item.hasTemplate && item.status === 'Draft' && !this.grilleVide(item);
   }
 
   isSelected(item: PlanningWeekItem): boolean {

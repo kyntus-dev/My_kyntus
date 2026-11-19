@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Planning.Application.Abstractions;
 using Planning.Application.DTOs.Planning;
@@ -162,6 +162,40 @@ public class PlanningLeaveImpactTests
             absenceRemoved: false, regenerateFrom: monday));
     }
 
+    // v50 : cellule déjà en sous-effectif — le congé validé doit quand même faire couvrir le shift.
+    [Fact]
+    public void NeedsRegen_true_when_shift_was_already_under_quota_v50()
+    {
+        var monday = FutureMonday();
+        // Shift 1 demande 4 personnes, seules 2 y sont : le départ de l'une creuse encore le trou.
+        var planning = Week(monday,
+            Assign(1, monday, 1, new TimeOnly(12, 0)),
+            Assign(2, monday, 1, new TimeOnly(13, 0)),
+            Assign(3, monday, 2, new TimeOnly(12, 30)),
+            Assign(4, monday, 2, new TimeOnly(13, 30)));
+
+        Assert.True(PlanningLeaveImpactEvaluator.NeedsRegen(
+            planning,
+            [Cfg(1, required: 4, minPresence: 0), Cfg(2, required: 2, minPresence: 0)],
+            userId: 1, monday, monday,
+            absenceRemoved: false, regenerateFrom: monday));
+    }
+
+    // Le shift reste au-dessus de son quota après le départ : aucune regen inutile.
+    [Fact]
+    public void NeedsRegen_false_when_shift_stays_at_quota_v50()
+    {
+        var monday = FutureMonday();
+        var planning = Week(monday,
+            Assign(1, monday, 1, new TimeOnly(12, 0)),
+            Assign(2, monday, 1, new TimeOnly(13, 0)),
+            Assign(3, monday, 1, new TimeOnly(14, 0)));
+
+        Assert.False(PlanningLeaveImpactEvaluator.NeedsRegen(
+            planning, [Cfg(1, required: 2, minPresence: 0)], userId: 1, monday, monday,
+            absenceRemoved: false, regenerateFrom: monday));
+    }
+
     [Fact]
     public void NeedsRegen_true_when_removal_breaks_min_presence()
     {
@@ -280,6 +314,49 @@ public class PlanningLeaveImpactTests
         Assert.NotNull(tracker.LastDto?.RegenerateFromDate);
     }
 
+    // v51 : la régénération échoue → l'absence est quand même posée sur le jour concerné.
+    [Fact]
+    public async Task Sync_regen_impossible_marque_quand_meme_le_conge_v51()
+    {
+        await using var db = CreateDb();
+        await SeedOrgAsync(db);
+
+        var monday = FutureMonday();
+        db.SubServiceShiftConfigs.Add(Cfg(1, required: 2, minPresence: 50));
+        db.Users.AddRange(MakeUser(1), MakeUser(2));
+        db.WeeklyPlannings.Add(new WeeklyPlanning
+        {
+            Id = 11,
+            SubServiceId = 1,
+            WeekCode = "2099-W11",
+            WeekStartDate = monday,
+            Status = PlanningStatus.Published
+        });
+        await db.SaveChangesAsync();
+
+        foreach (var (uid, br) in new[] { (1, new TimeOnly(12, 0)), (2, new TimeOnly(13, 0)) })
+        {
+            var a = Assign(uid, monday, 1, br);
+            a.WeeklyPlanningId = 11;
+            db.ShiftAssignments.Add(a);
+        }
+        await db.SaveChangesAsync();
+
+        var tracker = new TrackingPlanningService
+        {
+            ThrowOnGenerate = "Le superviseur n'a pas encore configuré les modes.",
+        };
+        var svc = new PlanningLeaveImpactService(db, tracker, NullLogger<PlanningLeaveImpactService>.Instance);
+
+        await svc.SyncAfterAbsenceChangeAsync(1, monday, monday, absenceRemoved: false);
+
+        Assert.Equal(1, tracker.GenerateCount);
+        var jour = await db.ShiftAssignments.AsNoTracking()
+            .SingleAsync(a => a.UserId == 1 && a.AssignedDate == monday);
+        Assert.True(jour.IsOnLeave);
+        Assert.Null(jour.BreakTime);
+    }
+
     [Fact]
     public async Task Sync_refuse_surgical_restores_IsOnLeave()
     {
@@ -358,9 +435,14 @@ public class PlanningLeaveImpactTests
         public List<int> GeneratedPlanningIds { get; } = new();
         public GeneratePlanningFromConfigDto? LastDto { get; private set; }
 
+        /// <summary>v51 : simule une régénération impossible (modes non saisis, cellule vide…).</summary>
+        public string? ThrowOnGenerate { get; init; }
+
         public Task<WeeklyPlanningResponseDto> GeneratePlanningFromConfigAsync(GeneratePlanningFromConfigDto dto)
         {
             GenerateCount++;
+            if (ThrowOnGenerate is not null)
+                throw new InvalidOperationException(ThrowOnGenerate);
             LastDto = dto;
             GeneratedPlanningIds.Add(dto.WeeklyPlanningId);
             return Task.FromResult(new WeeklyPlanningResponseDto { Id = dto.WeeklyPlanningId });
@@ -385,7 +467,7 @@ public class PlanningLeaveImpactTests
         public Task<WeekShiftConfigResponseDto?> GetShiftConfigAsync(int subServiceId, string weekCode) => NIAsync<WeekShiftConfigResponseDto?>();
         public Task<WeekShiftConfigResponseDto?> GetShiftTemplateAsync(int subServiceId) => NIAsync<WeekShiftConfigResponseDto?>();
         public Task<WeekShiftConfigResponseDto> SaveShiftTemplateAsync(SaveShiftConfigDto dto) => NIAsync<WeekShiftConfigResponseDto>();
-        public Task<ShiftConfigStatusResponseDto> GetShiftConfigStatusAsync() => NIAsync<ShiftConfigStatusResponseDto>();
+        public Task<ShiftConfigStatusResponseDto> GetShiftConfigStatusAsync(int? viewerUserId = null) => NIAsync<ShiftConfigStatusResponseDto>();
         public Task EnsureWeekSnapshotAsync(int subServiceId, string weekCode, DateOnly weekStartDate, bool forceRefresh = false) => NI();
         public Task<WeeklyShiftModePlanDto> GetWeeklyShiftModePlanAsync(int subServiceId, string weekCode, DateOnly weekStartDate) => NIAsync<WeeklyShiftModePlanDto>();
         public Task<WeeklyShiftModePlanDto> SaveWeeklyShiftModePlanAsync(SaveWeeklyShiftModePlanDto dto) => NIAsync<WeeklyShiftModePlanDto>();

@@ -1,4 +1,4 @@
-import { KyntusRoleNames } from '../org/kyntus-role-names';
+﻿import { KyntusRoleNames } from '../org/kyntus-role-names';
 
 export const PLATFORM_VERBS = ['View', 'Act', 'Validate', 'Configure'] as const;
 export type PlatformVerb = (typeof PLATFORM_VERBS)[number];
@@ -14,8 +14,9 @@ export const PLATFORM_ROLES = [
   KyntusRoleNames.Audit,
   KyntusRoleNames.Superviseur,
   KyntusRoleNames.ReferentTechnique,
+  // v54 — « Chef de projet » n'a plus de ligne à lui : c'est le même rôle que RP (alias côté
+  // serveur). Deux lignes faisaient qu'un droit coché sur l'une ne s'appliquait pas à l'autre.
   KyntusRoleNames.Rp,
-  KyntusRoleNames.ChefDeProjet,
   KyntusRoleNames.Pilote,
   KyntusRoleNames.Employee,
   KyntusRoleNames.Ingenieur,
@@ -61,13 +62,21 @@ const TEAM_LEAD = [
   KyntusRoleNames.ChefDeProjet,
 ] as const;
 const RH_CHEF_PROJET = [...ADMIN_RH, KyntusRoleNames.Rp, KyntusRoleNames.ChefDeProjet] as const;
+/** v48 — Dépôt des procédures « Process Bytel » : l'encadrement, superviseurs compris. */
+const PROCESS_DEPOT = [...RH_CHEF_PROJET, KyntusRoleNames.Superviseur, KyntusRoleNames.ReferentTechnique] as const;
+/**
+ * v54 — Le RP (chef de projet) a les mêmes pouvoirs qu'un superviseur sur son périmètre :
+ * configurer les horaires, enregistrer les modes de la semaine, valider et générer.
+ */
 const PLANNING_VALIDATION = [
   ...ADMIN_RH,
   KyntusRoleNames.Superviseur,
+  KyntusRoleNames.Rp,
 ] as const;
 const PLANNING_SHIFT_CONFIG = [
   ...ADMIN_RH,
   KyntusRoleNames.Superviseur,
+  KyntusRoleNames.Rp,
 ] as const;
 const PLANNING_GENERATE = [
   ...ADMIN_RH,
@@ -137,7 +146,8 @@ const SRV_ADMIN_RH_AUDIT = [R.Admin, R.RH, R.Audit] as const;
 const SRV_ADMIN_AUDIT = [R.Admin, R.Audit] as const;
 /** PointageRoles.PeutVoirEquipe et API congés « équipe ». */
 const SRV_RESPONSABLES = [R.Admin, R.RH, R.Superviseur, R.Manager, R.ReferentTechnique, R.Coach, R.ChefDeProjet, R.Rp] as const;
-const SRV_VALIDATION_CONGES = [R.Admin, R.RH, R.Superviseur, R.Manager] as const;
+// v55 — Le RP (chef de projet) valide les congés de son périmètre, comme le superviseur.
+const SRV_VALIDATION_CONGES = [R.Admin, R.RH, R.Superviseur, R.Manager, R.Rp] as const;
 const SRV_QUOTAS_CONGES = [R.Admin, R.RH, R.Superviseur, R.Manager, R.Rp, R.ChefDeProjet] as const;
 const QUOTAS_CONGES = [R.Superviseur, R.Admin, R.Rp, R.ChefDeProjet] as const;
 /** Réclamations « mes demandes » (Planning, ReclamationController). */
@@ -202,13 +212,15 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
 
   { id: 'conges.self', label: 'Mes congés', module: 'Congés', view: SELF, defaultScope: 'Self' },
   { id: 'conges.equipe', label: 'Congés de l’équipe', module: 'Congés', view: TEAM_LEAD, serveur: SRV_RESPONSABLES },
-  { id: 'conges.validation', label: 'Valider les congés', module: 'Congés', view: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur], validate: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur], serveur: SRV_VALIDATION_CONGES },
+  { id: 'conges.validation', label: 'Valider les congés', module: 'Congés', view: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur, KyntusRoleNames.Rp], validate: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur, KyntusRoleNames.Rp], serveur: SRV_VALIDATION_CONGES },
   { id: 'conges.history', label: 'Historique des congés', module: 'Congés', view: ADMIN_RH, serveur: SRV_ADMIN_RH },
   // v29 : superviseur = ses cellules ; chef de projet = tout son département.
   { id: 'conges.quotas', label: 'Quotas cellule / service', module: 'Congés', view: QUOTAS_CONGES, configure: QUOTAS_CONGES, serveurAgir: SRV_QUOTAS_CONGES },
   { id: 'conges.periodes', label: 'Périodes interdites', module: 'Congés', view: ADMIN_RH, configure: ADMIN_RH, serveurAgir: SRV_ADMIN_RH },
 
   { id: 'documentation.module', label: 'Module Documentation (accès au menu)', module: 'Documentation', view: SELF, defaultScope: 'Self' },
+  // v48 : Process Bytel — lecture pour tous (selon la visibilité choisie à l'envoi), dépôt pour RH / Admin / chef de projet.
+  { id: 'process-bytel', label: 'Process Bytel (documents partagés)', module: 'Documentation', view: SELF, act: PROCESS_DEPOT },
   { id: 'documentation.admin-config', label: 'Configuration documentation', module: 'Documentation', view: ADMIN, configure: ADMIN },
   { id: 'documentation.doc-types', label: 'Types de documents', module: 'Documentation', view: ADMIN, configure: ADMIN },
   { id: 'documentation.permissions', label: 'Permissions documents', module: 'Documentation', view: ADMIN, configure: ADMIN },

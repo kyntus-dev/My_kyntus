@@ -165,13 +165,16 @@ export const MICROSERVICES: Microservice[] = [
     label: 'Périmètre superviseur',
     icon: ICONS.users,
     ouvertureIam: 'prime.module',
-    roles: ['Superviseur'],
+    // v54 — Le RP (chef de projet) encadre les mêmes cellules que ses superviseurs : il doit
+    // pouvoir enregistrer les modes de la semaine sans dépendre d'eux. Admin et RH y accèdent
+    // aussi, comme sur les autres écrans de pilotage.
+    roles: ['Superviseur', 'RP', 'Chef de projet', 'Admin', 'RH'],
     children: [
       {
         label: 'Périmètre superviseur',
         route: '/prime',
         primePath: '/superviseur/scope',
-        roles: ['Superviseur'],
+        roles: ['Superviseur', 'RP', 'Chef de projet', 'Admin', 'RH'],
         hat: 'team',
       },
     ],
@@ -240,6 +243,15 @@ export const MICROSERVICES: Microservice[] = [
       { label: 'Traiter les renforts samedi', route: '/planning/demandes-renfort', roles: [...ADMIN_RH, 'Superviseur', 'Manager', 'Référent technique', 'Coach', 'Chef de projet', 'RP'], hat: 'team', ouvertureIam: 'planning.reinforcement' },
       { label: 'Valider les plannings', route: '/planning/validation', roles: [...ADMIN_RH, KyntusRoleNames.Superviseur], hat: 'team', capability: 'planning.validation' },
       { label: 'Configuration des horaires', route: '/planning/shift-config', roles: [...ADMIN_RH, KyntusRoleNames.Superviseur], hat: 'team', capability: 'planning.shift-config' },
+    ],
+  },
+  {
+    // v48 : Process Bytel — procédures déposées par l'encadrement, visibles selon l'activité.
+    id: 'process-bytel',
+    label: 'Process Bytel',
+    icon: ICONS.doc,
+    children: [
+      { label: 'Documents (ITs…)', route: '/process-bytel', roles: EMPLOYEE_ROLES, hat: 'self', ouvertureIam: 'process-bytel' },
     ],
   },
   {

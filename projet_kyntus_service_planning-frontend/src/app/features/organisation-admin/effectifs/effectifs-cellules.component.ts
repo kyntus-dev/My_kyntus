@@ -10,7 +10,14 @@ import { PlatformAccessService } from '../../../core/platform-access/platform-ac
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { agentsDuNoeud, destinationsArchivage, repartirAgents, type CibleArchivage } from '../archivage.util';
-import { filtrerEffectifs, lignesEffectifs, totauxEffectifs, type LigneEffectif } from './effectifs.util';
+import {
+  filtrerEffectifs,
+  libelleEncadrants,
+  lignesEffectifs,
+  totauxEffectifs,
+  type EncadrantCellule,
+  type LigneEffectif,
+} from './effectifs.util';
 
 type Mode = 'reaffecter' | 'desactiver';
 
@@ -41,6 +48,7 @@ type Mode = 'reaffecter' | 'desactiver';
           <span><b>{{ totaux().cellules }}</b> cellules</span>
           <span><b>{{ totaux().agents }}</b> collaborateurs</span>
           <span><b>{{ totaux().pilotes }}</b> pilotes</span>
+          <span><b>{{ totaux().encadrement }}</b> en encadrement</span>
           <span [class.ef-alerte]="totaux().vides > 0"><b>{{ totaux().vides }}</b> cellule(s) vide(s)</span>
         </div>
 
@@ -86,8 +94,17 @@ type Mode = 'reaffecter' | 'desactiver';
                   <p class="ef-sous">Aucun pilote dans cette cellule.</p>
                 }
                 @if (membres().encadrement.length) {
-                  <p class="ef-note">Responsables non déplacés (à corriger dans leur fiche) :
-                    @for (a of membres().encadrement; track a.id; let last = $last) { {{ a.lastName }} {{ a.firstName }} ({{ a.role }}){{ last ? '' : ', ' }} }
+                  <p class="ef-note">
+                    <b>Encadrement de la cellule — non concerné par cette opération</b> (c'est normal :
+                    seuls les pilotes sont déplacés) :
+                    @for (a of membres().encadrement; track a.id; let last = $last) { {{ a.lastName }} {{ a.firstName }} ({{ a.role }}){{ last ? '' : ', ' }} }.
+                    @if (mode() === 'desactiver') {
+                      Avant de désactiver la cellule, rattachez-les ailleurs depuis leur fiche
+                      (Organisation RH › Responsables, ou la fiche du collaborateur) : sinon ils
+                      resteront rattachés à une cellule archivée.
+                    } @else {
+                      Pour les déplacer, changez leur rattachement dans leur fiche.
+                    }
                   </p>
                 }
               </div>
@@ -132,10 +149,16 @@ type Mode = 'reaffecter' | 'desactiver';
               @for (l of visibles(); track l.celluleId) {
                 <tr [class.ef-vide]="l.total === 0" [class.ef-active]="selection()?.celluleId === l.celluleId">
                   <td class="ef-chemin">{{ l.contrat }} › {{ l.pole }}</td>
-                  <td><b>{{ l.cellule }}</b></td>
+                  <td>
+                    <b>{{ l.cellule }}</b>
+                    @if (l.encadrement) {
+                      <!-- v53 — On nomme l'encadrement : c'est lui qui explique l'écart pilotes / total. -->
+                      <span class="ef-enc">dont encadrement : {{ libelle(l.encadrants) }}</span>
+                    }
+                  </td>
                   <td class="ef-n">{{ l.services }}</td>
                   <td class="ef-n">{{ l.pilotes }}</td>
-                  <td class="ef-n">{{ l.encadrement || '' }}</td>
+                  <td class="ef-n" [title]="libelle(l.encadrants)">{{ l.encadrement || '' }}</td>
                   <td class="ef-n"><b>{{ l.total }}</b></td>
                   @if (peutModifier()) {
                     <td class="ef-actions">
@@ -150,6 +173,12 @@ type Mode = 'reaffecter' | 'desactiver';
             </tbody>
           </table>
         </div>
+        <p class="ef-sous">
+          <b>Pilotes</b> : les agents planifiés. <b>Encadrement</b> : superviseurs, référents
+          techniques, chefs de projet et RP rattachés à la cellule — ils y figurent normalement,
+          ne sont jamais planifiés, et ne sont pas déplacés lors d'une réaffectation.
+          <b>Total</b> = pilotes + encadrement.
+        </p>
       }
     </section>
   `,
@@ -171,6 +200,7 @@ type Mode = 'reaffecter' | 'desactiver';
     .ef-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
     .ef-table th { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); padding: 8px 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-input); }
     .ef-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-color); }
+    .ef-enc { display: block; margin-top: 2px; font-size: 0.74rem; color: var(--text-muted); font-weight: 400; }
     .ef-table tr:last-child td { border-bottom: 0; }
     .ef-n { text-align: right !important; font-variant-numeric: tabular-nums; width: 90px; }
     .ef-chemin { color: var(--text-muted); font-size: 0.78rem; }
@@ -266,6 +296,11 @@ export class EffectifsCellulesComponent implements OnInit {
     if (this.mode() === 'reaffecter') return `Réaffecter ${this.coches().size} agent(s)`;
     return this.membres().pilotes.length ? 'Réaffecter et désactiver' : 'Désactiver la cellule';
   });
+
+  /** v53 — « BENABDERAHMANE Mohamed (Référent technique), … ». */
+  libelle(encadrants: readonly EncadrantCellule[]): string {
+    return libelleEncadrants(encadrants);
+  }
 
   ngOnInit(): void {
     this.charger();

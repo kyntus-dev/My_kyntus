@@ -1,9 +1,11 @@
 {
   "Routes": [
-
     {
       "UpstreamPathTemplate": "/hubs/planning/negotiate",
-      "UpstreamHttpMethod": [ "GET", "POST" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST"
+      ],
       "DownstreamPathTemplate": "/hubs/planning/negotiate",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -15,7 +17,11 @@
     },
     {
       "UpstreamPathTemplate": "/hubs/planning",
-      "UpstreamHttpMethod": [ "GET", "POST", "CONNECT" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "CONNECT"
+      ],
       "DownstreamPathTemplate": "/hubs/planning",
       "DownstreamScheme": "ws",
       "DownstreamHostAndPorts": [
@@ -27,7 +33,10 @@
     },
     {
       "UpstreamPathTemplate": "/api/formations",
-      "UpstreamHttpMethod": [ "GET", "POST" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST"
+      ],
       "DownstreamPathTemplate": "/api/formations",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -44,7 +53,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/formations/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "PATCH", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/formations/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -59,10 +74,12 @@
         "TimeoutValue": 30000
       }
     },
-
     {
       "UpstreamPathTemplate": "/hubs/newsletter/negotiate",
-      "UpstreamHttpMethod": [ "GET", "POST" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST"
+      ],
       "DownstreamPathTemplate": "/hubs/newsletter/negotiate",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -74,7 +91,11 @@
     },
     {
       "UpstreamPathTemplate": "/hubs/newsletter",
-      "UpstreamHttpMethod": [ "GET", "POST", "CONNECT" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "CONNECT"
+      ],
       "DownstreamPathTemplate": "/hubs/newsletter",
       "DownstreamScheme": "ws",
       "DownstreamHostAndPorts": [
@@ -84,10 +105,12 @@
         }
       ]
     },
-
     {
       "UpstreamPathTemplate": "/hubs/reclamation/negotiate",
-      "UpstreamHttpMethod": [ "GET", "POST" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST"
+      ],
       "DownstreamPathTemplate": "/hubs/reclamation/negotiate",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -99,7 +122,11 @@
     },
     {
       "UpstreamPathTemplate": "/hubs/reclamation",
-      "UpstreamHttpMethod": [ "GET", "POST", "CONNECT" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "CONNECT"
+      ],
       "DownstreamPathTemplate": "/hubs/reclamation",
       "DownstreamScheme": "ws",
       "DownstreamHostAndPorts": [
@@ -109,10 +136,12 @@
         }
       ]
     },
-
     {
       "UpstreamPathTemplate": "/hubs/documentation/negotiate",
-      "UpstreamHttpMethod": [ "GET", "POST" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST"
+      ],
       "DownstreamPathTemplate": "/hubs/documentation/negotiate",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -124,7 +153,11 @@
     },
     {
       "UpstreamPathTemplate": "/hubs/documentation",
-      "UpstreamHttpMethod": [ "GET", "POST", "CONNECT" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "CONNECT"
+      ],
       "DownstreamPathTemplate": "/hubs/documentation",
       "DownstreamScheme": "ws",
       "DownstreamHostAndPorts": [
@@ -134,10 +167,13 @@
         }
       ]
     },
-
     {
       "UpstreamPathTemplate": "/hubs/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "CONNECT" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "CONNECT"
+      ],
       "DownstreamPathTemplate": "/hubs/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -147,10 +183,14 @@
         }
       ]
     },
-
     {
       "UpstreamPathTemplate": "/api/Auth/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/Auth/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -173,7 +213,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/auth/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/Auth/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -194,10 +239,14 @@
         "Limit": 30
       }
     },
-
     {
       "UpstreamPathTemplate": "/api/reclamation",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/reclamation",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -209,7 +258,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/reclamation/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/reclamation/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -219,10 +273,14 @@
         }
       ]
     },
-
     {
       "UpstreamPathTemplate": "/api/proposition",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/proposition",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -234,7 +292,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/proposition/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/proposition/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -244,10 +307,14 @@
         }
       ]
     },
-
     {
       "UpstreamPathTemplate": "/api/newsletter",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/newsletter",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -259,7 +326,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/newsletter/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/newsletter/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -271,7 +343,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/my-newsletters",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/my-newsletters",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -283,7 +361,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/my-newsletters/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/my-newsletters/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -295,7 +379,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/media",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/media",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -307,7 +396,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/media/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/media/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -317,11 +411,15 @@
         }
       ]
     },
-
     {
       "UpstreamPathTemplate": "/api/Conges",
       "RouteIsCaseSensitive": true,
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/Conges",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -334,7 +432,12 @@
     {
       "UpstreamPathTemplate": "/api/Conges/{everything}",
       "RouteIsCaseSensitive": true,
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/Conges/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -347,7 +450,12 @@
     {
       "UpstreamPathTemplate": "/api/conges",
       "RouteIsCaseSensitive": true,
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/conges",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -360,7 +468,12 @@
     {
       "UpstreamPathTemplate": "/api/conges/{everything}",
       "RouteIsCaseSensitive": true,
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/conges/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -372,7 +485,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/contract",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/contract",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -384,7 +502,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/contract/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/contract/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -396,7 +519,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/floor",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/floor",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -408,7 +536,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/floor/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/floor/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -420,7 +553,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/planning",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/planning",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -432,7 +570,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/planning/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/planning/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -444,7 +587,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/services",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/services",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -456,7 +604,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/services/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/services/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -468,7 +621,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/SubServices",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/SubServices",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -480,7 +638,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/SubServices/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/SubServices/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -492,7 +655,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/users",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "PATCH", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/users",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -504,7 +673,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/users/import/v2/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/users/import/v2/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -519,7 +693,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/users/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "PATCH", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/users/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -529,33 +709,48 @@
         }
       ]
     },
-{
-  "UpstreamPathTemplate": "/api/roles",
-  "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
-  "DownstreamPathTemplate": "/api/roles",
-  "DownstreamScheme": "http",
-  "DownstreamHostAndPorts": [
     {
-      "Host": "planning-backend",
-      "Port": 8080
-    }
-  ]
-},
-{
-  "UpstreamPathTemplate": "/api/roles/{everything}",
-  "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
-  "DownstreamPathTemplate": "/api/roles/{everything}",
-  "DownstreamScheme": "http",
-  "DownstreamHostAndPorts": [
+      "UpstreamPathTemplate": "/api/roles",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "DownstreamPathTemplate": "/api/roles",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "planning-backend",
+          "Port": 8080
+        }
+      ]
+    },
     {
-      "Host": "planning-backend",
-      "Port": 8080
-    }
-  ]
-},
+      "UpstreamPathTemplate": "/api/roles/{everything}",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "DownstreamPathTemplate": "/api/roles/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "planning-backend",
+          "Port": 8080
+        }
+      ]
+    },
     {
       "UpstreamPathTemplate": "/api/userimportexport",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/userimportexport",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -567,7 +762,12 @@
     },
     {
       "UpstreamPathTemplate": "/api/userimportexport/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
       "DownstreamPathTemplate": "/api/userimportexport/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -577,10 +777,15 @@
         }
       ]
     },
-
     {
       "UpstreamPathTemplate": "/api/prime",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/prime",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -592,7 +797,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/prime/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/prime/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -604,7 +815,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/rp",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/rp",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -616,7 +833,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/rp/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/rp/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -628,7 +851,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/supervisor",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/supervisor",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -640,7 +869,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/supervisor/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/supervisor/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -652,7 +887,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/admin/org-reconciliation",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/admin/org-reconciliation",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -664,7 +905,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/admin/org-reconciliation/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/admin/org-reconciliation/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -676,7 +923,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/admin",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/admin",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -688,7 +941,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/admin/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/admin/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -700,7 +959,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/audit",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/audit",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -712,7 +977,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/audit/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/audit/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -722,10 +993,15 @@
         }
       ]
     },
-
     {
       "UpstreamPathTemplate": "/api/parrainage",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/parrainage",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -737,7 +1013,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/parrainage/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/parrainage/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -747,10 +1029,15 @@
         }
       ]
     },
-
     {
       "UpstreamPathTemplate": "/api/documentation",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/documentation",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -762,7 +1049,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/documentation/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/documentation/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -774,7 +1067,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/generate-document-ai",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/generate-document-ai",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -786,7 +1085,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/generate-document-ai/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/generate-document-ai/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -798,7 +1103,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/directory",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/directory",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -815,7 +1126,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/directory/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/directory/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -832,7 +1149,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/iam",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/iam",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -844,7 +1167,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/iam/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/iam/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -856,7 +1185,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/qualite",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/qualite",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -868,7 +1203,13 @@
     },
     {
       "UpstreamPathTemplate": "/api/qualite/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "PATCH" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
       "DownstreamPathTemplate": "/api/qualite/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -880,7 +1221,11 @@
     },
     {
       "UpstreamPathTemplate": "/socket.io/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "OPTIONS" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "OPTIONS"
+      ],
       "DownstreamPathTemplate": "/socket.io/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
@@ -892,7 +1237,12 @@
     },
     {
       "UpstreamPathTemplate": "/socket.io",
-      "UpstreamHttpMethod": [ "GET", "POST", "CONNECT", "OPTIONS" ],
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "CONNECT",
+        "OPTIONS"
+      ],
       "DownstreamPathTemplate": "/socket.io",
       "DownstreamScheme": "ws",
       "DownstreamHostAndPorts": [
@@ -901,6 +1251,56 @@
           "Port": 5000
         }
       ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/mot-de-passe/{everything}",
+      "UpstreamHttpMethod": [
+        "POST"
+      ],
+      "DownstreamPathTemplate": "/api/mot-de-passe/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "planning-backend",
+          "Port": 8080
+        }
+      ],
+      "QoSOptions": {
+        "ExceptionsAllowedBeforeBreaking": 5,
+        "DurationOfBreak": 30000,
+        "TimeoutValue": 30000
+      },
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 20
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/api/public/employes",
+      "UpstreamHttpMethod": [
+        "GET"
+      ],
+      "DownstreamPathTemplate": "/api/public/employes",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "planning-backend",
+          "Port": 8080
+        }
+      ],
+      "QoSOptions": {
+        "ExceptionsAllowedBeforeBreaking": 5,
+        "DurationOfBreak": 30000,
+        "TimeoutValue": 30000
+      },
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      }
     }
   ],
   "GlobalConfiguration": {

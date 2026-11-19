@@ -137,7 +137,7 @@
                           <span class="level-badge expertise lv-{{ user.niveauExpertiseMetier }}" [title]="'Expertise métier : ' + (expertiseLevelLabel(user.niveauExpertiseMetier) ?? '')">{{ expertiseLevelLabel(user.niveauExpertiseMetier) }}</span>
                         }
                       </div>
-                      <span class="email">{{ user.email }}</span>
+                      <span class="email">{{ libelleMail(user.email) }}</span>
                     </div>
                   </div>
                 </td>

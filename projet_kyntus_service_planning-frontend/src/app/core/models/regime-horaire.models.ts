@@ -52,4 +52,6 @@ export interface HeureSortieAccesDto {
   role: string | null;
   cellule: string | null;
   acces: boolean;
+  /** v43 : horaire de base (« 0840 » ou « 0740 ») des comptes ayant accès. */
+  productionBase?: '0840' | '0740' | null;
 }

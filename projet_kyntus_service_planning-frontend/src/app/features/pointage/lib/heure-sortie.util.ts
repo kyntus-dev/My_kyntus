@@ -238,6 +238,49 @@ export function productionDuChoix(choix: ChoixProduction | null | undefined, _da
   return CHOIX_PRODUCTION.find((c) => c.valeur === choix)?.minutes ?? null;
 }
 
+/** v42 : un choix fait pour une journée. */
+export interface ChoixJour { jour: string; choix: ChoixProduction }
+
+/** Production prévue d'une journée et son origine (pour le détail du solde). */
+export interface PrevueJour { minutes: number; origine: string }
+
+/**
+ * Production prévue d'une journée pour le solde (journée sur journée) :
+ * 1. le choix fait ce jour-là (07h40 ou 08h40) ;
+ * 2. v43 : sinon l'horaire de base fixé par l'Admin (08h40 ou 07h40) ;
+ * 3. sans horaire de base connu : le dernier choix fait avant ce jour, sinon le premier choix fait ensuite ;
+ * 4. sinon null : production du planning ou du régime.
+ */
+export function prevueDuChoix(date: string, choix: readonly ChoixJour[], base?: ChoixProduction | null): PrevueJour | null {
+  const tries = [...choix].sort((a, b) => a.jour.localeCompare(b.jour));
+  const duJour = tries.find((c) => c.jour.slice(0, 10) === date);
+  if (duJour) return { minutes: productionDuChoix(duJour.choix)!, origine: 'choisi ce jour' };
+  if (base) return { minutes: productionDuChoix(base)!, origine: 'horaire de base' };
+  const avant = [...tries].reverse().find((c) => c.jour.slice(0, 10) < date);
+  if (avant) return { minutes: productionDuChoix(avant.choix)!, origine: 'dernier choix' };
+  const apres = tries.find((c) => c.jour.slice(0, 10) > date);
+  if (apres) return { minutes: productionDuChoix(apres.choix)!, origine: 'premier choix' };
+  return null;
+}
+
+/**
+ * v45 : horaire 08h40 : la journée à 07h40 de la semaine (lundi → vendredi) est-elle déjà prise un
+ * autre jour que `date` ? Renvoie ce jour, sinon null. Même règle que le serveur.
+ */
+export function courteDejaPriseSemaine(date: string, choix: readonly ChoixJour[], base: ChoixProduction | null | undefined): string | null {
+  if (base === '0740') return null;
+  const [y, m, d] = date.split('-').map(Number);
+  const jour = new Date(y, m - 1, d);
+  const dow = jour.getDay();
+  if (dow === 0 || dow === 6) return null;
+  const lundi = new Date(y, m - 1, d - ((dow + 6) % 7));
+  const iso = (x: Date) => x.toLocaleDateString('sv-SE');
+  const debut = iso(lundi);
+  const fin = iso(new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate() + 4));
+  const prise = choix.find((c) => c.choix === '0740' && c.jour.slice(0, 10) !== date && c.jour.slice(0, 10) >= debut && c.jour.slice(0, 10) <= fin);
+  return prise ? prise.jour.slice(0, 10) : null;
+}
+
 /** Début de la période de paie (le 24) contenant `date` : la compensation des heures se fait sur 24 → 23. */
 export function debutPeriodePaie(date: Date): Date {
   return date.getDate() >= 24
@@ -263,8 +306,8 @@ export interface SoldeHeures {
 export function soldeHeures(
   jours: readonly JourSolde[],
   aujourdhui: string,
-  /** Production imposée (prioritaire) ; v40 : n'est plus utilisée par l'écran. */
-  prevueImposee?: (date: Date) => number | null,
+  /** Production imposée (prioritaire) : v42, celle du choix de la journée. */
+  prevueImposee?: (date: Date) => number | PrevueJour | null,
 ): SoldeHeures {
   const lignes = detailSolde(jours, aujourdhui, prevueImposee).filter((l) => l.compte);
   const plus = lignes.reduce((s, l) => s + Math.max(0, l.ecartMinutes ?? 0), 0);
@@ -322,7 +365,7 @@ const MOTIFS_NON_COMPTE: Record<string, string> = {
 export function detailSolde(
   jours: readonly JourSolde[],
   aujourdhui: string,
-  prevueImposee?: (date: Date) => number | null,
+  prevueImposee?: (date: Date) => number | PrevueJour | null,
 ): LigneSolde[] {
   let cumul = 0;
   return [...jours]
@@ -332,9 +375,10 @@ export function detailSolde(
       const date = j.jour.slice(0, 10);
       const [y, m, d] = date.split('-').map(Number);
       const jourDate = new Date(y, m - 1, d);
-      const imposee = prevueImposee?.(jourDate) ?? null;
+      const brute = prevueImposee?.(jourDate) ?? null;
+      const imposee = typeof brute === 'number' ? brute : brute?.minutes ?? null;
       const prevue = imposee ?? j.productionPrevueMinutes ?? productionExcel(jourDate);
-      const originePrevue = imposee != null ? 'Choix'
+      const originePrevue = imposee != null ? (typeof brute === 'number' ? 'Choix' : brute!.origine)
         : j.productionPrevueMinutes != null
           ? (j.source === 'Planning' ? 'Planning publié' : j.source === 'PlanningIT' ? 'Planning IT' : j.source === 'Regime' ? 'Régime horaire' : 'Planning')
           : 'Règle Excel';

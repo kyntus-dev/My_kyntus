@@ -1,4 +1,4 @@
-using EmployeeDirectory.Application.Abstractions;
+﻿using EmployeeDirectory.Application.Abstractions;
 using EmployeeDirectory.Application.Dtos;
 using EmployeeDirectory.Domain.Enums;
 using EmployeeDirectory.Infrastructure.Persistence;
@@ -75,7 +75,8 @@ public sealed class OrgResponsibilityResolver(DirectoryDbContext db) : IOrgRespo
             .Select(a => new { a.Kind, a.NodeId })
             .ToListAsync(ct);
 
-        // v32 : chef de projet = tous les pôles de son activité (pas seulement ceux affectés).
+        // v57 : chef de projet = les pôles inscrits + ceux des contrats dont il est responsable.
+        // Plus d'élargissement automatique aux autres contrats de la même activité.
         var polesActivite = await PerimetreActivite.PolesChefDeProjetAsync(db, actorId, ct);
         assignments = assignments
             .Where(a => a.Kind != OrgAssignmentKind.ChefDeProjet)

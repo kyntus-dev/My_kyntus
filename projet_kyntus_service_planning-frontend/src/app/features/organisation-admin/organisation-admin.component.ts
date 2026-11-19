@@ -49,6 +49,8 @@ type Onglet = 'structure' | 'agents' | 'archives';
  * « Archiver » ne supprime rien : le nœud reste en base avec son historique
  * (plannings, primes, congés, affectations clôturées) et disparaît des listes et des choix.
  */
+import { estPlanifiable } from '../../core/org/postes-production.util';
+
 @Component({
   selector: 'app-organisation-admin',
   standalone: true,
@@ -103,6 +105,9 @@ export class OrganisationAdminComponent implements OnInit {
   });
   readonly index = computed(() => buildCelluleIndex(this.depts(), this.unassigned()));
   readonly effectifs = computed(() => effectifsParCellule(this.agents()));
+  /** v51 : agents planifiables par cellule (même règle que le Planning : encadrement exclu). */
+  readonly planifiables = computed(() =>
+    effectifsParCellule(this.agents().filter((a) => estPlanifiable(a.role))));
   readonly codeParContrat = computed(() => new Map(this.contrats().map((c) => [c.id, c.code])));
   readonly contratsArchives = computed(() =>
     this.contrats().filter((c) => !c.isActive && (c.kind ?? '').toLowerCase() === 'operational'));
@@ -390,6 +395,15 @@ export class OrganisationAdminComponent implements OnInit {
     return (p.cellules ?? []).reduce((n, c) => n + this.effectifCellule(c), 0);
   }
 
+  /** v51 : personnes de la cellule qui apparaissent dans son planning (hors encadrement). */
+  planifiablesCellule(c: OrgCelluleNode): number {
+    return this.planifiables().get(c.id) ?? 0;
+  }
+
+  planifiablesPole(p: OrgPoleNode): number {
+    return (p.cellules ?? []).reduce((n, c) => n + this.planifiablesCellule(c), 0);
+  }
+
   async nouveauContrat(): Promise<void> {
     const name = await this.prompt.prompt({
       title: 'Nouveau contrat',
@@ -420,6 +434,78 @@ export class OrganisationAdminComponent implements OnInit {
     });
     if (!ok) return;
     await this.run(this.api.archiveBusinessDepartment(d.id), 'Contrat archivé.');
+  }
+
+  // ── v48 : cellules de Formation & Qualité ───────────────────────────────────
+
+  /**
+   * Cellules attendues dans l'activité Formation & Qualité, et le pôle qui les porte.
+   * Les pôles manquants sont créés avec elles ; un service du même nom est ajouté dans chaque
+   * cellule pour pouvoir y affecter des agents (comme « Nouvelle cellule »).
+   */
+  private static readonly CELLULES_FORMATION: ReadonlyArray<{ pole: string; cellule: string }> = [
+    { pole: 'Formation', cellule: 'Formateurs' },
+    { pole: 'Formation', cellule: 'Agents en formation' },
+    { pole: 'Contrôle qualité', cellule: 'Contrôleurs de qualité' },
+  ];
+
+  private static cle(nom: string): string {
+    return nom.trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  }
+
+  /** L'activité « Formation & Qualité » (nom contenant « formation »). */
+  estFormationQualite(d: OperationalDepartmentNode): boolean {
+    return /formation/i.test(d.name);
+  }
+
+  /** Cellules attendues qui n'existent pas encore dans cette activité. */
+  cellulesFormationManquantes(d: OperationalDepartmentNode): string[] {
+    const existantes = new Set(
+      d.poles.flatMap((p) => p.cellules.map((c) => OrganisationAdminComponent.cle(c.name))),
+    );
+    return OrganisationAdminComponent.CELLULES_FORMATION
+      .filter((x) => !existantes.has(OrganisationAdminComponent.cle(x.cellule)))
+      .map((x) => x.cellule);
+  }
+
+  /** Crée les cellules manquantes (et leur pôle) après confirmation. Rien d'autre n'est touché. */
+  async creerCellulesFormation(d: OperationalDepartmentNode): Promise<void> {
+    const manquantes = OrganisationAdminComponent.CELLULES_FORMATION.filter((x) =>
+      this.cellulesFormationManquantes(d).includes(x.cellule));
+    if (manquantes.length === 0) return;
+
+    const ok = await this.confirm.confirm({
+      title: 'Créer les cellules de Formation & Qualité',
+      message:
+        `Dans « ${d.name} », les cellules suivantes seront créées, avec un service du même nom : `
+        + manquantes.map((x) => `${x.cellule} (pôle ${x.pole})`).join(', ')
+        + '. Aucun agent n’est déplacé.',
+      confirmLabel: 'Créer',
+    });
+    if (!ok) return;
+
+    this.busy.set(true);
+    try {
+      const poles = new Map(d.poles.map((p) => [OrganisationAdminComponent.cle(p.name), p.id]));
+      let crees = 0;
+      for (const x of manquantes) {
+        const clePole = OrganisationAdminComponent.cle(x.pole);
+        let poleId = poles.get(clePole);
+        if (!poleId) {
+          poleId = (await firstValueFrom(this.api.createPole(d.id, x.pole))).id;
+          poles.set(clePole, poleId);
+        }
+        const cellule = await firstValueFrom(this.api.createCellule(poleId, x.cellule));
+        await firstValueFrom(this.api.createService(cellule.id, x.cellule));
+        crees++;
+      }
+      this.toast.success(`${crees} cellule(s) créée(s) dans « ${d.name} ».`);
+      this.load();
+    } catch (err) {
+      this.toast.error(this.message(err, 'Impossible de créer les cellules de formation.'));
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   async nouveauPole(d: OperationalDepartmentNode): Promise<void> {

@@ -1,4 +1,4 @@
-namespace Planning.Application.DTOs.Planning;
+﻿namespace Planning.Application.DTOs.Planning;
 
 // -- Cr�er un planning --
 public class CreateWeeklyPlanningDto
@@ -121,6 +121,13 @@ public class WeeklyPlanningResponseDto
     public int SubServiceId { get; set; }
     public List<EmployeePlanningDto> Assignments { get; set; } = new();
     public CoverageReportDto? CoverageReport { get; set; }
+    /// <summary>v51 : agents planifiables rattachés aujourd'hui à la cellule (référence de l'effectif).</summary>
+    public int PlanifiableEmployeeCount { get; set; }
+    /// <summary>v51 : raison du dernier échec de génération (null si la dernière a réussi).</summary>
+    public string? GenerationErreur { get; set; }
+    public DateTime? GenerationErreurLe { get; set; }
+    /// <summary>v52 : cellule à plusieurs modes sans plan de modes validé pour cette semaine.</summary>
+    public bool ModesEnAttente { get; set; }
 }
 
 /// <summary>Liste légère pour Planning Équipe (superviseur) — sans grille ni coverage.</summary>
@@ -455,6 +462,8 @@ public class ShiftConfigStatusItemDto
     public int ShiftCount { get; set; }
     public int TemplateEffectif { get; set; }
     public int ActiveEmployeeCount { get; set; }
+    /// <summary>v50 : agents réellement planifiables (hors postes non planifiés : formation, RH, IT…).</summary>
+    public int PlanifiableEmployeeCount { get; set; }
 }
 
 public class ShiftConfigStatusResponseDto
@@ -553,6 +562,12 @@ public class GeneratePlanningFromConfigDto
 
     /// <summary>Motif pour les notifications de republication soft.</summary>
     public string? RepublishReason { get; set; }
+
+    /// <summary>
+    /// v52 : cellule à plusieurs modes — générer sans attendre la date limite, en reprenant les modes
+    /// de la dernière semaine enregistrée (mode par défaut pour les agents sans mode).
+    /// </summary>
+    public bool ForcerModes { get; set; }
 }
 
 public class PlanningWeekItemDto
@@ -574,6 +589,10 @@ public class PlanningWeekItemDto
     public int ManualModificationCount { get; set; }
     /// <summary>UserIds distincts affectés (si planning généré).</summary>
     public List<int> AssignedUserIds { get; set; } = new();
+    /// <summary>v51 : agents planifiables rattachés aujourd'hui à la cellule.</summary>
+    public int PlanifiableEmployeeCount { get; set; }
+    /// <summary>v51 : raison du dernier échec de génération (null si la dernière a réussi).</summary>
+    public string? GenerationErreur { get; set; }
 }
 
 public class PlanningWeekListDto

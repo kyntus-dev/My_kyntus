@@ -117,6 +117,10 @@ export interface PointageAujourdhuiDto {
   derniereSynchro: string | null;
   /** Production mémorisée dans « Heure de sortie » : « 0840 », « 0740 » ou null (v18). */
   choixProduction?: '0840' | '0740' | null;
+  /** v43 : horaire de base fixé par l'Admin : 08h40 (une journée à 07h40 par semaine) ou 07h40. */
+  productionBase?: '0840' | '0740' | null;
+  /** v43 : jour de la semaine où la journée à 07h40 a déjà été prise (horaire 08h40), sinon null. */
+  jour0740Semaine?: string | null;
 }
 
 export type PointageCorrespondanceStatut = 'AValider' | 'Auto' | 'Valide' | 'Ignore';

@@ -1,4 +1,4 @@
-using Planning.Application.Pointage;
+﻿using Planning.Application.Pointage;
 using Planning.Domain.Enums;
 
 namespace Planning.Application.Presence;
@@ -137,7 +137,11 @@ public sealed record PresenceAgentDto(
     string? Pilote = null, // « NOM Prénom » (colonne Pilote de l'export paie)
     // v30 : case « En formation » cochée (agent hors paie tant qu'il n'est pas en production).
     // FormationAu = dernier jour de formation une fois terminée (null tant qu'elle continue).
-    bool EnFormation = false);
+    bool EnFormation = false,
+    // v46 : rôle du compte (les superviseurs et référents techniques du périmètre d'un chef de projet).
+    string? Role = null,
+    // v48 : « contractuel » / « non-contractuel » (type de formation choisi sur la fiche).
+    string? TypeFormation = null);
 
 public sealed record PresenceGrilleDto(
     string Perimetre,
@@ -147,7 +151,9 @@ public sealed record PresenceGrilleDto(
     DateTime? DerniereSynchro,
     bool PeutModifier,
     IReadOnlyList<PresenceCodeDto> Codes,
-    IReadOnlyList<PresenceAgentDto> Agents);
+    IReadOnlyList<PresenceAgentDto> Agents,
+    // v46 : superviseurs et référents techniques ne peuvent pas autoriser un retard ni un dépassement de pause.
+    bool PeutAutoriserRetard = true);
 
 /// <summary>Saisie sur une journée (ou une période si <see cref="Au"/> est renseigné).</summary>
 public sealed record PresenceSaisieRequest(
@@ -186,3 +192,15 @@ public sealed class PresenceRefusException(string message, bool horsPerimetre = 
 {
     public bool HorsPerimetre { get; } = horsPerimetre;
 }
+
+/// <summary>
+/// v58 — État de validation du tableau de paie d'une période : qui a validé et quand.
+/// Visible par tous ceux qui consultent le tableau.
+/// </summary>
+public sealed record PaieValidationDto(
+    DateOnly Du,
+    DateOnly Au,
+    bool Validee,
+    string? ValideParNom,
+    DateTime? ValideLe,
+    string? Commentaire);

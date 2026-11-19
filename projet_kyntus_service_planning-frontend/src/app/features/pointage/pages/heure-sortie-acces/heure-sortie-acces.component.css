@@ -26,3 +26,6 @@
   .hsa-group-head { grid-template-columns: 1fr auto; }
   .hsa-bar { display: none; }
 }
+
+/* v43 : horaire de base par compte */
+.hsa-base { margin-left: auto; max-width: 240px; font-size: 0.78rem; padding: 4px 8px; }

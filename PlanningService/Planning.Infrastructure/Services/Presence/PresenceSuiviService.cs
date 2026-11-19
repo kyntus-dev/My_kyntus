@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Planning.Application.Presence;
 using Planning.Domain.Entities;
 using Planning.Infrastructure.Persistence;
@@ -9,8 +9,26 @@ namespace Planning.Infrastructure.Services.Presence;
 /// Avertissements, éléments variables de paie et dossier administratif. Chaque lecture et chaque
 /// écriture est limitée aux agents du périmètre du demandeur (RH / Admin : tous).
 /// </summary>
-public sealed class PresenceSuiviService(AppDbContext db, IPresenceService presences) : IPresenceSuiviService
+public sealed class PresenceSuiviService(
+    AppDbContext db,
+    IPresenceService presences,
+    IPaieValidationService? paie = null) : IPresenceSuiviService
 {
+    /// <summary>
+    /// v58 — Les montants d'une période validée par les RH ne bougent plus : ajout, modification
+    /// et suppression d'un élément variable de paie y sont refusés jusqu'à réouverture par les RH.
+    /// </summary>
+    private async Task RefuserSiPaieValideeAsync(DateOnly jour, CancellationToken ct)
+    {
+        if (paie is null) return;
+        var verrou = await paie.VerrouDuJourAsync(jour, ct);
+        if (verrou is null) return;
+        throw new PresenceRefusException(
+            $"Tableau de paie validé par {verrou.ValideParNom} le "
+            + $"{verrou.ValideLe.ToLocalTime():dd/MM/yyyy} : les montants de cette période ne sont "
+            + "plus modifiables. Demandez aux RH de la rouvrir.");
+    }
+
     // ── Listes et types ajoutés à la main (v31) ─────────────────────────────────
 
     public async Task<SuiviCataloguesDto> CataloguesAsync(CancellationToken ct = default)
@@ -180,6 +198,7 @@ public sealed class PresenceSuiviService(AppDbContext db, IPresenceService prese
     public async Task<EvpDto> AjouterEvpAsync(PresenceViewer viewer, EvpRequest request, CancellationToken ct = default)
     {
         var auteur = await AutoriserAsync(viewer, request.UserId, ct);
+        await RefuserSiPaieValideeAsync(request.Date, ct);
         var ligne = new ElementVariablePaie { UserId = request.UserId };
         Appliquer(ligne, request, auteur, await TypesAsync(CategoriesType.Evp, ct));
         db.ElementsVariablesPaie.Add(ligne);
@@ -193,6 +212,8 @@ public sealed class PresenceSuiviService(AppDbContext db, IPresenceService prese
                     ?? throw new PresenceRefusException("Élément introuvable.");
         await AutoriserAsync(viewer, ligne.UserId, ct);
         var auteur = await AutoriserAsync(viewer, request.UserId, ct);
+        await RefuserSiPaieValideeAsync(ligne.Date, ct);
+        await RefuserSiPaieValideeAsync(request.Date, ct);
         ligne.UserId = request.UserId;
         Appliquer(ligne, request, auteur, await TypesAsync(CategoriesType.Evp, ct));
         await db.SaveChangesAsync(ct);
@@ -204,6 +225,7 @@ public sealed class PresenceSuiviService(AppDbContext db, IPresenceService prese
         var ligne = await db.ElementsVariablesPaie.FirstOrDefaultAsync(e => e.Id == id, ct)
                     ?? throw new PresenceRefusException("Élément introuvable.");
         await AutoriserAsync(viewer, ligne.UserId, ct);
+        await RefuserSiPaieValideeAsync(ligne.Date, ct);
         db.ElementsVariablesPaie.Remove(ligne);
         await db.SaveChangesAsync(ct);
     }

@@ -62,6 +62,10 @@ export interface PresenceAgentDto {
   pilote?: string | null;
   /** v30 : case « En formation » cochée (hors paie tant qu'il n'a pas intégré la production). */
   enFormation?: boolean;
+  /** v46 : rôle du compte (superviseurs et référents techniques du périmètre d'un chef de projet). */
+  role?: string | null;
+  /** v48 : « contractuel » ou « non-contractuel » (agent en formation). */
+  typeFormation?: string | null;
 }
 
 export interface PresenceGrilleDto {
@@ -73,6 +77,8 @@ export interface PresenceGrilleDto {
   peutModifier: boolean;
   codes: PresenceCodeDto[];
   agents: PresenceAgentDto[];
+  /** v46 : false pour un superviseur ou un référent technique (pas d'autorisation de retard). */
+  peutAutoriserRetard?: boolean;
 }
 
 export interface PresenceSaisieRequest {
@@ -198,4 +204,14 @@ export interface DossierDto {
   userId: number;
   fiche: FicheRhDto;
   documents: DossierDocumentDto[];
+}
+
+/** v58 — Validation du tableau de paie d'une période : qui a validé, quand. */
+export interface PaieValidationDto {
+  du: string;
+  au: string;
+  validee: boolean;
+  valideParNom: string | null;
+  valideLe: string | null;
+  commentaire: string | null;
 }

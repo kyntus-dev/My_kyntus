@@ -80,4 +80,22 @@ public class HeureSortieAcces
     /// </summary>
     public string? ChoixProduction { get; set; }
     public DateTime? ChoixModifieLe { get; set; }
+
+    /// <summary>
+    /// v43 : horaire de base du collaborateur, fixé par l'Admin : « 0840 » (08h40, avec une journée à
+    /// 07h40 par semaine, du lundi au vendredi) ou « 0740 » (07h40 tous les jours).
+    /// </summary>
+    public string ProductionBase { get; set; } = "0840";
+}
+
+/// <summary>
+/// v42 : production choisie dans « Heure de sortie » pour une journée (07h40 ou 08h40). Une ligne par
+/// collaborateur et par jour : le solde des heures compare chaque journée à la production choisie ce jour-là.
+/// </summary>
+public class HeureSortieChoixJour
+{
+    public int UserId { get; set; }
+    public DateOnly Jour { get; set; }
+    public string Choix { get; set; } = string.Empty;
+    public DateTime ModifieLe { get; set; } = DateTime.UtcNow;
 }

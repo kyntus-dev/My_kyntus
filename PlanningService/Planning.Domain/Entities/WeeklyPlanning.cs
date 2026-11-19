@@ -20,6 +20,14 @@ public class WeeklyPlanning
     public User? Validator { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// v51 : raison du dernier echec de generation (modes non saisis par le superviseur, cellule
+    /// vide...). Null apres une generation reussie. Affichee dans la liste et la vue du planning
+    /// pour qu'une grille vide ne soit jamais muette.
+    /// </summary>
+    public string? GenerationErreur { get; set; }
+    public DateTime? GenerationErreurLe { get; set; }
+
     public ICollection<ShiftAssignment> ShiftAssignments { get; set; }
     public ICollection<WeeklyShiftConfig> WeeklyShiftConfigs { get; set; }
 }

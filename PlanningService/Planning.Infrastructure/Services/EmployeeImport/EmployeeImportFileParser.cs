@@ -6,48 +6,76 @@ namespace Planning.Infrastructure.Services.EmployeeImport;
 
 public class EmployeeImportFileParser
 {
-    private const long MaxFileBytes = 5 * 1024 * 1024;
+    private const long MaxFileBytes = 15 * 1024 * 1024;
 
+    /// <summary>
+    /// v52 — Lecture tolérante : <b>tout fichier est accepté</b>. L'extension n'est pas regardée,
+    /// on essaie le classeur Excel puis le texte délimité (; , tabulation). Seules les colonnes
+    /// utiles sont retenues plus loin, par le rapprochement des en-têtes.
+    /// </summary>
     public ParsedImportFile Parse(IFormFile file)
     {
         if (file.Length == 0)
             throw new InvalidOperationException("Le fichier est vide.");
 
         if (file.Length > MaxFileBytes)
-            throw new InvalidOperationException("Le fichier dépasse la taille maximale de 5 Mo.");
+            throw new InvalidOperationException("Le fichier dépasse la taille maximale de 15 Mo.");
 
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
         using var stream = new MemoryStream();
         file.CopyTo(stream);
         stream.Position = 0;
 
-        return extension switch
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var texteDAbord = extension is ".csv" or ".txt" or ".tsv";
+
+        if (!texteDAbord)
         {
-            ".xlsx" or ".xls" => ParseExcel(stream),
-            ".csv" => ParseCsv(stream),
-            _ => throw new InvalidOperationException("Format non supporté. Utilisez .xlsx ou .csv.")
-        };
+            var excel = TryParseExcel(stream);
+            if (excel is not null) return excel;
+        }
+
+        stream.Position = 0;
+        try
+        {
+            return ParseCsv(stream);
+        }
+        catch (Exception) when (texteDAbord)
+        {
+            stream.Position = 0;
+            return TryParseExcel(stream)
+                ?? throw new InvalidOperationException(
+                    "Fichier illisible : enregistrez-le en .xlsx ou .csv, puis réessayez.");
+        }
     }
 
-    private static ParsedImportFile ParseExcel(Stream stream)
+    private static ParsedImportFile? TryParseExcel(Stream stream)
     {
-        using var wb = new XLWorkbook(stream);
-        var ws = wb.Worksheet(1);
-        var range = ws.RangeUsed();
-        if (range is null)
-            throw new InvalidOperationException("Le fichier Excel ne contient aucune donnée.");
+        try
+        {
+            stream.Position = 0;
+            using var wb = new XLWorkbook(stream);
+            // La feuille la plus remplie : un classeur peut commencer par une feuille de garde.
+            var ws = wb.Worksheets
+                .OrderByDescending(s => s.RangeUsed()?.RowCount() ?? 0)
+                .FirstOrDefault();
+            var range = ws?.RangeUsed();
+            if (range is null) return null;
 
-        var rows = range.RowsUsed().ToList();
-        if (rows.Count < 1)
-            throw new InvalidOperationException("Le fichier Excel ne contient aucune ligne.");
+            var rows = range.RowsUsed().ToList();
+            if (rows.Count < 1) return null;
 
-        var headers = ReadExcelRow(rows[0]);
-        var dataRows = new List<IReadOnlyList<string>>();
+            var headers = ReadExcelRow(rows[0]);
+            var dataRows = new List<IReadOnlyList<string>>();
 
-        foreach (var row in rows.Skip(1))
-            dataRows.Add(ReadExcelRow(row));
+            foreach (var row in rows.Skip(1))
+                dataRows.Add(ReadExcelRow(row));
 
-        return new ParsedImportFile(headers, dataRows);
+            return new ParsedImportFile(headers, dataRows);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private static IReadOnlyList<string> ReadExcelRow(IXLRangeRow row)
@@ -76,6 +104,9 @@ public class EmployeeImportFileParser
         if (lines.Count == 0)
             throw new InvalidOperationException("Le fichier CSV est vide.");
 
+        if (lines.All(l => string.IsNullOrWhiteSpace(l)))
+            throw new InvalidOperationException("Le fichier ne contient aucune donnée.");
+
         var delimiter = DetectDelimiter(lines[0]);
         var headers = ParseCsvLine(lines[0], delimiter);
         var dataRows = lines.Skip(1)
@@ -88,9 +119,12 @@ public class EmployeeImportFileParser
 
     private static char DetectDelimiter(string line)
     {
-        var semicolons = line.Count(c => c == ';');
-        var commas = line.Count(c => c == ',');
-        return semicolons > commas ? ';' : ',';
+        var candidats = new[] { ';', '\t', ',', '|' };
+        var meilleur = candidats
+            .Select(c => (Sep: c, N: line.Count(x => x == c)))
+            .OrderByDescending(x => x.N)
+            .First();
+        return meilleur.N > 0 ? meilleur.Sep : ';';
     }
 
     private static List<string> ParseCsvLine(string line, char delimiter)

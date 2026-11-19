@@ -1,0 +1,298 @@
+/* v49 — Import du fichier RH depuis les liaisons HTEL. */
+
+.ie-card {
+  margin-bottom: 1.1rem;
+  padding: 1.15rem 1.25rem 1.25rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.section-heading p {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 80ch;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.95rem;
+  border-radius: var(--radius-card, 0.65rem);
+  font-size: 0.88rem;
+  margin-bottom: 0.9rem;
+}
+
+.alert-error {
+  background: color-mix(in srgb, #dc2626 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #dc2626 35%, var(--border-color));
+  color: #b91c1c;
+}
+
+/* ── Dépôt ── */
+
+.ie-depot {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+
+.ie-zone {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border: 1px dashed color-mix(in srgb, var(--soft-blue) 55%, var(--border-color));
+  border-radius: var(--radius-card, 0.65rem);
+  background: color-mix(in srgb, var(--soft-blue) 7%, var(--bg-card));
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ie-zone:hover {
+  background: color-mix(in srgb, var(--soft-blue) 13%, var(--bg-card));
+}
+
+.ie-zone input[type='file'] {
+  display: none;
+}
+
+.ie-etat {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ── Réglages communs ── */
+
+.ie-reglages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card, 0.65rem);
+  background: color-mix(in srgb, var(--soft-blue) 5%, var(--bg-card));
+}
+
+@media (max-width: 1100px) {
+  .ie-reglages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.ie-champ {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.ie-champ label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.ie-champ .ky-input {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.88rem;
+}
+
+.ie-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+  color: var(--text-primary) !important;
+  cursor: pointer;
+}
+
+.requis {
+  color: var(--danger, #dc2626);
+}
+
+.ie-note {
+  margin: 0 0 0.7rem;
+  font-size: 0.83rem;
+  color: var(--text-muted);
+}
+
+/* ── Tableau ── */
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 0 -0.25rem;
+}
+
+.prime-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+  table-layout: fixed;
+}
+
+.ie-table th:nth-child(1) { width: 3%; }
+.ie-table th:nth-child(2) { width: 25%; }
+.ie-table th:nth-child(3) { width: 11%; }
+.ie-table th:nth-child(4) { width: 11%; }
+.ie-table th:nth-child(5) { width: 24%; }
+.ie-table th:nth-child(6) { width: 26%; }
+
+.prime-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.prime-table td {
+  padding: 0.6rem 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  font-size: 0.88rem;
+  vertical-align: middle;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.prime-table tbody tr:hover {
+  background: color-mix(in srgb, var(--soft-blue) 8%, transparent);
+}
+
+.ie-col-check {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.ie-row--off td {
+  background: color-mix(in srgb, var(--border-color) 14%, transparent);
+  color: var(--text-muted);
+}
+
+.ie-nom {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.ie-sous {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.muted-cell {
+  color: var(--text-muted);
+}
+
+.ie-select {
+  width: 100%;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.84rem;
+}
+
+.col-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Badges ── */
+
+.ie-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.ie-badge--ok {
+  background: color-mix(in srgb, #16a34a 14%, var(--bg-card));
+  border-color: color-mix(in srgb, #16a34a 40%, var(--border-color));
+  color: #15803d;
+}
+
+.ie-badge--warn {
+  background: color-mix(in srgb, #d97706 15%, var(--bg-card));
+  border-color: color-mix(in srgb, #d97706 40%, var(--border-color));
+  color: #b45309;
+}
+
+.ie-badge--ko {
+  background: color-mix(in srgb, #dc2626 12%, var(--bg-card));
+  border-color: color-mix(in srgb, #dc2626 38%, var(--border-color));
+  color: #b91c1c;
+}
+
+/* ── Actions et rapport ── */
+
+.ie-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+.ie-conflit {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.ie-rapport {
+  margin-top: 0.5rem;
+}
+
+.ie-resume {
+  margin: 0 0 0.8rem;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.btn-sm {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+/* v52 — Lecture tolérante : information (colonnes déduites, lignes écartées), pas un blocage. */
+.alert-info {
+  background: color-mix(in srgb, #0ea5e9 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #0ea5e9 35%, var(--border-color));
+  color: #0369a1;
+}
+
+.ie-details {
+  margin: -0.4rem 0 0.9rem;
+  padding-left: 1.2rem;
+  font-size: 0.82rem;
+  color: var(--text-muted, #64748b);
+}

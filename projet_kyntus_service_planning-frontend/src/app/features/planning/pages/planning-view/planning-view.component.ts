@@ -85,6 +85,8 @@ export class PlanningViewComponent implements OnInit {
   hasConsulted  = false;
   consulting    = false;
   canValidate   = false;
+  /** v54 — Droit « Générer le planning › Agir » : régénérer ne demande pas le droit de valider. */
+  canGenerer    = false;
   /** Édition grille (overrides, commentaires) — Admin/RH, brouillon ou publié. */
   canEdit = false;
   /** Provenance navigation (retour liste). */
@@ -191,6 +193,10 @@ selectedHolidayShiftId      = 0;
     this.canValidate = isAdminRh
       || (this.access.hasCatalog()
         && (this.access.canValidate('planning.publish') || this.access.canValidate('planning.validation')));
+    // v54 : générer / régénérer relève du droit « Générer le planning », que le RP (chef de projet)
+    // possède sur son périmètre. La publication reste au droit de validation.
+    this.canGenerer = this.canValidate
+      || (this.access.hasCatalog() && this.access.canAct('planning.generate'));
 
     const qp = this.route.snapshot.queryParamMap;
     const from = (qp.get('from') || '').toLowerCase();
@@ -375,7 +381,8 @@ selectedHolidayShiftId      = 0;
 
   /** Régénère le brouillon (semaine entière) ou un Published (jours restants → Draft à revalider). */
   async regeneratePlanning(): Promise<void> {
-    if (!this.planning || !this.canValidate) return;
+    // v54 : droit « Générer le planning » (le RP l'a sur son périmètre), pas celui de valider.
+    if (!this.planning || !this.canGenerer) return;
     const isPublished = this.planning.status === 'Published';
     if (this.planning.status !== 'Draft' && !isPublished) return;
 
@@ -412,9 +419,62 @@ selectedHolidayShiftId      = 0;
       error: (err) => {
         this.regenerating = false;
         this.error = err.error?.message ?? 'Erreur régénération.';
+        // v51 : la raison est enregistrée sur le planning — on recharge pour l'afficher.
+        if (this.planning) this.loadPlanning(this.planning.id);
         this.cdr.detectChanges();
       },
     });
+  }
+
+  /**
+   * v52 : cellule à plusieurs modes, modes de la semaine pas encore enregistrés par le superviseur.
+   * Action explicite : génère tout de suite en reprenant les modes de la dernière semaine
+   * enregistrée (mode par défaut pour les agents qui n'en ont pas).
+   */
+  async genererAvecModesRepris(): Promise<void> {
+    if (!this.planning || !this.canGenerer || this.regenerating) return;
+    const ok = await this.confirmService.confirm({
+      title: 'Générer avec les modes repris',
+      message:
+        'Les modes de la semaine n\'ont pas été enregistrés par le superviseur.\n\n'
+        + 'La grille sera générée tout de suite en reprenant les modes de la dernière semaine '
+        + 'enregistrée ; les agents sans mode prennent le mode par défaut. Le superviseur pourra '
+        + 'toujours les modifier, puis vous régénérerez.',
+      confirmLabel: 'Générer',
+      variant: 'warning',
+    });
+    if (!ok) return;
+
+    this.regenerating = true;
+    this.error = '';
+    this.successMsg = '';
+    this.planningService.generateFromConfig({
+      subServiceId: this.planning.subServiceId,
+      weekCode: this.planning.weekCode,
+      weeklyPlanningId: this.planning.id,
+      forcerModes: true,
+    }).subscribe({
+      next: () => {
+        this.regenerating = false;
+        this.successMsg = 'Planning généré avec les modes repris — contrôlez la grille puis validez.';
+        this.loadPlanning(this.planning!.id);
+        setTimeout(() => { this.successMsg = ''; this.cdr.detectChanges(); }, 5000);
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.regenerating = false;
+        this.error = err.error?.message ?? 'Erreur de génération.';
+        if (this.planning) this.loadPlanning(this.planning.id);
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  /** v52 : le message rouge d'erreur répète le bandeau d'échec : on n'en affiche qu'un. */
+  get erreurDistincte(): string {
+    const e = (this.error ?? '').trim();
+    const g = (this.planning?.generationErreur ?? '').trim();
+    return e && g && e === g ? '' : e;
   }
 
   get coverageWarnings(): string[] {
@@ -593,6 +653,83 @@ selectedHolidayShiftId      = 0;
         modes,
       };
     });
+  }
+
+  // ── v50 : cohérence effectif / quotas ──────────────────────────────────────
+
+  /** Somme des quotas configurés (ce que la configuration des shifts demande chaque jour). */
+  get quotaTotal(): number {
+    return (this.planning?.shiftConfigs ?? []).reduce((s, c) => s + (c.requiredCount || 0), 0);
+  }
+
+  /** Agents réellement présents dans la grille (une personne comptée une fois). */
+  get effectifPlanifie(): number {
+    const ids = new Set((this.planning?.assignments ?? []).map((a) => a.userId));
+    return ids.size;
+  }
+
+  /** v51 : agents planifiables rattachés aujourd'hui à la cellule (ceux que la grille doit contenir). */
+  get effectifCellule(): number {
+    return this.planning?.planifiableEmployeeCount ?? this.planning?.totalEffectif ?? 0;
+  }
+
+  /**
+   * v51 : diagnostic exact de la grille. Chaque cas a une cause et une action distinctes :
+   * génération en échec, cellule vide, grille pas encore générée, effectif sous les quotas,
+   * effectif modifié depuis la génération. null = tout est cohérent.
+   */
+  get alerteEffectif(): { titre: string; texte: string } | null {
+    if (!this.planning) return null;
+    const planifie = this.effectifPlanifie;
+    const cellule = this.effectifCellule;
+    const quotas = this.quotaTotal;
+    const erreur = (this.planning.generationErreur ?? '').trim();
+
+    if (erreur) {
+      return {
+        titre: 'La génération de cette semaine a échoué',
+        texte: `${erreur} Corrigez la cause, puis cliquez sur « Régénérer ».`,
+      };
+    }
+    if (planifie === 0 && cellule === 0) {
+      return {
+        titre: 'Aucun agent planifiable dans la cellule',
+        texte: 'Le Planning ne compte aucun agent de production rattaché à cette cellule '
+          + '(l\'encadrement n\'est jamais planifié). Affectez les agents dans Organisation RH, '
+          + 'lancez « Synchro organisation », puis régénérez.',
+      };
+    }
+    if (planifie === 0 && this.planning.modesEnAttente) {
+      return {
+        titre: 'Modes de la semaine non enregistrés',
+        texte: 'Cette cellule fonctionne avec plusieurs modes : la génération attend que le '
+          + 'superviseur enregistre les modes de la semaine (ou, à défaut, la date limite).',
+      };
+    }
+    if (planifie === 0) {
+      return {
+        titre: 'Grille non générée',
+        texte: `${cellule} agent(s) planifiable(s) sont rattachés à la cellule, mais la grille de `
+          + 'cette semaine est vide. Cliquez sur « Régénérer » : en cas d\'échec, la raison '
+          + 's\'affichera ici.',
+      };
+    }
+    if (planifie !== cellule) {
+      return {
+        titre: 'Effectif modifié depuis la génération',
+        texte: `La grille contient ${planifie} agent(s), la cellule en compte ${cellule} aujourd'hui. `
+          + 'Régénérez pour repartir de l\'effectif actuel.',
+      };
+    }
+    if (quotas > 0 && planifie < quotas) {
+      return {
+        titre: 'Effectif inférieur aux quotas',
+        texte: `${planifie} agent(s) pour ${quotas} poste(s) demandés par jour : c'est l'origine des `
+          + 'cases « MANQUE ». Ajustez les quotas (Configuration des horaires › Répartir) ou '
+          + 'renforcez la cellule.',
+      };
+    }
+    return null;
   }
 
   toggleShiftKpiDetail(label: string, expandable: boolean): void {

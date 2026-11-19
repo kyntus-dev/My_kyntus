@@ -372,6 +372,35 @@
   text-align: center;
 }
 
+/* v51 : explication de l'écart sous le nom du service. */
+.pv-validation .pv-ecart-texte {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #b45309;
+  white-space: normal;
+}
+
+.pv-validation .pv-eff-ecart--info {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--border-color) 45%, transparent);
+}
+
+/* v50 : effectif figé dans le planning différent de l'effectif réel de la cellule. */
+.pv-validation .pv-eff-ecart {
+  display: inline-block;
+  margin-left: 0.3rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #b45309;
+  background: color-mix(in srgb, #d97706 16%, transparent);
+  cursor: help;
+}
+
 .pv-validation .pv-col-stat {
   display: flex;
   align-items: center;

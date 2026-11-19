@@ -1,5 +1,6 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Auth.Application.Commands.AdminResetPassword;
+using Auth.Application.Commands.ChangeMyPassword;
 using Auth.Application.Commands.DeleteFromPlanning;
 using Auth.Application.Commands.Login;
 using Auth.Application.Commands.Logout;
@@ -279,6 +280,51 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erreur suppression user Auth depuis Planning");
+            return StatusCode(500, new { message = "Erreur serveur" });
+        }
+    }
+
+    /// <summary>
+    /// v56 — Chacun change son propre mot de passe depuis l'application (l'ancien est exigé).
+    /// Les sessions ouvertes ailleurs sont coupées : il faut se reconnecter avec le nouveau.
+    /// </summary>
+    [HttpPost("me/password")]
+    [Authorize]
+    [EnableRateLimiting("password")]
+    public async Task<IActionResult> ChangerMonMotDePasse([FromBody] ChangeMyPasswordDto dto)
+    {
+        var sub = User.FindFirstValue("sub")
+                  ?? User.FindAll(ClaimTypes.NameIdentifier)
+                      .Select(c => c.Value)
+                      .FirstOrDefault(v => v.Contains('-', StringComparison.Ordinal));
+        var email = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
+        Guid.TryParse(sub, out var subjectId);
+
+        try
+        {
+            var r = await _mediator.Send(new ChangeMyPasswordCommand(
+                subjectId, email, dto?.AncienMotDePasse ?? "", dto?.NouveauMotDePasse ?? ""));
+            return Ok(new { message = "Mot de passe modifié. Reconnectez-vous avec le nouveau.", email = r.Email });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur changement de mot de passe");
             return StatusCode(500, new { message = "Erreur serveur" });
         }
     }
