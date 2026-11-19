@@ -47,7 +47,7 @@ export function apercuMenu(role: string, cles: readonly string[], groupes: reado
     let lieAuxDroits = false;
     const entrees: string[] = [];
     for (const c of g.children) {
-      if (c.isSectionHeader) continue;
+      if (c.isSectionHeader || c.superAdminOnly) continue;
       const ecrans = ecransDe(c);
       if (ecrans.length) lieAuxDroits = true;
       const ok = ecrans.length

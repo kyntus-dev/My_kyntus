@@ -66,6 +66,8 @@ export interface MenuItem {
   capability?: string;
   /** En-tête de section non cliquable dans le menu latéral. */
   isSectionHeader?: boolean;
+  /** v60 — Entrée réservée au Super Admin (droits des administrateurs). */
+  superAdminOnly?: boolean;
   /** Badge numérique (ex. compteur inbox). */
   menuBadge?: number;
   /**
@@ -138,6 +140,8 @@ export const MICROSERVICES: Microservice[] = [
       { label: 'Vue d’ensemble', route: '/admin?section=overview', platformAdminSection: 'overview', roles: ADMIN_RH, hat: 'both', capability: 'admin.overview' },
       { label: 'Accès par rôle', route: '/admin?section=access', platformAdminSection: 'access', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
       { label: 'Accès par compte', route: '/admin?section=comptes', platformAdminSection: 'comptes', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
+      // v60 — Super Admin : fonctionnalités accordées ou retirées à chaque administrateur.
+      { label: 'Droits des administrateurs', route: '/admin?section=admins', platformAdminSection: 'admins', roles: [KyntusRoleNames.Admin], hat: 'both', superAdminOnly: true },
       { label: 'Rôles', route: '/admin?section=roles', platformAdminSection: 'roles', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.roles' },
       // v31 : une entrée par rubrique « Administration » de « Accès par rôle », dans le même ordre.
       { label: 'Utilisateurs', route: '/users', roles: ADMIN_RH, hat: 'both', capability: 'admin.users' },

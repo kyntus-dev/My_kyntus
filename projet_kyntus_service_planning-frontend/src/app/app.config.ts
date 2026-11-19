@@ -18,6 +18,7 @@ import {
   documentationIdentityInitFactory,
 } from './core/services/documentation-identity.service';
 import { primeIdentityInterceptor } from './features/prime/interceptors/prime-identity.interceptor';
+import { adminRestrictionInterceptor } from './core/interceptors/admin-restriction.interceptor';
 import {
   KyntusNotificationInitService,
   kyntusNotificationInitFactory,
@@ -45,6 +46,8 @@ export const appConfig: ApplicationConfig = {
       withInterceptorsFromDi(),
       withInterceptors([
         primeIdentityInterceptor,
+        // v60 — Fonctionnalité retirée par le Super Admin : message clair + droits rechargés.
+        adminRestrictionInterceptor,
       ]),
     ),
     {

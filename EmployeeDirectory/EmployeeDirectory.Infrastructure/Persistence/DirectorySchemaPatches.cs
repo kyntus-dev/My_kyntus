@@ -37,6 +37,7 @@ public static class DirectorySchemaPatches
         await RunPatchAsync(nameof(EnsureOutboxTableAsync), () => EnsureOutboxTableAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureIamPermissionsTableAsync), () => EnsureIamPermissionsTableAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureIamUserPermissionsTableAsync), () => EnsureIamUserPermissionsTableAsync(db, ct), log);
+        await RunPatchAsync(nameof(EnsureIamAdminRestrictionsTableAsync), () => EnsureIamAdminRestrictionsTableAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureEmployeeRowVersionDefaultAsync), () => EnsureEmployeeRowVersionDefaultAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureBusinessDepartmentSchemaAsync), () => EnsureBusinessDepartmentSchemaAsync(db, ct), log);
         await RunPatchAsync(nameof(EnsureOrgPoleBusinessDepartmentAsync), () => EnsureOrgPoleBusinessDepartmentAsync(db, ct), log);
@@ -131,6 +132,25 @@ public static class DirectorySchemaPatches
             );
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_iam_permissions_Role_Action_Scope"
                 ON iam_permissions ("Role", "Action", "Scope");
+            """,
+            ct);
+    }
+
+    /// <summary>Restrictions des administrateurs par le Super Admin (v60) : table nouvelle, vide au départ.</summary>
+    public static async Task EnsureIamAdminRestrictionsTableAsync(DirectoryDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS iam_admin_restrictions (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "SubjectId" uuid NOT NULL,
+                "Action" character varying(128) NOT NULL,
+                "IsAllowed" boolean NOT NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedBy" character varying(160) NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_iam_admin_restrictions_SubjectId_Action"
+                ON iam_admin_restrictions ("SubjectId", "Action");
             """,
             ct);
     }

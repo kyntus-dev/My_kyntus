@@ -45,6 +45,7 @@ import { badgeTypeFormation } from '../../../../core/hr/type-formation.util';
 import { resolveUserGuid } from '../../../../core/lib/user-guid.util';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
+import { KyIfAdminAllowedDirective } from '../../../../shared/directives/ky-if-admin-allowed.directive';
 
 @Component({
   selector: 'app-user-list',
@@ -56,6 +57,7 @@ import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toas
     PilotRotationHistoryModalComponent,
     BodyPortalDirective,
     EmployeeDeactivateDialogComponent,
+    KyIfAdminAllowedDirective,
   ],
   templateUrl: './user-list.component.html',
   styleUrls: ['./user-list.component.css']

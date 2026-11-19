@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Kyntus.Identity.Jwt;
+using Kyntus.Iam;
 using Microsoft.EntityFrameworkCore;
 using Parrainage.Application;
 using Parrainage.Infrastructure;
@@ -38,6 +39,9 @@ builder.Services.AddKyntusJwtAuthentication(builder.Configuration);
 builder.Services.AddParrainageApplication();
 builder.Services.AddParrainageInfrastructure(builder.Configuration, isTesting);
 
+// v60 — Restrictions des administrateurs par le Super Admin (contrôle à l'entrée de chaque API).
+builder.Services.AddKyntusAdminRestrictions(builder.Configuration);
+
 var app = builder.Build();
 
 if (isTesting)
@@ -71,6 +75,7 @@ app.Use(async (ctx, next) =>
 });
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseKyntusAdminRestrictions();
 
 app.MapGet("/", () => Results.Ok(new
 {

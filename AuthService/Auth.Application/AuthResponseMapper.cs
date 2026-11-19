@@ -18,6 +18,7 @@ internal static class AuthResponseMapper
             Username = user.Username,
             Email = user.Email,
             Role = user.Role?.Name ?? "Employee",
+            IsSuperAdmin = user.EstSuperAdminEffectif,
         },
     };
 }

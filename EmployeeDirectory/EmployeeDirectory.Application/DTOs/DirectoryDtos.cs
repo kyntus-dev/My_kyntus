@@ -284,7 +284,11 @@ public record CanActOnResultDto(bool Allowed, string ActorId, string TargetEmplo
 public record EffectivePermissionsDto(
     string SubjectId,
     string Role,
-    IReadOnlyList<string> Permissions);
+    IReadOnlyList<string> Permissions,
+    // v60 — Super Admin, administrateur restreint par le Super Admin, fonctionnalités retirées.
+    bool SuperAdmin = false,
+    bool AdminRestreint = false,
+    IReadOnlyList<string>? Retraits = null);
 
 public record IamScreenDto(string Id, string Label, string Module, IReadOnlyList<string> Verbs);
 

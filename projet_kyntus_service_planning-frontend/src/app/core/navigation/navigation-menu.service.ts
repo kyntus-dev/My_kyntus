@@ -24,6 +24,26 @@ import { PlatformAccessService } from '../platform-access/platform-access.servic
 import { mapJwtRoleToParrainageRole } from '../session/kyntus-role-ui.config';
 import { HEURE_SORTIE_ROUTE, HeureSortieAccessService } from '../services/heure-sortie-access.service';
 
+/** v60 — Rubriques « Accès par rôle » des entrées d'administration de Prime, Parrainage et Documentation. */
+export function ecransAdminModule(item: MenuItem): readonly string[] {
+  switch (item.primeAdminSection) {
+    case 'workflows': return ['prime.workflow'];
+    case undefined: break;
+    default: return ['prime.workflow', 'prime.rbac', 'prime.catalog'];
+  }
+  switch (item.parrainageView) {
+    case 'admin-workflow': return ['parrainage.workflow'];
+    case 'admin-config': return ['parrainage.config'];
+    default: break;
+  }
+  switch (item.documentationTab) {
+    case 'admin-config':
+      return ['documentation.admin-config', 'documentation.doc-types', 'documentation.permissions', 'documentation.storage', 'documentation.workflow'];
+    case 'workflow': return ['documentation.workflow'];
+    default: return [];
+  }
+}
+
 @Injectable({ providedIn: 'root' })
 export class NavigationMenuService {
   private readonly primeRole = inject(RoleService);
@@ -96,7 +116,7 @@ export class NavigationMenuService {
     const kind = this.deptContext.departmentKind();
     const managerNav = this.managerNav();
     const items = buildPrimeMenuItemsForRole(role, kind, managerNav).filter((item) =>
-      this.isPrimeItemAllowed(item, role),
+      this.isPrimeItemAllowed(item, role) && this.moduleItemAllowed(item),
     );
     const badgeCount = this.inboxBadge.count();
     return items.map((item) => {
@@ -133,11 +153,12 @@ export class NavigationMenuService {
     if (dualHat && hat === 'self') {
       const selfItems = buildParrainageMenuItemsForRole('PILOTE');
       if (mapped === 'ADMIN' || mapped === 'AUDIT') {
-        return [...selfItems, ...buildParrainageMenuItemsForRole(mapped).map((i) => ({ ...i, hat: 'both' as const }))];
+        return [...selfItems, ...buildParrainageMenuItemsForRole(mapped).map((i) => ({ ...i, hat: 'both' as const }))]
+          .filter((i) => this.moduleItemAllowed(i));
       }
       return selfItems;
     }
-    return buildParrainageMenuItemsForRole(mapped);
+    return buildParrainageMenuItemsForRole(mapped).filter((i) => this.moduleItemAllowed(i));
   }
 
   private filterDocumentationChildren(jwtRole: string): MenuItem[] {
@@ -147,11 +168,23 @@ export class NavigationMenuService {
     if (dualHat && hat === 'self') {
       const selfItems = buildDocumentationMenuItemsForRole('Pilote');
       if (mapped === 'Admin' || mapped === 'Audit') {
-        return [...selfItems, ...buildDocumentationMenuItemsForRole(mapped).map((i) => ({ ...i, hat: 'both' as const }))];
+        return [...selfItems, ...buildDocumentationMenuItemsForRole(mapped).map((i) => ({ ...i, hat: 'both' as const }))]
+          .filter((i) => this.moduleItemAllowed(i));
       }
       return selfItems;
     }
-    return buildDocumentationMenuItemsForRole(mapped);
+    return buildDocumentationMenuItemsForRole(mapped).filter((i) => this.moduleItemAllowed(i));
+  }
+
+  /**
+   * v60 — Administrateur restreint par le Super Admin : les entrées d'administration des modules Prime,
+   * Parrainage et Documentation suivent les rubriques correspondantes d'« Accès par rôle ».
+   * Sans restriction : aucune entrée n'est retirée (comportement historique).
+   */
+  private moduleItemAllowed(item: MenuItem): boolean {
+    if (!this.access.adminRestreint() || item.isSectionHeader) return true;
+    const ecrans = ecransAdminModule(item);
+    return !ecrans.length || ecrans.some((e) => this.access.canView(e));
   }
 
   /**
@@ -161,6 +194,8 @@ export class NavigationMenuService {
    * et pour les entrées sans écran IAM.
    */
   private itemAllowed(item: MenuItem, jwtRole: string): boolean {
+    // v60 — Entrée réservée au Super Admin.
+    if (item.superAdminOnly) return this.access.superAdmin();
     if (this.access.hasCatalog()) {
       // Titres de section : gardés seulement s'ils précèdent une entrée affichée (filterItemsByHat).
       if (item.isSectionHeader) return true;

@@ -73,6 +73,12 @@ public static class DependencyInjection
         services.AddScoped<IRebacClient, DirectoryIamReadService>();
         services.AddScoped<ISubjectPermissionOverrides, DirectoryIamReadService>();
         services.AddScoped<EmployeeDirectory.Application.Iam.IIamUserAccessService, DirectoryIamUserAccessService>();
+        // v60 — Restrictions des administrateurs par le Super Admin (table vide = comportement historique).
+        services.AddMemoryCache();
+        services.AddHttpContextAccessor();
+        services.AddScoped<DirectoryIamAdminRestrictionService>();
+        services.AddScoped<EmployeeDirectory.Application.Iam.IIamAdminRestrictionService>(sp => sp.GetRequiredService<DirectoryIamAdminRestrictionService>());
+        services.AddScoped<IAdminRestrictionProvider>(sp => sp.GetRequiredService<DirectoryIamAdminRestrictionService>());
 
         services.AddScoped<DirectoryEmployeSyncService>();
         services.AddScoped<DirectoryOrgSyncService>();

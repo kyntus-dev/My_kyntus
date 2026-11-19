@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Auth.Application\Auth.Application.csproj" />
     <ProjectReference Include="..\Auth.Infrastructure\Auth.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Kyntus.Iam\Kyntus.Iam.csproj" />
   </ItemGroup>
 
 </Project>

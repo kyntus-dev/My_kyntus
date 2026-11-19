@@ -1,0 +1,183 @@
+@if (!superAdmin()) {
+  <section class="adr-card adr-refus">
+    <h2>Réservé au Super Admin</h2>
+    <p>Seul le Super Admin règle les droits des administrateurs.</p>
+  </section>
+} @else {
+  <section class="adr-intro">
+    <div>
+      <h2>Droits des administrateurs</h2>
+      <p>
+        Par défaut, un administrateur a tous les droits. Retirez ou rendez chaque fonctionnalité, pour tous les
+        administrateurs ou pour un administrateur précis. Une fonctionnalité retirée disparaît de ses menus, de ses
+        pages, d’« Accès par rôle » et d’« Accès par compte », et le serveur la refuse. L’administrateur ne peut pas
+        la réactiver lui-même. Effet sans reconnexion.
+      </p>
+    </div>
+    <span class="adr-badge-super">Super Admin</span>
+  </section>
+
+  <div class="adr-layout">
+    <aside class="adr-card adr-cibles" aria-label="Administrateurs">
+      <input
+        class="adr-search"
+        type="search"
+        placeholder="Rechercher un administrateur…"
+        [ngModel]="rechercheCible()"
+        (ngModelChange)="rechercheCible.set($event)"
+      />
+      @if (chargementCibles()) {
+        <p class="adr-muted">Chargement…</p>
+      } @else {
+        <ul>
+          @for (c of ciblesFiltrees(); track c.guid) {
+            <li>
+              <button
+                type="button"
+                class="adr-cible"
+                [class.active]="selection()?.guid === c.guid"
+                [class.inactif]="!c.actif"
+                (click)="choisir(c)"
+              >
+                <span class="adr-avatar" [class.global]="c.guid === tous">{{ c.guid === tous ? '∗' : initiales(c.nom) }}</span>
+                <span class="adr-cible-txt">
+                  <strong>{{ c.nom }}</strong>
+                  <small>{{ c.email }}</small>
+                </span>
+                @if (resume(c); as r) {
+                  @if (r.retraits) { <span class="adr-pill retire" title="Fonctionnalités retirées">−{{ r.retraits }}</span> }
+                  @if (r.accordes) { <span class="adr-pill accorde" title="Fonctionnalités rendues">+{{ r.accordes }}</span> }
+                }
+              </button>
+            </li>
+          }
+          @if (ciblesFiltrees().length <= 1) {
+            <li class="adr-muted">Aucun autre compte administrateur trouvé.</li>
+          }
+        </ul>
+      }
+    </aside>
+
+    <section class="adr-card adr-detail">
+      @if (erreur()) {
+        <p class="adr-erreur">{{ erreur() }}</p>
+      } @else if (chargement() || !detail()) {
+        <p class="adr-muted">Chargement des droits…</p>
+      } @else {
+        <header class="adr-detail-head">
+          <div>
+            <h3>{{ selection()?.nom }}</h3>
+            <p class="adr-muted">
+              @if (detail()!.tousLesAdmins) {
+                Réglage commun : s’applique à chaque administrateur, sauf réglage propre à son compte.
+              } @else {
+                Hérite du réglage commun « Tous les administrateurs » ; les cases modifiées ici ne valent que pour ce compte.
+              }
+              @if (detail()!.modifieLe) { <span>· Modifié le {{ detail()!.modifieLe!.slice(0, 10) }} par {{ detail()!.modifiePar }}</span> }
+            </p>
+          </div>
+          <div class="adr-stat" [class.alerte]="retraits() > 0">
+            <strong>{{ retraits() }}</strong>
+            <span>fonctionnalité(s) retirée(s)</span>
+          </div>
+        </header>
+
+        <div class="adr-toolbar">
+          <input
+            class="adr-search"
+            type="search"
+            placeholder="Rechercher une rubrique ou un module…"
+            [ngModel]="recherche()"
+            (ngModelChange)="recherche.set($event)"
+          />
+          <div class="adr-seg" role="tablist" aria-label="Filtre">
+            <button type="button" [class.on]="filtre() === 'toutes'" (click)="filtre.set('toutes')">Toutes</button>
+            <button type="button" [class.on]="filtre() === 'retirees'" (click)="filtre.set('retirees')">Retirées</button>
+            <button type="button" [class.on]="filtre() === 'modifiees'" (click)="filtre.set('modifiees')">Modifiées ({{ modifs().length }})</button>
+          </div>
+          <button type="button" class="adr-btn" (click)="apercuOuvert.set(!apercuOuvert())">
+            {{ apercuOuvert() ? 'Masquer l’aperçu' : 'Aperçu du menu' }}
+          </button>
+          <button type="button" class="adr-btn" (click)="toutAutoriser()">Tout rendre</button>
+        </div>
+
+        @if (apercuOuvert()) {
+          <div class="adr-apercu">
+            <p><strong>Menu de l’administrateur avec ces réglages</strong> ({{ entreesApercu() }} entrée(s), brouillon compris)</p>
+            @for (g of apercu(); track g.id) {
+              <div class="adr-apercu-groupe">
+                <span>{{ g.label }}</span>
+                @if (g.module) { <em>module (selon ses propres règles)</em> }
+                @else { <small>{{ g.entrees.join(' · ') }}</small> }
+              </div>
+            } @empty {
+              <p class="adr-muted">Aucune entrée : l’administrateur ne verra que son espace personnel.</p>
+            }
+          </div>
+        }
+
+        <div class="adr-table" role="table" aria-label="Fonctionnalités">
+          <div class="adr-row adr-row-head" role="row">
+            <span role="columnheader">Rubrique</span>
+            @for (v of verbes; track v) { <span role="columnheader" class="adr-col">{{ libelles[v] }}</span> }
+            <span role="columnheader" class="adr-col-actions"></span>
+          </div>
+
+          @for (m of modules(); track m.module) {
+            <div class="adr-module" role="row">
+              <strong>{{ m.module }}</strong>
+              @if (m.retirees) { <span class="adr-pill retire">{{ m.retirees }} retirée(s)</span> }
+              <span class="adr-module-actions">
+                <button type="button" class="adr-link" (click)="moduleEntier(m.ecrans, true)">Tout autoriser</button>
+                <button type="button" class="adr-link danger" (click)="moduleEntier(m.ecrans, false)">Tout retirer</button>
+              </span>
+            </div>
+            @for (s of m.ecrans; track s.id) {
+              <div class="adr-row" role="row" [class.ferme]="!permis(s.id, 'View')">
+                <span class="adr-label" role="cell">
+                  {{ s.label }}
+                  <small>{{ s.id }}</small>
+                </span>
+                @for (v of verbes; track v) {
+                  <span role="cell" class="adr-col">
+                    <button
+                      type="button"
+                      class="adr-toggle"
+                      [class.on]="permis(s.id, v)"
+                      [class.modifie]="modifie(s.id, v)"
+                      [disabled]="inactif(s.id, v)"
+                      [attr.aria-pressed]="permis(s.id, v)"
+                      [attr.aria-label]="titre(s, v)"
+                      [title]="titre(s, v)"
+                      (click)="basculer(s, v)"
+                    >{{ permis(s.id, v) ? '✓' : '✕' }}</button>
+                  </span>
+                }
+                <span class="adr-col-actions" role="cell">
+                  @if (permis(s.id, 'View')) {
+                    <button type="button" class="adr-link danger" (click)="ecranEntier(s, false)">Retirer</button>
+                  } @else {
+                    <button type="button" class="adr-link" (click)="ecranEntier(s, true)">Autoriser</button>
+                  }
+                </span>
+              </div>
+            }
+          } @empty {
+            <p class="adr-muted adr-vide">Aucune rubrique ne correspond.</p>
+          }
+        </div>
+
+        <footer class="adr-footer">
+          <span class="adr-muted">
+            @if (modifs().length) { <span>{{ modifs().length }} modification(s) non enregistrée(s).</span> }
+            @else { <span>Aucune modification en attente.</span> }
+          </span>
+          <button type="button" class="adr-btn" [disabled]="!modifs().length || enregistrement()" (click)="annuler()">Annuler</button>
+          <button type="button" class="adr-btn primary" [disabled]="!modifs().length || enregistrement()" (click)="enregistrer()">
+            {{ enregistrement() ? 'Enregistrement…' : 'Enregistrer' }}
+          </button>
+        </footer>
+      }
+    </section>
+  </div>
+}

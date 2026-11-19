@@ -10,6 +10,7 @@ import { AdminOrgSyncComponent } from './admin-org-sync.component';
 import { AdminAnomaliesComponent } from './admin-anomalies.component';
 import { AdminRolesComponent } from '../roles/admin-roles.component';
 import { AdminUserAccessComponent } from '../user-access/admin-user-access.component';
+import { AdminRightsComponent } from '../admin-rights/admin-rights.component';
 
 @Component({
   selector: 'app-admin-root',
@@ -24,6 +25,7 @@ import { AdminUserAccessComponent } from '../user-access/admin-user-access.compo
     AdminAnomaliesComponent,
     AdminRolesComponent,
     AdminUserAccessComponent,
+    AdminRightsComponent,
   ],
   template: `
     <section class="plat-page">
@@ -48,6 +50,7 @@ import { AdminUserAccessComponent } from '../user-access/admin-user-access.compo
         @case ('overview') { <app-admin-overview /> }
         @case ('access') { <app-admin-access-matrix /> }
         @case ('comptes') { <app-admin-user-access /> }
+        @case ('admins') { <app-admin-rights /> }
         @case ('roles') { <app-admin-roles /> }
         @case ('sync') { <app-admin-org-sync /> }
         @case ('modules') { <app-admin-modules-gallery /> }
@@ -93,6 +96,8 @@ export class AdminRootComponent {
     { id: 'overview' as const, label: 'Vue d’ensemble', capability: 'admin.overview' },
     { id: 'access' as const, label: 'Accès par rôle', capability: 'admin.access' },
     { id: 'comptes' as const, label: 'Accès par compte', capability: 'admin.access' },
+    // v60 — Super Admin uniquement.
+    { id: 'admins' as const, label: 'Droits des administrateurs', capability: 'admin.access', superAdmin: true },
     { id: 'roles' as const, label: 'Rôles', capability: 'admin.roles' },
     { id: 'sync' as const, label: 'Synchro organisation', capability: 'admin.sync' },
     { id: 'modules' as const, label: 'Configuration des modules', capability: 'admin.modules' },
@@ -104,7 +109,8 @@ export class AdminRootComponent {
   }
 
   visibleTabs() {
-    return this.tabs.filter((t) => this.access.canView(t.capability));
+    return this.tabs.filter((t) =>
+      ('superAdmin' in t && t.superAdmin) ? this.access.superAdmin() : this.access.canView(t.capability));
   }
 
   /** Section affichée : celle demandée si elle est ouverte au rôle, sinon le premier onglet autorisé. */

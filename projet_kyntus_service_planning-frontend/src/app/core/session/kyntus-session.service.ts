@@ -11,6 +11,7 @@ import {
   readJwtEmail,
   readJwtName,
   readJwtNameIdentifier,
+  readJwtIsSuperAdmin,
   readJwtRole,
 } from './kyntus-auth-token.util';
 
@@ -191,6 +192,12 @@ export class KyntusSessionService {
     const fromJwt = this.getJwtRole();
     if (fromJwt) return fromJwt;
     return this.getStoredUser()?.role?.trim() ?? '';
+  }
+
+  /** v60 — Compte Super Admin (seul habilité à régler les droits des administrateurs). */
+  isSuperAdmin(): boolean {
+    const token = readStoredAccessToken();
+    return !!token && readJwtIsSuperAdmin(token);
   }
 
   getSubjectId(): string | null {

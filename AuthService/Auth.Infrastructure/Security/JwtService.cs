@@ -46,6 +46,9 @@ public class JwtService : IJwtService
             new(ClaimTypes.Role, user.Role?.Name ?? "User"),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
+        // v60 — Super Admin : rôle « Admin » inchangé (toute la plateforme le reconnaît) + marqueur signé.
+        if (user.EstSuperAdminEffectif)
+            claims.Add(new Claim("kyntus_super_admin", "true"));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secretKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

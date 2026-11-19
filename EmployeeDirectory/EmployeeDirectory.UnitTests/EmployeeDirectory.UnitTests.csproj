@@ -21,6 +21,11 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- v60 : tests du Super Admin (HttpContext, cache mémoire). -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\EmployeeDirectory.Domain\EmployeeDirectory.Domain.csproj" />
     <ProjectReference Include="..\EmployeeDirectory.Application\EmployeeDirectory.Application.csproj" />

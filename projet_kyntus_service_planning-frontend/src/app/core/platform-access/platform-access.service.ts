@@ -18,12 +18,23 @@ export class PlatformAccessService {
   private readonly keys = signal<readonly string[]>([]);
   private readonly loaded = signal(false);
   private readonly seeded = signal(false);
+  /** v60 — Super Admin (réponse serveur ; le jeton sert avant le premier chargement). */
+  private readonly superAdminServeur = signal(false);
+  /** v60 — Administrateur restreint par le Super Admin : droits explicites, sans joker. */
+  private readonly restreint = signal(false);
+  private readonly retraitsSet = signal<ReadonlySet<string>>(new Set());
   private loadPromise: Promise<void> | null = null;
   private loadedAt = 0;
   private readonly ttlMs = 15_000;
 
   readonly hasCatalog = computed(() => this.seeded());
   readonly permissionKeys = computed(() => this.keys());
+  /** v60 — Compte Super Admin : seul à voir et régler les droits des administrateurs. */
+  readonly superAdmin = computed(() => this.superAdminServeur() || this.session.isSuperAdmin());
+  /** v60 — Administrateur dont le Super Admin a retiré au moins une fonctionnalité. */
+  readonly adminRestreint = computed(() => this.restreint());
+  /** v60 — Fonctionnalités retirées à l'administrateur courant (« écran.Verbe »). */
+  readonly retraits = computed(() => this.retraitsSet());
 
   async ensureLoaded(force = false): Promise<void> {
     const stale = this.loaded() && Date.now() - this.loadedAt > this.ttlMs;
@@ -42,6 +53,9 @@ export class PlatformAccessService {
       const dto = await firstValueFrom(this.api.getEffective());
       const perms = dto.permissions ?? [];
       this.keys.set(perms);
+      this.superAdminServeur.set(dto.superAdmin === true);
+      this.restreint.set(dto.adminRestreint === true);
+      this.retraitsSet.set(new Set(dto.retraits ?? []));
       this.seeded.set(
         perms.some(
           (p) =>
@@ -52,6 +66,9 @@ export class PlatformAccessService {
     } catch {
       this.keys.set([]);
       this.seeded.set(false);
+      this.superAdminServeur.set(false);
+      this.restreint.set(false);
+      this.retraitsSet.set(new Set());
     } finally {
       this.loaded.set(true);
       this.loadedAt = Date.now();
@@ -109,6 +126,48 @@ export class PlatformAccessService {
   canConfigure(capability: string): boolean {
     if (!this.seeded()) return this.fallbackAdminRh();
     return this.can(capability, 'Configure');
+  }
+
+  /**
+   * v60 — Supprimer : verbe propre aux administrateurs restreints par le Super Admin. Pour tout autre
+   * compte, la suppression suit « Modifier » (comportement historique).
+   */
+  canDelete(capability: string): boolean {
+    if (!this.seeded()) return this.fallbackAdminRh();
+    if (this.restreint()) return this.canView(capability) && this.hasAdminVerb(capability, 'Delete');
+    return this.canAct(capability);
+  }
+
+  /**
+   * v60 — Exporter / télécharger : verbe propre aux administrateurs restreints. Pour tout autre compte,
+   * l'export suit la consultation (comportement historique).
+   */
+  canExport(capability: string): boolean {
+    if (!this.seeded()) return true;
+    if (this.restreint()) return this.canView(capability) && this.hasAdminVerb(capability, 'Export');
+    return this.canView(capability);
+  }
+
+  /** v60 — Droit « écran.Verbe » (Verbe : View, Act, Validate, Configure, Delete ou Export). */
+  hasAction(action: string): boolean {
+    const i = action.lastIndexOf('.');
+    if (i <= 0) return true;
+    const ecran = action.slice(0, i);
+    const verbe = action.slice(i + 1);
+    switch (verbe) {
+      case 'View': return this.canView(ecran);
+      case 'Act': return this.canAct(ecran);
+      case 'Validate': return this.canValidate(ecran);
+      case 'Configure': return this.canConfigure(ecran);
+      case 'Delete': return this.canDelete(ecran);
+      case 'Export': return this.canExport(ecran);
+      default: return true;
+    }
+  }
+
+  private hasAdminVerb(capability: string, verb: 'Delete' | 'Export'): boolean {
+    const perms = this.keys();
+    return perms.includes('*:Global') || perms.some((p) => p.startsWith(`${capability}.${verb}:`));
   }
 
   private canDirect(capability: string, verb: PlatformVerb, scope: string): boolean {

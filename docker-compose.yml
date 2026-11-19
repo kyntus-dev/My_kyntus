@@ -117,6 +117,10 @@ services:
       DemoSeed__Passwords__Formation: ${KYNTUS_DEMO_SEED_PASSWORD_FORMATION:-Azerty@2026}
       DemoSeed__Passwords__Superviseur: ${KYNTUS_DEMO_SEED_PASSWORD_SUPERVISEUR:-Azerty@2026}
       DemoSeed__Passwords__Qualiticien: ${KYNTUS_DEMO_SEED_PASSWORD_QUALITICIEN:-Azerty@2026}
+      # v60 — Compte Super Admin « test admin » (mot de passe vide = celui du compte admin démo).
+      SuperAdminSeed__Email: ${KYNTUS_SUPERADMIN_EMAIL:-test.admin@kyntus.ma}
+      SuperAdminSeed__Username: ${KYNTUS_SUPERADMIN_USERNAME:-test admin}
+      SuperAdminSeed__Password: ${KYNTUS_SUPERADMIN_PASSWORD:-}
       KYNTUS_DEMO_ENRICHMENT: ${KYNTUS_DEMO_ENRICHMENT:-false}
       KYNTUS_AUTH_DEMO_AUDIT_SEED: ${KYNTUS_AUTH_DEMO_AUDIT_SEED:-false}
       InternalServices__ApiKey: ${KYNTUS_INTERNAL_SERVICE_API_KEY:?Définir KYNTUS_INTERNAL_SERVICE_API_KEY dans .env}

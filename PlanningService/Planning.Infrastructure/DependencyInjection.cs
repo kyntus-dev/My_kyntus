@@ -50,6 +50,9 @@ public static class DependencyInjection
 
         services.AddKyntusOutbox<AppDbContext>();
         services.AddKyntusCaching(configuration);
+        // v60 — Appels Auth : signale le Super Admin (protection de son compte).
+        services.AddHttpContextAccessor();
+        services.AddTransient<ActingSuperAdminHeaderHandler>();
         services.AddKyntusIamViaDirectoryHttp(
             configuration["Directory:BaseUrl"] ?? "http://employee-directory-backend:8080");
         services.AddDesktopPushClient(configuration);
@@ -110,7 +113,7 @@ public static class DependencyInjection
             var apiKey = configuration["InternalServices:ApiKey"];
             if (!string.IsNullOrWhiteSpace(apiKey))
                 client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Service-Key", apiKey);
-        });
+        }).AddHttpMessageHandler<ActingSuperAdminHeaderHandler>();
         // Réaffectations (v21) : implémentées par UserService (mêmes synchronisations que la fiche).
         services.AddScoped<IAgentReaffectation>(sp => (IAgentReaffectation)sp.GetRequiredService<IUserService>());
         services.AddHttpClient<IUserService, UserService>((sp, client) =>
@@ -125,7 +128,7 @@ public static class DependencyInjection
                 client.DefaultRequestHeaders.Remove("X-Internal-Service-Key");
                 client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Service-Key", apiKey);
             }
-        });
+        }).AddHttpMessageHandler<ActingSuperAdminHeaderHandler>();
         // v56 : « mot de passe oublié » (écran de connexion) et API publique des employés.
         services.AddScoped<IMotDePasseOublieService, MotDePasseOublieService>();
         // v58 : validation du tableau de paie par les RH (verrouillage de la période).

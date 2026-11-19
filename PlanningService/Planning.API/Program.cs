@@ -8,6 +8,7 @@ using Planning.Infrastructure.Hubs;
 using Planning.Application;
 using Planning.Infrastructure;
 using Planning.Infrastructure.Persistence;
+using Kyntus.Iam;
 
 var builder = WebApplication.CreateBuilder(args);
 var isTesting = builder.Environment.IsEnvironment("Testing");
@@ -86,6 +87,9 @@ builder.Services.AddHealthChecks();
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
+// v60 — Restrictions des administrateurs par le Super Admin (contrôle à l'entrée de chaque API).
+builder.Services.AddKyntusAdminRestrictions(builder.Configuration);
+
 var app = builder.Build();
 app.MapHealthChecks("/health");
 
@@ -110,6 +114,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAngular");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseKyntusAdminRestrictions();
 app.MapControllers();
 app.MapHub<PlanningHub>("/hubs/planning");
 app.MapHub<NewsletterHub>("/hubs/newsletter");

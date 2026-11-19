@@ -7,7 +7,8 @@ public sealed class PolicyEvaluator(
     IPermissionCatalog catalog,
     IRebacClient rebac,
     ILogger<PolicyEvaluator> logger,
-    ISubjectPermissionOverrides? overrides = null) : IPolicyEvaluator
+    ISubjectPermissionOverrides? overrides = null,
+    IAdminRestrictionProvider? adminRestrictions = null) : IPolicyEvaluator
 {
     public async Task<PolicyDecision> EvaluateAsync(PolicyRequest request, CancellationToken ct = default)
     {
@@ -16,6 +17,13 @@ public sealed class PolicyEvaluator(
 
         if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
         {
+            // v60 — Tous les droits, sauf les fonctionnalités retirées par le Super Admin.
+            if (adminRestrictions is not null && request.SubjectId != Guid.Empty)
+            {
+                var restrictions = await adminRestrictions.GetAsync(request.SubjectId, ct);
+                if (restrictions.IsDenied(action))
+                    return new PolicyDecision(false, "Retiré par le Super Admin");
+            }
             return new PolicyDecision(true);
         }
 

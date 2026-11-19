@@ -10,6 +10,7 @@ using EmployeeDirectory.Application.Queries.Health;
 using EmployeeDirectory.Application.Rebac;
 using EmployeeDirectory.Application.Reconcile;
 using EmployeeDirectory.Domain.Enums;
+using Kyntus.Iam;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -688,13 +689,30 @@ public class IamUserAccessController(IIamUserAccessService access) : ControllerB
 {
     [HttpGet("{subjectId:guid}/access")]
     [Authorize(Roles = "Admin,RH")]
-    public async Task<ActionResult<UserAccessDto>> Get(Guid subjectId, [FromQuery] string? role, CancellationToken ct) =>
-        Ok(await access.GetAsync(subjectId, role ?? "Employee", ct));
+    public async Task<ActionResult<UserAccessDto>> Get(
+        Guid subjectId,
+        [FromQuery] string? role,
+        [FromServices] IIamAdminRestrictionService restrictions,
+        CancellationToken ct)
+    {
+        var dto = await access.GetAsync(subjectId, role ?? "Employee", ct);
+        // v60 — Rubriques retirées à l'administrateur appelant : masquées.
+        var denied = await IamCaller.DeniedAsync(User, restrictions, ct);
+        return Ok(denied.Count == 0
+            ? dto
+            : dto with { Screens = dto.Screens.Where(e => AdminAccessCatalog.ScreenVisible(denied, e.Id)).ToList() });
+    }
 
     [HttpPut("{subjectId:guid}/access")]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<UserAccessDto>> Update(Guid subjectId, [FromBody] UserAccessUpdateRequest body, CancellationToken ct)
+    public async Task<ActionResult<UserAccessDto>> Update(
+        Guid subjectId,
+        [FromBody] UserAccessUpdateRequest body,
+        [FromServices] IIamAdminRestrictionService restrictions,
+        CancellationToken ct)
     {
+        var refus = await IamCaller.GuardAsync(User, restrictions, (body.Changes ?? []).Select(c => (body.Role, c.Action)), ct);
+        if (refus is not null) return refus;
         try
         {
             return Ok(await access.UpdateAsync(subjectId, body, User.GetEmail() ?? User.Identity?.Name, ct));
@@ -719,6 +737,7 @@ public class IamController(IMediator mediator) : ControllerBase
     [HttpGet("effective-permissions")]
     public async Task<ActionResult<EffectivePermissionsDto>> EffectivePermissions(
         [FromQuery] string? role,
+        [FromServices] IIamAdminRestrictionService restrictions,
         CancellationToken ct)
     {
         var subjectId = User.GetSubjectId() ?? Guid.Empty;
@@ -727,7 +746,27 @@ public class IamController(IMediator mediator) : ControllerBase
                       && (string.Equals(callerRole, "Admin", StringComparison.OrdinalIgnoreCase)
                           || string.Equals(callerRole, "RH", StringComparison.OrdinalIgnoreCase));
         // Aperçu d'un rôle (Admin / RH) : droits du rôle seul, sans les exceptions du compte appelant.
-        return Ok(await mediator.Send(new GetEffectivePermissionsQuery(preview ? Guid.Empty : subjectId, preview ? role!.Trim() : callerRole), ct));
+        var dto = await mediator.Send(new GetEffectivePermissionsQuery(preview ? Guid.Empty : subjectId, preview ? role!.Trim() : callerRole), ct);
+
+        // v60 — Super Admin : tous les droits. Administrateur restreint par le Super Admin : tout,
+        // sauf les fonctionnalités retirées (au lieu du joker « *:Global »). Sans restriction : inchangé.
+        var superAdmin = KyntusAdminClaims.IsSuperAdmin(User);
+        var denied = await IamCaller.DeniedAsync(User, restrictions, ct);
+        if (denied.Count == 0)
+            return Ok(superAdmin ? dto with { SuperAdmin = true } : dto);
+        if (preview)
+            return Ok(dto with
+            {
+                Permissions = dto.Permissions
+                    .Where(k => k.StartsWith("*:", StringComparison.Ordinal) || AdminAccessCatalog.ActionAllowed(denied, k.Split(':')[0]))
+                    .ToList(),
+            });
+        return Ok(dto with
+        {
+            Permissions = AdminAccessCatalog.EffectiveKeys(denied),
+            AdminRestreint = true,
+            Retraits = denied,
+        });
     }
 
     [HttpGet("leave-workflow")]
@@ -736,33 +775,55 @@ public class IamController(IMediator mediator) : ControllerBase
 
     [HttpGet("catalog")]
     [Authorize(Roles = "Admin,RH")]
-    public async Task<ActionResult<IamCatalogDto>> Catalog(CancellationToken ct) =>
-        Ok(await mediator.Send(new GetIamCatalogQuery(), ct));
+    public async Task<ActionResult<IamCatalogDto>> Catalog(
+        [FromServices] IIamAdminRestrictionService restrictions,
+        CancellationToken ct)
+    {
+        var dto = await mediator.Send(new GetIamCatalogQuery(), ct);
+        var denied = await IamCaller.DeniedAsync(User, restrictions, ct);
+        return Ok(denied.Count == 0
+            ? dto
+            : dto with { Screens = dto.Screens.Where(e => AdminAccessCatalog.ScreenVisible(denied, e.Id)).ToList() });
+    }
 
     [HttpGet("permissions")]
     [Authorize(Roles = "Admin,RH")]
     public async Task<ActionResult<IReadOnlyList<IamPermissionRowDto>>> Permissions(
         [FromQuery] string? role,
-        CancellationToken ct) =>
-        Ok(await mediator.Send(new ListIamPermissionsQuery(role), ct));
+        [FromServices] IIamAdminRestrictionService restrictions,
+        CancellationToken ct)
+    {
+        var rows = await mediator.Send(new ListIamPermissionsQuery(role), ct);
+        var denied = await IamCaller.DeniedAsync(User, restrictions, ct);
+        if (denied.Count == 0) return Ok(rows);
+        return Ok(rows.Where(r => r.Action == "*" || AdminAccessCatalog.ActionAllowed(denied, r.Action)).ToList());
+    }
 
     [HttpGet("matrix")]
     [Authorize(Roles = "Admin,RH")]
     public async Task<ActionResult<IamMatrixDto>> Matrix(
         [FromQuery] string role,
         [FromQuery] string? scope,
+        [FromServices] IIamAdminRestrictionService restrictions,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(role)) return BadRequest(new { error = "role requis" });
-        return Ok(await mediator.Send(new GetIamMatrixQuery(role.Trim(), scope), ct));
+        var dto = await mediator.Send(new GetIamMatrixQuery(role.Trim(), scope), ct);
+        var denied = await IamCaller.DeniedAsync(User, restrictions, ct);
+        return Ok(denied.Count == 0
+            ? dto
+            : dto with { Rows = dto.Rows.Where(r => AdminAccessCatalog.ScreenVisible(denied, r.Capability)).ToList() });
     }
 
     [HttpPut("permissions")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<IamPermissionRowDto>> Upsert(
         [FromBody] UpsertIamPermissionRequest body,
+        [FromServices] IIamAdminRestrictionService restrictions,
         CancellationToken ct)
     {
+        var refus = await IamCaller.GuardAsync(User, restrictions, [(body.Role, body.Action)], ct);
+        if (refus is not null) return refus;
         try
         {
             return Ok(await mediator.Send(new UpsertIamPermissionCommand(body), ct));
@@ -777,8 +838,11 @@ public class IamController(IMediator mediator) : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<object>> UpsertBulk(
         [FromBody] UpsertIamPermissionsBulkRequest body,
+        [FromServices] IIamAdminRestrictionService restrictions,
         CancellationToken ct)
     {
+        var refus = await IamCaller.GuardAsync(User, restrictions, (body.Items ?? []).Select(i => (i.Role, i.Action)), ct);
+        if (refus is not null) return refus;
         try
         {
             var upserted = await mediator.Send(new UpsertIamPermissionsBulkCommand(body.Items ?? []), ct);

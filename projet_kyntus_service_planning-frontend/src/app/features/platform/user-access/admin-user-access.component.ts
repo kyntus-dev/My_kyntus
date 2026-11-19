@@ -12,6 +12,7 @@ import {
   UserAccessApiService,
 } from '../../../core/platform-access/user-access-api.service';
 import { KyntusSessionService } from '../../../core/session/kyntus-session.service';
+import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { UserService } from '../../users/services/user.service';
@@ -64,6 +65,8 @@ export class AdminUserAccessComponent implements OnInit {
   readonly libelles = LIBELLES_VERBES;
   readonly ordre = ORDRE_VERBES;
   readonly peutModifier = this.session.getRole() === 'Admin';
+  /** v60 — Le Super Admin règle les comptes administrateurs dans « Droits des administrateurs ». */
+  readonly superAdmin = inject(PlatformAccessService).superAdmin;
 
   readonly comptes = signal<Compte[]>([]);
   readonly resumes = signal<Map<string, UserAccessSummaryDto>>(new Map());
@@ -218,6 +221,11 @@ export class AdminUserAccessComponent implements OnInit {
         this.toast.error(err?.error?.message ?? err?.error?.error ?? 'Enregistrement impossible.');
       },
     });
+  }
+
+  /** v60 — Ouvre les droits de cet administrateur (Super Admin). */
+  ouvrirDroitsAdmin(subjectId: string): void {
+    void this.router.navigate(['/admin'], { queryParams: { section: 'admins', admin: subjectId.toLowerCase(), compte: null } });
   }
 
   initiales(nom: string): string {

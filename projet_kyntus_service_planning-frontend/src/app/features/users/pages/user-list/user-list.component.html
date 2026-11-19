@@ -14,11 +14,11 @@
         <details class="toolbar-menu" #generalMenu>
           <summary class="ky-btn-secondary">Autres actions</summary>
           <div class="toolbar-dropdown">
-            <button type="button" (click)="generalMenu.open = false; goimport()">Importer</button>
-            <button type="button" (click)="generalMenu.open = false; openGroupReset()">Régénérer par groupe</button>
+            <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="generalMenu.open = false; goimport()">Importer</button>
+            <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="generalMenu.open = false; openGroupReset()">Régénérer par groupe</button>
           </div>
         </details>
-        <details class="toolbar-menu" #exportMenu>
+        <details *kyIfAdminAllowed="'admin.users.Export'" class="toolbar-menu" #exportMenu>
           <summary class="ky-btn-secondary" [attr.aria-busy]="!!exporting">{{ exporting ? 'Export en cours…' : 'Exporter' }}</summary>
           <div class="toolbar-dropdown">
             <p>Fichier Excel avec l'organisation (activité, pôle, cellule).</p>
@@ -27,7 +27,7 @@
             <button type="button" [disabled]="!!exporting || loading" (click)="exportMenu.open = false; exportEmployees('inactive')">Employés inactifs</button>
           </div>
         </details>
-        <button type="button" class="ky-btn-primary" (click)="createUser()"><span aria-hidden="true">+</span> Nouvel employé</button>
+        <button *kyIfAdminAllowed="'admin.users.Act'" type="button" class="ky-btn-primary" (click)="createUser()"><span aria-hidden="true">+</span> Nouvel employé</button>
       </div>
     </div>
     <div class="employee-filters">
@@ -165,7 +165,7 @@
                 <td class="col-actions" (click)="$event.stopPropagation()">
                   <div class="action-group">
                     <button type="button" class="btn-action btn-detail" (click)="viewUser(user.id)" [attr.aria-label]="'Détails de ' + user.lastName + ' ' + user.firstName">Détails</button>
-                    <button type="button" class="btn-action edit" (click)="editUser(user.id)" title="Modifier" [attr.aria-label]="'Modifier ' + user.lastName + ' ' + user.firstName"><app-lucide-icon [icon]="icons.edit" className="w-4 h-4" /></button>
+                    <button *kyIfAdminAllowed="'admin.users.Act'" type="button" class="btn-action edit" (click)="editUser(user.id)" title="Modifier" [attr.aria-label]="'Modifier ' + user.lastName + ' ' + user.firstName"><app-lucide-icon [icon]="icons.edit" className="w-4 h-4" /></button>
                     <button type="button" class="btn-action more-actions" (click)="openActions(user, $event)" aria-haspopup="dialog" [attr.aria-expanded]="actionUser?.id === user.id" [attr.aria-label]="'Autres actions pour ' + user.lastName + ' ' + user.firstName">⋯</button>
                   </div>
                 </td>
@@ -191,13 +191,13 @@
       <div id="employee-actions-panel" class="employee-action-panel" role="dialog" aria-modal="true" aria-labelledby="employee-actions-title"
         [style.top.px]="actionTop" [style.left.px]="actionLeft" (click)="$event.stopPropagation()" (keydown)="actionKeydown($event)">
         <div class="action-panel-heading"><strong id="employee-actions-title">{{ selected.lastName }} {{ selected.firstName }}</strong><button type="button" aria-label="Fermer les actions" (click)="closeActions()">×</button></div>
-        <button type="button" (click)="runAction('level', selected)">Modifier le niveau contractuel</button>
+        <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="runAction('level', selected)">Modifier le niveau contractuel</button>
         <button type="button" (click)="runAction('history', selected)">Historique des rotations</button>
-        <button type="button" [disabled]="resettingUserId !== null" (click)="runAction('reset', selected)">Réinitialiser le mot de passe</button>
+        <button *kyIfAdminAllowed="'admin.users.Act'" type="button" [disabled]="resettingUserId !== null" (click)="runAction('reset', selected)">Réinitialiser le mot de passe</button>
         @if (selected.isActive !== false) {
-          <button type="button" class="danger-action" (click)="runAction('deactivate', selected)">Désactiver (sortie)</button>
+          <button *kyIfAdminAllowed="'admin.users.Delete'" type="button" class="danger-action" (click)="runAction('deactivate', selected)">Désactiver (sortie)</button>
         } @else {
-          <button type="button" (click)="runAction('reactivate', selected)">Réactiver</button>
+          <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="runAction('reactivate', selected)">Réactiver</button>
         }
       </div>
     </div>

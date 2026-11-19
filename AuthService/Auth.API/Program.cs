@@ -2,6 +2,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Auth.Application;
 using Auth.Infrastructure;
+using Kyntus.Iam;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
@@ -14,6 +15,8 @@ var isTesting = builder.Environment.IsEnvironment("Testing");
 builder.Services.AddControllers();
 builder.Services.AddAuthApplication();
 builder.Services.AddAuthInfrastructure(builder.Configuration, isTesting);
+// v60 — Restrictions des administrateurs par le Super Admin (Journal d'accès).
+builder.Services.AddKyntusAdminRestrictions(builder.Configuration);
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["Secret"] ?? throw new InvalidOperationException("JWT Secret non configurée");
@@ -147,6 +150,7 @@ app.UseCors("AllowAll");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseKyntusAdminRestrictions();
 app.MapControllers();
 app.Run();
 

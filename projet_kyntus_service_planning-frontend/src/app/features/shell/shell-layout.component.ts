@@ -145,6 +145,8 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
   role = '';
   readonly libelleRole = libelleRole;
+  /** v60 — Compte Super Admin (bandeau utilisateur). */
+  readonly estSuperAdmin = this.platformAccess.superAdmin;
 
   sidebarOpen = false;
   sidebarCollapsed = false;

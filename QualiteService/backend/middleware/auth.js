@@ -1,6 +1,7 @@
 const { verifyKyntusToken, extractKyntusClaims } = require("./kyntusJwt");
 const { hasKcqRole } = require("./kcqRoles");
 const { resolveCurrentUser, listAllowedPilotIds } = require("../services/directorySync");
+const { adminRestriction } = require("./adminRestrictions");
 
 async function auth(req, res, next) {
   try {
@@ -10,6 +11,15 @@ async function auth(req, res, next) {
     const raw = authHeader || (allowQueryToken && queryToken ? `Bearer ${queryToken}` : "");
     const decoded = verifyKyntusToken(raw);
     const claims = extractKyntusClaims(decoded);
+    // v60 — Fonctionnalité retirée par le Super Admin à cet administrateur : refus (403).
+    const retiree = await adminRestriction(req, claims, raw);
+    if (retiree) {
+      return res.status(403).json({
+        code: "ADMIN_RESTRICTED",
+        action: retiree,
+        message: "Cette fonctionnalité vous a été retirée par le Super Admin.",
+      });
+    }
     const { doc, mapped, scope } = await resolveCurrentUser(claims, raw);
 
     req.user = {
