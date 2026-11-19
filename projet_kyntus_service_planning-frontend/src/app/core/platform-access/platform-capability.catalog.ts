@@ -167,6 +167,8 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'admin.overview', label: 'Vue d’ensemble', module: 'Administration', view: ADMIN_RH },
   // v35 : les API d'accès par rôle / par compte n'acceptent que Admin et RH (modification : Admin).
   { id: 'admin.access', label: 'Accès par rôle', module: 'Administration', view: ADMIN, configure: ADMIN, serveur: SRV_ADMIN_RH, serveurAgir: SRV_ADMIN },
+  // v60.2 : rubrique à part (avant : suivait « Accès par rôle », qui l'ouvre encore hors admin restreint).
+  { id: 'admin.comptes', label: 'Accès par compte', module: 'Administration', view: ADMIN, configure: ADMIN, serveur: SRV_ADMIN_RH, serveurAgir: SRV_ADMIN },
   { id: 'admin.roles', label: 'Rôles (création, suppression)', module: 'Administration', view: ADMIN, act: ADMIN, serveur: SRV_ADMIN },
   { id: 'admin.users', label: 'Utilisateurs', module: 'Administration', view: ADMIN_RH, act: ADMIN_RH, serveurAgir: SRV_ADMIN_RH },
   { id: 'rh.contrats', label: 'Contrats', module: 'Ressources humaines', view: TEAM_LEAD },

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installe d'un coup toutes les versions manquantes jusqu’à la v37 (rôles, présences, exports, droits, menu selon les droits, archivage avec réaffectation, export paie contrôlé, connexion fiabilisée, effectifs des cellules, heure de sortie au choix, détail du solde, solde selon le choix du jour, horaire de base, arrivée selon le planning, correction des journées, présences v46, mail interne facultatif v47, Process Bytel v48, refus de Planification expliqués et imports tolérants v52, encadrement nommé v53, rôle unique RP v54, congés validés par le RP v55, API publique et mot de passe v56, périmètre exact des RP v57, paie validée par les RH v58, Super Admin et droits des administrateurs v60), dans l'ordre :
-#   v11.5 → v11.6 → v12 (serveur) → v12 (application) → v12.1 → v12.2 → v13 → v14 → v14.1 → v15 → v15.1 → v15.2 → v15.3 → v16 → v17 → v18 → v19 → v19.1 → v20 → v21 → v22 → v23 → v24 → v25 → v26 → v27 → v28 → v28.1 → v29 → v29.1 → v30 → v31 → v32 → v33 → v34 → v35 → v36 → v37 → v37.1 → v38 → v39 → v40 → v41 → v42 → v43 → v44 → v45 → v46 → v46.1 → v47 → v48 → v48.1 → v49 → v50 → v51 → v52 → v53 → v54 → v55 → v56 → v57 → v58 → v60 → v60.1
+#   v11.5 → v11.6 → v12 (serveur) → v12 (application) → v12.1 → v12.2 → v13 → v14 → v14.1 → v15 → v15.1 → v15.2 → v15.3 → v16 → v17 → v18 → v19 → v19.1 → v20 → v21 → v22 → v23 → v24 → v25 → v26 → v27 → v28 → v28.1 → v29 → v29.1 → v30 → v31 → v32 → v33 → v34 → v35 → v36 → v37 → v37.1 → v38 → v39 → v40 → v41 → v42 → v43 → v44 → v45 → v46 → v46.1 → v47 → v48 → v48.1 → v49 → v50 → v51 → v52 → v53 → v54 → v55 → v56 → v57 → v58 → v60 → v60.1 → v60.2
 #
 #   bash installer_v60.sh test     environnement de test (~/kyntus-test)
 #   bash installer_v60.sh prod     production (/home/o/projets_mykyntus-)
@@ -96,6 +96,7 @@ VERSIONS=(
   "v58 horaires au périmètre, listes conformes, paie validée par les RH|reorg-2026-code-v58.patch|PlanningService/Planning.API/Controllers/PaieValidationController.cs|presences/paie"
   "v60 Super Admin, droits des administrateurs|reorg-2026-code-v60.patch|Kyntus.Iam/AdminRestrictionMiddleware.cs|class AdminRestrictionMiddleware"
   "v60.1 correctif de compilation Formation|reorg-2026-code-v60.1.patch|init/FormationBackend.Dockerfile|COPY Kyntus.Iam/ Kyntus.Iam/"
+  "v60.2 Accès par compte, rubrique à part|reorg-2026-code-v60.2.patch|EmployeeDirectory/EmployeeDirectory.Application/Iam/PlatformAccessCatalog.cs|S(\"admin.comptes\""
 )
 
 echo "=== 1. Versions ($ENV) ==="

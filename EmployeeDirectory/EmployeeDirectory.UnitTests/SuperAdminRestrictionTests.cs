@@ -124,7 +124,7 @@ public class SuperAdminRestrictionTests : IDisposable
     [InlineData("GET", "/api/iam/admin-restrictions/me", null, null)]
     [InlineData("OPTIONS", "/api/iam/permissions", null, null)]
     [InlineData("PUT", "/api/iam/permissions/bulk", "admin.access", "Configure")]
-    [InlineData("PUT", "/api/iam/users/0c9c1a39-0000-4000-8000-000000000000/access", "admin.access", "Configure")]
+    [InlineData("PUT", "/api/iam/users/0c9c1a39-0000-4000-8000-000000000000/access", "admin.comptes", "Configure")]
     [InlineData("POST", "/api/users", "admin.users", "Act")]
     [InlineData("DELETE", "/api/users/12", "admin.users", "Delete")]
     [InlineData("POST", "/api/users/12/reset-password", "admin.users", "Act")]
@@ -151,6 +151,17 @@ public class SuperAdminRestrictionTests : IDisposable
         Assert.NotNull(feature);
         Assert.Equal(screen, feature!.Screens[0]);
         Assert.Equal(verb, feature.Verb);
+    }
+
+    [Fact]
+    public void Account_access_is_a_separate_feature_from_role_access()
+    {
+        Assert.Contains(PlatformAccessCatalog.Screens, s => s.Id == "admin.comptes");
+        var snapshot = new AdminRestrictionSnapshot(false, ["admin.comptes.View"]);
+        var comptes = AdminFeatureRouteMap.Resolve("GET", "/api/iam/users/0c9c1a39-0000-4000-8000-000000000000/access");
+        var roles = AdminFeatureRouteMap.Resolve("GET", "/api/iam/permissions");
+        Assert.True(comptes!.Screens.All(s => snapshot.IsDenied(s, comptes.Verb)));
+        Assert.Contains(roles!.Screens, s => !snapshot.IsDenied(s, roles.Verb));
     }
 
     [Fact]

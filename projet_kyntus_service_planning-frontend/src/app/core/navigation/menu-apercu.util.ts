@@ -48,7 +48,7 @@ export function apercuMenu(role: string, cles: readonly string[], groupes: reado
     const entrees: string[] = [];
     for (const c of g.children) {
       if (c.isSectionHeader || c.superAdminOnly) continue;
-      const ecrans = ecransDe(c);
+      const ecrans = role === 'Admin' && c.iamStrict ? [c.iamStrict] : ecransDe(c);
       if (ecrans.length) lieAuxDroits = true;
       const ok = ecrans.length
         ? ecrans.some((e) => droitAccorde(cles, e, c.capabilityVerb === 'Act' ? 'Act' : 'View', role))

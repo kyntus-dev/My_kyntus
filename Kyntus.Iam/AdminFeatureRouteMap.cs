@@ -150,8 +150,9 @@ public static class AdminFeatureRouteMap
         yield return R("/api/auth/audit/access", "audit.access-history");
 
         // ───────────── Administration › Accès par rôle / par compte (Employee Directory) ─────────────
-        yield return R("/api/iam/users", "admin.access", Methods.Read, "View");
-        yield return R("/api/iam/users", "admin.access", Methods.Write, "Configure");
+        // v60.2 : « Accès par compte » est une rubrique à part.
+        yield return R("/api/iam/users", "admin.comptes", Methods.Read, "View");
+        yield return R("/api/iam/users", "admin.comptes", Methods.Write, "Configure");
         yield return R("/api/iam", "admin.access", Methods.Read, "View");
         yield return R("/api/iam", "admin.access", Methods.Write, "Configure");
 

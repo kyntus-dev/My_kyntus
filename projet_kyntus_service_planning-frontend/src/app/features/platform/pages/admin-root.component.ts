@@ -95,7 +95,7 @@ export class AdminRootComponent {
   readonly tabs = [
     { id: 'overview' as const, label: 'Vue d’ensemble', capability: 'admin.overview' },
     { id: 'access' as const, label: 'Accès par rôle', capability: 'admin.access' },
-    { id: 'comptes' as const, label: 'Accès par compte', capability: 'admin.access' },
+    { id: 'comptes' as const, label: 'Accès par compte', capability: 'admin.comptes', comptes: true },
     // v60 — Super Admin uniquement.
     { id: 'admins' as const, label: 'Droits des administrateurs', capability: 'admin.access', superAdmin: true },
     { id: 'roles' as const, label: 'Rôles', capability: 'admin.roles' },
@@ -110,7 +110,9 @@ export class AdminRootComponent {
 
   visibleTabs() {
     return this.tabs.filter((t) =>
-      ('superAdmin' in t && t.superAdmin) ? this.access.superAdmin() : this.access.canView(t.capability));
+      ('superAdmin' in t && t.superAdmin) ? this.access.superAdmin()
+        : ('comptes' in t && t.comptes) ? this.access.canViewAccesParCompte()
+        : this.access.canView(t.capability));
   }
 
   /** Section affichée : celle demandée si elle est ouverte au rôle, sinon le premier onglet autorisé. */

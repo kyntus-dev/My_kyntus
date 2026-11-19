@@ -68,6 +68,11 @@ export interface MenuItem {
   isSectionHeader?: boolean;
   /** v60 — Entrée réservée au Super Admin (droits des administrateurs). */
   superAdminOnly?: boolean;
+  /**
+   * v60.2 — Seul écran pris en compte pour un administrateur restreint par le Super Admin (les autres
+   * écrans de capability / ouvertureIam ne valent que pour les autres comptes).
+   */
+  iamStrict?: string;
   /** Badge numérique (ex. compteur inbox). */
   menuBadge?: number;
   /**
@@ -139,7 +144,8 @@ export const MICROSERVICES: Microservice[] = [
     children: [
       { label: 'Vue d’ensemble', route: '/admin?section=overview', platformAdminSection: 'overview', roles: ADMIN_RH, hat: 'both', capability: 'admin.overview' },
       { label: 'Accès par rôle', route: '/admin?section=access', platformAdminSection: 'access', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
-      { label: 'Accès par compte', route: '/admin?section=comptes', platformAdminSection: 'comptes', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
+      // v60.2 : rubrique à part ; « Accès par rôle » l'ouvre encore, sauf pour un admin restreint.
+      { label: 'Accès par compte', route: '/admin?section=comptes', platformAdminSection: 'comptes', roles: [KyntusRoleNames.Admin], hat: 'both', ouvertureIam: ['admin.comptes', 'admin.access'], iamStrict: 'admin.comptes' },
       // v60 — Super Admin : fonctionnalités accordées ou retirées à chaque administrateur.
       { label: 'Droits des administrateurs', route: '/admin?section=admins', platformAdminSection: 'admins', roles: [KyntusRoleNames.Admin], hat: 'both', superAdminOnly: true },
       { label: 'Rôles', route: '/admin?section=roles', platformAdminSection: 'roles', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.roles' },

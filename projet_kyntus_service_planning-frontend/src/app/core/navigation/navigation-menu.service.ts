@@ -199,7 +199,7 @@ export class NavigationMenuService {
     if (this.access.hasCatalog()) {
       // Titres de section : gardés seulement s'ils précèdent une entrée affichée (filterItemsByHat).
       if (item.isSectionHeader) return true;
-      const ecrans = ecransDe(item);
+      const ecrans = this.access.adminRestreint() && item.iamStrict ? [item.iamStrict] : ecransDe(item);
       if (ecrans.length) {
         return ecrans.some((e) => (item.capabilityVerb === 'Act' ? this.access.canAct(e) : this.access.canView(e)));
       }

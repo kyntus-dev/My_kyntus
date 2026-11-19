@@ -148,6 +148,15 @@ export class PlatformAccessService {
     return this.canView(capability);
   }
 
+  /**
+   * v60.2 — « Accès par compte » : rubrique à part. Hors administrateur restreint par le Super Admin,
+   * « Accès par rôle » l'ouvre aussi (comportement historique : l'onglet suivait cette rubrique).
+   */
+  canViewAccesParCompte(): boolean {
+    if (this.canView('admin.comptes')) return true;
+    return !this.restreint() && this.canView('admin.access');
+  }
+
   /** v60 — Droit « écran.Verbe » (Verbe : View, Act, Validate, Configure, Delete ou Export). */
   hasAction(action: string): boolean {
     const i = action.lastIndexOf('.');

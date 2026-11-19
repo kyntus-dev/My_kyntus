@@ -103,6 +103,9 @@ public static class PlatformAccessCatalog
     [
         S("admin.overview", "Vue d'ensemble", "Administration", View: AdminRh),
         S("admin.access", "Accès par rôle", "Administration", View: Admin, Configure: Admin),
+        // v60.2 : « Accès par compte » devient une rubrique à part (elle suivait « Accès par rôle »).
+        // Pour les rôles autres qu'un administrateur restreint, « Accès par rôle » continue de l'ouvrir.
+        S("admin.comptes", "Accès par compte", "Administration", View: Admin, Configure: Admin),
         // v35 : gestion des rôles (création, suppression) — l'API est réservée à l'Admin.
         S("admin.roles", "Rôles (création, suppression)", "Administration", View: Admin, Act: Admin),
         S("admin.users", "Utilisateurs", "Administration", View: AdminRh, Act: AdminRh),
