@@ -128,6 +128,9 @@ public static class DependencyInjection
         });
         // v56 : « mot de passe oublié » (écran de connexion) et API publique des employés.
         services.AddScoped<IMotDePasseOublieService, MotDePasseOublieService>();
+        // v58 : validation du tableau de paie par les RH (verrouillage de la période).
+        services.AddScoped<Planning.Infrastructure.Services.Presence.IPaieValidationService,
+            Planning.Infrastructure.Services.Presence.PaieValidationService>();
         services.AddScoped<IPublicEmployesService, PublicEmployesService>();
         services.AddScoped<IContractService, ContractService>();
         services.AddScoped<IPlanningOrgMirrorService, PlanningOrgMirrorService>();

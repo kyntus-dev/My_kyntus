@@ -205,3 +205,13 @@ export interface DossierDto {
   fiche: FicheRhDto;
   documents: DossierDocumentDto[];
 }
+
+/** v58 — Validation du tableau de paie d'une période : qui a validé, quand. */
+export interface PaieValidationDto {
+  du: string;
+  au: string;
+  validee: boolean;
+  valideParNom: string | null;
+  valideLe: string | null;
+  commentaire: string | null;
+}

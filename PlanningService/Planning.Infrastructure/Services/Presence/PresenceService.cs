@@ -20,8 +20,28 @@ public sealed class PresenceService(
     IPointageQueryService pointage,
     IPlanningPerimeterResolver perimeter,
     IOptionsMonitor<PointageOptions> options,
-    IMemoryCache? cache = null) : IPresenceService
+    IMemoryCache? cache = null,
+    IPaieValidationService? paie = null) : IPresenceService
 {
+    /// <summary>
+    /// v58 — Période de paie validée par les RH : plus personne n'y touche, pas même celui qui a
+    /// le droit de saisir. Pour corriger, les RH rouvrent la période (Présences et paie › Export
+    /// paie › Rouvrir), ce qui est tracé.
+    /// </summary>
+    private async Task RefuserSiPaieValideeAsync(DateOnly debut, DateOnly fin, CancellationToken ct)
+    {
+        if (paie is null) return;
+        for (var jour = debut; jour <= fin; jour = jour.AddDays(1))
+        {
+            var verrou = await paie.VerrouDuJourAsync(jour, ct);
+            if (verrou is null) continue;
+            throw new PresenceRefusException(
+                $"Tableau de paie validé par {verrou.ValideParNom} le "
+                + $"{verrou.ValideLe.ToLocalTime():dd/MM/yyyy} : cette période n'est plus modifiable. "
+                + "Demandez aux RH de la rouvrir.");
+        }
+    }
+
     /// <summary>
     /// Calcul du pointage gardé 30 s : passer du tableau aux retards puis à l'export paie ne
     /// recalcule pas tout. Les saisies des responsables (motifs, autorisations) sont relues à chaque fois.
@@ -67,6 +87,8 @@ public sealed class PresenceService(
         var fin = request.Au is DateOnly a && a >= request.Jour ? a : request.Jour;
         if (fin.DayNumber - request.Jour.DayNumber >= 62)
             throw new PresenceRefusException("Période trop longue : 62 jours au plus.");
+
+        await RefuserSiPaieValideeAsync(request.Jour, fin, ct);
 
         var me = await FindViewerAsync(viewer, ct);
         if (!viewer.Global)

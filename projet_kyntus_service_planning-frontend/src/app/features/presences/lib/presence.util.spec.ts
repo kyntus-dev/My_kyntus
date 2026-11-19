@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { PresenceAgentDto, PresenceJourDto } from '../../../core/models/presence.models';
-import { FILTRES_VIDES, familleCode, filtrerAgents, joursDeLaPeriode, lignesRetards, periodePaie, structureDeLActivite } from './presence.util';
+import {
+  FILTRES_VIDES,
+  familleCode,
+  filtrerAgents,
+  joursDeLaPeriode,
+  libellesUniques,
+  lignesRetards,
+  optionsActivites,
+  optionsOrganisation,
+  periodePaie,
+  structureDeLActivite,
+} from './presence.util';
 
 const jour = (p: Partial<PresenceJourDto>): PresenceJourDto => ({
   jour: '2026-11-02', code: 'P', auto: true, codeAuto: 'P', statut: 'Retard', planning: '09:00', arrivee: '09:12:00', depart: '18:00:00',
@@ -116,20 +127,74 @@ describe('structureDeLActivite (v48.1)', () => {
     { name: 'Bytel Kyntus', isActive: true, poles: [{ name: 'Pôle client', cellules: [{ name: 'Support VIP' }] }] },
   ];
 
-  it('propose les pôles et cellules de l’activité même sans agent présent', () => {
+  it('propose les pôles et cellules de l’activité même sans agent présent (triés, v58)', () => {
     expect(structureDeLActivite(activites, 'Formation & Qualité', '')).toEqual({
-      poles: ['Formation', 'Contrôle qualité'],
-      cellules: ['Formateurs', 'Agents en formation', 'Contrôleurs de qualité'],
+      poles: ['Contrôle qualité', 'Formation'],
+      cellules: ['Agents en formation', 'Contrôleurs de qualité', 'Formateurs'],
     });
   });
 
   it('limite les cellules au pôle choisi', () => {
     expect(structureDeLActivite(activites, 'Formation & Qualité', 'Formation').cellules)
-      .toEqual(['Formateurs', 'Agents en formation']);
+      .toEqual(['Agents en formation', 'Formateurs']);
   });
 
   it('ne propose rien sans activité choisie ou pour une activité inconnue', () => {
     expect(structureDeLActivite(activites, '', '')).toEqual({ poles: [], cellules: [] });
     expect(structureDeLActivite(activites, 'Inconnue', '')).toEqual({ poles: [], cellules: [] });
+  });
+});
+
+describe('listes déroulantes Présence et Paie (v58)', () => {
+  const activites = [
+    {
+      name: 'Bytel Kyntus',
+      isActive: true,
+      poles: [
+        { name: 'Pôle technique', cellules: [{ name: 'Support technicien' }, { name: 'Prestations réseaux & CV' }] },
+        { name: 'Pôle BTB', cellules: [{ name: 'BTB' }] },
+      ],
+    },
+  ];
+
+  it('retire les doublons d’orthographe, d’espaces et d’accents', () => {
+    expect(libellesUniques(['Support technicien', 'support  technicien ', 'SUPPORT TECHNICIEN', 'BTB']))
+      .toEqual(['BTB', 'Support technicien']);
+    expect(libellesUniques(['Pôle technique', 'Pole technique'])).toEqual(['Pôle technique']);
+    expect(libellesUniques([null, undefined, '  '])).toEqual([]);
+  });
+
+  it('l’organisation fait foi : un pôle qui n’existe plus n’est pas proposé', () => {
+    const options = optionsOrganisation(activites, 'Bytel Kyntus', '', {
+      poles: ['Pôle technique', 'Ancien pôle supprimé'],
+      cellules: ['Support technicien', 'Cellule fantôme'],
+    });
+
+    expect(options.poles).toEqual(['Pôle BTB', 'Pôle technique']);
+    expect(options.cellules).toEqual(['BTB', 'Prestations réseaux & CV', 'Support technicien']);
+  });
+
+  it('respecte la hiérarchie : seules les cellules du pôle choisi', () => {
+    const options = optionsOrganisation(activites, 'Bytel Kyntus', 'Pôle BTB', {
+      poles: [],
+      cellules: ['Support technicien'],
+    });
+
+    expect(options.cellules).toEqual(['BTB']);
+  });
+
+  it('se rabat sur les agents quand l’organisation ne déclare rien', () => {
+    const options = optionsOrganisation(activites, 'Activité inconnue', '', {
+      poles: ['Pôle orphelin', 'Pôle orphelin'],
+      cellules: ['Cellule orpheline'],
+    });
+
+    expect(options.poles).toEqual(['Pôle orphelin']);
+    expect(options.cellules).toEqual(['Cellule orpheline']);
+  });
+
+  it('les activités proposées viennent de l’organisation puis des agents, sans doublon', () => {
+    expect(optionsActivites(activites, ['bytel kyntus', 'Formation & Qualité']))
+      .toEqual(['Bytel Kyntus', 'Formation & Qualité']);
   });
 });

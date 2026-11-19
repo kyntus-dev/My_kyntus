@@ -73,6 +73,8 @@ public class AppDbContext : DbContext
     public DbSet<Avertissement> Avertissements { get; set; } = null!;
     public DbSet<PresenceTypePersonnalise> PresenceTypesPersonnalises { get; set; } = null!;
     public DbSet<ElementVariablePaie> ElementsVariablesPaie { get; set; } = null!;
+    /// <summary>v58 : validation du tableau de paie par les RH (verrouillage de la période).</summary>
+    public DbSet<PaiePeriodeValidation> PaiePeriodeValidations { get; set; } = null!;
     public DbSet<DossierDocument> DossierDocuments { get; set; } = null!;
     /// <summary>v48 : bibliothèque « Process Bytel » (procédures partagées aux agents).</summary>
     public DbSet<ProcessDocument> ProcessDocuments { get; set; } = null!;
@@ -741,6 +743,16 @@ public class AppDbContext : DbContext
             e.Property(x => x.Commentaire).HasMaxLength(1000).IsRequired();
             e.Property(x => x.CreatedByNom).HasMaxLength(120);
             e.HasIndex(x => new { x.UserId, x.Date });
+        });
+
+        modelBuilder.Entity<PaiePeriodeValidation>(e =>
+        {
+            e.ToTable("PaiePeriodeValidations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ValideParNom).HasMaxLength(160).IsRequired();
+            e.Property(x => x.Commentaire).HasMaxLength(500);
+            e.Property(x => x.RouvertParNom).HasMaxLength(160);
+            e.HasIndex(x => new { x.PeriodeDu, x.PeriodeAu });
         });
 
         modelBuilder.Entity<DossierDocument>(e =>

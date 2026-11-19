@@ -110,6 +110,32 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>
+    /// v58 : validation du tableau de paie par les RH. La table garde qui a validé et quand ;
+    /// tant qu'une période est validée et non rouverte, elle est verrouillée.
+    /// </summary>
+    public static async Task EnsurePaieValidationAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PaiePeriodeValidations" (
+                "Id" bigserial PRIMARY KEY,
+                "PeriodeDu" date NOT NULL,
+                "PeriodeAu" date NOT NULL,
+                "ValideParUserId" integer NOT NULL,
+                "ValideParNom" character varying(160) NOT NULL,
+                "ValideLe" timestamp with time zone NOT NULL DEFAULT now(),
+                "Commentaire" character varying(500) NULL,
+                "RouvertLe" timestamp with time zone NULL,
+                "RouvertParUserId" integer NULL,
+                "RouvertParNom" character varying(160) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_PaiePeriodeValidations_Periode"
+                ON "PaiePeriodeValidations" ("PeriodeDu", "PeriodeAu");
+            """,
+            ct);
+    }
+
     /// <summary>v48 : type de formation (contractuel / non contractuel) et bibliothèque Process Bytel.</summary>
     public static async Task EnsureFormationEtProcessBytelAsync(AppDbContext db, CancellationToken ct = default)
     {

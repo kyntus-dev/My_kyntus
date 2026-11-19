@@ -192,3 +192,15 @@ public sealed class PresenceRefusException(string message, bool horsPerimetre = 
 {
     public bool HorsPerimetre { get; } = horsPerimetre;
 }
+
+/// <summary>
+/// v58 — État de validation du tableau de paie d'une période : qui a validé et quand.
+/// Visible par tous ceux qui consultent le tableau.
+/// </summary>
+public sealed record PaieValidationDto(
+    DateOnly Du,
+    DateOnly Au,
+    bool Validee,
+    string? ValideParNom,
+    DateTime? ValideLe,
+    string? Commentaire);

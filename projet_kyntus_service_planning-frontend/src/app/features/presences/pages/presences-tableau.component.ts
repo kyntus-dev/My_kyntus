@@ -13,7 +13,7 @@ import type {
   PresenceJourDto,
 } from '../../../core/models/presence.models';
 import { DirectoryFacadeService } from '../../../core/directory/directory-facade.service';
-import { ActiviteStructure, structureDeLActivite } from '../lib/presence.util';
+import { ActiviteStructure, optionsActivites, optionsOrganisation } from '../lib/presence.util';
 import { PresencesNavComponent } from '../components/presences-nav.component';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import {
@@ -126,18 +126,25 @@ export class PresencesTableauComponent implements OnInit {
     const f = this.filtres();
     const dansActivite = agents.filter((a) => !f.activite || this.activiteDuPole(a.poleId, a) === f.activite);
     const dansPole = dansActivite.filter((a) => !f.pole || a.pole === f.pole);
-    const declarees = structureDeLActivite(this.structure(), f.activite, f.pole);
+    // v58 : l'organisation fait foi — pas de doublon, hiérarchie respectée, rien qui n'existe plus.
+    const listes = optionsOrganisation(this.structure(), f.activite, f.pole, {
+      poles: dansActivite.map((a) => a.pole),
+      cellules: dansPole.map((a) => a.cellule),
+    });
     const personnes = (test: (r?: string | null) => boolean) => agents
       .filter((a) => test(a.role))
       .map((a) => ({ id: String(a.userId), nom: a.nom }))
       .sort((x, y) => x.nom.localeCompare(y.nom, 'fr', { sensitivity: 'base' }));
     return {
       // v46 : Formation & Qualité toujours proposée.
-      activites: uniq([...agents.map((a) => this.activiteDuPole(a.poleId, a)), this.activiteFormation()]),
+      activites: optionsActivites(this.structure(), [
+        ...agents.map((a) => this.activiteDuPole(a.poleId, a)),
+        this.activiteFormation(),
+      ]),
       // v48.1 : complétées par l'organisation — une activité sans agent propose quand même
       // ses pôles et ses cellules (ex. Formation & Qualité).
-      poles: uniq([...dansActivite.map((a) => a.pole), ...declarees.poles]),
-      cellules: uniq([...dansPole.map((a) => a.cellule), ...declarees.cellules]),
+      poles: listes.poles,
+      cellules: listes.cellules,
       // v46 : Salarié et Sous-traitant toujours proposés.
       types: [...TYPES_CONTRAT] as string[],
       superviseurs: personnes(estSuperviseur),

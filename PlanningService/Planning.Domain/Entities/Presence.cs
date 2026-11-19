@@ -90,3 +90,26 @@ public class DossierDocument
     public int? CreatedBy { get; set; }
     public string? CreatedByNom { get; set; }
 }
+
+/// <summary>
+/// v58 — Validation du tableau de paie d'une période, réservée aux RH.
+/// <para>
+/// Une ligne par période validée : qui a validé, quand. Tant qu'elle existe, la période est
+/// verrouillée — présences et éléments variables de paie ne s'y modifient plus, sauf réouverture
+/// par les RH, qui est elle aussi tracée.
+/// </para>
+/// </summary>
+public class PaiePeriodeValidation
+{
+    public long Id { get; set; }
+    public DateOnly PeriodeDu { get; set; }
+    public DateOnly PeriodeAu { get; set; }
+    public int ValideParUserId { get; set; }
+    public string ValideParNom { get; set; } = string.Empty;
+    public DateTime ValideLe { get; set; } = DateTime.UtcNow;
+    public string? Commentaire { get; set; }
+    /// <summary>Réouverture : la ligne est conservée pour l'historique, mais ne verrouille plus.</summary>
+    public DateTime? RouvertLe { get; set; }
+    public int? RouvertParUserId { get; set; }
+    public string? RouvertParNom { get; set; }
+}

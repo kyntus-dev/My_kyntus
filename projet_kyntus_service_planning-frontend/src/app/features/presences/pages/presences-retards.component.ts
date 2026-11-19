@@ -7,7 +7,14 @@ import { PresenceService } from '../../../core/services/presence.service';
 import type { PresenceGrilleDto } from '../../../core/models/presence.models';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { telechargerExcel } from '../../pointage/lib/excel-export';
-import { formatMinutes, lignesExportRetards, lignesRetards, periodePaie, type LigneRetard } from '../lib/presence.util';
+import {
+  formatMinutes,
+  libellesUniques,
+  lignesExportRetards,
+  lignesRetards,
+  periodePaie,
+  type LigneRetard,
+} from '../lib/presence.util';
 
 interface Activite { id: string; name: string; kind: string; isActive: boolean; poleIds: string[] }
 
@@ -59,13 +66,14 @@ export class PresencesRetardsComponent implements OnInit {
 
   readonly options = computed(() => {
     const l = this.toutes();
-    const uniq = (xs: string[]) => [...new Set(xs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
     const dansActivite = l.filter((x) => !this.activite() || x.activite === this.activite());
     const dansPole = dansActivite.filter((x) => !this.pole() || x.pole === this.pole());
+    // v58 : mêmes listes que les autres écrans Présence et Paie — dédoublonnées (orthographe,
+    // accents, espaces) et limitées au niveau choisi.
     return {
-      activites: uniq(l.map((x) => x.activite)),
-      poles: uniq(dansActivite.map((x) => x.pole)),
-      cellules: uniq(dansPole.map((x) => x.cellule)),
+      activites: libellesUniques(l.map((x) => x.activite)),
+      poles: libellesUniques(dansActivite.map((x) => x.pole)),
+      cellules: libellesUniques(dansPole.map((x) => x.cellule)),
     };
   });
 

@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Kyntus.Iam;
 using Kyntus.Identity.Jwt;
@@ -203,9 +203,16 @@ public class PlanningController(
 
     // GET api/planning/config/status — avancement modèles (rouge/vert)
     [HttpGet("config/status")]
-    public async Task<IActionResult> GetShiftConfigStatus()
+    public async Task<IActionResult> GetShiftConfigStatus(CancellationToken ct)
     {
-        return Ok(await _planningService.GetShiftConfigStatusAsync());
+        // v58 : chacun ne configure que son périmètre, comme dans « Valider les plannings ».
+        // RH, Admin et un droit accordé « Toute l'entreprise » voient toutes les cellules.
+        var role = User.GetAuthRole();
+        var voitTout = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase)
+            || await PorteeGlobaleAsync(CapShiftConfigure, ct);
+        var viewerId = voitTout ? null : await ResolvePlanningUserIdAsync();
+        return Ok(await _planningService.GetShiftConfigStatusAsync(viewerId));
     }
 
     // GET api/planning/config/3 — modèle permanent

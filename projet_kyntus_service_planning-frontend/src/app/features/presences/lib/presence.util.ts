@@ -206,10 +206,68 @@ export interface ActiviteStructure {
 const memeNom = (a: string | null | undefined, b: string | null | undefined): boolean =>
   (a ?? '').trim().localeCompare((b ?? '').trim(), 'fr', { sensitivity: 'base' }) === 0;
 
+/** v58 — Clé de comparaison d'un libellé d'organisation : sans accents, sans casse, espaces réduits. */
+export function cleLibelle(valeur: string | null | undefined): string {
+  return (valeur ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** v58 — Dédoublonne des libellés sur cette clé (le premier rencontré donne l'orthographe) et trie. */
+export function libellesUniques(valeurs: Iterable<string | null | undefined>): string[] {
+  const parCle = new Map<string, string>();
+  for (const v of valeurs) {
+    const libelle = (v ?? '').trim();
+    if (!libelle) continue;
+    const cle = cleLibelle(libelle);
+    if (!parCle.has(cle)) parCle.set(cle, libelle);
+  }
+  return [...parCle.values()].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+}
+
+/**
+ * v58 — Listes déroulantes « Pôle » et « Cellule » des modules Présence et Paie.
+ *
+ * L'organisation de l'application fait foi : seuls les pôles de l'activité choisie et les cellules
+ * du pôle choisi sont proposés, sans doublon (« Support technicien » et « support technicien  »
+ * ne font qu'une entrée). Les libellés venus des agents ne servent qu'à compléter une structure
+ * encore vide ; dès que l'organisation déclare quelque chose pour ce niveau, elle seule est
+ * retenue — un pôle ou une cellule qui n'existe plus ne reste donc pas dans les filtres.
+ */
+export function optionsOrganisation(
+  activites: readonly ActiviteStructure[],
+  activite: string,
+  pole: string,
+  depuisLesAgents: { poles: Iterable<string | null | undefined>; cellules: Iterable<string | null | undefined> },
+): { poles: string[]; cellules: string[] } {
+  const declarees = structureDeLActivite(activites, activite, pole);
+  return {
+    poles: declarees.poles.length > 0
+      ? libellesUniques(declarees.poles)
+      : libellesUniques(depuisLesAgents.poles),
+    cellules: declarees.cellules.length > 0
+      ? libellesUniques(declarees.cellules)
+      : libellesUniques(depuisLesAgents.cellules),
+  };
+}
+
+/** v58 — Activités proposées : celles déclarées dans l'organisation, puis celles vues sur les agents. */
+export function optionsActivites(
+  activites: readonly ActiviteStructure[],
+  depuisLesAgents: Iterable<string | null | undefined>,
+): string[] {
+  const declarees = activites.filter((a) => a.isActive !== false).map((a) => a.name);
+  return libellesUniques([...declarees, ...depuisLesAgents]);
+}
+
 /**
  * Pôles et cellules déclarés dans l'organisation pour l'activité choisie. Les listes des filtres
  * étaient construites à partir des seuls agents présents : une activité sans agent (Formation &
  * Qualité juste après la création de ses cellules) n'en proposait aucun.
+ * v58 : les doublons sont retirés et la hiérarchie respectée (cellules du pôle choisi seulement).
  */
 export function structureDeLActivite(
   activites: readonly ActiviteStructure[],
@@ -220,9 +278,9 @@ export function structureDeLActivite(
   const dept = activites.find((a) => a.isActive !== false && memeNom(a.name, activite));
   if (!dept) return { poles: [], cellules: [] };
   return {
-    poles: dept.poles.map((p) => p.name),
-    cellules: dept.poles
+    poles: libellesUniques(dept.poles.map((p) => p.name)),
+    cellules: libellesUniques(dept.poles
       .filter((p) => !pole || memeNom(p.name, pole))
-      .flatMap((p) => p.cellules.map((c) => c.name)),
+      .flatMap((p) => p.cellules.map((c) => c.name))),
   };
 }

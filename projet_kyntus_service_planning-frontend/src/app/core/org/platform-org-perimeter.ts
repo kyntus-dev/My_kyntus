@@ -270,6 +270,44 @@ export function collectCelluleMemberOrgIds(
 }
 
 /** Restreint l’arbre org aux cellules indiquées (périmètre superviseur). */
+/**
+ * v58 — Réduit l'arbre aux services autorisés (identifiants d'organisation), en ne gardant que les
+ * cellules, pôles et contrats qui en contiennent encore un. Sert aux écrans dont le serveur renvoie
+ * déjà la liste du périmètre : l'écran n'affiche alors rien de plus que ce que le serveur accorde.
+ */
+export function filterOrgTreeToServiceIds(
+  operationalDepartments: readonly OperationalDepartmentNode[],
+  unassignedPoles: readonly OrgPoleNode[],
+  serviceIds: Iterable<string>,
+): { operationalDepartments: OperationalDepartmentNode[]; unassignedPoles: OrgPoleNode[] } {
+  const keys = new Set(
+    [...serviceIds].map((id) => (id ?? '').trim().toLowerCase()).filter(Boolean),
+  );
+  if (keys.size === 0) {
+    return { operationalDepartments: [], unassignedPoles: [] };
+  }
+
+  const filterPoles = (poles: readonly OrgPoleNode[]): OrgPoleNode[] =>
+    poles
+      .map((pole) => ({
+        ...pole,
+        cellules: (pole.cellules ?? [])
+          .map((c) => ({
+            ...c,
+            services: (c.services ?? []).filter((s) => keys.has((s.id ?? '').trim().toLowerCase())),
+          }))
+          .filter((c) => c.services.length > 0),
+      }))
+      .filter((pole) => pole.cellules.length > 0);
+
+  return {
+    operationalDepartments: operationalDepartments
+      .map((md) => ({ ...md, poles: filterPoles(md.poles ?? []) }))
+      .filter((md) => md.poles.length > 0),
+    unassignedPoles: filterPoles(unassignedPoles),
+  };
+}
+
 export function filterOrgTreeToCelluleIds(
   operationalDepartments: readonly OperationalDepartmentNode[],
   unassignedPoles: readonly OrgPoleNode[],

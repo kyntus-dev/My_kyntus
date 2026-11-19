@@ -1,4 +1,4 @@
-using Planning.Application.DTOs.Planning;
+﻿using Planning.Application.DTOs.Planning;
 namespace Planning.Application.Abstractions;
 
 public interface IPlanningService
@@ -18,7 +18,8 @@ public interface IPlanningService
     Task<WeekShiftConfigResponseDto?> GetShiftConfigAsync(int subServiceId, string weekCode);
     Task<WeekShiftConfigResponseDto?> GetShiftTemplateAsync(int subServiceId);
     Task<WeekShiftConfigResponseDto> SaveShiftTemplateAsync(SaveShiftConfigDto dto);
-    Task<ShiftConfigStatusResponseDto> GetShiftConfigStatusAsync();
+    /// <summary>v58 : viewerUserId renseigné = limité au périmètre de ce compte ; null = tout.</summary>
+    Task<ShiftConfigStatusResponseDto> GetShiftConfigStatusAsync(int? viewerUserId = null);
     Task EnsureWeekSnapshotAsync(int subServiceId, string weekCode, DateOnly weekStartDate, bool forceRefresh = false);
 
     // -- Modes de shifts hebdomadaires --

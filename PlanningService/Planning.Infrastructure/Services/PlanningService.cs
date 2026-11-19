@@ -329,10 +329,34 @@ public partial class PlanningService : IPlanningService
     public async Task<WeekShiftConfigResponseDto?> GetShiftTemplateAsync(int subServiceId)
         => await BuildWeekShiftConfigResponseAsync(subServiceId, isTemplate: true, weekCode: null);
 
-    public async Task<ShiftConfigStatusResponseDto> GetShiftConfigStatusAsync()
+    /// <summary>
+    /// v58 — Configuration des horaires : même règle que « Valider les plannings ». Quand
+    /// <paramref name="viewerUserId"/> est renseigné, seules les cellules du périmètre de ce compte
+    /// sont renvoyées ; RH, Admin et les droits accordés « Toute l'entreprise » passent null et
+    /// voient tout. Un responsable ne configure donc que ce qu'il encadre.
+    /// </summary>
+    public async Task<ShiftConfigStatusResponseDto> GetShiftConfigStatusAsync(int? viewerUserId = null)
     {
-        var subs = await _context.SubServices
-            .AsNoTracking()
+        HashSet<int>? perimetre = null;
+        if (viewerUserId is > 0)
+        {
+            perimetre = await _perimeter.GetManagedSubServiceIdsAsync(viewerUserId.Value);
+            if (perimetre.Count == 0)
+            {
+                return new ShiftConfigStatusResponseDto
+                {
+                    Items = new List<ShiftConfigStatusItemDto>(),
+                    ConfiguredCount = 0,
+                    TotalCount = 0,
+                };
+            }
+        }
+
+        var subsQuery = _context.SubServices.AsNoTracking();
+        if (perimetre is not null)
+            subsQuery = subsQuery.Where(s => perimetre.Contains(s.Id));
+
+        var subs = await subsQuery
             .OrderBy(s => s.Name)
             .Select(s => new { s.Id, s.Name, s.PrimeServiceId })
             .ToListAsync();

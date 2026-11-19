@@ -20,10 +20,12 @@ import {
   telechargerExportPaie,
 } from '../lib/paie.util';
 import { type ContextePenalites, type PeriodeAgents, penalitesAgent } from '../lib/manquements.util';
-import { ActiviteStructure, enteteJour, familleCode, periodePaie, structureDeLActivite, ymd } from '../lib/presence.util';
+import { ActiviteStructure, enteteJour, familleCode, optionsActivites, optionsOrganisation, periodePaie, ymd } from '../lib/presence.util';
 import { DirectoryFacadeService } from '../../../core/directory/directory-facade.service';
 import { dateFr, messageErreur, montantFr, sansAccents } from '../lib/suivi.util';
 import { normaliserTypeFormation } from '../../../core/hr/type-formation.util';
+import { KyntusSessionService } from '../../../core/session/kyntus-session.service';
+import type { PaieValidationDto } from '../../../core/models/presence.models';
 
 interface Activite { id: string; name: string; kind: string; isActive: boolean; poleIds: string[] }
 type Mode = 'paie' | 'mois';
@@ -47,6 +49,7 @@ export class PresencesExportComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly annuaire = inject(DirectoryFacadeService);
   private readonly toast = inject(KyntusToastService);
+  private readonly session = inject(KyntusSessionService);
 
   readonly codesDeduits = CODES_DEDUITS;
   readonly codesNonDeduits = CODES_NON_DEDUITS;
@@ -71,6 +74,15 @@ export class PresencesExportComponent implements OnInit {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly exportEnCours = signal(false);
+
+  // v58 — Validation du tableau de paie : réservée au RH, visible de tous.
+  readonly validation = signal<PaieValidationDto | null>(null);
+  readonly validationEnCours = signal(false);
+  readonly estRh = computed(() => {
+    const role = (this.session.getRole() ?? '').trim().toLowerCase();
+    return role === 'rh' || role === 'admin';
+  });
+  readonly verrouille = computed(() => this.validation()?.validee === true);
 
   readonly recherche = signal('');
   readonly activite = signal('');
@@ -122,11 +134,15 @@ export class PresencesExportComponent implements OnInit {
     const dansActivite = l.filter((x) => !this.activite() || this.activiteDe(x) === this.activite());
     const dansPole = dansActivite.filter((x) => !this.pole() || x.pole === this.pole());
     // v48.1 : complétées par l'organisation (activité sans agent : Formation & Qualité).
-    const declarees = structureDeLActivite(this.structure(), this.activite(), this.pole());
+    // v58 : mêmes listes que le tableau des présences — sans doublon et conformes à l'organisation.
+    const listes = optionsOrganisation(this.structure(), this.activite(), this.pole(), {
+      poles: dansActivite.map((x) => x.pole),
+      cellules: dansPole.map((x) => x.cellule),
+    });
     return {
-      activites: uniq([...l.map((x) => this.activiteDe(x)), this.activiteFormation()]),
-      poles: uniq([...dansActivite.map((x) => x.pole), ...declarees.poles]),
-      cellules: uniq([...dansPole.map((x) => x.cellule), ...declarees.cellules]),
+      activites: optionsActivites(this.structure(), [...l.map((x) => this.activiteDe(x)), this.activiteFormation()]),
+      poles: listes.poles,
+      cellules: listes.cellules,
     };
   });
 
@@ -244,8 +260,10 @@ export class PresencesExportComponent implements OnInit {
       saisies: this.suivi.avertissements(p2.du, au).pipe(catchError(() => of(null))),
       prec1: this.presences.grille(p1.du, p1.au).pipe(catchError(() => of(null))),
       prec2: this.presences.grille(p2.du, p2.au).pipe(catchError(() => of(null))),
+      validation: this.presences.validationPaie(du, au).pipe(catchError(() => of(null))),
     }).subscribe({
-      next: ({ grille, evp, saisies, prec1, prec2 }) => {
+      next: ({ grille, evp, saisies, prec1, prec2, validation }) => {
+        this.validation.set(validation);
         this.grille.set(grille);
         this.evp.set(evp ?? []);
         this.evpIndisponible.set(evp === null);
@@ -256,6 +274,50 @@ export class PresencesExportComponent implements OnInit {
       error: (err) => {
         this.loading.set(false);
         this.error.set(messageErreur(err, 'Impossible de préparer l’export paie.'));
+      },
+    });
+  }
+
+  /** v58 — Valide le tableau : RH uniquement, et la période devient non modifiable. */
+  validerPaie(): void {
+    if (!this.estRh() || this.validationEnCours()) return;
+    const { du, au, libelle } = this.periode();
+    if (!confirm(
+      `Valider le tableau de paie de ${libelle} ?\n\n`
+      + 'La période sera verrouillée : plus aucune présence ni aucun montant ne pourra y être '
+      + 'modifié tant que les RH ne la rouvrent pas. Votre nom et la date seront affichés.',
+    )) return;
+
+    this.validationEnCours.set(true);
+    this.presences.validerPaie(du, au).subscribe({
+      next: (v) => {
+        this.validation.set(v);
+        this.validationEnCours.set(false);
+        this.toast.success('Tableau de paie validé.');
+      },
+      error: (err) => {
+        this.validationEnCours.set(false);
+        this.toast.error(messageErreur(err, 'Validation impossible.'));
+      },
+    });
+  }
+
+  /** v58 — Rouvre la période pour correction : RH uniquement, action tracée. */
+  rouvrirPaie(): void {
+    if (!this.estRh() || this.validationEnCours()) return;
+    const { du, au, libelle } = this.periode();
+    if (!confirm(`Rouvrir le tableau de paie de ${libelle} ? Les corrections redeviendront possibles.`)) return;
+
+    this.validationEnCours.set(true);
+    this.presences.rouvrirPaie(du, au).subscribe({
+      next: (v) => {
+        this.validation.set(v);
+        this.validationEnCours.set(false);
+        this.toast.success('Période rouverte.');
+      },
+      error: (err) => {
+        this.validationEnCours.set(false);
+        this.toast.error(messageErreur(err, 'Réouverture impossible.'));
       },
     });
   }
