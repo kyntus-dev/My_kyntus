@@ -1,4 +1,4 @@
-using Kyntus.Iam;
+﻿using Kyntus.Iam;
 using Kyntus.Identity.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +10,12 @@ namespace Planning.API.Controllers;
 /// Tableau des présences (superviseur, référent technique, chef de projet, RH, Admin).
 /// Droits dans « Accès par rôle » : écran « presences » (Voir / Agir). Chaque responsable ne voit
 /// et ne modifie que les agents de son périmètre ; RH et Admin voient toute l'entreprise.
+/// <para>
+/// v57 — L'étendue se règle depuis l'interface : si « Tableau des présences › Consulter » est
+/// accordé à un rôle avec la portée <b>« Toute l'entreprise »</b>, ce rôle voit tous les agents
+/// (c'est ainsi que les RP partagent Présences et Paie). Avec toute autre portée, chacun reste
+/// sur son périmètre. Rien n'est codé en dur en dehors d'Admin et RH.
+/// </para>
 /// Route sous /api/planning/… : déjà publiée par la passerelle.
 /// </summary>
 [ApiController]
@@ -26,7 +32,7 @@ public sealed class PresencesController(IPresenceService presences, IPolicyEvalu
     {
         if (!await PeutAsync(CapVoir, ct)) return Forbid();
         var (d, a) = PeriodeParDefaut(du, au);
-        var result = await presences.GetGrilleAsync(Viewer(), d, a, await PeutAsync(CapAgir, ct), ct);
+        var result = await presences.GetGrilleAsync(await ViewerAsync(ct), d, a, await PeutAsync(CapAgir, ct), ct);
         return result is null ? NotFound(new { message = "Compte introuvable dans le Planning." }) : Ok(result);
     }
 
@@ -42,7 +48,7 @@ public sealed class PresencesController(IPresenceService presences, IPolicyEvalu
         var (d, a) = PeriodeParDefaut(du, au);
         try
         {
-            return Ok(await presences.SaisirAsync(Viewer(), body, d, a, ct));
+            return Ok(await presences.SaisirAsync(await ViewerAsync(ct), body, d, a, ct));
         }
         catch (PresenceRefusException ex) when (ex.HorsPerimetre)
         {
@@ -70,11 +76,24 @@ public sealed class PresencesController(IPresenceService presences, IPolicyEvalu
         return decision.Allowed;
     }
 
-    private PresenceViewer Viewer()
+    /// <summary>
+    /// v57 — Portée « Toute l'entreprise » accordée à ce rôle dans « Accès par rôle » : la
+    /// vérification porte sur une ressource nommée, que seule une portée globale peut couvrir.
+    /// </summary>
+    private async Task<bool> PorteeGlobaleAsync(string action, CancellationToken ct)
+    {
+        var role = User.GetAuthRole() ?? "Employee";
+        var decision = await policy.EvaluateAsync(
+            new PolicyRequest(User.GetSubjectId() ?? Guid.Empty, role, action, "platform", "toute-l-entreprise"), ct);
+        return decision.Allowed;
+    }
+
+    private async Task<PresenceViewer> ViewerAsync(CancellationToken ct)
     {
         var role = User.GetAuthRole();
         var global = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
-                     || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase);
+                     || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase)
+                     || await PorteeGlobaleAsync(CapVoir, ct);
         return new PresenceViewer(User.GetAuthUserId(), User.GetSubjectId(), User.GetEmail(), role, global);
     }
 }

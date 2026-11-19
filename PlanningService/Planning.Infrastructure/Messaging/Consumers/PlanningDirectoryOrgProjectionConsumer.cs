@@ -1,3 +1,4 @@
+﻿using Kyntus.Caching;
 using Kyntus.Messaging.Contracts;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,8 @@ namespace Planning.Infrastructure.Messaging.Consumers;
 public sealed class PlanningDirectoryOrgProjectionConsumer(
     AppDbContext db,
     IUserService userService,
-    ILogger<PlanningDirectoryOrgProjectionConsumer> logger) :
+    ILogger<PlanningDirectoryOrgProjectionConsumer> logger,
+    ICacheService? cache = null) :
     IConsumer<DirectoryOrgNodeChangedMessage>,
     IConsumer<DirectoryAssignmentChangedMessage>
 {
@@ -122,10 +124,31 @@ public sealed class PlanningDirectoryOrgProjectionConsumer(
         }
 
         await db.SaveChangesAsync(context.CancellationToken);
+        // v57 : le périmètre en cache devient faux à la seconde où la responsabilité change.
+        await OublierPerimetreAsync(user.Id, context.CancellationToken);
         logger.LogInformation("Planning Directory assignment {Kind} applied to user {UserId}", msg.Kind, user.Id);
 
         // Toujours pousser Auth : corrige aussi les désync JWT (rôle Planning déjà à jour).
         await userService.SyncUserRoleToAuthAsync(user.Id, context.CancellationToken);
+    }
+
+    /// <summary>
+    /// v57 — Efface le périmètre mis en cache pour ce compte (périmètre local, pôles du chef de
+    /// projet, nœuds d'Organisation RH). Sans cela, un contrat retiré restait visible jusqu'à
+    /// cinq minutes, et l'utilisateur croyait que son retrait n'avait pas été pris en compte.
+    /// </summary>
+    private async Task OublierPerimetreAsync(int userId, CancellationToken ct)
+    {
+        if (cache is null) return;
+        try
+        {
+            await cache.RemoveByPrefixAsync(KyntusCacheKeys.PlanningPerimeter(userId), ct);
+            await cache.RemoveAsync(KyntusCacheKeys.PlanningPerimeter(userId), ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Périmètre en cache non effacé pour l'utilisateur {UserId}", userId);
+        }
     }
 
     private async Task HandleRemovalAsync(DirectoryAssignmentChangedMessage msg, CancellationToken ct)
@@ -177,6 +200,8 @@ public sealed class PlanningDirectoryOrgProjectionConsumer(
         }
 
         await db.SaveChangesAsync(ct);
+        // v57 : un retrait doit se voir tout de suite, pas après l'expiration du cache.
+        await OublierPerimetreAsync(user.Id, ct);
         logger.LogInformation("Planning Directory assignment removal {Kind} applied for user {UserId}", msg.Kind, user.Id);
     }
 

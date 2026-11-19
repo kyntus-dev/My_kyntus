@@ -1,4 +1,4 @@
-using Kyntus.Iam;
+﻿using Kyntus.Iam;
 using Kyntus.Identity.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -141,6 +141,8 @@ public sealed class PresencesSuiviController(IPresenceSuiviService suivi, IPolic
             autorise = await PeutAsync(alt, ct);
         }
         if (!autorise) return Forbid();
+        // v57 : étendue résolue une fois par requête, avant d'exécuter l'action.
+        await ResoudrePorteeAsync(ct);
         try
         {
             return await corps();
@@ -162,11 +164,31 @@ public sealed class PresencesSuiviController(IPresenceSuiviService suivi, IPolic
         return decision.Allowed;
     }
 
-    private PresenceViewer Viewer()
+    /// <summary>v57 — Vrai si ce rôle a Présences ou Paie avec la portée « Toute l'entreprise ».</summary>
+    private bool _porteeGlobale;
+
+    private async Task ResoudrePorteeAsync(CancellationToken ct)
     {
-        var role = User.GetAuthRole();
-        var global = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
-                     || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase);
-        return new PresenceViewer(User.GetAuthUserId(), User.GetSubjectId(), User.GetEmail(), role, global);
+        var role = User.GetAuthRole() ?? "Employee";
+        if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase))
+        {
+            _porteeGlobale = true;
+            return;
+        }
+
+        foreach (var action in new[] { "presences.View", "presences.export.View", "presences.evp.View" })
+        {
+            var decision = await policy.EvaluateAsync(
+                new PolicyRequest(User.GetSubjectId() ?? Guid.Empty, role, action, "platform", "toute-l-entreprise"), ct);
+            if (decision.Allowed)
+            {
+                _porteeGlobale = true;
+                return;
+            }
+        }
     }
+
+    private PresenceViewer Viewer() =>
+        new(User.GetAuthUserId(), User.GetSubjectId(), User.GetEmail(), User.GetAuthRole(), _porteeGlobale);
 }
