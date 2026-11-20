@@ -163,9 +163,9 @@ public sealed class PresenceService(
         {
             for (var j = request.Jour; j <= fin; j = j.AddDays(1))
             {
-                existantes.TryGetValue(j, out var avant);
-                if (request.RetardAutorise != (avant?.RetardAutorise ?? false)
-                    || request.RetardPauseAutorise != (avant?.RetardPauseAutorise ?? false))
+                existantes.TryGetValue(j, out var precedente);
+                if (request.RetardAutorise != (precedente?.RetardAutorise ?? false)
+                    || request.RetardPauseAutorise != (precedente?.RetardPauseAutorise ?? false))
                     throw new PresenceRefusException(
                         "Seuls le chef de projet, les RH et l'Admin peuvent autoriser un retard ou un dépassement de pause.");
             }
