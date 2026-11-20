@@ -2756,6 +2756,21 @@ public partial class PlanningService : IPlanningService
     // ----------------------------------------------------
     public async Task<WeeklyPlanningResponseDto?> GetPlanningByIdAsync(int id)
     {
+        // v61 — Effectif synchronisé sur les jours encore modifiables : agents sortis retirés, agents
+        // arrivés dans la cellule ajoutés. Jamais dans une transaction en cours ; un échec ne bloque pas
+        // l'affichage (le planning s'affiche tel qu'il est).
+        if (!_context.Database.IsRelational() || _context.Database.CurrentTransaction is null)
+        {
+            try
+            {
+                await SynchroniserEffectifAsync(id);
+            }
+            catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException)
+            {
+                _context.ChangeTracker.Clear();
+            }
+        }
+
         var planning = await _context.WeeklyPlannings
             .AsNoTracking()
             .AsSplitQuery()
@@ -2793,6 +2808,20 @@ public partial class PlanningService : IPlanningService
             .ToHashSet();
         foreach (var masquee in planning.ShiftAssignments.Where(a => horsProduction.Contains(a.UserId)).ToList())
             planning.ShiftAssignments.Remove(masquee);
+
+        // v61 — Agent sorti : ses journées après la date de sortie (sans date : à partir d'aujourd'hui)
+        // ne s'affichent plus. Retirées de la vue seulement : l'historique reste en base.
+        var datesSortie = await ChargerDatesSortieAsync(idsAffectes);
+        var aujourdhuiVue = DateOnly.FromDateTime(DateTime.Now);
+        foreach (var apresSortie in planning.ShiftAssignments
+                     .Where(a => a.User is not null
+                                 && PlanningEffectifRules.MasqueeApresSortie(
+                                     a.User.IsActive,
+                                     datesSortie.TryGetValue(a.UserId, out var sortie) ? sortie : null,
+                                     a.AssignedDate,
+                                     aujourdhuiVue))
+                     .ToList())
+            planning.ShiftAssignments.Remove(apresSortie);
 
         var comments = await _context.PlanningComments
             .Where(c => c.WeeklyPlanningId == id)

@@ -155,6 +155,9 @@ public static class PlatformAccessCatalog
         S("presences.avertissements", "Manquements (référentiel)", "Présences et paie", View: TeamLead, Act: TeamLead),
         S("presences.evp", "Éléments variables de paie", "Présences et paie", View: TeamLead, Act: TeamLead),
         S("presences.dossier", "Dossier administratif", "Présences et paie", View: RhChefProjet, Act: RhChefProjet),
+        // v61 : tableaux dédiés des superviseurs et référents techniques du périmètre (listes du tableau
+        // des présences). Consulter = voir leurs présences ; Agir = les saisir. RP coché par défaut.
+        S("presences.encadrement", "Présences des superviseurs et référents", "Présences et paie", View: RhChefProjet, Act: RhChefProjet),
         // v37 : superviseur aussi (ses agents, dont ceux en formation, en couleur).
         S("presences.export", "Export paie", "Présences et paie", View: [.. RhChefProjet, "Superviseur"]),
 
@@ -280,6 +283,13 @@ public static class PlatformAccessCatalog
         normalizedAction = $"{catalogScreen.Id}.{catalogVerb}";
         return true;
     }
+
+    /// <summary>
+    /// v61 — Rubriques ajoutées après la mise en service : leurs droits par défaut sont posés une seule
+    /// fois sur une base existante (tant qu'aucune ligne n'existe pour la rubrique, quel que soit le rôle).
+    /// Une rubrique décochée ensuite garde sa ligne (refusée) : rien n'est réimposé au redémarrage.
+    /// </summary>
+    public static readonly string[] RubriquesAjoutees = ["presences.encadrement"];
 
     public static IEnumerable<(string Action, string Scope)> SeedRowsForRole(string role)
     {

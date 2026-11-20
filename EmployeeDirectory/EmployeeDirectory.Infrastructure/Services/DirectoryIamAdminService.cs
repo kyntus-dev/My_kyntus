@@ -136,6 +136,7 @@ public sealed class DirectoryIamAdminService(DirectoryDbContext db) : IIamAdminS
         if (!premiereInstallation)
         {
             await FusionnerAliasAsync(ct);
+            await AjouterRubriquesAjouteesAsync(ct);
             return;
         }
 
@@ -201,6 +202,36 @@ public sealed class DirectoryIamAdminService(DirectoryDbContext db) : IIamAdminS
 
         db.IamPermissions.RemoveRange(lignes);
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// v61 — Droits par défaut d'une rubrique ajoutée après l'installation (ex. « Présences des
+    /// superviseurs et référents » : RP), posés une seule fois : seulement si la rubrique n'a encore
+    /// aucune ligne. Les droits existants des autres rubriques ne sont jamais touchés.
+    /// </summary>
+    public async Task AjouterRubriquesAjouteesAsync(CancellationToken ct = default)
+    {
+        foreach (var rubrique in PlatformAccessCatalog.RubriquesAjoutees)
+        {
+            var prefixe = rubrique + ".";
+            if (await db.IamPermissions.AnyAsync(p => p.Action.StartsWith(prefixe), ct))
+                continue;
+            foreach (var role in PlatformAccessCatalog.Roles.Where(r => !string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var (action, scope) in PlatformAccessCatalog.SeedRowsForRole(role).Where(r => r.Action.StartsWith(prefixe, StringComparison.Ordinal)))
+                {
+                    db.IamPermissions.Add(new IamPermission
+                    {
+                        Id = Guid.NewGuid(),
+                        Role = role,
+                        Action = action,
+                        Scope = scope,
+                        IsAllowed = true,
+                    });
+                }
+            }
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     /// <summary>

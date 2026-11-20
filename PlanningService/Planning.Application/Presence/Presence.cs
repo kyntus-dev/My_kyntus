@@ -84,6 +84,68 @@ public static class PresenceRegles
         code == PresenceCodes.Present
             ? (entreeAutorisee ? retardEntree : 0) + (pauseAutorisee ? retardPause : 0)
             : 0;
+
+    /// <summary>Bloc des heures supplémentaires : seules les tranches complètes de 30 minutes comptent.</summary>
+    public const int BlocHeuresSupMinutes = 30;
+
+    /// <summary>Limite entre heures supplémentaires de jour et de nuit.</summary>
+    public static readonly TimeOnly LimiteHeuresSupNuit = new(21, 0);
+
+    /// <summary>
+    /// v61 : heures supplémentaires d'une journée, d'après les pointages et le planning.
+    /// Jour ouvré : sortie après la fin prévue (début du planning + production prévue + pause autorisée),
+    /// partagée entre avant 21h et après 21h. Dimanche ou férié : tout le temps travaillé.
+    /// Chaque part est arrondie à la tranche de 30 minutes inférieure. Rien sans journée complète
+    /// (nombre pair de pointages), ni un jour d'absence ou de congé.
+    /// </summary>
+    public static HeuresSupJour HeuresSupplementaires(
+        DateOnly jour,
+        string statut,
+        string? code,
+        string? planning,
+        int pauseAutoriseeMinutes,
+        int? productionPrevueMinutes,
+        IReadOnlyList<string> pointages)
+    {
+        if (code is not (null or PresenceCodes.Present or PresenceCodes.Formation or "F"))
+            return HeuresSupJour.Aucune;
+        var heures = new List<TimeOnly>(pointages.Count);
+        foreach (var p in pointages)
+            if (TimeOnly.TryParse(p, System.Globalization.CultureInfo.InvariantCulture, out var t))
+                heures.Add(t);
+        heures.Sort();
+        if (heures.Count < 2 || heures.Count % 2 == 1
+            || statut is PointageJourStatuts.PointageManquant or PointageJourStatuts.EnCours)
+            return HeuresSupJour.Aucune;
+
+        var dimancheOuFerie = jour.DayOfWeek == DayOfWeek.Sunday
+                              || statut == PointageJourStatuts.Ferie
+                              || JoursFeries.Nom(jour) is not null;
+        if (dimancheOuFerie)
+        {
+            var travaille = 0.0;
+            for (var i = 0; i + 1 < heures.Count; i += 2)
+                travaille += (heures[i + 1] - heures[i]).TotalMinutes;
+            return new HeuresSupJour(null, 0, 0, Bloc(travaille));
+        }
+
+        if (productionPrevueMinutes is not int prevue
+            || !TimeOnly.TryParse(planning, System.Globalization.CultureInfo.InvariantCulture, out var debut))
+            return HeuresSupJour.Aucune;
+        var finMinutes = debut.Hour * 60 + debut.Minute + prevue + Math.Max(0, pauseAutoriseeMinutes);
+        if (finMinutes >= 24 * 60)
+            return HeuresSupJour.Aucune;
+        // Calcul en minutes depuis minuit (la soustraction de TimeOnly reboucle sur 24 h).
+        var departMinutes = heures[^1].Hour * 60 + heures[^1].Minute;
+        var limiteMinutes = LimiteHeuresSupNuit.Hour * 60 + LimiteHeuresSupNuit.Minute;
+        var avant = Math.Max(0, Math.Min(departMinutes, limiteMinutes) - finMinutes);
+        var apres = Math.Max(0, departMinutes - Math.Max(finMinutes, limiteMinutes));
+        var fin = new TimeOnly(finMinutes / 60, finMinutes % 60);
+        return new HeuresSupJour(fin.ToString("HH:mm"), Bloc(avant), Bloc(apres), 0);
+    }
+
+    private static int Bloc(double minutes) =>
+        (int)Math.Floor(minutes / BlocHeuresSupMinutes) * BlocHeuresSupMinutes;
 }
 
 public sealed record PresenceJourDto(
@@ -107,7 +169,18 @@ public sealed record PresenceJourDto(
     string? Commentaire,
     string? ModifiePar,
     DateTime? ModifieLe,
-    bool AbsencePartielle = false);
+    bool AbsencePartielle = false,
+    // v61 : heures supplémentaires détectées au pointage (au-delà de la fin prévue, par blocs de 30 min).
+    string? FinPrevue = null,
+    int HsAvant21Minutes = 0,
+    int HsApres21Minutes = 0,
+    int HsDimancheFerieMinutes = 0);
+
+/// <summary>v61 : heures supplémentaires d'une journée, en minutes (multiples de 30).</summary>
+public sealed record HeuresSupJour(string? FinPrevue, int Avant21Minutes, int Apres21Minutes, int DimancheFerieMinutes)
+{
+    public static readonly HeuresSupJour Aucune = new(null, 0, 0, 0);
+}
 
 public sealed record PresenceTotauxDto(
     int Presents,
@@ -141,7 +214,12 @@ public sealed record PresenceAgentDto(
     // v46 : rôle du compte (les superviseurs et référents techniques du périmètre d'un chef de projet).
     string? Role = null,
     // v48 : « contractuel » / « non-contractuel » (type de formation choisi sur la fiche).
-    string? TypeFormation = null);
+    string? TypeFormation = null,
+    // v61 : superviseur / référent technique : pôles (ids et noms) et cellules des agents visibles qui le
+    // désignent, plus son propre placement. Sert aux listes filtrées par activité, pôle et cellule.
+    IReadOnlyList<string>? PoleIdsEncadres = null,
+    IReadOnlyList<string>? PolesEncadres = null,
+    IReadOnlyList<string>? CellulesEncadrees = null);
 
 public sealed record PresenceGrilleDto(
     string Perimetre,
@@ -153,7 +231,12 @@ public sealed record PresenceGrilleDto(
     IReadOnlyList<PresenceCodeDto> Codes,
     IReadOnlyList<PresenceAgentDto> Agents,
     // v46 : superviseurs et référents techniques ne peuvent pas autoriser un retard ni un dépassement de pause.
-    bool PeutAutoriserRetard = true);
+    bool PeutAutoriserRetard = true,
+    // v61 : rubrique « Présences des superviseurs et référents » : listes dédiées (Consulter) et saisie (Agir).
+    bool EncadrementDedie = false,
+    bool EncadrementModifiable = false,
+    // v61 : false = périmètre limité : les filtres ne proposent que les contrats, pôles et cellules de ce périmètre.
+    bool ToutesActivites = false);
 
 /// <summary>Saisie sur une journée (ou une période si <see cref="Au"/> est renseigné).</summary>
 public sealed record PresenceSaisieRequest(
@@ -167,7 +250,11 @@ public sealed record PresenceSaisieRequest(
     string? Commentaire,
     bool AbsencePartielle = false);
 
-public sealed record PresenceViewer(int? AuthUserId, Guid? SubjectId, string? Email, string? Role, bool Global);
+/// <param name="EncadrementVoir">v61 : droit « Présences des superviseurs et référents › Consulter » (null : règle v46, chef de projet).</param>
+/// <param name="EncadrementAgir">v61 : droit « … › Modifier » (null : règle v46, chef de projet).</param>
+public sealed record PresenceViewer(
+    int? AuthUserId, Guid? SubjectId, string? Email, string? Role, bool Global,
+    bool? EncadrementVoir = null, bool? EncadrementAgir = null);
 
 /// <summary>Demandeur résolu : son compte Planning et les agents qu'il peut traiter (null = tous).</summary>
 public sealed record PresenceAuteur(int? UserId, string? Nom, IReadOnlySet<int>? Agents)

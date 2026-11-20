@@ -117,9 +117,11 @@ export function filtrerAgents(
   const q = f.recherche.trim().toLowerCase();
   const correspond = (choix: string, a: PresenceAgentDto) => choix === '*' || choix === String(a.userId);
   if (encadrementSurDemande && (f.superviseurs || f.referents)) {
+    // v61 : l'activité, le pôle et la cellule choisis s'appliquent aussi (périmètre de chaque personne).
     return agents.filter((a) =>
       ((f.superviseurs && estSuperviseur(a.role) && correspond(f.superviseurs, a))
         || (f.referents && estReferentTechnique(a.role) && correspond(f.referents, a)))
+      && encadrementDans(a, f, activiteDuPole)
       && (!q || a.nom.toLowerCase().includes(q)));
   }
   return agents.filter((a) =>
@@ -131,6 +133,55 @@ export function filtrerAgents(
     && (!f.type || a.type === f.type)
     && correspondFormation(f.formation, a)
     && (!f.aTraiter || aTraiter(a)));
+}
+
+/**
+ * v61 — Superviseur ou référent rattaché à l'activité, au pôle et à la cellule choisis : par son
+ * placement, ou par les agents de ces niveaux qui le désignent sur leur fiche (calcul serveur).
+ * Évite de proposer, pour un contrat, des responsables d'un autre contrat ou d'un autre périmètre.
+ */
+export function encadrementDans(
+  a: PresenceAgentDto,
+  f: Pick<FiltresPresence, 'activite' | 'pole' | 'cellule'>,
+  activiteDuPole: (poleId: string | null, agent?: PresenceAgentDto) => string | null,
+): boolean {
+  const poleIds = [a.poleId, ...(a.poleIdsEncadres ?? [])].filter((x): x is string => !!x);
+  const poles = [a.pole, ...(a.polesEncadres ?? [])].filter((x): x is string => !!x);
+  const cellules = [a.cellule, ...(a.cellulesEncadrees ?? [])].filter((x): x is string => !!x);
+  return (!f.activite || poleIds.some((p) => activiteDuPole(p) === f.activite))
+    && (!f.pole || poles.some((p) => memeLibelle(p, f.pole)))
+    && (!f.cellule || cellules.some((c) => memeLibelle(c, f.cellule)));
+}
+
+const memeLibelle = (a: string, b: string) => cleLibelle(a) === cleLibelle(b);
+
+/**
+ * v61 — Listes des filtres selon le périmètre. Toute l'entreprise (RH, Admin, portée globale) :
+ * organisation complète (v58). Périmètre limité (RP, superviseur…) : seulement les contrats, pôles et
+ * cellules de ses agents (et des superviseurs / référents qu'il voit), sans doublon ni autre périmètre.
+ */
+export function optionsPerimetre(
+  toutesActivites: boolean,
+  structure: readonly ActiviteStructure[],
+  activite: string,
+  pole: string,
+  depuisLesAgents: {
+    activites: Iterable<string | null | undefined>;
+    poles: Iterable<string | null | undefined>;
+    cellules: Iterable<string | null | undefined>;
+  },
+): { activites: string[]; poles: string[]; cellules: string[] } {
+  if (toutesActivites) {
+    return {
+      activites: optionsActivites(structure, depuisLesAgents.activites),
+      ...optionsOrganisation(structure, activite, pole, depuisLesAgents),
+    };
+  }
+  return {
+    activites: libellesUniques(depuisLesAgents.activites),
+    poles: libellesUniques(depuisLesAgents.poles),
+    cellules: libellesUniques(depuisLesAgents.cellules),
+  };
 }
 
 export interface LigneRetard {

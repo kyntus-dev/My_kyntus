@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { EvpDto, PresenceAgentDto, PresenceJourDto } from '../../../core/models/presence.models';
-import { entetesPaie, hhmmss, joursOuvres, joursPayes, lignePaie, lignesDetailPenalites, nomsExport, totauxControle, valeursPaie } from './paie.util';
+import {
+  CATEGORIES_EVP, COLONNES_FIN, categorieEvp, entetesPaie, hhmmss, joursOuvres, joursPayes, lignePaie, lignesDetailPenalites,
+  moisCivilDePeriode, nomsExport, reglesExport, totauxControle, valeursPaie,
+} from './paie.util';
 import { penalitesAgent } from './manquements.util';
 import { joursDeLaPeriode } from './presence.util';
 
@@ -24,13 +27,17 @@ function agent(jours: PresenceJourDto[], extra: Partial<PresenceAgentDto> = {}):
 }
 
 describe('export paie', () => {
-  it('reprend les 52 colonnes du fichier d’octobre 2026 (27 jours du lundi au samedi), plus « Statut paie » et « Type de formation » (v48)', () => {
+  it('reprend les 52 colonnes du fichier d’octobre 2026 (27 jours du lundi au samedi), plus « Statut paie », « Type de formation » (v48) et les colonnes v61', () => {
     const entetes = entetesPaie('2026-10-01', '2026-10-31');
-    expect(entetes).toHaveLength(54);
+    // v61 : + 3 colonnes de présence, + 6 catégories d'EVP, + 5 colonnes d'heures supplémentaires.
+    expect(entetes).toHaveLength(54 + 3 + 6 + 5);
     expect(entetes.slice(0, 4)).toEqual(['Type', 'Affectation', 'Pilote', 'jeu\n01/10']);
     expect(entetes).not.toContain('dim\n04/10');
     expect(entetes.slice(-2)).toEqual(['Sortie (AR)', 'Statut paie']);
-    expect(entetes.slice(-24, -17)).toEqual(['Formation', 'Type de formation', 'Date entrée', 'Abs. partielle', 'ABS N (déduit)', 'AM (déduit)', 'AR (déduit)']);
+    expect(entetes.slice(-38, -31)).toEqual(['Formation', 'Type de formation', 'Date entrée', 'Abs. partielle', 'ABS N (déduit)', 'AM (déduit)', 'AR (déduit)']);
+    // Les colonnes existantes gardent leur ordre relatif.
+    const ordre = ['Jrs travaillés', 'Total des absences', 'Cumul retards', 'Manque de Pointage', 'Commentaire Présence', 'Éléments Variables de Paie', 'Total EVP', 'Montant pénalité', 'Origine pénalité', 'Sortie (AR)', 'Statut paie'];
+    expect(ordre.map((c) => entetes.indexOf(c))).toEqual([...ordre.map((c) => entetes.indexOf(c))].sort((a, b) => a - b));
     expect(hhmmss(1505)).toBe('25:05:00');
   });
 
@@ -71,10 +78,14 @@ describe('export paie', () => {
     expect(l.originePenalite).toBe('');
     expect(l.absPartielle).toBe(1);
     expect(l.commentaires).toBe('08/10 : (sup) Justificatif reçu');
-    expect(l.evp).toBe('05/10 Heures Supp. (à valoriser) : 4 h | 20/10 Prime : Objectif');
+    // v61 : détail regroupé par type, sans les longs commentaires ; montants rangés par catégorie.
+    expect(l.evp).toBe('Heures Supp. (à valoriser) : à valoriser (05/10) | Prime : 300 (20/10)');
+    expect(l.evpCategories).toEqual([0, 0, 300, 0, 0, 0]);
+    expect(l.joursPresents).toBe(21);
+    expect(l.presentsParDefaut).toBe(0);
     expect(l.totalEvp).toBe(300);
     expect(l.alertes).toContain('EVP à valoriser');
-    expect(valeursPaie(l)).toHaveLength(54);
+    expect(valeursPaie(l)).toHaveLength(entetesPaie(du, au).length);
     const avecPenalite = lignePaie(a, evp, du, au, { montant: 250, details: [], origine: 'R01 ×1', disciplinaires: 0, alertes: [] });
     expect(avecPenalite.penalite).toBe(-250);
     expect(avecPenalite.originePenalite).toBe('R01 ×1');
@@ -160,5 +171,101 @@ describe('export paie v37 : formation en couleur, détail et contrôle', () => {
     expect(det.map((r) => r[7])).toEqual([-50, -100, -50]);
     expect(det.reduce((s, r) => s + (r[7] as number), 0)).toBe(l.penalite);
     expect(l.penalite).toBe(-200);
+  });
+});
+
+describe('export paie v61 : mois civil + décalage (absences du 24 au 23)', () => {
+  // Paie de novembre 2026 : colonnes 01/11 → 30/11 ; absences 24/10 → 23/11 ; 24/11 → 30/11 présents par défaut.
+  const du = '2026-10-24';
+  const au = '2026-11-23';
+  const mois = moisCivilDePeriode(au);
+
+  function grilles(codes: Record<string, string>, extra: Partial<PresenceAgentDto> = {}, jourExtra: Record<string, Partial<PresenceJourDto>> = {}) {
+    const ref = agent(joursDeLaPeriode(du, au).map((d) => jour(d, codes[d] ?? 'P', jourExtra[d] ?? {})), extra);
+    const civ = agent(joursDeLaPeriode(mois.du, mois.au).map((d) => jour(d, codes[d] ?? 'P', jourExtra[d] ?? {})), extra);
+    return { ref, civ };
+  }
+
+  it('mois civil du 23 : du 1er au dernier jour', () => {
+    expect(mois).toEqual({ du: '2026-11-01', au: '2026-11-30' });
+    expect(moisCivilDePeriode('2026-12-23')).toEqual({ du: '2026-12-01', au: '2026-12-31' });
+    expect(moisCivilDePeriode('2027-02-23')).toEqual({ du: '2027-02-01', au: '2027-02-28' });
+  });
+
+  it('mois complet : 26 − absences du 24/10 au 23/11 ; du 24/11 au 30/11 présent par défaut, sans double comptage', () => {
+    const { ref, civ } = grilles({ '2026-10-27': 'ABS N', '2026-11-05': 'AM', '2026-11-10': 'CP', '2026-11-25': 'ABS N' });
+    const l = lignePaie(ref, [], du, au, undefined, { mois, agentMois: civ });
+
+    expect(l.jours).toHaveLength(25); // novembre 2026 du lundi au samedi
+    expect(l.joursProduction).toBe(25);
+    expect(l.deduits['ABS N']).toBe(1); // 27/10 (le 25/11 sera déduit en décembre)
+    expect(l.deduits.AM).toBe(1);
+    expect(l.nonDeduits.CP).toBe(1);
+    expect(l.totalAbsences).toBe(2);
+    expect(l.absencesAvantMois).toBe(1);
+    expect(l.jrsTravailles).toBe(24);
+    const i25 = joursOuvres(mois.du, mois.au).indexOf('2026-11-25');
+    expect(l.jours[i25]).toBe('P');
+    expect(l.presentsParDefaut).toBe(6); // 24, 25, 26, 27, 28, 30
+    expect(l.statutPaie).toBe('Production');
+  });
+
+  it('nouvel entrant le 10/11 : jours de production depuis son arrivée réelle, absences d’avant ignorées', () => {
+    const { ref, civ } = grilles({ '2026-10-27': 'ABS N', '2026-11-12': 'AM' }, { dateEntree: '2026-11-10' });
+    const l = lignePaie(ref, [], du, au, undefined, { mois, agentMois: civ });
+    expect(l.joursProduction).toBe(18);
+    expect(l.totalAbsences).toBe(1);
+    expect(l.absencesAvantMois).toBe(0);
+    expect(l.jrsTravailles).toBe(17.72); // 26 × 18 ÷ 25 − 1
+    expect(l.dateEntree).toBe('10/11/2026');
+    expect(l.statutPaie).toBe('Prorata (entrée, sortie ou formation)');
+  });
+
+  it('agent sortant le 26/11 : prorata jusqu’à la sortie, jours suivants vides, signalé', () => {
+    const { ref, civ } = grilles({}, { dateSortie: '2026-11-26' });
+    const l = lignePaie(ref, [], du, au, undefined, { mois, agentMois: civ });
+    const cols = joursOuvres(mois.du, mois.au);
+    expect(l.joursProduction).toBe(22);
+    expect(l.jrsTravailles).toBe(22.88);
+    expect(['2026-11-27', '2026-11-28', '2026-11-30'].map((d) => l.jours[cols.indexOf(d)])).toEqual(['', '', '']);
+    expect(l.presentsParDefaut).toBe(3);
+    expect(l.sortie).toBe('Sorti le 26/11/2026 (pendant la période) — à vérifier');
+  });
+
+  it('changement de contrat dans le mois : un seul agent, une seule ligne, mêmes jours', () => {
+    const { ref, civ } = grilles({ '2026-11-05': 'AM' }, { cellule: 'Bytel Kyntus' });
+    const l = lignePaie(ref, [], du, au, undefined, { mois, agentMois: { ...civ, cellule: 'Sfr Ftth' } });
+    expect(l.affectation).toBe('BYTEL KYNTUS');
+    expect(l.totalAbsences).toBe(1);
+    expect(l.jrsTravailles).toBe(25);
+  });
+
+  it('heures supplémentaires : totalisées par catégorie sur la période 24 → 23, détail par date', () => {
+    const { ref, civ } = grilles({}, {}, {
+      '2026-11-03': { hsAvant21Minutes: 60, finPrevue: '19:00' },
+      '2026-11-05': { hsAvant21Minutes: 120, hsApres21Minutes: 60, finPrevue: '19:00' },
+      '2026-11-08': { hsDimancheFerieMinutes: 390 },
+      '2026-11-25': { hsAvant21Minutes: 90, finPrevue: '19:00' }, // compté en décembre
+    });
+    const l = lignePaie(ref, [], du, au, undefined, { mois, agentMois: civ });
+    expect([l.hsAvant21, l.hsApres21, l.hsDimancheFerie, l.hsTotal]).toEqual([3, 1, 6.5, 10.5]);
+    expect(l.hsDetail).toBe('03/11 1h (fin prévue 19:00) | 05/11 2h + 1h après 21h (fin prévue 19:00) | 08/11 6h30 dim./férié');
+    const totaux = new Map(totauxControle([l]));
+    expect(totaux.get('Total heures supplémentaires (h)')).toBe(10.5);
+    const v = valeursPaie(l);
+    const e = entetesPaie(mois.du, mois.au);
+    expect(v).toHaveLength(e.length);
+    expect(v[e.indexOf('Total HS (h)')]).toBe(10.5);
+    expect(v[e.indexOf('Abs. déduites avant le 1er')]).toBe(0);
+  });
+
+  it('catégories d’EVP et noms du fichier', () => {
+    expect(['Heures Supp. (à valoriser)', 'Samedis (à valoriser)', 'Challenges (à valoriser)', 'Prime', 'Indemnité', 'Rappel de salaire', 'Retenue', 'Avance sur salaire', 'Autre', 'Type perso']
+      .map(categorieEvp)).toEqual([0, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
+    expect(CATEGORIES_EVP.every((c) => (COLONNES_FIN as readonly string[]).includes(c.colonne))).toBe(true);
+    const n = nomsExport(du, au, mois);
+    expect(n).toEqual({ feuille: 'Récap 11-2026 abs 24-10→23-11', fichier: 'recap_paie_2026-11_absences_2026-10-24_2026-11-23.xlsx' });
+    expect(n.feuille.length).toBeLessThanOrEqual(31);
+    expect(reglesExport(du, au, mois)[2]).toContain('Du 24/11/2026 au 30/11/2026 : présent par défaut');
   });
 });

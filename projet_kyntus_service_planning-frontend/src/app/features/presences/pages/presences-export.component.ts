@@ -16,11 +16,12 @@ import {
   type LignePaie,
   joursOuvres,
   lignePaie,
+  moisCivilDePeriode,
   nomsExport,
   telechargerExportPaie,
 } from '../lib/paie.util';
 import { type ContextePenalites, type PeriodeAgents, penalitesAgent } from '../lib/manquements.util';
-import { ActiviteStructure, enteteJour, familleCode, optionsActivites, optionsOrganisation, periodePaie, ymd } from '../lib/presence.util';
+import { ActiviteStructure, enteteJour, familleCode, optionsPerimetre, periodePaie, ymd } from '../lib/presence.util';
 import { DirectoryFacadeService } from '../../../core/directory/directory-facade.service';
 import { dateFr, messageErreur, montantFr, sansAccents } from '../lib/suivi.util';
 import { normaliserTypeFormation } from '../../../core/hr/type-formation.util';
@@ -62,6 +63,12 @@ export class PresencesExportComponent implements OnInit {
   readonly decalage = signal(0);
   readonly periode = computed(() => this.periodeDe(this.decalage()));
   readonly grille = signal<PresenceGrilleDto | null>(null);
+  /**
+   * v61 — Mois civil + décalage (mode paie) : colonnes du 1er à la fin du mois ; absences, EVP,
+   * retards et heures supplémentaires sur la période 24 → 23 (grille ci-dessus, inchangée).
+   */
+  readonly mois = computed(() => (this.mode() === 'paie' ? moisCivilDePeriode(this.periode().au) : null));
+  readonly grilleMois = signal<PresenceGrilleDto | null>(null);
   /** v30 : manquements saisis (période et deux précédentes) ; null si illisibles. */
   readonly saisies = signal<AvertissementDto[] | null>(null);
   /** v30 : grilles des deux périodes précédentes (rang « mois consécutif » des retards). */
@@ -99,7 +106,9 @@ export class PresencesExportComponent implements OnInit {
 
   readonly jours = computed(() => {
     const g = this.grille();
-    return g ? joursOuvres(g.du.slice(0, 10), g.au.slice(0, 10)) : [];
+    const m = this.mois();
+    if (!g) return [];
+    return m ? joursOuvres(m.du, m.au) : joursOuvres(g.du.slice(0, 10), g.au.slice(0, 10));
   });
 
   private readonly activiteParPole = computed(() => {
@@ -125,7 +134,12 @@ export class PresencesExportComponent implements OnInit {
     const du = g.du.slice(0, 10);
     const au = g.au.slice(0, 10);
     const ctx: ContextePenalites = { du, au, saisies: this.saisies(), precedents: this.precedents() };
-    return g.agents.map((a) => lignePaie(a, this.evp(), du, au, penalitesAgent(a, ctx)));
+    const mois = this.mois();
+    if (!mois) return g.agents.map((a) => lignePaie(a, this.evp(), du, au, penalitesAgent(a, ctx)));
+    // v61 : un agent entré après le 23 n'apparaît que sur la grille du mois : il est ajouté (sans doublon).
+    const parMois = new Map<number, PresenceAgentDto>((this.grilleMois()?.agents ?? []).map((a) => [a.userId, a]));
+    const agents = [...g.agents, ...[...parMois.values()].filter((a) => !g.agents.some((x) => x.userId === a.userId))];
+    return agents.map((a) => lignePaie(a, this.evp(), du, au, penalitesAgent(a, ctx), { mois, agentMois: parMois.get(a.userId) ?? null }));
   });
 
   readonly options = computed(() => {
@@ -135,12 +149,15 @@ export class PresencesExportComponent implements OnInit {
     const dansPole = dansActivite.filter((x) => !this.pole() || x.pole === this.pole());
     // v48.1 : complétées par l'organisation (activité sans agent : Formation & Qualité).
     // v58 : mêmes listes que le tableau des présences — sans doublon et conformes à l'organisation.
-    const listes = optionsOrganisation(this.structure(), this.activite(), this.pole(), {
+    // v61 : un RP (périmètre limité) ne voit que les contrats, pôles et cellules de son périmètre.
+    const toutes = this.grille()?.toutesActivites ?? true;
+    const listes = optionsPerimetre(toutes, this.structure(), this.activite(), this.pole(), {
+      activites: [...l.map((x) => this.activiteDe(x)), ...(toutes ? [this.activiteFormation()] : [])],
       poles: dansActivite.map((x) => x.pole),
       cellules: dansPole.map((x) => x.cellule),
     });
     return {
-      activites: optionsActivites(this.structure(), [...l.map((x) => this.activiteDe(x)), this.activiteFormation()]),
+      activites: listes.activites,
       poles: listes.poles,
       cellules: listes.cellules,
     };
@@ -190,6 +207,7 @@ export class PresencesExportComponent implements OnInit {
       horsPaieFormation: l.filter((x) => x.etatFormation === 'en-formation').length,
       integres: l.filter((x) => x.etatFormation === 'integre').length,
       evp: somme((x) => x.totalEvp),
+      hs: Math.round(somme((x) => x.hsTotal) * 100) / 100,
       alertes: l.filter((x) => x.alertes.length > 0).length,
     };
   });
@@ -211,7 +229,7 @@ export class PresencesExportComponent implements OnInit {
 
   readonly nomFichier = computed(() => {
     const g = this.grille();
-    return g ? nomsExport(g.du.slice(0, 10), g.au.slice(0, 10)).fichier : '';
+    return g ? nomsExport(g.du.slice(0, 10), g.au.slice(0, 10), this.mois() ?? undefined).fichier : '';
   });
 
   ngOnInit(): void {
@@ -248,6 +266,7 @@ export class PresencesExportComponent implements OnInit {
 
   load(): void {
     const { du, au } = this.periode();
+    const mois = this.mois();
     const p1 = this.periodeDe(this.decalage() - 1);
     const p2 = this.periodeDe(this.decalage() - 2);
     const versPeriode = (g: PresenceGrilleDto | null, p: { du: string; au: string }): PeriodeAgents | null =>
@@ -261,10 +280,12 @@ export class PresencesExportComponent implements OnInit {
       prec1: this.presences.grille(p1.du, p1.au).pipe(catchError(() => of(null))),
       prec2: this.presences.grille(p2.du, p2.au).pipe(catchError(() => of(null))),
       validation: this.presences.validationPaie(du, au).pipe(catchError(() => of(null))),
+      grilleMois: mois ? this.presences.grille(mois.du, mois.au).pipe(catchError(() => of(null))) : of(null),
     }).subscribe({
-      next: ({ grille, evp, saisies, prec1, prec2, validation }) => {
+      next: ({ grille, evp, saisies, prec1, prec2, validation, grilleMois }) => {
         this.validation.set(validation);
         this.grille.set(grille);
+        this.grilleMois.set(grilleMois);
         this.evp.set(evp ?? []);
         this.evpIndisponible.set(evp === null);
         this.saisies.set(saisies);
@@ -341,7 +362,7 @@ export class PresencesExportComponent implements OnInit {
     if (!g || !lignes.length || this.exportEnCours()) return;
     this.exportEnCours.set(true);
     try {
-      await telechargerExportPaie(lignes, g.du.slice(0, 10), g.au.slice(0, 10));
+      await telechargerExportPaie(lignes, g.du.slice(0, 10), g.au.slice(0, 10), this.mois() ?? undefined);
       this.toast.success(`Export paie : ${lignes.length} ligne(s).`);
     } catch {
       this.toast.error('Génération du fichier impossible.');

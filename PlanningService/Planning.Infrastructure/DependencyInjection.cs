@@ -146,6 +146,8 @@ public static class DependencyInjection
         services.AddScoped<IPlanningReinforcementRequestService, PlanningReinforcementRequestService>();
         services.AddScoped<IPlanningPendingRequestsAlertService, PlanningPendingRequestsAlertService>();
         services.AddHostedService<WeeklyPlanningAutoGeneratorHostedService>();
+        // v61 — Plannings alignés sur les agents réels (sortis retirés, arrivés ajoutés).
+        services.AddHostedService<PlanningEffectifSyncHostedService>();
         services.AddHostedService<PendingRequestsReminderHostedService>();
         services.AddScoped<IPlanningOrgMirrorService, PlanningOrgMirrorService>();
         services.AddScoped<IDirectoryOrgWriteClient, DirectoryOrgWriteClient>();

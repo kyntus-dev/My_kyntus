@@ -71,12 +71,29 @@ public sealed class PresenceService(
             peutModifier,
             PresenceCodes.Tous,
             agents,
-            PeutAutoriserRetard(viewer.Role));
+            PeutAutoriserRetard(viewer.Role),
+            VoitEncadrement(viewer),
+            peutModifier && SaisitEncadrement(viewer),
+            viewer.Global);
     }
 
     /// <summary>v46 : superviseurs et référents techniques n'autorisent ni retard ni dépassement de pause.</summary>
     internal static bool PeutAutoriserRetard(string? role) =>
         !KyntusRoleNames.IsSuperviseur(role) && !KyntusRoleNames.IsReferentTechnique(role);
+
+    /// <summary>
+    /// v61 : rubrique « Présences des superviseurs et référents › Consulter » (responsable non global).
+    /// Sans réponse du catalogue (null) : règle v46, réservée au chef de projet (RP).
+    /// </summary>
+    internal static bool VoitEncadrement(PresenceViewer viewer) =>
+        !viewer.Global && (viewer.EncadrementVoir ?? KyntusRoleNames.IsChefDeProjet(viewer.Role));
+
+    /// <summary>v61 : « … › Modifier » : saisir les présences des superviseurs et référents du périmètre.</summary>
+    internal static bool SaisitEncadrement(PresenceViewer viewer) =>
+        VoitEncadrement(viewer) && (viewer.EncadrementAgir ?? KyntusRoleNames.IsChefDeProjet(viewer.Role));
+
+    private static bool EstEncadrement(string? role) =>
+        KyntusRoleNames.IsSuperviseur(role) || KyntusRoleNames.IsReferentTechnique(role);
 
     public async Task<PresenceAgentDto> SaisirAsync(
         PresenceViewer viewer, PresenceSaisieRequest request, DateOnly grilleDu, DateOnly grilleAu, CancellationToken ct = default)
@@ -98,6 +115,18 @@ public sealed class PresenceService(
             var (ids, _) = await AgentsVisiblesAsync(me, viewer, ct);
             if (!ids.Contains(request.UserId))
                 throw new PresenceRefusException("Cet agent n'est pas dans votre périmètre.", horsPerimetre: true);
+            // v61 : superviseurs et référents : saisie selon la rubrique dédiée (consultation seule sinon).
+            if (VoitEncadrement(viewer) && !SaisitEncadrement(viewer))
+            {
+                var roleCible = await db.Users.AsNoTracking()
+                    .Where(u => u.Id == request.UserId)
+                    .Select(u => u.Role != null ? u.Role.Name : null)
+                    .FirstOrDefaultAsync(ct);
+                if (EstEncadrement(roleCible))
+                    throw new PresenceRefusException(
+                        "Vous pouvez consulter les présences des superviseurs et référents, pas les modifier "
+                        + "(droit « Présences des superviseurs et référents › Modifier »).", horsPerimetre: true);
+            }
         }
         else if (!await db.Users.AnyAsync(u => u.Id == request.UserId, ct))
         {
@@ -187,6 +216,7 @@ public sealed class PresenceService(
                 Pole = u.SubService != null ? u.SubService.Service.Floor.Name : null,
                 PoleId = u.SubService != null ? u.SubService.Service.Floor.PrimePoleId : null,
                 Role = u.Role != null ? u.Role.Name : null,
+                u.Guid,
             })
             .ToDictionaryAsync(u => u.Id, ct);
         var profils = await db.UserHrProfiles.AsNoTracking()
@@ -201,6 +231,39 @@ public sealed class PresenceService(
             .ToListAsync(ct);
 
         var congesParAgent = conges.GroupBy(c => c.UserId).ToDictionary(g => g.Key, g => g.ToList());
+
+        // v61 : périmètre de chaque superviseur / référent : son placement, plus le pôle et la cellule des
+        // agents affichés qui le désignent sur leur fiche (jamais au-delà des agents visibles).
+        var encadres = new Dictionary<int, (HashSet<string> PoleIds, HashSet<string> Poles, HashSet<string> Cellules)>();
+        var encadrantsParGuid = users.Values
+            .Where(x => EstEncadrement(x.Role) && x.Guid != Guid.Empty)
+            .GroupBy(x => x.Guid)
+            .ToDictionary(grp => grp.Key, grp => grp.First().Id);
+        void AjouterEncadre(int encadrant, string? poleId, string? pole, string? cellule)
+        {
+            if (!encadres.TryGetValue(encadrant, out var t))
+            {
+                t = (new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                     new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                     new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                encadres[encadrant] = t;
+            }
+            if (!string.IsNullOrWhiteSpace(poleId)) t.PoleIds.Add(poleId);
+            if (!string.IsNullOrWhiteSpace(pole)) t.Poles.Add(pole);
+            if (!string.IsNullOrWhiteSpace(cellule)) t.Cellules.Add(cellule);
+        }
+        foreach (var orgEncadrant in users.Values.Where(x => EstEncadrement(x.Role)))
+            AjouterEncadre(orgEncadrant.Id, orgEncadrant.PoleId, orgEncadrant.Pole, orgEncadrant.Cellule);
+        foreach (var profilAgent in profils.Values)
+        {
+            if (!users.TryGetValue(profilAgent.UserId, out var agentOrg)) continue;
+            foreach (var designe in new[] { profilAgent.SuperviseurId, profilAgent.ReferentTechniqueId })
+            {
+                if (designe is Guid guidDesigne && encadrantsParGuid.TryGetValue(guidDesigne, out var idEncadrant)
+                    && idEncadrant != profilAgent.UserId)
+                    AjouterEncadre(idEncadrant, agentOrg.PoleId, agentOrg.Pole, agentOrg.Cellule);
+            }
+        }
 
         var result = new List<PresenceAgentDto>(suivis.Count);
         foreach (var s in suivis)
@@ -220,6 +283,8 @@ public sealed class PresenceService(
                 var code = saisie?.Code ?? codeAuto;
                 var entreeOk = saisie?.RetardAutorise ?? false;
                 var pauseOk = saisie?.RetardPauseAutorise ?? false;
+                var hs = PresenceRegles.HeuresSupplementaires(
+                    j.Jour, j.Statut, code, j.Planning, j.PauseAutoriseeMinutes, j.ProductionPrevueMinutes, j.Pointages);
                 return new PresenceJourDto(
                     j.Jour,
                     code,
@@ -241,7 +306,11 @@ public sealed class PresenceService(
                     saisie?.Commentaire,
                     saisie?.UpdatedByNom,
                     saisie?.UpdatedAt,
-                    saisie?.AbsencePartielle ?? false);
+                    saisie?.AbsencePartielle ?? false,
+                    hs.FinPrevue,
+                    hs.Avant21Minutes,
+                    hs.Apres21Minutes,
+                    hs.DimancheFerieMinutes);
             }).ToList();
 
             result.Add(new PresenceAgentDto(
@@ -263,7 +332,10 @@ public sealed class PresenceService(
                 profil?.EnFormation ?? false,
                 org?.Role,
                 // v48 : type de formation (contractuel / non contractuel).
-                profil?.TypeFormation));
+                profil?.TypeFormation,
+                encadres.TryGetValue(s.UserId, out var perimetreEncadrant) ? perimetreEncadrant.PoleIds.OrderBy(x => x).ToList() : null,
+                perimetreEncadrant.Poles?.OrderBy(x => x).ToList(),
+                perimetreEncadrant.Cellules?.OrderBy(x => x).ToList()));
         }
         return result
             .OrderBy(a => a.Cellule ?? "", StringComparer.CurrentCultureIgnoreCase)
@@ -345,10 +417,23 @@ public sealed class PresenceService(
         var horsFormation = ids.Except(enFormation).ToList();
         // v46 : un chef de projet voit aussi (et saisit) les superviseurs et référents techniques de son
         // périmètre : placés dans ses services, ou désignés sur la fiche de ses agents.
-        if (KyntusRoleNames.IsChefDeProjet(viewer.Role) && ids.Count > 0)
+        // v61 : ce droit est la rubrique « Présences des superviseurs et référents › Consulter » (RP par défaut).
+        if (VoitEncadrement(viewer) && ids.Count > 0)
         {
             var encadrement = await EncadrementAsync(me, ids, scope, ct);
             horsFormation = horsFormation.Union(encadrement).ToList();
+        }
+        else if (KyntusRoleNames.IsChefDeProjet(viewer.Role) && horsFormation.Count > 0)
+        {
+            // v61 : droit retiré au RP : ni superviseur ni référent dans son tableau (même placés dans ses services).
+            var encadrants = (await db.Users.AsNoTracking()
+                    .Where(u => horsFormation.Contains(u.Id) && u.Role != null)
+                    .Select(u => new { u.Id, Role = u.Role!.Name })
+                    .ToListAsync(ct))
+                .Where(u => EstEncadrement(u.Role))
+                .Select(u => u.Id)
+                .ToHashSet();
+            horsFormation = horsFormation.Where(id => !encadrants.Contains(id)).ToList();
         }
         if (!inclureFormation)
         {

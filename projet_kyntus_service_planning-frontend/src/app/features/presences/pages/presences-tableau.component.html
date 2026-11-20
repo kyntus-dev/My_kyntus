@@ -75,7 +75,8 @@
     @if (estChefDeProjet() && (filtres().superviseurs || filtres().referents)) {
       <div class="pz-vue-encadrement">
         <b>{{ filtres().superviseurs ? 'Tableau des superviseurs' : 'Tableau des référents techniques' }}</b>
-        — seules les personnes choisies sont affichées (les filtres activité, pôle, cellule, contrat et formation ne s’appliquent pas ici).
+        — seules les personnes choisies sont affichées, dans l’activité, le pôle et la cellule choisis (les filtres contrat et formation ne s’appliquent pas ici).
+        @if (!encadrementModifiable()) { <span class="ku-muted">Consultation seule.</span> }
         <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="filtrer({ superviseurs: '', referents: '' })">Revenir aux agents</button>
       </div>
     }
@@ -137,8 +138,8 @@
                               [class.pz-manuel]="!j.auto"
                               [class.pz-manque]="j.manquePointage"
                               [class.pz-partiel]="j.absencePartielle"
-                              [disabled]="!data()?.peutModifier || (a.enFormation && !saisieFormation())"
-                              [title]="a.enFormation && !saisieFormation() ? 'En formation : saisie réservée à l’équipe formation. ' + c.titre : c.titre"
+                              [disabled]="verrouillee(a)"
+                              [title]="a.enFormation && !saisieFormation() ? 'En formation : saisie réservée à l’équipe formation. ' + c.titre : (verrouillee(a) && data()?.peutModifier && !a.enFormation ? 'Consultation seule (droit « Présences des superviseurs et référents › Modifier »). ' + c.titre : c.titre)"
                               (click)="ouvrir(a, j)">
                         @if (j.commentaire) { <i class="pz-dot"></i> }{{ j.code ?? '' }}
                       </button>

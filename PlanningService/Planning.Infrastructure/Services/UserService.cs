@@ -1707,6 +1707,33 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
 
         await _context.SaveChangesAsync(ct);
 
+        // v61 — Agent sorti : retiré des plannings à venir après sa date de sortie (journées non
+        // déclarées seulement). Les journées passées et déclarées restent : historique conservé.
+        if (!isActive && profile?.DateSortie is DateOnly sortieAgent)
+        {
+            try
+            {
+                var lendemain = sortieAgent.AddDays(1);
+                var aujourdhui = DateOnly.FromDateTime(DateTime.Today);
+                var depuis = lendemain > aujourdhui ? lendemain : aujourdhui.AddDays(1);
+                var futures = await _context.ShiftAssignments
+                    .Where(a => a.UserId == id && a.AssignedDate >= depuis && !a.Declarations.Any())
+                    .ToListAsync(ct);
+                if (futures.Count > 0)
+                {
+                    _context.ShiftAssignments.RemoveRange(futures);
+                    await _context.SaveChangesAsync(ct);
+                    _logger.LogInformation(
+                        "Sortie : {Nombre} journée(s) à venir retirée(s) des plannings pour l'agent {UserId}.",
+                        futures.Count, id);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Plannings à venir non nettoyés après la sortie de l'agent {UserId}.", id);
+            }
+        }
+
         // Connexion bloquée (ou rétablie) côté Auth ; le compte n'est jamais supprimé.
         await SyncAuthActiveAsync(user, ct);
 

@@ -26,6 +26,34 @@ export const JOURS_PAIE = 26;
 export const CODES_DEDUITS = ['ABS N', 'AM', 'AR', 'CSS', 'MAT'] as const;
 export const CODES_NON_DEDUITS = ['ABS', 'CP', 'DF', 'REC'] as const;
 
+/**
+ * v61 : éléments variables de paie rangés par catégorie (une colonne de montant chacune).
+ * Le type saisi décide de la catégorie ; un type personnalisé non reconnu va dans « EVP Autres ».
+ */
+export const CATEGORIES_EVP = [
+  { colonne: 'EVP Heures supp. saisies', motifs: [/heures?\s*supp/i] },
+  { colonne: 'EVP Samedis', motifs: [/samedi/i] },
+  { colonne: 'EVP Primes & challenges', motifs: [/prime/i, /challenge/i] },
+  { colonne: 'EVP Indemnités & rappels', motifs: [/indemnit/i, /rappel/i] },
+  { colonne: 'EVP Retenues & avances', motifs: [/retenue/i, /avance/i] },
+  { colonne: 'EVP Autres', motifs: [] as RegExp[] },
+] as const;
+
+/** Index de la catégorie d'un type d'EVP (dernière catégorie : « Autres »). */
+export function categorieEvp(type: string): number {
+  const i = CATEGORIES_EVP.findIndex((c) => c.motifs.some((m) => m.test(type)));
+  return i < 0 ? CATEGORIES_EVP.length - 1 : i;
+}
+
+/**
+ * v61 : heures supplémentaires détectées au pointage (calcul serveur, PresenceRegles) : sortie après
+ * la fin prévue, par tranches de 30 min, avant 21h / après 21h ; dimanche et férié : tout le temps travaillé.
+ */
+export const COLONNES_HS = ['HS avant 21h (h)', 'HS après 21h (h)', 'HS dim./férié (h)', 'Total HS (h)', 'Détail HS'] as const;
+
+/** v61 : présences de la ligne (mois civil + décalage). */
+export const COLONNES_PRESENCE = ['Jrs présents (pointage/saisie)', 'Présents par défaut (24→fin)', 'Abs. déduites avant le 1er'] as const;
+
 export const COLONNES_FIN = [
   'Formation',
   // v48 : contractuel / non contractuel (vide hors formation).
@@ -34,13 +62,16 @@ export const COLONNES_FIN = [
   'Abs. partielle',
   ...CODES_DEDUITS.map((c) => `${c} (déduit)`),
   ...CODES_NON_DEDUITS,
+  ...COLONNES_PRESENCE,
   'Jrs travaillés',
   'Total des absences',
   'Cumul retards',
   'Manque de Pointage',
   'Commentaire Présence',
   'Éléments Variables de Paie',
+  ...CATEGORIES_EVP.map((c) => c.colonne),
   'Total EVP',
+  ...COLONNES_HS,
   'Montant pénalité',
   'Origine pénalité',
   'Sortie (AR)',
@@ -69,7 +100,21 @@ export interface LignePaie {
   manques: number;
   commentaires: string;
   evp: string;
+  /** v61 : montant par catégorie d'EVP, dans l'ordre de CATEGORIES_EVP. */
+  evpCategories: number[];
   totalEvp: number;
+  /** v61 : jours de présence réels (pointage ou saisie) sur les jours de production. */
+  joursPresents: number;
+  /** v61 : jours du 24 à la fin du mois, présents par défaut (absences reportées au mois suivant). */
+  presentsParDefaut: number;
+  /** v61 : absences déduites du 24 du mois précédent à la veille du 1er (hors colonnes). */
+  absencesAvantMois: number;
+  /** v61 : heures supplémentaires de la période de référence, en heures. */
+  hsAvant21: number;
+  hsApres21: number;
+  hsDimancheFerie: number;
+  hsTotal: number;
+  hsDetail: string;
   penalite: number;
   originePenalite: string;
   sortie: string;
@@ -117,6 +162,8 @@ export const STYLE_EXPORT = {
   formatCompte: '0;[Red]-0;;@',
   /** Montant : séparateur de milliers, négatif en rouge, zéro masqué. */
   formatMontant: '#,##0.##;[Red]-#,##0.##;;@',
+  /** v61 : heures supplémentaires en heures décimales (1,5 = 1h30), zéro masqué. */
+  formatHeures: '0.00;[Red]-0.00;;@',
 } as const;
 
 export function etatFormation(formation: number, joursProduction: number): EtatFormation {
@@ -155,6 +202,45 @@ export function hhmmss(minutes: number): string {
 
 const arrondi2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * v61 : mois civil d'une période de paie 24 → 23 (le mois du 23) : 1er → dernier jour.
+ * Colonnes et présences sur ce mois ; absences, EVP et heures supplémentaires sur la période 24 → 23.
+ */
+export function moisCivilDePeriode(au: string): { du: string; au: string } {
+  const [y, m] = au.slice(0, 10).split('-').map(Number);
+  const dernier = new Date(y, m, 0).getDate();
+  return { du: `${y}-${pad(m)}-01`, au: `${y}-${pad(m)}-${pad(dernier)}` };
+}
+
+/** v61 : options du mode « Mois civil + décalage ». */
+export interface OptionsMoisCivil {
+  /** Mois civil des colonnes (1er → fin du mois). */
+  mois: { du: string; au: string };
+  /** Agent lu sur la grille du mois civil (jours affichés du 1er au 23) ; à défaut, celui de la période. */
+  agentMois?: PresenceAgentDto | null;
+}
+
+const heures = (minutes: number) => Math.round((minutes / 60) * 100) / 100;
+
+/** « 1h », « 1h30 », « 6h30 ». */
+export function hhmm(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h}h${pad(m)}` : `${h}h`;
+}
+
+const montantTexte = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
+
+/** v61 : détail des EVP regroupé par type, sans les longs commentaires (consultables dans l'écran EVP). */
+export function detailEvp(elements: readonly EvpDto[]): string {
+  const parType = new Map<string, EvpDto[]>();
+  for (const e of elements) parType.set(e.type, [...(parType.get(e.type) ?? []), e]);
+  return [...parType.entries()].map(([type, liste]) => {
+    const montants = liste.map((e) => `${e.montant ? montantTexte(e.montant) : 'à valoriser'} (${ddmm(e.date)})`);
+    return `${type} : ${montants.join(', ')}`;
+  }).join(' | ');
+}
+
 /** 26 jours au prorata des jours de production, moins les absences déduites (jamais négatif). */
 export function joursPayes(joursProduction: number, joursPeriode: number, absencesDeduites: number): number {
   if (joursProduction <= 0 || joursPeriode <= 0) return 0;
@@ -166,20 +252,42 @@ export function typePaie(type: string): string {
   return type.toLowerCase().startsWith('sous') ? 'Sous-Traitant' : 'Salarié';
 }
 
+/**
+ * Ligne de l'export paie. du / au = période de référence des absences, EVP et retards (24 → 23 en paie).
+ * v61 : avec `civil`, colonnes et jours de production sur le mois civil (1er → fin du mois) ; du 24 à
+ * la fin du mois, présent par défaut (les absences de ces jours seront déduites le mois suivant) ;
+ * absences déduites sur la période 24 → 23, y compris les jours du mois précédent (hors colonnes).
+ */
 export function lignePaie(
   agent: PresenceAgentDto, evp: readonly EvpDto[], du: string, au: string, penalites?: PenaliteAgent,
+  civil?: OptionsMoisCivil,
 ): LignePaie {
-  const colonnes = joursOuvres(du, au);
+  const reference = joursOuvres(du, au);
+  const colonnes = civil ? joursOuvres(civil.mois.du, civil.mois.au) : reference;
   const parJour = new Map(agent.jours.map((j) => [j.jour.slice(0, 10), j]));
-  const codes = colonnes.map((j) => parJour.get(j)?.code ?? '');
+  const parJourMois = civil?.agentMois ? new Map(civil.agentMois.jours.map((j) => [j.jour.slice(0, 10), j])) : parJour;
   const plage = plageFormation(agent);
+  /** Mois civil : jours après la période de référence (24 → fin du mois), présents par défaut. */
+  const parDefaut = (j: string) => !!civil && j > au;
+  const codes = colonnes.map((j) => {
+    const reel = parJourMois.get(j)?.code ?? parJour.get(j)?.code ?? '';
+    if (!parDefaut(j)) return reel;
+    if (estJourProduction(agent, j, plage)) return reel === 'F' ? 'F' : 'P';
+    return estJourFormation(agent, j, plage) ? 'FOR' : '';
+  });
   const production = colonnes.map((j) => estJourProduction(agent, j, plage));
   const joursProduction = production.filter(Boolean).length;
-  // Absences comptées sur les jours de production (la sortie borne déjà les jours AR).
-  const compte = (code: string) => colonnes.filter((_, i) => production[i] && codes[i] === code).length;
+  // Absences comptées sur les jours de production de la période de référence (la sortie borne les AR).
+  const codesReference = civil ? reference.map((j) => parJour.get(j)?.code ?? '') : codes;
+  const productionReference = civil ? reference.map((j) => estJourProduction(agent, j, plage)) : production;
+  const compte = (code: string, jusquA?: string) => reference.filter((j, i) =>
+    productionReference[i] && codesReference[i] === code && (!jusquA || j < jusquA)).length;
 
+  // Bornes d'affichage (entrée, sortie) : de la période de référence à la fin du mois civil.
+  const debut = du;
+  const fin = civil && civil.mois.au > au ? civil.mois.au : au;
   const sortie = agent.dateSortie?.slice(0, 10) ?? null;
-  const sortieDansPeriode = !!sortie && sortie >= du && sortie <= au;
+  const sortieDansPeriode = !!sortie && sortie >= debut && sortie <= fin;
 
   const formation = plage
     ? colonnes.filter((j) => estJourFormation(agent, j, plage)).length
@@ -196,7 +304,32 @@ export function lignePaie(
   const totalAbsences = Object.values(deduits).reduce((s, v) => s + v, 0);
 
   const entree = agent.dateEntree?.slice(0, 10) ?? null;
-  const afficherEntree = !!entree && (formation > 0 || (entree >= du && entree <= au));
+  const afficherEntree = !!entree && (formation > 0 || (entree >= debut && entree <= fin));
+  const absencesAvantMois = civil ? CODES_DEDUITS.reduce((n, c) => n + compte(c, civil.mois.du), 0) : 0;
+  const joursPresents = colonnes.filter((j, i) => production[i] && !parDefaut(j) && codes[i] === 'P').length;
+  const presentsParDefaut = colonnes.filter((j, i) => production[i] && parDefaut(j) && codes[i] === 'P').length;
+
+  // v61 : heures supplémentaires de la période de référence, jours de production seulement.
+  const joursHs = agent.jours.filter((j) => {
+    const d = j.jour.slice(0, 10);
+    return d >= du && d <= au && estJourProduction(agent, d, plage);
+  });
+  const hs = joursHs.reduce((t, j) => ({
+    avant: t.avant + (j.hsAvant21Minutes ?? 0),
+    apres: t.apres + (j.hsApres21Minutes ?? 0),
+    dimFerie: t.dimFerie + (j.hsDimancheFerieMinutes ?? 0),
+  }), { avant: 0, apres: 0, dimFerie: 0 });
+  const hsDetail = joursHs
+    .map((j) => {
+      const parts = [
+        j.hsAvant21Minutes ? hhmm(j.hsAvant21Minutes) : '',
+        j.hsApres21Minutes ? `${hhmm(j.hsApres21Minutes)} après 21h` : '',
+        j.hsDimancheFerieMinutes ? `${hhmm(j.hsDimancheFerieMinutes)} dim./férié` : '',
+      ].filter(Boolean);
+      return parts.length ? `${ddmm(j.jour)} ${parts.join(' + ')}${j.finPrevue ? ` (fin prévue ${j.finPrevue})` : ''}` : '';
+    })
+    .filter(Boolean)
+    .join(' | ');
 
   const commentaires = agent.jours
     .filter((j) => j.commentaire)
@@ -208,6 +341,9 @@ export function lignePaie(
     .slice()
     .sort((a, b) => (a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1));
   const totalEvp = Math.round(elements.reduce((s, e) => s + e.montant, 0) * 100) / 100;
+  const evpCategories = CATEGORIES_EVP.map((_, i) => Math.round(elements
+    .filter((e) => categorieEvp(e.type) === i)
+    .reduce((t, e) => t + e.montant, 0) * 100) / 100);
 
   const retard = agent.totaux.retardRetenuMinutes;
   const alertes: string[] = [...(penalites?.alertes ?? [])];
@@ -221,7 +357,7 @@ export function lignePaie(
   let statutPaie = 'Production';
   if (joursProduction === 0 && formation > 0) statutPaie = 'En formation – hors paie';
   else if (joursProduction === 0) statutPaie = 'Hors période (entrée / sortie)';
-  else if (formation > 0 && integration && integration >= du && integration <= au)
+  else if (formation > 0 && integration && integration >= debut && integration <= fin)
     statutPaie = `Intégré en production le ${ddmmyyyy(integration)} (prorata)`;
   else if (joursProduction < colonnes.length) statutPaie = 'Prorata (entrée, sortie ou formation)';
 
@@ -236,7 +372,10 @@ export function lignePaie(
     jours: codes,
     formation,
     dateEntree: afficherEntree ? ddmmyyyy(entree!) : '',
-    absPartielle: agent.jours.filter((j) => j.absencePartielle && estJourProduction(agent, j.jour.slice(0, 10), plage)).length,
+    absPartielle: agent.jours.filter((j) => {
+      const d = j.jour.slice(0, 10);
+      return j.absencePartielle && d >= du && d <= au && estJourProduction(agent, d, plage);
+    }).length,
     deduits,
     nonDeduits,
     jrsTravailles: joursPayes(joursProduction, colonnes.length, totalAbsences),
@@ -245,8 +384,17 @@ export function lignePaie(
     cumulRetards: hhmmss(retard),
     manques: agent.totaux.manquesPointage,
     commentaires,
-    evp: elements.map((e) => `${ddmm(e.date)} ${e.type} : ${e.commentaire}`).join(' | '),
+    evp: detailEvp(elements),
+    evpCategories,
     totalEvp,
+    joursPresents,
+    presentsParDefaut,
+    absencesAvantMois,
+    hsAvant21: heures(hs.avant),
+    hsApres21: heures(hs.apres),
+    hsDimancheFerie: heures(hs.dimFerie),
+    hsTotal: heures(hs.avant + hs.apres + hs.dimFerie),
+    hsDetail,
     penalite: penalites?.montant ? -penalites.montant : 0,
     originePenalite: penalites?.origine ?? '',
     sortie: sortieDansPeriode ? `Sorti le ${ddmmyyyy(sortie!)} (pendant la période) — à vérifier` : '',
@@ -276,13 +424,22 @@ export function valeursPaie(l: LignePaie): (string | number)[] {
     l.absPartielle,
     ...CODES_DEDUITS.map((c) => l.deduits[c]),
     ...CODES_NON_DEDUITS.map((c) => l.nonDeduits[c]),
+    l.joursPresents,
+    l.presentsParDefaut,
+    l.absencesAvantMois,
     l.jrsTravailles,
     l.totalAbsences,
     l.cumulRetards,
     l.manques,
     l.commentaires,
     l.evp,
+    ...l.evpCategories,
     l.totalEvp,
+    l.hsAvant21,
+    l.hsApres21,
+    l.hsDimancheFerie,
+    l.hsTotal,
+    l.hsDetail,
     l.penalite,
     l.originePenalite,
     l.sortie,
@@ -290,9 +447,19 @@ export function valeursPaie(l: LignePaie): (string | number)[] {
   ];
 }
 
-/** Nom de la feuille (« Récap 24-10 au 23-11 ») et du fichier. */
-export function nomsExport(du: string, au: string): { feuille: string; fichier: string } {
+/**
+ * Nom de la feuille (« Récap 24-10 au 23-11 ») et du fichier.
+ * v61 : mois civil + décalage → « Récap 11-2026 abs 24-10→23-11 » (31 caractères au plus).
+ */
+export function nomsExport(du: string, au: string, mois?: { du: string; au: string }): { feuille: string; fichier: string } {
   const court = (iso: string) => iso.slice(0, 10).split('-').slice(1).reverse().join('-');
+  if (mois) {
+    const [y, m] = mois.du.split('-');
+    return {
+      feuille: `Récap ${m}-${y} abs ${court(du)}→${court(au)}`,
+      fichier: `recap_paie_${y}-${m}_absences_${du}_${au}.xlsx`,
+    };
+  }
   return { feuille: `Récap ${court(du)} au ${court(au)}`, fichier: `recap_absences_${du}_${au}.xlsx` };
 }
 
@@ -322,13 +489,26 @@ export function totauxControle(lignes: readonly LignePaie[]): [string, number][]
     ['Total pénalités (DH)', somme((l) => l.penalite)],
     ['Retards et manquements pénalisés (feuille Détail pénalités)', lignes.reduce((n, l) => n + l.occurrences.length, 0)],
     ['Total EVP (DH)', somme((l) => l.totalEvp)],
+    ...CATEGORIES_EVP.map((c, i): [string, number] => [`dont ${c.colonne} (DH)`, somme((l) => l.evpCategories[i] ?? 0)]),
+    ['Heures supplémentaires avant 21h (h)', somme((l) => l.hsAvant21)],
+    ['Heures supplémentaires après 21h (h)', somme((l) => l.hsApres21)],
+    ['Heures supplémentaires dimanche / férié (h)', somme((l) => l.hsDimancheFerie)],
+    ['Total heures supplémentaires (h)', somme((l) => l.hsTotal)],
   ];
 }
 
 /** v37 : règles appliquées, écrites dans le fichier pour pouvoir le vérifier sans l'application. */
-export function reglesExport(du: string, au: string): string[] {
+export function reglesExport(du: string, au: string, mois?: { du: string; au: string }): string[] {
+  const periode = mois
+    ? [
+      `Mois civil + décalage. Colonnes de jours : du ${ddmmyyyy(mois.du)} au ${ddmmyyyy(mois.au)}, du lundi au samedi.`,
+      `Absences, EVP, retards et heures supplémentaires : période de référence du ${ddmmyyyy(du)} au ${ddmmyyyy(au)} (y compris les jours avant le 1er, colonne « Abs. déduites avant le 1er »).`,
+      `Du ${ddmmyyyy(addJour(au, 1))} au ${ddmmyyyy(mois.au)} : présent par défaut ; les absences de ces jours seront déduites le mois suivant (période du 24 au 23). Aucun jour n’est compté deux fois.`,
+      'Jours de production : du 1er à la fin du mois, à partir de la date d’entrée réelle et jusqu’à la date de sortie, hors formation.',
+    ]
+    : [`Période : du ${ddmmyyyy(du)} au ${ddmmyyyy(au)}. Colonnes de jours : du lundi au samedi.`];
   return [
-    `Période : du ${ddmmyyyy(du)} au ${ddmmyyyy(au)}. Colonnes de jours : du lundi au samedi.`,
+    ...periode,
     `Jrs travaillés = ${JOURS_PAIE} × jours de production ÷ jours lundi-samedi de la période − absences déduites (mois complet : ${JOURS_PAIE} − absences déduites). Jamais négatif, arrondi à 2 décimales.`,
     'Jours de production : entre la date d’entrée et la date de sortie, hors jours de formation.',
     `Absences déduites : ${CODES_DEDUITS.join(', ')}. Affichées sans être déduites : ${CODES_NON_DEDUITS.join(', ')}. Comptées sur les jours de production seulement.`,
@@ -338,28 +518,42 @@ export function reglesExport(du: string, au: string): string[] {
     'Autres codes : saisis par les responsables dans Présences › Manquements.',
     'Rang : 1er mois ; 2e mois consécutif si le même code existe la période précédente ; 3e mois consécutif et + s’il existe aussi la période d’avant.',
     'G02 et G03 : disciplinaires, signalés sans montant. Retards autorisés et jours de formation : jamais pénalisés.',
+    'Jrs présents (pointage/saisie) : jours de production codés « P », d’après le pointage ou la saisie validée des responsables (RP, superviseur, référent, RH).',
+    `Éléments variables de paie : montants rangés par catégorie (${CATEGORIES_EVP.map((c) => c.colonne.replace('EVP ', '')).join(', ')}) ; « Éléments Variables de Paie » donne le détail par type et par date.`,
+    'Heures supplémentaires (automatiques) : sortie pointée après la fin prévue (début du planning + production prévue + pause autorisée), par tranches complètes de 30 minutes, séparées avant 21h et après 21h ; dimanche et jour férié : tout le temps travaillé. Journées complètes seulement (pointages pairs), jamais un jour d’absence.',
   ];
 }
 
+function addJour(iso: string, n: number): string {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  const x = new Date(y, m - 1, d + n);
+  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
+}
+
 /** Génère le classeur (exceljs chargé à la demande) et le télécharge. */
-export async function telechargerExportPaie(lignes: readonly LignePaie[], du: string, au: string): Promise<void> {
-  const buffer = await classeurExportPaie(lignes, du, au);
+export async function telechargerExportPaie(
+  lignes: readonly LignePaie[], du: string, au: string, mois?: { du: string; au: string },
+): Promise<void> {
+  const buffer = await classeurExportPaie(lignes, du, au, mois);
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = nomsExport(du, au).fichier;
+  a.download = nomsExport(du, au, mois).fichier;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 /** v37 : contenu du fichier Excel (4 feuilles : récap, détail pénalités, référentiel, règles et contrôle). */
-export async function classeurExportPaie(lignes: readonly LignePaie[], du: string, au: string): Promise<ArrayBuffer> {
+export async function classeurExportPaie(
+  lignes: readonly LignePaie[], du: string, au: string, mois?: { du: string; au: string },
+): Promise<ArrayBuffer> {
   const mod = await import('exceljs');
   const ExcelJS = ((mod as unknown) as { default?: typeof import('exceljs') }).default ?? mod;
-  const { feuille } = nomsExport(du, au);
+  const { feuille } = nomsExport(du, au, mois);
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet(feuille.slice(0, 31));
-  const entetes = entetesPaie(du, au);
+  // Excel refuse « \ / ? * [ ] : » dans un nom de feuille.
+  const ws = wb.addWorksheet(feuille.replace(/[\\/?*[\]:]/g, '-').slice(0, 31));
+  const entetes = mois ? entetesPaie(mois.du, mois.au) : entetesPaie(du, au);
   const nbJours = entetes.length - 3 - COLONNES_FIN.length;
   const remplir = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
 
@@ -379,8 +573,9 @@ export async function classeurExportPaie(lignes: readonly LignePaie[], du: strin
   const colStatut = entetes.length; // « Statut paie » : dernière colonne
   const premiereFin = 4 + nbJours; // 1re colonne après les jours
   const colonneFin = (nom: string) => premiereFin + COLONNES_FIN.indexOf(nom as (typeof COLONNES_FIN)[number]);
-  const colonnesMontant = new Set([colonneFin('Total EVP'), colonneFin('Montant pénalité')]);
-  const colonnesTexte = new Set(['Type de formation', 'Date entrée', 'Cumul retards', 'Commentaire Présence', 'Éléments Variables de Paie', 'Origine pénalité', 'Sortie (AR)', 'Statut paie'].map(colonneFin));
+  const colonnesMontant = new Set([colonneFin('Total EVP'), colonneFin('Montant pénalité'), ...CATEGORIES_EVP.map((c) => colonneFin(c.colonne))]);
+  const colonnesTexte = new Set(['Type de formation', 'Date entrée', 'Cumul retards', 'Commentaire Présence', 'Éléments Variables de Paie', 'Détail HS', 'Origine pénalité', 'Sortie (AR)', 'Statut paie'].map(colonneFin));
+  const colonnesHeures = new Set(COLONNES_HS.filter((c) => c !== 'Détail HS').map(colonneFin));
   const colonnesDeduites = new Set([...CODES_DEDUITS.map((c) => colonneFin(`${c} (déduit)`)), colonneFin('Total des absences')]);
   const colJrs = colonneFin('Jrs travaillés');
   const codesDeduits = new Set<string>(CODES_DEDUITS);
@@ -403,6 +598,8 @@ export async function classeurExportPaie(lignes: readonly LignePaie[], du: strin
         if (code === 'P') cell.font = { ...cell.font, color: { argb: st.discret } };
         else if (code === 'FOR') cell.font = { ...cell.font, bold: true, color: { argb: COULEUR_JOUR_FORMATION.texte } };
         else if (codesDeduits.has(code)) cell.font = { ...cell.font, bold: true, color: { argb: st.rouge } };
+      } else if (colonnesHeures.has(col)) {
+        cell.numFmt = st.formatHeures;
       } else if (colonnesMontant.has(col)) {
         cell.numFmt = st.formatMontant;
         cell.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
@@ -423,7 +620,7 @@ export async function classeurExportPaie(lignes: readonly LignePaie[], du: strin
     else if (i === 1) c.width = 20;
     else if (i === 2) c.width = 26;
     else if (i < 3 + nbJours) c.width = 6.5;
-    else c.width = nom.startsWith('Commentaire') || nom.startsWith('Éléments') || nom.startsWith('Origine') ? 42
+    else c.width = nom.startsWith('Commentaire') || nom.startsWith('Éléments') || nom.startsWith('Origine') || nom === 'Détail HS' ? 42
       : nom.startsWith('Sortie') || nom.startsWith('Statut') ? 34 : 11;
   });
   ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 1, showGridLines: false }];
@@ -484,7 +681,7 @@ export async function classeurExportPaie(lignes: readonly LignePaie[], du: strin
   }
   reg.addRow([]);
   titre('Règles de calcul appliquées');
-  for (const r of reglesExport(du, au)) {
+  for (const r of reglesExport(du, au, mois)) {
     const row = reg.addRow([r]);
     row.getCell(1).font = { name: st.police, size: st.taille };
     row.getCell(1).alignment = { wrapText: true, vertical: 'top' };

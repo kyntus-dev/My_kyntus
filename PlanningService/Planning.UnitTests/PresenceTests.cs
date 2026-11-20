@@ -167,6 +167,47 @@ public class PresenceTests
     }
 
     [Fact]
+    public async Task Rubrique_presences_superviseurs_et_referents_v61()
+    {
+        await using var db = await SeedAsync();
+        db.Roles.AddRange(new Role { Id = 2, Name = "Superviseur" }, new Role { Id = 3, Name = "RP" }, new Role { Id = 4, Name = "Référent technique" });
+        var supGuid = Guid.NewGuid();
+        db.Users.AddRange(
+            new User { Id = 7, RoleId = 3, FirstName = "Resp", LastName = "Projet", Email = "rp@kyntus.com", AuthUserId = 700, IsActive = true },
+            new User { Id = 8, RoleId = 2, FirstName = "Sup", LastName = "Designe", Email = "s8@kyntus.com", Guid = supGuid, IsActive = true },
+            new User { Id = 9, RoleId = 4, FirstName = "Ref", LastName = "Place", Email = "r9@kyntus.com", SubServiceId = 10, IsActive = true });
+        await db.SaveChangesAsync();
+        (await db.UserHrProfiles.SingleAsync(p => p.UserId == 2)).SuperviseurId = supGuid;
+        await db.SaveChangesAsync();
+        var svc = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()));
+
+        // Consulter + Modifier (défaut du RP) : listes dédiées, périmètre du superviseur = cellule de ses agents.
+        var complet = new PresenceViewer(700, null, null, "RP", false, EncadrementVoir: true, EncadrementAgir: true);
+        var grille = await svc.GetGrilleAsync(complet, Lundi, Lundi, true);
+        Assert.True(grille!.EncadrementDedie);
+        Assert.True(grille.EncadrementModifiable);
+        Assert.Equal(new[] { 2, 8, 9 }, grille.Agents.Select(a => a.UserId).OrderBy(i => i).ToArray());
+        var sup = grille.Agents.Single(a => a.UserId == 8);
+        Assert.Equal(new[] { "pole-1" }, sup.PoleIdsEncadres);
+        Assert.Equal(new[] { "Cellule A" }, sup.CellulesEncadrees);
+        Assert.Null(grille.Agents.Single(a => a.UserId == 2).PoleIdsEncadres);
+
+        // Consulter seulement : visibles, saisie refusée sur un superviseur, permise sur un agent.
+        var lecture = new PresenceViewer(700, null, null, "RP", false, EncadrementVoir: true, EncadrementAgir: false);
+        Assert.False((await svc.GetGrilleAsync(lecture, Lundi, Lundi, true))!.EncadrementModifiable);
+        await Assert.ThrowsAsync<PresenceRefusException>(() =>
+            svc.SaisirAsync(lecture, new PresenceSaisieRequest(8, Lundi, null, "P", false, false, null, null), Lundi, Lundi));
+        var agent = await svc.SaisirAsync(lecture, new PresenceSaisieRequest(2, Lundi, null, "P", false, false, null, null), Lundi, Lundi);
+        Assert.Equal("P", agent.Jours.Single().Code);
+
+        // Droit retiré : ni superviseur ni référent, même placé dans le service du RP.
+        var sans = new PresenceViewer(700, null, null, "RP", false, EncadrementVoir: false, EncadrementAgir: false);
+        var reduite = await svc.GetGrilleAsync(sans, Lundi, Lundi, true);
+        Assert.False(reduite!.EncadrementDedie);
+        Assert.Equal(new[] { 2 }, reduite.Agents.Select(a => a.UserId).ToArray());
+    }
+
+    [Fact]
     public async Task Avertissements_et_evp_limites_au_perimetre()
     {
         await using var db = await SeedAsync();

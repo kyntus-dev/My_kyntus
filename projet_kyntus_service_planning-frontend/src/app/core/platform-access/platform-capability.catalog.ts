@@ -209,6 +209,8 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'presences.avertissements', label: 'Manquements (référentiel)', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
   { id: 'presences.evp', label: 'Éléments variables de paie', module: 'Présences et paie', view: TEAM_LEAD, act: TEAM_LEAD, defaultScope: 'Cellule' },
   { id: 'presences.dossier', label: 'Dossier administratif', module: 'Présences et paie', view: RH_CHEF_PROJET, act: RH_CHEF_PROJET },
+  // v61 : tableaux dédiés des superviseurs et référents techniques du périmètre (Consulter / Modifier ; RP par défaut).
+  { id: 'presences.encadrement', label: 'Présences des superviseurs et référents', module: 'Présences et paie', view: RH_CHEF_PROJET, act: RH_CHEF_PROJET },
   // v37 : superviseur aussi (ses agents, dont ceux en formation, en couleur).
   { id: 'presences.export', label: 'Export paie', module: 'Présences et paie', view: [...RH_CHEF_PROJET, KyntusRoleNames.Superviseur] },
 

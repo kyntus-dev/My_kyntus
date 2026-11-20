@@ -948,6 +948,18 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
     return this.totalEffectif === 0 ? '0%' : '100%';
   }
 
+  /**
+   * v61 — Nombre d'agents correspondant à un % (affichage seulement : aucune règle de génération
+   * n'est modifiée) : % × effectif réel planifiable de la cellule (agents actifs, sortis exclus).
+   */
+  agentsEstimes(pourcentage: number | null | undefined): number | null {
+    return agentsPourPourcentage(pourcentage, this.serviceEmployeeCount);
+  }
+
+  titreAgentsEstimes(pourcentage: number | null | undefined): string {
+    return `${Number(pourcentage) || 0} % de l’effectif actif de la cellule (${this.serviceEmployeeCount} agent(s)), arrondi.`;
+  }
+
   get quotasMatchEffectif(): boolean {
     return this.serviceEmployeeCount <= 0 || this.totalEffectif === this.serviceEmployeeCount;
   }
@@ -1293,4 +1305,11 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
       },
     });
   }
+}
+
+/** v61 — Agents pour un % de l'effectif (arrondi) ; null si inconnu ou nul. */
+export function agentsPourPourcentage(pourcentage: number | null | undefined, effectif: number): number | null {
+  const pct = Number(pourcentage);
+  if (!Number.isFinite(pct) || pct <= 0 || !(effectif > 0)) return null;
+  return Math.round((Math.min(100, pct) * effectif) / 100);
 }
