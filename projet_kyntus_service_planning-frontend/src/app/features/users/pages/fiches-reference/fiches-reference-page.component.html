@@ -246,6 +246,22 @@
       }
     </section>
 
+    @if (suivi && suivi.statut === 'en-cours') {
+      <section class="card ky-card" aria-live="polite">
+        <div class="section-heading">
+          <div>
+            <h2>Application en cours — {{ suivi.fichier }}</h2>
+            <p>
+              {{ suivi.traitees }} / {{ suivi.total }} ligne(s) traitée(s). Chaque fiche est enregistrée puis transmise à
+              l'annuaire : comptez quelques minutes. Vous pouvez quitter la page, l'application continue sur le serveur
+              (résultat dans l'onglet Historique).
+            </p>
+          </div>
+        </div>
+        <div class="fr-progression"><div class="fr-progression-barre" [style.width.%]="avancement"></div></div>
+      </section>
+    }
+
     <!-- Rapport d'application -->
     @if (rapport; as r) {
       <section class="card ky-card">

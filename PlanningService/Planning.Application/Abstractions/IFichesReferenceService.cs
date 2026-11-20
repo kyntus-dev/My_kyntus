@@ -12,6 +12,14 @@ public interface IFichesReferenceService
 
     Task<ApplicationFichesReferenceDto> AppliquerAsync(AppliquerFichesReferenceRequest demande, string auteur, CancellationToken ct = default);
 
+    /// <summary>
+    /// v63.2 — Lance l'application en arrière-plan (indépendante de la requête HTTP) et rend son suivi.
+    /// <paramref name="autorisation"/> : en-tête Authorization de l'appelant, transmis à l'annuaire.
+    /// </summary>
+    SuiviApplicationFichesDto DemarrerApplication(AppliquerFichesReferenceRequest demande, string auteur, string? autorisation);
+
+    SuiviApplicationFichesDto? SuiviApplication(Guid importId);
+
     Task<IReadOnlyList<ImportFichesReferenceDto>> HistoriqueAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<LigneAppliqueeFicheDto>> DetailImportAsync(Guid importId, CancellationToken ct = default);

@@ -302,6 +302,19 @@ public class FichesReferenceV63Tests
         Assert.True(historique.Single(h => h.ImportId == application.ImportId).Annule);
     }
 
+    [Fact]
+    public void Une_seule_application_a_la_fois_et_avancement_lisible()
+    {
+        var suivi = new FichesReferenceSuivi();
+        var premiere = suivi.Demarrer(Guid.NewGuid(), "bdd.xlsx", 3);
+        Assert.NotNull(premiere);
+        Assert.Null(suivi.Demarrer(Guid.NewGuid(), "bdd.xlsx", 3));
+        Interlocked.Increment(ref premiere!.Traitees);
+        Assert.Equal((1, 3, FichesReferenceSuivi.EnCours), (FichesReferenceSuivi.VersDto(premiere).Traitees, premiere.Total, premiere.Statut));
+        premiere.Statut = FichesReferenceSuivi.Termine;
+        Assert.NotNull(suivi.Demarrer(Guid.NewGuid(), "bdd.xlsx", 1));
+    }
+
     /// <summary>Classeur fictif au format du fichier RH (17 colonnes + 1 colonne vide sans intitulé, feuille BOX).</summary>
     private static MemoryStream Classeur()
     {

@@ -134,6 +134,18 @@ export interface ApplicationFichesReferenceDto {
   lignes: LigneAppliqueeFicheDto[];
 }
 
+/** v63.2 — Avancement d'une application lancée en arrière-plan. */
+export interface SuiviApplicationFichesDto {
+  importId: string;
+  fichier: string;
+  statut: 'en-cours' | 'termine' | 'echec' | string;
+  total: number;
+  traitees: number;
+  demarreLe: string;
+  resultat: ApplicationFichesReferenceDto | null;
+  erreur: string | null;
+}
+
 export interface ImportFichesReferenceDto {
   importId: string;
   le: string;
@@ -174,8 +186,13 @@ export class FichesReferenceApiService {
     return this.http.post<AnalyseFichesReferenceDto>(`${FICHES_REFERENCE_API}/analyser`, form);
   }
 
-  appliquer(demande: AppliquerFichesReferenceRequest): Observable<ApplicationFichesReferenceDto> {
-    return this.http.post<ApplicationFichesReferenceDto>(`${FICHES_REFERENCE_API}/appliquer`, demande);
+  /** Lance l'application (arrière-plan) : rend le suivi à interroger avec {@link suivi}. */
+  appliquer(demande: AppliquerFichesReferenceRequest): Observable<SuiviApplicationFichesDto> {
+    return this.http.post<SuiviApplicationFichesDto>(`${FICHES_REFERENCE_API}/appliquer`, demande);
+  }
+
+  suivi(importId: string): Observable<SuiviApplicationFichesDto> {
+    return this.http.get<SuiviApplicationFichesDto>(`${FICHES_REFERENCE_API}/application/${importId}`);
   }
 
   historique(): Observable<ImportFichesReferenceDto[]> {

@@ -33,19 +33,29 @@ public class FichesReferenceController(IFichesReferenceService service) : Contro
         }
     }
 
+    /// <summary>
+    /// v63.2 — Lance l'application en arrière-plan et rend aussitôt son suivi (202) : plusieurs centaines de
+    /// fiches prennent plusieurs minutes, au-delà du délai de la passerelle. Avancement : GET application/{id}.
+    /// </summary>
     [HttpPost("appliquer")]
-    public async Task<ActionResult<ApplicationFichesReferenceDto>> Appliquer(
-        [FromBody] AppliquerFichesReferenceRequest demande, CancellationToken ct)
+    public ActionResult<SuiviApplicationFichesDto> Appliquer([FromBody] AppliquerFichesReferenceRequest demande)
     {
         try
         {
-            return Ok(await service.AppliquerAsync(demande, Auteur(), ct));
+            var suivi = service.DemarrerApplication(demande, Auteur(), Request.Headers.Authorization.ToString());
+            return Accepted(suivi);
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [HttpGet("application/{importId:guid}")]
+    public ActionResult<SuiviApplicationFichesDto> Suivi(Guid importId) =>
+        service.SuiviApplication(importId) is { } suivi
+            ? Ok(suivi)
+            : NotFound(new { message = "Application introuvable (le service a peut-être redémarré) : consultez l'historique." });
 
     [HttpGet("historique")]
     public async Task<ActionResult<IReadOnlyList<ImportFichesReferenceDto>>> Historique(CancellationToken ct) =>

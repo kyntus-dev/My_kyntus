@@ -174,6 +174,7 @@ public static class DependencyInjection
         services.AddScoped<EmployeeImportTemplateBuilder>();
         // v63 — Fiches employés : fichier RH de référence + complétude.
         services.AddScoped<IFichesReferenceService, FichesReferenceService>();
+        services.AddSingleton<FichesReferenceSuivi>();
 
         services.AddScoped<IReclamationService, ReclamationService>();
         services.AddScoped<IPropositionService, PropositionService>();

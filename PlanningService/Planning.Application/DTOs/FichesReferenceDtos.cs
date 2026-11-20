@@ -114,3 +114,14 @@ public sealed record ImportFichesReferenceDto(
 public sealed record AnnulationFichesReferenceDto(Guid ImportId, int ValeursRestaurees, int ValeursConservees, int FichesDesactivees, string Message);
 
 public sealed record FicheIncompleteDto(int UserId, string Nom, string Prenom, string? Matricule, string? Service, string Role, IReadOnlyList<string> ChampsManquants);
+
+/// <summary>v63.2 — Avancement d'une application lancée en arrière-plan (statut : en-cours, termine, echec).</summary>
+public sealed record SuiviApplicationFichesDto(
+    Guid ImportId,
+    string Fichier,
+    string Statut,
+    int Total,
+    int Traitees,
+    DateTime DemarreLe,
+    ApplicationFichesReferenceDto? Resultat,
+    string? Erreur);

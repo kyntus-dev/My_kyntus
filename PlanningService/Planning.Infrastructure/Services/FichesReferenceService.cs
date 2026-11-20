@@ -2,6 +2,7 @@ using System.Globalization;
 using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Planning.Application.Abstractions;
 using Planning.Application.DTOs;
@@ -27,7 +28,9 @@ public sealed class FichesReferenceService(
     IUserService users,
     IDirectoryEmployeeWriteClient annuaire,
     IMemoryCache cache,
-    ILogger<FichesReferenceService> logger) : IFichesReferenceService
+    ILogger<FichesReferenceService> logger,
+    IServiceScopeFactory? scopeFactory = null,
+    FichesReferenceSuivi? suivi = null) : IFichesReferenceService
 {
     private const long TailleMax = 15 * 1024 * 1024;
     private const int LignesMax = 5000;
@@ -179,17 +182,64 @@ public sealed class FichesReferenceService(
 
     // ── Application ──────────────────────────────────────────────────────────────────────────
 
-    public async Task<ApplicationFichesReferenceDto> AppliquerAsync(
-        AppliquerFichesReferenceRequest demande, string auteur, CancellationToken ct = default)
+    public Task<ApplicationFichesReferenceDto> AppliquerAsync(
+        AppliquerFichesReferenceRequest demande, string auteur, CancellationToken ct = default) =>
+        ExecuterAsync(PrendreAnalyse(demande), demande, Court(auteur, 160) ?? "inconnu", Guid.NewGuid(), null, ct);
+
+    /// <summary>L'analyse validée à l'écran ; elle ne s'applique qu'une fois (pas de double import par double clic).</summary>
+    private AnalyseEnCache PrendreAnalyse(AppliquerFichesReferenceRequest demande)
     {
         if (string.IsNullOrWhiteSpace(demande.Jeton)
             || !cache.TryGetValue(CleCache(demande.Jeton), out AnalyseEnCache? analyse) || analyse is null)
             throw new InvalidOperationException("L'analyse a expiré ou est introuvable : relancez l'analyse du fichier.");
-        // Une analyse ne s'applique qu'une fois (pas de double import par double clic).
         cache.Remove(CleCache(demande.Jeton));
-        auteur = Court(auteur, 160) ?? "inconnu";
+        return analyse;
+    }
+
+    public SuiviApplicationFichesDto DemarrerApplication(AppliquerFichesReferenceRequest demande, string auteur, string? autorisation)
+    {
+        if (scopeFactory is null || suivi is null)
+            throw new InvalidOperationException("Application en arrière-plan indisponible.");
+        if (string.IsNullOrWhiteSpace(demande.Jeton) || !cache.TryGetValue(CleCache(demande.Jeton), out AnalyseEnCache? apercu) || apercu is null)
+            throw new InvalidOperationException("L'analyse a expiré ou est introuvable : relancez l'analyse du fichier.");
 
         var importId = Guid.NewGuid();
+        var etat = suivi.Demarrer(importId, apercu.Fichier, apercu.Rapprochement.Count)
+                   ?? throw new InvalidOperationException("Une mise à jour des fiches est déjà en cours : attendez qu'elle se termine.");
+        var analyse = PrendreAnalyse(demande);
+        auteur = Court(auteur, 160) ?? "inconnu";
+
+        // Hors du contexte de la requête : la passerelle coupe la requête au bout de 90 s, le travail continue.
+        using (ExecutionContext.SuppressFlow())
+        {
+            _ = Task.Run(async () =>
+            {
+                DirectoryHttpAuthContext.AuthorizationHeader.Value = string.IsNullOrWhiteSpace(autorisation) ? null : autorisation;
+                try
+                {
+                    await using var scope = scopeFactory.CreateAsyncScope();
+                    var service = (FichesReferenceService)scope.ServiceProvider.GetRequiredService<IFichesReferenceService>();
+                    etat.Resultat = await service.ExecuterAsync(analyse, demande, auteur, importId,
+                        () => Interlocked.Increment(ref etat.Traitees), CancellationToken.None);
+                    etat.Statut = FichesReferenceSuivi.Termine;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Fichier RH de référence : application {ImportId} interrompue", importId);
+                    etat.Erreur = "L'application s'est interrompue. Les fiches déjà traitées sont dans l'historique ; relancez l'analyse pour terminer.";
+                    etat.Statut = FichesReferenceSuivi.Echec;
+                }
+            });
+        }
+        return FichesReferenceSuivi.VersDto(etat);
+    }
+
+    public SuiviApplicationFichesDto? SuiviApplication(Guid importId) =>
+        suivi?.Lire(importId) is { } etat ? FichesReferenceSuivi.VersDto(etat) : null;
+
+    private async Task<ApplicationFichesReferenceDto> ExecuterAsync(
+        AnalyseEnCache analyse, AppliquerFichesReferenceRequest demande, string auteur, Guid importId, Action? avancer, CancellationToken ct)
+    {
         var importLe = DateTime.UtcNow;
         var aujourdhui = DateOnly.FromDateTime(importLe);
         var roles = await db.Roles.AsNoTracking().ToDictionaryAsync(r => r.Name, r => r.Id, StringComparer.OrdinalIgnoreCase, ct);
@@ -197,6 +247,12 @@ public sealed class FichesReferenceService(
         var resultats = new List<LigneAppliqueeFicheDto>();
 
         foreach (var (numero, r) in analyse.Rapprochement.OrderBy(kv => kv.Key))
+        {
+            try { await AppliquerLigneAsync(numero, r); }
+            finally { avancer?.Invoke(); }
+        }
+
+        async Task AppliquerLigneAsync(int numero, FicheReferenceRapprochement.Resultat r)
         {
             var v = analyse.Valeurs[numero];
             var choix = demande.Choix.TryGetValue(numero, out var c) && !string.IsNullOrWhiteSpace(c)
@@ -211,7 +267,7 @@ public sealed class FichesReferenceService(
             if (choix == "ignorer" || r.Statut == FicheReferenceRapprochement.Ignore)
             {
                 resultats.Add(Ligne("ignore", null, r.Message ?? "Ligne non appliquée."));
-                continue;
+                return;
             }
 
             try
@@ -222,14 +278,14 @@ public sealed class FichesReferenceService(
                     if (fichesTraitees.TryGetValue(cible, out var autre))
                     {
                         resultats.Add(Ligne("erreur", cible, $"Cette fiche a déjà été mise à jour par la ligne {autre} : ligne non appliquée."));
-                        continue;
+                        return;
                     }
                     fichesTraitees[cible] = numero;
                     var maj = await MettreAJourAsync(cible, v, importId, importLe, analyse.Fichier, auteur, ct);
                     if (maj is null)
                     {
                         resultats.Add(Ligne("erreur", cible, "Fiche introuvable (supprimée depuis l'analyse ?)."));
-                        continue;
+                        return;
                     }
                     var message = maj.Modifications.Count == 0 ? "Fiche déjà à jour." : null;
                     var resultat = maj.Modifications.Count == 0 ? "sans-changement" : "mis-a-jour";
@@ -245,7 +301,7 @@ public sealed class FichesReferenceService(
                     if (r.Statut is FicheReferenceRapprochement.Historique or FicheReferenceRapprochement.SortiInconnu || v.Sorti(aujourdhui))
                     {
                         resultats.Add(Ligne("ignore", null, "Aucune fiche n'est créée pour un employé sorti."));
-                        continue;
+                        return;
                     }
                     var cree = await CreerAsync(v, roles, importId, importLe, analyse.Fichier, auteur, ct);
                     fichesTraitees[cree.UserId] = numero;

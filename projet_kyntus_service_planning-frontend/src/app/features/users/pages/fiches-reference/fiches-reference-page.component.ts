@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
@@ -29,6 +29,7 @@ import {
   ImportFichesReferenceDto,
   LigneAppliqueeFicheDto,
   LigneFicheReferenceDto,
+  SuiviApplicationFichesDto,
 } from '../../services/fiches-reference-api.service';
 import {
   FILTRES_FICHES,
@@ -63,7 +64,7 @@ type Onglet = 'import' | 'incompletes' | 'historique';
   templateUrl: './fiches-reference-page.component.html',
   styleUrls: ['./fiches-reference-page.component.css'],
 })
-export class FichesReferencePageComponent implements OnInit {
+export class FichesReferencePageComponent implements OnInit, OnDestroy {
   readonly icons = {
     warn: AlertTriangle,
     ok: CheckCircle2,
@@ -107,6 +108,10 @@ export class FichesReferencePageComponent implements OnInit {
   desactiverSortis = false;
   voirAbsents = false;
   rapport: ApplicationFichesReferenceDto | null = null;
+  /** v63.2 — Application en cours (arrière-plan) : avancement interrogé toutes les 2 s. */
+  suivi: SuiviApplicationFichesDto | null = null;
+  private minuterie: ReturnType<typeof setTimeout> | null = null;
+  private echecsSuivi = 0;
   filtreRapport: 'tous' | 'modifies' | 'erreurs' | 'incompletes' = 'tous';
 
   // ── Fiches incomplètes ──
@@ -122,6 +127,14 @@ export class FichesReferencePageComponent implements OnInit {
   detail: LigneAppliqueeFicheDto[] = [];
   annulationEnCours: string | null = null;
   annulationAConfirmer: string | null = null;
+
+  ngOnDestroy(): void {
+    if (this.minuterie) clearTimeout(this.minuterie);
+  }
+
+  get avancement(): number {
+    return this.suivi && this.suivi.total > 0 ? Math.round((100 * this.suivi.traitees) / this.suivi.total) : 0;
+  }
 
   ngOnInit(): void {
     const onglet = this.route.snapshot.queryParamMap.get('onglet');
@@ -166,6 +179,9 @@ export class FichesReferencePageComponent implements OnInit {
   }
 
   reinitialiser(): void {
+    if (this.minuterie) clearTimeout(this.minuterie);
+    this.suivi = null;
+    this.applying = false;
     this.fichierNom = '';
     this.erreur = null;
     this.analyse = null;
@@ -231,21 +247,65 @@ export class FichesReferencePageComponent implements OnInit {
     this.api
       .appliquer({ jeton: this.analyse.jeton, choix: this.choix, desactiverSortis: this.desactiverSortis })
       .subscribe({
-        next: (rapport) => {
-          this.rapport = rapport;
+        next: (suivi) => {
+          // Le serveur travaille en arrière-plan : on suit l'avancement jusqu'au rapport.
+          this.suivi = suivi;
           this.analyse = null;
-          this.applying = false;
-          this.incompletesChargees = false;
-          const c = rapport.compteurs;
-          this.toast.success(`${c.misesAJour} fiche(s) mise(s) à jour, ${c.crees} créée(s), ${c.champsModifies} champ(s) modifié(s).`);
+          this.echecsSuivi = 0;
           this.cdr.detectChanges();
+          this.planifierSuivi();
         },
         error: (err) => {
-          this.erreur = formatHttpErrorMessage(err, "L'application a échoué : aucune ligne n'a été traitée.");
+          this.erreur = formatHttpErrorMessage(err, "L'application n'a pas pu démarrer : aucune ligne n'a été traitée.");
           this.applying = false;
           this.cdr.detectChanges();
         },
       });
+  }
+
+  private planifierSuivi(): void {
+    if (this.minuterie) clearTimeout(this.minuterie);
+    this.minuterie = setTimeout(() => this.interrogerSuivi(), 2000);
+  }
+
+  private interrogerSuivi(): void {
+    const id = this.suivi?.importId;
+    if (!id) return;
+    this.api.suivi(id).subscribe({
+      next: (suivi) => {
+        this.suivi = suivi;
+        this.echecsSuivi = 0;
+        if (suivi.statut === 'termine' && suivi.resultat) {
+          this.terminer(suivi.resultat);
+        } else if (suivi.statut === 'echec') {
+          this.erreur = suivi.erreur ?? "L'application s'est interrompue.";
+          this.applying = false;
+          this.incompletesChargees = false;
+        } else {
+          this.planifierSuivi();
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        // Coupure passagère : on réessaie ; au-delà, on renvoie vers l'historique.
+        if (++this.echecsSuivi < 10 && err?.status !== 404) {
+          this.planifierSuivi();
+          return;
+        }
+        this.erreur = "Avancement indisponible. L'application continue peut-être sur le serveur : consultez l'onglet Historique.";
+        this.applying = false;
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  private terminer(rapport: ApplicationFichesReferenceDto): void {
+    this.rapport = rapport;
+    this.suivi = null;
+    this.applying = false;
+    this.incompletesChargees = false;
+    const c = rapport.compteurs;
+    this.toast.success(`${c.misesAJour} fiche(s) mise(s) à jour, ${c.crees} créée(s), ${c.champsModifies} champ(s) modifié(s).`);
   }
 
   get lignesRapport(): LigneAppliqueeFicheDto[] {
