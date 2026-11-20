@@ -67,6 +67,8 @@ public static class DependencyInjection
         // E-mails des plannings et des notifications : file d'envoi + boucle d'envoi à cadence limitée.
         services.Configure<NotificationEmailOptions>(configuration.GetSection(NotificationEmailOptions.SectionName));
         services.AddScoped<INotificationEmailQueue, NotificationEmailQueue>();
+        // v62 : cloche de l'application (notification à la personne concernée après chaque action).
+        services.AddScoped<IAppNotifier, Planning.Infrastructure.Services.Notifications.AppNotifier>();
         services.AddScoped<EmailOutboxProcessor>();
         services.AddScoped<INotificationEmailSettingsService, NotificationEmailSettingsService>();
         if (!isTesting)

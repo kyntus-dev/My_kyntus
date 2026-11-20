@@ -359,6 +359,8 @@ public class PlanningNotificationDto
     public DateTime CreatedAt { get; set; }
     /// <summary>Route SPA pour le clic (dérivée du type de notification).</summary>
     public string? DeepLink { get; set; }
+    /// <summary>v62 : presences, conges, documentation, affectation… (null : notification planning historique).</summary>
+    public string? Categorie { get; set; }
 }
 
 // -- Sauvegarder la config shifts (template si WeekCode vide) --

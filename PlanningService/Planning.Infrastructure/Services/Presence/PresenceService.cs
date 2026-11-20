@@ -1,7 +1,10 @@
 ﻿using Kyntus.Messaging.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Planning.Application.Abstractions;
+using Planning.Application.NotificationEmail;
 using Planning.Application.Pointage;
 using Planning.Application.Presence;
 using Planning.Domain.Entities;
@@ -21,7 +24,9 @@ public sealed class PresenceService(
     IPlanningPerimeterResolver perimeter,
     IOptionsMonitor<PointageOptions> options,
     IMemoryCache? cache = null,
-    IPaieValidationService? paie = null) : IPresenceService
+    IPaieValidationService? paie = null,
+    IAppNotifier? notifier = null,
+    ILogger<PresenceService>? logger = null) : IPresenceService
 {
     /// <summary>
     /// v58 — Période de paie validée par les RH : plus personne n'y touche, pas même celui qui a
@@ -73,8 +78,9 @@ public sealed class PresenceService(
             agents,
             PeutAutoriserRetard(viewer.Role),
             VoitEncadrement(viewer),
-            peutModifier && SaisitEncadrement(viewer),
-            viewer.Global);
+            peutModifier && (viewer.Global ? viewer.EncadrementAgir ?? true : SaisitEncadrement(viewer)),
+            viewer.Global,
+            viewer.Global ? viewer.EncadrementVoir ?? true : VoitEncadrement(viewer));
     }
 
     /// <summary>v46 : superviseurs et référents techniques n'autorisent ni retard ni dépassement de pause.</summary>
@@ -132,6 +138,18 @@ public sealed class PresenceService(
         {
             throw new PresenceRefusException("Agent introuvable.");
         }
+        else if (viewer.EncadrementAgir == false)
+        {
+            // v62 : RH, Admin ou portée globale sans « Présences des superviseurs et référents › Modifier ».
+            var roleCible = await db.Users.AsNoTracking()
+                .Where(u => u.Id == request.UserId)
+                .Select(u => u.Role != null ? u.Role.Name : null)
+                .FirstOrDefaultAsync(ct);
+            if (EstEncadrement(roleCible))
+                throw new PresenceRefusException(
+                    "Vous pouvez consulter les présences des superviseurs et référents, pas les modifier "
+                    + "(droit « Présences des superviseurs et référents › Modifier »).", horsPerimetre: true);
+        }
 
         var commentaire = Nettoyer(request.Commentaire, 1000);
         var motif = Nettoyer(request.MotifAutorisation, 300);
@@ -152,6 +170,11 @@ public sealed class PresenceService(
                         "Seuls le chef de projet, les RH et l'Admin peuvent autoriser un retard ou un dépassement de pause.");
             }
         }
+
+        // v62 : état avant la saisie (planning et notification à l'agent).
+        var avant = existantes.ToDictionary(
+            e => e.Key,
+            e => new EtatPresence(e.Value.Code, e.Value.AbsencePartielle, e.Value.RetardAutorise || e.Value.RetardPauseAutorise));
 
         for (var jour = request.Jour; jour <= fin; jour = jour.AddDays(1))
         {
@@ -179,9 +202,77 @@ public sealed class PresenceService(
             ligne.UpdatedByNom = auteur;
         }
         await db.SaveChangesAsync(ct);
+        await ApresSaisieAsync(request, code, fin, avant, auteur, ct);
 
         (grilleDu, grilleAu) = Borner(grilleDu, grilleAu);
         return (await ConstruireAsync([request.UserId], grilleDu, grilleAu, ct)).Single();
+    }
+
+    private sealed record EtatPresence(string? Code, bool Partielle, bool RetardAutorise);
+
+    /// <summary>
+    /// v62 — Après une saisie : le planning suit le motif (arrêt maladie, congé… = aucun shift ; motif
+    /// retiré = shift rendu), puis l'agent est notifié. Rien ici ne fait échouer la saisie.
+    /// </summary>
+    private async Task ApresSaisieAsync(
+        PresenceSaisieRequest request, string? code, DateOnly fin,
+        IReadOnlyDictionary<DateOnly, EtatPresence> avant, string? auteur, CancellationToken ct)
+    {
+        var jours = new List<DateOnly>();
+        for (var j = request.Jour; j <= fin; j = j.AddDays(1))
+            jours.Add(j);
+        bool BloquaitAvant(DateOnly j) =>
+            avant.TryGetValue(j, out var a) && !a.Partielle && PresenceCodes.RetireDuPlanning(a.Code);
+        var bloqueApres = !request.AbsencePartielle && PresenceCodes.RetireDuPlanning(code);
+        var poses = bloqueApres ? jours.Where(j => !BloquaitAvant(j)).ToList() : new List<DateOnly>();
+        var retires = bloqueApres ? new List<DateOnly>() : jours.Where(BloquaitAvant).ToList();
+
+        try
+        {
+            var n = await PresenceAbsencesPlanning.AppliquerAuPlanningAsync(db, request.UserId, poses, retires, ct);
+            if (n > 0)
+                logger?.LogInformation("Présence → planning : {Nombre} journée(s) mise(s) à jour pour l'agent {UserId}.", n, request.UserId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            db.ChangeTracker.Clear();
+            logger?.LogWarning(ex, "Planning non mis à jour après la saisie de présence de l'agent {UserId}.", request.UserId);
+        }
+
+        if (notifier is null)
+            return;
+        var notification = NotificationSaisie(request, code, fin, avant, auteur, poses, retires);
+        if (notification is not null)
+            await notifier.NotifierAsync(new NotificationEmailRecipients(UserIds: [request.UserId]), notification, ct: ct);
+    }
+
+    /// <summary>v62 : message à l'agent après une saisie de son responsable (null : rien d'utile à dire).</summary>
+    private static AppNotification? NotificationSaisie(
+        PresenceSaisieRequest request, string? code, DateOnly fin, IReadOnlyDictionary<DateOnly, EtatPresence> avant,
+        string? auteur, IReadOnlyCollection<DateOnly> poses, IReadOnlyCollection<DateOnly> retires)
+    {
+        var par = string.IsNullOrWhiteSpace(auteur) ? string.Empty : $" par {auteur.Trim()}";
+        var periode = request.Jour == fin ? $"le {request.Jour:dd/MM/yyyy}" : $"du {request.Jour:dd/MM/yyyy} au {fin:dd/MM/yyyy}";
+        var cle = $"PRESENCE-{request.UserId}-{request.Jour:yyyyMMdd}";
+        if (poses.Count > 0)
+        {
+            var libelle = PresenceCodes.Tous.FirstOrDefault(c => c.Code == code)?.Libelle ?? code;
+            return new AppNotification("presences", $"Absence enregistrée : {libelle}",
+                $"{libelle} enregistré(e) {periode}{par}. Votre planning est mis à jour : aucun shift ne vous est attribué ces jours-là.",
+                "/mes-plannings", cle);
+        }
+        if (retires.Count > 0)
+            return new AppNotification("presences", "Absence retirée",
+                $"L'absence {periode} a été retirée{par}. Vous êtes de nouveau attendu(e) selon votre planning.",
+                "/mes-plannings", cle);
+        var nouveauRetardAutorise = (request.RetardAutorise || request.RetardPauseAutorise)
+            && !avant.Values.Any(a => a.RetardAutorise);
+        if (nouveauRetardAutorise)
+            return new AppNotification("presences", "Retard autorisé",
+                $"Votre retard {periode} a été autorisé{par}"
+                + (string.IsNullOrWhiteSpace(request.MotifAutorisation) ? "." : $" (motif : {request.MotifAutorisation.Trim()})."),
+                "/pointage/mon-suivi", cle);
+        return null;
     }
 
     public async Task<PresenceAuteur> ResoudreAsync(PresenceViewer viewer, CancellationToken ct = default)
@@ -399,7 +490,20 @@ public sealed class PresenceService(
             var tous = await db.Users.AsNoTracking()
                 .Where(u => u.IsActive && u.SubServiceId != null)
                 .Select(u => u.Id).ToListAsync(ct);
-            return (tous.Union(enFormation).ToList(), "Toute l'entreprise");
+            // v62 : superviseurs et référents sans cellule (rattachés par l'organisation) : proposés dans
+            // leurs tableaux dédiés. Le tableau principal et l'export paie des RH n'en changent pas.
+            var encadrementNonPlace = new List<int>();
+            if (viewer.EncadrementVoir != false)
+            {
+                encadrementNonPlace = (await db.Users.AsNoTracking()
+                        .Where(u => u.IsActive && u.SubServiceId == null && u.Role != null)
+                        .Select(u => new { u.Id, Role = u.Role!.Name })
+                        .ToListAsync(ct))
+                    .Where(u => EstEncadrement(u.Role))
+                    .Select(u => u.Id)
+                    .ToList();
+            }
+            return (tous.Union(enFormation).Union(encadrementNonPlace).ToList(), "Toute l'entreprise");
         }
         if (EstFormateur(viewer.Role))
         {

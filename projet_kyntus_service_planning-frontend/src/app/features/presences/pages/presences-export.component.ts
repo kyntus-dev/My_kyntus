@@ -21,7 +21,7 @@ import {
   telechargerExportPaie,
 } from '../lib/paie.util';
 import { type ContextePenalites, type PeriodeAgents, penalitesAgent } from '../lib/manquements.util';
-import { ActiviteStructure, enteteJour, familleCode, optionsPerimetre, periodePaie, ymd } from '../lib/presence.util';
+import { ActiviteStructure, enteteJour, estEncadrementNonPlace, familleCode, optionsPerimetre, periodePaie, ymd } from '../lib/presence.util';
 import { DirectoryFacadeService } from '../../../core/directory/directory-facade.service';
 import { dateFr, messageErreur, montantFr, sansAccents } from '../lib/suivi.util';
 import { normaliserTypeFormation } from '../../../core/hr/type-formation.util';
@@ -135,10 +135,15 @@ export class PresencesExportComponent implements OnInit {
     const au = g.au.slice(0, 10);
     const ctx: ContextePenalites = { du, au, saisies: this.saisies(), precedents: this.precedents() };
     const mois = this.mois();
-    if (!mois) return g.agents.map((a) => lignePaie(a, this.evp(), du, au, penalitesAgent(a, ctx)));
+    // v62 : toute l'entreprise : les superviseurs / référents sans cellule (ajoutés pour leurs tableaux
+    // dédiés du tableau des présences) ne changent pas l'export paie.
+    const agentsPaie = g.toutesActivites ? g.agents.filter((a) => !estEncadrementNonPlace(a)) : g.agents;
+    if (!mois) return agentsPaie.map((a) => lignePaie(a, this.evp(), du, au, penalitesAgent(a, ctx)));
     // v61 : un agent entré après le 23 n'apparaît que sur la grille du mois : il est ajouté (sans doublon).
     const parMois = new Map<number, PresenceAgentDto>((this.grilleMois()?.agents ?? []).map((a) => [a.userId, a]));
-    const agents = [...g.agents, ...[...parMois.values()].filter((a) => !g.agents.some((x) => x.userId === a.userId))];
+    const agents = [...agentsPaie, ...[...parMois.values()]
+      .filter((a) => !(g.toutesActivites && estEncadrementNonPlace(a)))
+      .filter((a) => !g.agents.some((x) => x.userId === a.userId))];
     return agents.map((a) => lignePaie(a, this.evp(), du, au, penalitesAgent(a, ctx), { mois, agentMois: parMois.get(a.userId) ?? null }));
   });
 

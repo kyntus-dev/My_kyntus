@@ -240,3 +240,20 @@ describe('v61 : périmètre du RP, superviseurs et référents par contrat', () 
     expect(optionsPerimetre(true, structure, '', '', depuis).activites).toEqual(['Autre contrat', 'Bytel Kyntus']);
   });
 });
+
+describe('v62 : listes superviseurs / référents pour les RH', () => {
+  it('le choix ouvre leur tableau sans être chef de projet ; non placés masqués du tableau principal', async () => {
+    const { filtrerAgents, FILTRES_VIDES, estEncadrementNonPlace } = await import('./presence.util');
+    const agents = [
+      agent({ userId: 1, nom: 'AGENT', role: 'Pilote' }),
+      agent({ userId: 2, nom: 'SUP placé', role: 'Superviseur' }),
+      agent({ userId: 3, nom: 'SUP organisation', role: 'Superviseur', pole: null, poleId: null, cellule: null, celluleId: null }),
+    ];
+    const act = () => null;
+    expect(filtrerAgents(agents, { ...FILTRES_VIDES, superviseurs: '*' }, act, false).map((a) => a.userId)).toEqual([2, 3]);
+    expect(filtrerAgents(agents, FILTRES_VIDES, act, false, true).map((a) => a.userId)).toEqual([1, 2]);
+    expect(filtrerAgents(agents, FILTRES_VIDES, act, false).map((a) => a.userId)).toEqual([1, 2, 3]);
+    expect(estEncadrementNonPlace(agents[2])).toBe(true);
+    expect(estEncadrementNonPlace(agents[1])).toBe(false);
+  });
+});

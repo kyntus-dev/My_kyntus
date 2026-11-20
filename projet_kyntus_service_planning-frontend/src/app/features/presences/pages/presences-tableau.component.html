@@ -55,7 +55,7 @@
         <option value="non-contractuel">Formation non contractuelle ({{ nbFormationNonContractuel() }})</option>
         <option value="non">Hors formation</option>
       </select>
-      @if (estChefDeProjet()) {
+      @if (filtreEncadrement()) {
         <select class="ku-input" [ngModel]="filtres().superviseurs" (ngModelChange)="filtrer({ superviseurs: $event })" aria-label="Superviseurs">
           <option value="">Superviseurs : —</option>
           <option value="*">Tableau des superviseurs ({{ options().superviseurs.length }})</option>
@@ -69,10 +69,10 @@
       }
       <label class="ku-check pz-atraiter"><input type="checkbox" [ngModel]="filtres().aTraiter" (ngModelChange)="filtrer({ aTraiter: $event })" /> À traiter seulement</label>
       <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="reinitialiser()">Réinitialiser</button>
-      <span class="pz-compte">{{ agents().length }} / {{ data()?.agents?.length ?? 0 }} agents</span>
+      <span class="pz-compte">{{ agents().length }} / {{ totalAgents() }} agents</span>
     </div>
 
-    @if (estChefDeProjet() && (filtres().superviseurs || filtres().referents)) {
+    @if (filtreEncadrement() && (filtres().superviseurs || filtres().referents)) {
       <div class="pz-vue-encadrement">
         <b>{{ filtres().superviseurs ? 'Tableau des superviseurs' : 'Tableau des référents techniques' }}</b>
         — seules les personnes choisies sont affichées, dans l’activité, le pôle et la cellule choisis (les filtres contrat et formation ne s’appliquent pas ici).

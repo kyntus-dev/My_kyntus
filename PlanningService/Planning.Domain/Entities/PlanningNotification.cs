@@ -34,5 +34,11 @@ namespace Planning.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? ReadAt { get; set; }
+
+        /// <summary>v62 : page ouverte au clic (ex. « /mes-conges ») ; null = déduite du type (anciennes notifications).</summary>
+        public string? Lien { get; set; }
+
+        /// <summary>v62 : presences, conges, documentation, affectation, planning…</summary>
+        public string? Categorie { get; set; }
     }
 }

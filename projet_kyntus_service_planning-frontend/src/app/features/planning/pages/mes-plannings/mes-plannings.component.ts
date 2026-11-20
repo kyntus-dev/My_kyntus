@@ -11,6 +11,7 @@ import { KyntusObjectDraftBinder } from '../../../../core/drafts/kyntus-object-d
 import { formatWeekLabel } from '../../utils/week-code.util';
 import { BodyPortalDirective } from '../../../../shared/directives/body-portal.directive';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
+import { ABSENCE_TYPES } from '../../services/conge.service';
 
 interface DayAssignment {
   assignmentId?: number;
@@ -240,7 +241,8 @@ export class MesPlanningsComponent implements OnInit, OnDestroy {
 
   cellLabel(d: DayAssignment): string {
     if (d.isHoliday) return d.holidayName || 'Férié';
-    if (d.isOnLeave) return d.absenceType || 'Congé';
+    if (d.isOnLeave) // v62 : libellé lisible (« Arrêt maladie »…), aussi pour les motifs saisis dans Présence.
+    return ABSENCE_TYPES.find((t) => t.value === d.absenceType)?.label ?? (d.absenceType || 'Congé');
     if (d.shiftLabel) return d.shiftLabel;
     return '—';
   }

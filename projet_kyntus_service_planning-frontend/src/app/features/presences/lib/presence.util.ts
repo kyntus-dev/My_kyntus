@@ -86,6 +86,9 @@ export const estReferentTechnique = (role?: string | null) => {
   return r === 'referenttechnique' || r === 'coach';
 };
 export const estEncadrement = (role?: string | null) => estSuperviseur(role) || estReferentTechnique(role);
+/** v62 : superviseur ou référent sans cellule (vu uniquement dans les tableaux dédiés). */
+export const estEncadrementNonPlace = (a: Pick<PresenceAgentDto, 'role' | 'cellule' | 'celluleId'>) =>
+  estEncadrement(a.role) && !a.cellule && !a.celluleId;
 
 /**
  * v48 — Le filtre « Formation » : tous, en formation (tous types), hors formation, ou l'un des
@@ -113,10 +116,17 @@ export function filtrerAgents(
    * choisies (tous les superviseurs, un superviseur, tous les référents ou un référent).
    */
   encadrementSurDemande = false,
+  /**
+   * v62 (toute l'entreprise) : superviseurs et référents sans cellule, présents seulement pour leurs
+   * tableaux dédiés : masqués du tableau principal (qui reste celui d'avant).
+   */
+  masquerEncadrementNonPlace = false,
 ): PresenceAgentDto[] {
   const q = f.recherche.trim().toLowerCase();
   const correspond = (choix: string, a: PresenceAgentDto) => choix === '*' || choix === String(a.userId);
-  if (encadrementSurDemande && (f.superviseurs || f.referents)) {
+  // v62 : un choix dans « Superviseurs » ou « Référents » ouvre leur tableau pour tous ceux qui ont ces
+  // listes (RH et Admin compris), pas seulement le chef de projet.
+  if (f.superviseurs || f.referents) {
     // v61 : l'activité, le pôle et la cellule choisis s'appliquent aussi (périmètre de chaque personne).
     return agents.filter((a) =>
       ((f.superviseurs && estSuperviseur(a.role) && correspond(f.superviseurs, a))
@@ -126,6 +136,7 @@ export function filtrerAgents(
   }
   return agents.filter((a) =>
     (!encadrementSurDemande || !estEncadrement(a.role))
+    && (!masquerEncadrementNonPlace || !estEncadrementNonPlace(a))
     && (!q || a.nom.toLowerCase().includes(q))
     && (!f.activite || activiteDuPole(a.poleId, a) === f.activite)
     && (!f.pole || a.pole === f.pole)

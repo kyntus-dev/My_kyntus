@@ -831,6 +831,8 @@ public partial class PlanningService : IPlanningService
                      && c.StartDate <= weekEnd
                      && c.EndDate >= planning.WeekStartDate)
             .ToListAsync();
+        // v62 : motifs d'absence saisis dans Présence (arrêt maladie…) = journées sans shift.
+        conges.AddRange(await PresenceAbsencesPlanning.CongesVirtuelsAsync(_context, userIds, planning.WeekStartDate, weekEnd));
 
         var assignments = new List<ShiftAssignment>();
         var weekDays = GetWeekDays(planning.WeekStartDate);
@@ -1658,6 +1660,8 @@ public partial class PlanningService : IPlanningService
                      && c.StartDate <= weekEnd
                      && c.EndDate >= planning.WeekStartDate)
             .ToListAsync();
+        // v62 : motifs d'absence saisis dans Présence (arrêt maladie…) = journées sans shift.
+        conges.AddRange(await PresenceAbsencesPlanning.CongesVirtuelsAsync(_context, userIds, planning.WeekStartDate, weekEnd));
 
         var assignments = new List<ShiftAssignment>();
         var weekDays = GetWeekDays(planning.WeekStartDate);
@@ -1852,6 +1856,7 @@ public partial class PlanningService : IPlanningService
 
         var exceptionalApplied = await LoadExceptionalAppliedKeysAsync(
             planning.WeekCode, planning.SubServiceId);
+        var absencesSemaine = await AbsencesAgentAsync(planning.ShiftAssignments.Where(a => a.UserId == userId).ToList());
 
         return new MyPlanningDto
         {
@@ -1863,7 +1868,7 @@ public partial class PlanningService : IPlanningService
             Days = planning.ShiftAssignments
                 .Where(a => a.UserId == userId)
                 .OrderBy(a => a.AssignedDate)
-                .Select(a => MapToDayDtoNew(a, null, exceptionalApplied))
+                .Select(a => MapToDayDtoNew(a, absencesSemaine, exceptionalApplied))
                 .ToList()
         };
     }
@@ -2564,6 +2569,7 @@ public partial class PlanningService : IPlanningService
 
         var exceptionalApplied = await LoadExceptionalAppliedKeysAsync(
             planning.WeekCode, planning.SubServiceId);
+        var absencesSemaine = await AbsencesAgentAsync(planning.ShiftAssignments.Where(a => a.UserId == userId).ToList());
 
         return new MyPlanningDto
         {
@@ -2575,7 +2581,7 @@ public partial class PlanningService : IPlanningService
             Days = planning.ShiftAssignments
                 .Where(a => a.UserId == userId)
                 .OrderBy(a => a.AssignedDate)
-                .Select(a => MapToDayDtoNew(a, null, exceptionalApplied))
+                .Select(a => MapToDayDtoNew(a, absencesSemaine, exceptionalApplied))
                 .ToList()
         };
     }
@@ -2597,6 +2603,8 @@ public partial class PlanningService : IPlanningService
             .ToListAsync();
 
         var result = new List<MyPlanningDto>();
+        // v62 : type d'absence affiché (congé validé ou motif saisi dans Présence, ex. arrêt maladie).
+        var absencesAgent = await AbsencesAgentAsync(plannings.SelectMany(p => p.ShiftAssignments).ToList());
         foreach (var p in plannings)
         {
             var exceptionalApplied = await LoadExceptionalAppliedKeysAsync(p.WeekCode, p.SubServiceId);
@@ -2609,11 +2617,25 @@ public partial class PlanningService : IPlanningService
                 SubServiceName = p.SubService.Name,
                 Days = p.ShiftAssignments
                     .OrderBy(a => a.AssignedDate)
-                    .Select(a => MapToDayDtoNew(a, null, exceptionalApplied))
+                    .Select(a => MapToDayDtoNew(a, absencesAgent, exceptionalApplied))
                     .ToList()
             });
         }
         return result;
+    }
+
+    /// <summary>v62 : congés validés et motifs d'absence de Présence couvrant ces journées.</summary>
+    private async Task<List<Conge>> AbsencesAgentAsync(IReadOnlyCollection<ShiftAssignment> jours)
+    {
+        if (jours.Count == 0) return [];
+        var ids = jours.Select(a => a.UserId).Distinct().ToList();
+        var du = jours.Min(a => a.AssignedDate);
+        var au = jours.Max(a => a.AssignedDate);
+        var conges = await _context.Conges.AsNoTracking()
+            .Where(c => ids.Contains(c.UserId) && c.Status == CongeStatus.Approved && c.StartDate <= au && c.EndDate >= du)
+            .ToListAsync();
+        conges.AddRange(await PresenceAbsencesPlanning.CongesVirtuelsAsync(_context, ids, du, au));
+        return conges;
     }
 
     public async Task<IReadOnlyList<MyPlanningDto>> GetAgentPlanningHistoryAsync(
@@ -2649,6 +2671,8 @@ public partial class PlanningService : IPlanningService
             .ToListAsync();
 
         var result = new List<MyPlanningDto>();
+        // v62 : type d'absence affiché (congé validé ou motif saisi dans Présence, ex. arrêt maladie).
+        var absencesAgent = await AbsencesAgentAsync(plannings.SelectMany(p => p.ShiftAssignments).ToList());
         foreach (var p in plannings)
         {
             var exceptionalApplied = await LoadExceptionalAppliedKeysAsync(p.WeekCode, p.SubServiceId);
@@ -2662,7 +2686,7 @@ public partial class PlanningService : IPlanningService
                 Days = p.ShiftAssignments
                     .Where(a => a.UserId == planningUserId)
                     .OrderBy(a => a.AssignedDate)
-                    .Select(a => MapToDayDtoNew(a, null, exceptionalApplied))
+                    .Select(a => MapToDayDtoNew(a, absencesAgent, exceptionalApplied))
                     .ToList()
             });
         }
@@ -2689,7 +2713,9 @@ public partial class PlanningService : IPlanningService
             Message = n.Message,
             IsRead = n.IsRead,
             CreatedAt = n.CreatedAt,
-            DeepLink = ResolveNotificationDeepLink(n.WeekCode, n.SubServiceName, n.Message)
+            // v62 : lien enregistré avec la notification ; sinon déduit du type (anciennes notifications).
+            DeepLink = string.IsNullOrWhiteSpace(n.Lien) ? ResolveNotificationDeepLink(n.WeekCode, n.SubServiceName, n.Message) : n.Lien,
+            Categorie = n.Categorie
         });
     }
 
@@ -2836,6 +2862,8 @@ public partial class PlanningService : IPlanningService
                      && c.StartDate <= weekEnd
                      && c.EndDate >= planning.WeekStartDate)
             .ToListAsync();
+        // v62 : motifs d'absence saisis dans Présence (arrêt maladie…) = journées sans shift.
+        conges.AddRange(await PresenceAbsencesPlanning.CongesVirtuelsAsync(_context, userIds, planning.WeekStartDate, weekEnd));
 
         var subConfigs = await _context.SubServiceShiftConfigs
             .Include(c => c.ShiftModeProfile)
@@ -4195,8 +4223,14 @@ public partial class PlanningService : IPlanningService
      List<Conge>? conges = null,
      HashSet<(int UserId, DateOnly Date)>? exceptionalApplied = null)
     {
+        // v62 : un motif d'absence saisi dans Présence (congé virtuel) s'affiche comme une absence,
+        // même si la journée n'a pas encore été marquée en base (semaines passées, avant synchronisation).
+        var surLeave = a.IsOnLeave
+            || (!a.IsHoliday && conges != null && conges.Any(c =>
+                c.Id == 0 && c.Reason == PresenceAbsencesPlanning.Raison
+                && c.UserId == a.UserId && c.StartDate <= a.AssignedDate && c.EndDate >= a.AssignedDate));
         var label = a.IsHoliday ? "F�RI�"
-                  : a.IsOnLeave ? "CONG�"
+                  : surLeave ? "CONG�"
                   : a.SubServiceShiftConfig?.Label
                     ?? a.Shift?.Label
                     ?? "�";
@@ -4209,7 +4243,7 @@ public partial class PlanningService : IPlanningService
 
         // ? Trouver le type d'absence
         string? absenceType = null;
-        if (a.IsOnLeave && conges != null)
+        if (surLeave && conges != null)
         {
             var conge = conges.FirstOrDefault(c =>
                 c.UserId == a.UserId &&
@@ -4220,7 +4254,7 @@ public partial class PlanningService : IPlanningService
 
         var isExceptional = a.IsExceptionalRequest
             || (exceptionalApplied != null
-                && !a.IsOnLeave
+                && !surLeave
                 && !a.IsHoliday
                 && a.SubServiceShiftConfigId != null
                 && exceptionalApplied.Contains((a.UserId, a.AssignedDate)));
@@ -4237,8 +4271,8 @@ public partial class PlanningService : IPlanningService
             IsManagerOverride = a.IsManagerOverride,
             IsExceptionalRequest = isExceptional,
             IsReinforcement = a.IsReinforcement,
-            BreakTime = a.BreakTime?.ToString("HH:mm"),
-            IsOnLeave = a.IsOnLeave,
+            BreakTime = surLeave ? null : a.BreakTime?.ToString("HH:mm"),
+            IsOnLeave = surLeave,
             AbsenceType = absenceType, // ? NOUVEAU
             IsHalfDaySaturday = a.IsHalfDaySaturday,
             SaturdaySlot = a.SaturdaySlot,

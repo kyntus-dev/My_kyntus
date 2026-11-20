@@ -97,8 +97,9 @@ public sealed class PresencesController(IPresenceService presences, IPolicyEvalu
                      || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase)
                      || await PorteeGlobaleAsync(CapVoir, ct);
         // v61 : rubrique « Présences des superviseurs et référents » (Consulter / Modifier), réglée dans Accès par rôle.
+        // v62 : évalué aussi pour RH, Admin et portée globale (listes Superviseurs / Référents proposées).
         return new PresenceViewer(User.GetAuthUserId(), User.GetSubjectId(), User.GetEmail(), role, global,
-            global ? null : await PeutAsync(CapEncadrementVoir, ct),
-            global ? null : await PeutAsync(CapEncadrementAgir, ct));
+            await PeutAsync(CapEncadrementVoir, ct),
+            await PeutAsync(CapEncadrementAgir, ct));
     }
 }

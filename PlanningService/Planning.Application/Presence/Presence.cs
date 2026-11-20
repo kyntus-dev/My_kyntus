@@ -35,6 +35,31 @@ public static class PresenceCodes
 
     public static bool EstValide(string? code) => code is not null && Tous.Any(c => c.Code == code);
 
+    /// <summary>
+    /// v62 : motif saisi qui retire l'agent du planning ce jour-là (arrêt maladie, congé, absence…).
+    /// Présent, formation et férié ne retirent rien (le férié est déjà géré par le planning).
+    /// </summary>
+    public static bool RetireDuPlanning(string? code) =>
+        code is not null && VersAbsenceType(code) is not null;
+
+    /// <summary>v62 : type d'absence du planning correspondant à un motif de présence (null : pas une absence).</summary>
+    public static AbsenceType? VersAbsenceType(string? code) => code?.Trim().ToUpperInvariant() switch
+    {
+        "ABS" => AbsenceType.AbsenceAutorisee,
+        "ABS N" => AbsenceType.AbsenceNonAutorisee,
+        "AM" => AbsenceType.ArretMaladie,
+        "AR" => AbsenceType.NeTravaillePlus,
+        "AT" => AbsenceType.AccidentDeTravail,
+        "CP" => AbsenceType.CongesPayes,
+        "CSS" => AbsenceType.CongesSansSolde,
+        "DF" => AbsenceType.DeuilFamilial,
+        "ENF" => AbsenceType.EnfantMalade,
+        "MAT" => AbsenceType.Maternite,
+        "PAT" => AbsenceType.Paternite,
+        "REC" => AbsenceType.Recup,
+        _ => null,
+    };
+
     /// <summary>Code d'un congé validé, d'après son type.</summary>
     public static string DepuisConge(AbsenceType type) => type switch
     {
@@ -236,7 +261,10 @@ public sealed record PresenceGrilleDto(
     bool EncadrementDedie = false,
     bool EncadrementModifiable = false,
     // v61 : false = périmètre limité : les filtres ne proposent que les contrats, pôles et cellules de ce périmètre.
-    bool ToutesActivites = false);
+    bool ToutesActivites = false,
+    // v62 : listes « Superviseurs » et « Référents techniques » proposées (RH, Admin et portée globale
+    // compris), selon « Présences des superviseurs et référents › Consulter ».
+    bool FiltreEncadrement = false);
 
 /// <summary>Saisie sur une journée (ou une période si <see cref="Au"/> est renseigné).</summary>
 public sealed record PresenceSaisieRequest(

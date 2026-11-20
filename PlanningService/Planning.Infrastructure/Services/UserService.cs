@@ -34,6 +34,8 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IRebacClient _rebac;
     private readonly IPlanningPerimeterResolver _perimeter;
+    /// <summary>v62 : cloche de l'application (agent prévenu de sa réaffectation).</summary>
+    private readonly IAppNotifier? _notifier;
 
     public UserService(
            AppDbContext context,
@@ -48,7 +50,8 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
            IEmployeeFieldService fieldService,
            IHttpContextAccessor httpContextAccessor,
            IRebacClient rebac,
-           IPlanningPerimeterResolver perimeter)
+           IPlanningPerimeterResolver perimeter,
+           IAppNotifier? notifier = null)
     {
         _context = context;
         _employePublisher = employePublisher;
@@ -63,6 +66,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         _httpContextAccessor = httpContextAccessor;
         _rebac = rebac;
         _perimeter = perimeter;
+        _notifier = notifier;
     }
 
     public async Task<List<UserDto>> GetAllUsersAsync()

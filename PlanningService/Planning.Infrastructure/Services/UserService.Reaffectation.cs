@@ -2,6 +2,7 @@ using Kyntus.Messaging.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Planning.Application.Abstractions;
+using Planning.Application.NotificationEmail;
 using Planning.Domain.Entities;
 
 namespace Planning.Infrastructure.Services;
@@ -315,6 +316,18 @@ public partial class UserService
         _logger.LogInformation(
             "Réaffectation : agent {UserId} ({Email}) de {Ancien} vers {Nouveau}, poste {AncienRole} → {NouveauRole}, par {Auteur}.",
             user.Id, user.Email, ligne.AncienLibelle ?? "—", ligne.NouveauLibelle, ancienRole, posteFinal, auteur.Nom);
+        // v62 : l'agent est prévenu de sa nouvelle affectation (lien vers son planning).
+        if (_notifier is not null && (changeService || !string.Equals(ancienRole, posteFinal, StringComparison.OrdinalIgnoreCase)))
+            await _notifier.NotifierAsync(
+                new NotificationEmailRecipients(UserIds: [user.Id]),
+                new AppNotification("affectation", "Nouvelle affectation",
+                    changeService
+                        ? $"Vous êtes affecté(e) à {ligne.NouveauLibelle} à partir d'aujourd'hui"
+                          + (string.IsNullOrWhiteSpace(auteur.Nom) ? "." : $" (par {auteur.Nom}).")
+                          + " Votre planning suivra cette affectation."
+                        : $"Votre poste devient « {posteFinal} »" + (string.IsNullOrWhiteSpace(auteur.Nom) ? "." : $" (par {auteur.Nom})."),
+                    "/mes-plannings", $"AFFECTATION-{user.Id}"),
+                ct: ct);
         return VersDto(ligne, $"{(user.LastName ?? "").ToUpperInvariant()} {user.FirstName}".Trim());
     }
 

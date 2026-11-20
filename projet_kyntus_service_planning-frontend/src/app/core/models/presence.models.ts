@@ -95,6 +95,8 @@ export interface PresenceGrilleDto {
   encadrementModifiable?: boolean;
   /** v61 : true = toute l'entreprise ; false = filtres limités aux contrats, pôles et cellules du périmètre. */
   toutesActivites?: boolean;
+  /** v62 : listes « Superviseurs » / « Référents techniques » proposées (RH, Admin et portée globale compris). */
+  filtreEncadrement?: boolean;
 }
 
 export interface PresenceSaisieRequest {

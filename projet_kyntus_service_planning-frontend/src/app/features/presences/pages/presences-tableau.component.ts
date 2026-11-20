@@ -20,6 +20,7 @@ import {
   FILTRES_VIDES,
   TYPES_CONTRAT,
   estEncadrement as estEncadrementRole,
+  estEncadrementNonPlace,
   estReferentTechnique,
   estSuperviseur,
   type FiltresPresence,
@@ -81,13 +82,18 @@ export class PresencesTableauComponent implements OnInit {
     const r = (this.auth.getRole() || '').trim().toLowerCase();
     return r === 'chef de projet' || r === 'rp';
   });
+  /**
+   * v62 : listes Superviseurs / Référents proposées : RP, et aussi RH, Admin et portée globale selon
+   * « Présences des superviseurs et référents › Consulter ». Le tableau principal des RH reste complet.
+   */
+  readonly filtreEncadrement = computed(() => this.data()?.filtreEncadrement ?? this.estChefDeProjet());
   /** v61 : « … › Modifier » : saisie des présences des superviseurs et référents. */
   readonly encadrementModifiable = computed(() => this.data()?.encadrementModifiable ?? this.estChefDeProjet());
   /** v61 : case non modifiable : agent en formation (équipe formation) ou encadrement en consultation seule. */
   verrouillee(a: PresenceAgentDto): boolean {
     if (!this.data()?.peutModifier) return true;
     if (a.enFormation && !this.saisieFormation()) return true;
-    return this.estChefDeProjet() && estEncadrementRole(a.role) && !this.encadrementModifiable();
+    return this.filtreEncadrement() && estEncadrementRole(a.role) && !this.encadrementModifiable();
   }
   /** v46 : superviseurs et référents techniques n'autorisent pas les retards (le serveur le refuse aussi). */
   readonly peutAutoriserRetard = computed(() => this.data()?.peutAutoriserRetard !== false);
@@ -185,7 +191,14 @@ export class PresencesTableauComponent implements OnInit {
   });
 
   readonly agents = computed(() =>
-    filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole, this.estChefDeProjet()));
+    filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole, this.estChefDeProjet(),
+      this.data()?.toutesActivites === true));
+  /** v62 : total du tableau principal (sans les superviseurs / référents ajoutés pour leurs tableaux dédiés). */
+  readonly totalAgents = computed(() => {
+    const d = this.data();
+    if (!d) return 0;
+    return d.toutesActivites ? d.agents.filter((a) => !estEncadrementNonPlace(a)).length : d.agents.length;
+  });
   /** v46 : nombre d'agents en formation dans les données (filtre « Formation »). */
   readonly nbFormation = computed(() => (this.data()?.agents ?? []).filter((a) => a.enFormation).length);
   // v48 : nombre d'agents par type de formation (libellés des filtres).

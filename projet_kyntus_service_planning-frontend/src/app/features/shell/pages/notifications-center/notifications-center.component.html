@@ -40,7 +40,7 @@
               <span class="ks-notif-row-dot" [class.read]="n.read"></span>
               <span class="ks-notif-row-body">
                 <span class="ks-notif-row-meta">
-                  <span class="ks-notif-source-tag">{{ sourceLabel(n.source) }}</span>
+                  <span class="ks-notif-source-tag">{{ n.sourceLabel || sourceLabel(n.source) }}</span>
                   <span class="ks-notif-row-date">{{ formatDate(n.createdAt) }}</span>
                 </span>
                 <span class="ks-notif-row-title">{{ n.title }}</span>

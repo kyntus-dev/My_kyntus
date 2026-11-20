@@ -42,6 +42,9 @@ public static class PlanningSchemaPatches
             );
             CREATE INDEX IF NOT EXISTS "IX_PlanningNotifications_AuthUserId" ON "PlanningNotifications" ("AuthUserId");
             ALTER TABLE "PlanningNotifications" ALTER COLUMN "WeekCode" TYPE character varying(64);
+            ALTER TABLE "PlanningNotifications" ADD COLUMN IF NOT EXISTS "Lien" character varying(300) NULL;
+            ALTER TABLE "PlanningNotifications" ADD COLUMN IF NOT EXISTS "Categorie" character varying(40) NULL;
+            CREATE INDEX IF NOT EXISTS "IX_PlanningNotifications_AuthUserId_WeekCode" ON "PlanningNotifications" ("AuthUserId", "WeekCode");
             """,
             ct);
     }

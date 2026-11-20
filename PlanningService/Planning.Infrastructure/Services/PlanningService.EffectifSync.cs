@@ -29,6 +29,43 @@ public partial class PlanningService
         if (!await _context.ShiftAssignments.AnyAsync(a => a.WeeklyPlanningId == planning.Id, ct))
             return 0;
 
+        // v62 : motifs d'absence saisis dans Présence (arrêt maladie, congé…) appliqués à la semaine.
+        var absences = await MarquerAbsencesPresenceAsync(planning, ct);
+        return absences + await SynchroniserJoursModifiablesAsync(planning, ct);
+    }
+
+    /// <summary>
+    /// v62 — Journées d'une semaine couvertes par un motif d'absence saisi dans Présence : marquées
+    /// « absent » (plus de shift ni de pause affichés ni comptés), passé compris, la présence faisant
+    /// foi. Le créneau prévu reste noté : si le motif est effacé, la journée retrouve son shift.
+    /// </summary>
+    private async Task<int> MarquerAbsencesPresenceAsync(WeeklyPlanning planning, CancellationToken ct)
+    {
+        var du = planning.WeekStartDate;
+        var au = du.AddDays(6);
+        var lignes = await _context.ShiftAssignments
+            .Where(a => a.WeeklyPlanningId == planning.Id && !a.IsOnLeave && !a.IsHoliday)
+            .ToListAsync(ct);
+        if (lignes.Count == 0) return 0;
+        var absences = await PresenceAbsencesPlanning.CongesVirtuelsAsync(
+            _context, lignes.Select(a => a.UserId).Distinct().ToList(), du, au, ct);
+        if (absences.Count == 0) return 0;
+        var jours = absences.Select(c => (c.UserId, c.StartDate)).ToHashSet();
+        var marquees = 0;
+        foreach (var a in lignes.Where(a => jours.Contains((a.UserId, a.AssignedDate))))
+        {
+            // Seul l'indicateur change : créneau et pause restent notés (retour si le motif est effacé).
+            a.IsOnLeave = true;
+            marquees++;
+        }
+        if (marquees > 0)
+            await _context.SaveChangesAsync(ct);
+        return marquees;
+    }
+
+    /// <summary>v61 — Agents sortis retirés, agents arrivés ajoutés, sur les jours encore modifiables.</summary>
+    private async Task<int> SynchroniserJoursModifiablesAsync(WeeklyPlanning planning, CancellationToken ct)
+    {
         var premierModifiable = PlanningRegenWindow.GetEarliestRegenerableDate(DateTime.Now);
         var jours = GetWeekDays(planning.WeekStartDate).Where(j => j.date >= premierModifiable).ToList();
         if (jours.Count == 0) return 0;
@@ -113,11 +150,12 @@ public partial class PlanningService
                         && c.StartDate <= dernier
                         && c.EndDate >= premier)
             .ToListAsync(ct);
+        conges.AddRange(await PresenceAbsencesPlanning.CongesVirtuelsAsync(_context, nouveauxIds, premier, dernier, ct));
 
         // Occupation actuelle des créneaux et des pauses, jour par jour.
         var dejaPlanifies = await _context.ShiftAssignments
             .AsNoTracking()
-            .Where(a => a.WeeklyPlanningId == planning.Id && a.AssignedDate >= premier && a.SubServiceShiftConfigId != null)
+            .Where(a => a.WeeklyPlanningId == planning.Id && a.AssignedDate >= premier && a.SubServiceShiftConfigId != null && !a.IsOnLeave)
             .Select(a => new { a.AssignedDate, ConfigId = a.SubServiceShiftConfigId!.Value, a.BreakTime })
             .ToListAsync(ct);
         var parCreneau = dejaPlanifies

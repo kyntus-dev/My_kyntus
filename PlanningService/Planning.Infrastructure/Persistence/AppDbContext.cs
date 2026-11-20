@@ -508,6 +508,8 @@ public class AppDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.WeekCode).HasMaxLength(64);
             e.Property(x => x.SubServiceName).HasMaxLength(200);
+            e.Property(x => x.Lien).HasMaxLength(300);
+            e.Property(x => x.Categorie).HasMaxLength(40);
             e.HasIndex(x => x.AuthUserId);
         });
 

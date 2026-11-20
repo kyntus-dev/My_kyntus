@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { formatWeekLabel } from '../../utils/week-code.util';
+import { ABSENCE_TYPES } from '../../services/conge.service';
 
 export interface AgentWeekDay {
   day: string;
@@ -116,7 +117,8 @@ export class AgentPlanningWeeksComponent implements OnChanges {
 
   cellLabel(d: AgentWeekDay): string {
     if (d.isHoliday) return d.holidayName || 'Férié';
-    if (d.isOnLeave) return d.absenceType || 'Congé';
+    if (d.isOnLeave) // v62 : libellé lisible (« Arrêt maladie »…), aussi pour les motifs saisis dans Présence.
+    return ABSENCE_TYPES.find((t) => t.value === d.absenceType)?.label ?? (d.absenceType || 'Congé');
     if (d.shiftLabel) return d.shiftLabel;
     return '—';
   }
