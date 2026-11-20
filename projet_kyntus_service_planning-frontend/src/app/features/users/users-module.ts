@@ -35,6 +35,12 @@ export interface UserHrProfile {
   dateEvolutionPoste?: string | null;
   ancienPoste?: string | null;
   ancienService?: string | null;
+  /** v63 : « Nomination de poste » du fichier RH de référence. */
+  poste?: string | null;
+  /** v63 : type de contrat tel qu'écrit dans le fichier RH (CDI, CDD, CI-Anapec…). */
+  typeContrat?: string | null;
+  /** v63 : boîte d'archivage du dossier papier. */
+  numeroBox?: string | null;
   niveauScolaire?: string | null;
   intitulesEtudes?: string | null;
   enFormation?: boolean;

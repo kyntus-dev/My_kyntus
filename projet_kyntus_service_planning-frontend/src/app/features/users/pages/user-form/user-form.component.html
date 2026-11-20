@@ -1171,6 +1171,36 @@
                   <span class="hint">Ancienneté calculée : {{ computedAncienneteLabel }}</span>
                 </div>
                 <div class="form-group">
+                  <label for="dateAnciennete">Date d'ancienneté</label>
+                  <input class="ky-input" id="dateAnciennete" name="dateAnciennete" type="date" [(ngModel)]="hrProfile.dateAnciennete" />
+                  <span class="hint">Par défaut, la date d'entrée.</span>
+                </div>
+                <div class="form-group">
+                  <label for="poste">Nomination de poste</label>
+                  <input class="ky-input" id="poste" name="poste" type="text" maxlength="160" [(ngModel)]="hrProfile.poste" placeholder="Ex. Pilote télécom" />
+                </div>
+                <div class="form-group">
+                  <label for="typeContrat">Type de contrat</label>
+                  <input class="ky-input" id="typeContrat" name="typeContrat" type="text" maxlength="60" list="typesContrat" [(ngModel)]="hrProfile.typeContrat" placeholder="CDI, CDD, CI-Anapec…" />
+                  <datalist id="typesContrat">
+                    <option value="CDI"></option>
+                    <option value="CDD"></option>
+                    <option value="CI-Anapec"></option>
+                    <option value="CDD-CDI"></option>
+                    <option value="Anapec-CI"></option>
+                  </datalist>
+                </div>
+                <div class="form-group">
+                  <label for="numeroBox">N° BOX (dossier papier)</label>
+                  <input class="ky-input" id="numeroBox" name="numeroBox" type="text" maxlength="40" [(ngModel)]="hrProfile.numeroBox" />
+                </div>
+                @if (isEditMode) {
+                  <div class="form-group">
+                    <label for="dateSortie">Date de sortie</label>
+                    <input class="ky-input" id="dateSortie" name="dateSortie" type="date" [(ngModel)]="hrProfile.dateSortie" />
+                  </div>
+                }
+                <div class="form-group">
                   <label for="rib">RIB</label>
                   <input class="ky-input" id="rib" name="rib" type="text" [(ngModel)]="hrProfile.rib" />
                 </div>

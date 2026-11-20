@@ -35,6 +35,13 @@ public static class PlanningEffectifRules
     }
 
     /// <summary>Un créneau proposé à un agent ajouté : besoin restant, ordre d'affichage, pauses.</summary>
+    /// <summary>
+    /// v63 : agent rattaché à une autre cellule (réaffecté) : ses journées à venir quittent ce planning.
+    /// Un renfort ou une demande exceptionnelle (venue d'une autre cellule, voulue) reste.
+    /// </summary>
+    public static bool ReaffecteAilleurs(Agent agent, int celluleId, bool renfortOuExceptionnel) =>
+        !renfortOuExceptionnel && agent.CelluleId != celluleId;
+
     public sealed record Creneau(int ConfigId, int Requis, int Affectes, int Ordre);
 
     /// <summary>

@@ -796,6 +796,12 @@ public partial class PlanningService : IPlanningService
 
         planning.TotalEffectif = employees.Count;
 
+        // v63 : le planning suit l'affectation réelle. Agents qui ne sont plus dans cette cellule
+        // (réaffectés, sortis) : leurs journées restant à régénérer sont retirées, corrections figées
+        // comprises ; le passé et les journées déjà déclarées restent (historique).
+        if (isPartial)
+            await RetirerAgentsHorsCelluleAsync(planning.Id, regenerateFrom!.Value, employees.Select(e => e.Id).ToHashSet(), frozenSnapshot);
+
         var subService = planning.SubService
             ?? await _context.SubServices.FindAsync(subServiceId);
         Dictionary<int, int>? employeeModeMap = null;
@@ -1421,6 +1427,32 @@ public partial class PlanningService : IPlanningService
             // PlanningService n'a pas de journal injecté : sortie d'erreur du conteneur.
             Console.Error.WriteLine($"[planning] erreur de génération non enregistrée (planning {planningId}) : {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// v63 — Journées (à partir de <paramref name="depuis"/>) d'agents qui ne font plus partie de la
+    /// cellule : retirées du planning et du jeu de départ de la régénération. Renforts et demandes
+    /// exceptionnelles (agents d'une autre cellule, voulus) et journées déclarées sont gardés.
+    /// </summary>
+    private async Task RetirerAgentsHorsCelluleAsync(
+        int weeklyPlanningId, DateOnly depuis, IReadOnlySet<int> agentsDeLaCellule, List<ShiftAssignment> jeuDeDepart)
+    {
+        var candidates = await _context.ShiftAssignments
+            .Where(a => a.WeeklyPlanningId == weeklyPlanningId
+                        && a.AssignedDate >= depuis
+                        && !a.IsReinforcement
+                        && !a.IsExceptionalRequest
+                        && !a.Declarations.Any())
+            .ToListAsync();
+        var horsCellule = candidates.Where(a => !agentsDeLaCellule.Contains(a.UserId)).ToList();
+        if (horsCellule.Count == 0)
+            return;
+        _context.ShiftAssignments.RemoveRange(horsCellule);
+        await _context.SaveChangesAsync();
+        jeuDeDepart.RemoveAll(a => a.AssignedDate >= depuis
+                                   && !a.IsReinforcement
+                                   && !a.IsExceptionalRequest
+                                   && !agentsDeLaCellule.Contains(a.UserId));
     }
 
     /// <summary>
@@ -2791,8 +2823,9 @@ public partial class PlanningService : IPlanningService
             {
                 await SynchroniserEffectifAsync(id);
             }
-            catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                // v63 : la synchronisation ne doit jamais empêcher d'afficher le planning.
                 _context.ChangeTracker.Clear();
             }
         }

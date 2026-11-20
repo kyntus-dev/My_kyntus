@@ -172,6 +172,8 @@ public static class DependencyInjection
         services.AddSingleton<EmployeeImportColumnMatcher>();
         services.AddScoped<IEmployeeDocumentFieldQueryService, EmployeeDocumentFieldQueryService>();
         services.AddScoped<EmployeeImportTemplateBuilder>();
+        // v63 — Fiches employés : fichier RH de référence + complétude.
+        services.AddScoped<IFichesReferenceService, FichesReferenceService>();
 
         services.AddScoped<IReclamationService, ReclamationService>();
         services.AddScoped<IPropositionService, PropositionService>();

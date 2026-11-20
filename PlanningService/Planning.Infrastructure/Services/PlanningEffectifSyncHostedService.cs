@@ -54,6 +54,19 @@ public sealed class PlanningEffectifSyncHostedService(
             .Select(p => p.Id)
             .ToListAsync(ct);
 
+        // v63 : motifs d'absence de Présence (arrêt maladie…) appliqués à tous les plannings, pas
+        // seulement aux deux semaines synchronisées ci-dessous (90 jours d'historique).
+        try
+        {
+            var marquees = await PresenceAbsencesPlanning.MarquerToutesAbsencesAsync(db, aujourdhui.AddDays(-90), ct);
+            if (marquees > 0)
+                logger.LogInformation("Présence → planning : {Nombre} journée(s) passée(s) en absence (arrêt maladie, congé…).", marquees);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Absences de Présence non appliquées aux plannings.");
+        }
+
         var total = 0;
         foreach (var id in ids)
         {
@@ -65,7 +78,7 @@ public sealed class PlanningEffectifSyncHostedService(
             {
                 total += await service.SynchroniserEffectifAsync(id, ct);
             }
-            catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogWarning(ex, "Effectif du planning {PlanningId} non synchronisé.", id);
             }

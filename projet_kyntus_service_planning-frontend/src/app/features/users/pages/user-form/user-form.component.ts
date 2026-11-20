@@ -273,6 +273,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
     dateEvolutionPoste: '',
     ancienPoste: '',
     ancienService: '',
+    poste: '',
+    typeContrat: '',
+    numeroBox: '',
     niveauScolaire: '',
     intitulesEtudes: '',
     enFormation: false,
@@ -327,14 +330,18 @@ export class UserFormComponent implements OnInit, OnDestroy {
   readonly contractLevelLabel = contractLevelLabel;
 
   get computedAncienneteLabel(): string {
-    const ref = this.hrProfile.dateEntree.trim() || this.form.hireDate;
+    const ref = this.hrProfile.dateAnciennete.trim() || this.hrProfile.dateEntree.trim() || this.form.hireDate;
     return formatSeniorityDuration(ref);
   }
 
   onDateEntreeChange(value: string): void {
+    const precedente = this.hrProfile.dateEntree;
     this.hrProfile.dateEntree = value;
-    // Ancienneté = date d'entrée (pas de saisie manuelle).
-    this.hrProfile.dateAnciennete = value;
+    // v63 : l'ancienneté suit la date d'entrée tant qu'elle n'a pas été saisie à part
+    // (le fichier RH de référence peut donner une date d'ancienneté différente : elle est gardée).
+    if (!this.hrProfile.dateAnciennete.trim() || this.hrProfile.dateAnciennete === precedente) {
+      this.hrProfile.dateAnciennete = value;
+    }
   }
 
   onHireDateChange(value: string): void {
@@ -342,7 +349,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
     if (!this.hrProfile.dateEntree.trim()) {
       this.hrProfile.dateEntree = value;
     }
-    this.hrProfile.dateAnciennete = this.hrProfile.dateEntree.trim() || value;
+    if (!this.hrProfile.dateAnciennete.trim()) {
+      this.hrProfile.dateAnciennete = this.hrProfile.dateEntree.trim() || value;
+    }
   }
 
   private readonly defaultProbation: Record<string, number> = {
@@ -530,6 +539,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
       dateEvolutionPoste: '',
       ancienPoste: '',
       ancienService: '',
+      poste: '',
+      typeContrat: '',
+      numeroBox: '',
       niveauScolaire: '',
       intitulesEtudes: '',
       enFormation: false,
@@ -1113,6 +1125,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
       dateEvolutionPoste: this.dateToInputValue(profile.dateEvolutionPoste),
       ancienPoste: profile.ancienPoste ?? '',
       ancienService: profile.ancienService ?? '',
+      poste: profile.poste ?? '',
+      typeContrat: profile.typeContrat ?? '',
+      numeroBox: profile.numeroBox ?? '',
       niveauScolaire: profile.niveauScolaire ?? '',
       intitulesEtudes: profile.intitulesEtudes ?? '',
       enFormation: profile.enFormation ?? false,
@@ -1167,9 +1182,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
       immatriculationCnss: this.hrProfile.immatriculationCnss.trim() || null,
       dateEntree: this.toOptionalDateIso(this.hrProfile.dateEntree || this.form.hireDate),
       dateEmbauche: this.toOptionalDateIso(this.form.hireDate),
-      // Alignée automatiquement sur la date d'entrée (pas de champ formulaire).
+      // v63 : date d'ancienneté saisie (fichier RH de référence) ; à défaut, la date d'entrée.
       dateAnciennete: this.toOptionalDateIso(
-        this.hrProfile.dateEntree || this.form.hireDate || this.hrProfile.dateAnciennete,
+        this.hrProfile.dateAnciennete || this.hrProfile.dateEntree || this.form.hireDate,
       ),
       dateSortie: this.isEditMode ? this.toOptionalDateIso(this.hrProfile.dateSortie) : null,
       dateEvolutionPoste: this.isEditMode
@@ -1177,6 +1192,10 @@ export class UserFormComponent implements OnInit, OnDestroy {
         : null,
       ancienPoste: this.isEditMode ? this.hrProfile.ancienPoste.trim() || null : null,
       ancienService: this.isEditMode ? this.hrProfile.ancienService.trim() || null : null,
+      // v63 : chaîne vide = champ vidé volontairement (null = inchangé côté serveur).
+      poste: this.hrProfile.poste.trim(),
+      typeContrat: this.hrProfile.typeContrat.trim(),
+      numeroBox: this.hrProfile.numeroBox.trim(),
       niveauScolaire: this.hrProfile.niveauScolaire.trim() || null,
       intitulesEtudes: this.hrProfile.intitulesEtudes.trim() || null,
       enFormation: this.hrProfile.enFormation,

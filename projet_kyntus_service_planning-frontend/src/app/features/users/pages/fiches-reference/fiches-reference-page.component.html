@@ -1,0 +1,434 @@
+<div class="ky-page-shell">
+  <app-kyntus-page-header
+    title="Fiches employés — fichier RH de référence"
+    subtitle="Mise à jour des fiches depuis la BDD salariés : identification par le nom, contrôle de chaque valeur, rien n'est écrasé par une case vide.">
+    <div actions>
+      <a routerLink="/users" class="ky-btn-secondary">Employés</a>
+      <a routerLink="/users/mails-internes" class="ky-btn-secondary">Mails internes</a>
+    </div>
+  </app-kyntus-page-header>
+
+  <nav class="fr-onglets" role="tablist">
+    <button type="button" role="tab" [class.actif]="onglet === 'import'" (click)="changerOnglet('import')">
+      <app-lucide-icon [icon]="icons.upload" className="w-4 h-4" /> Importer le fichier
+    </button>
+    <button type="button" role="tab" [class.actif]="onglet === 'incompletes'" (click)="changerOnglet('incompletes')">
+      <app-lucide-icon [icon]="icons.list" className="w-4 h-4" /> Fiches incomplètes
+      @if (incompletesChargees) { <span class="fr-pill fr-pill--warn">{{ incompletes.length }}</span> }
+    </button>
+    <button type="button" role="tab" [class.actif]="onglet === 'historique'" (click)="changerOnglet('historique')">
+      <app-lucide-icon [icon]="icons.history" className="w-4 h-4" /> Historique
+    </button>
+  </nav>
+
+  <!-- ═══════════════════════════ Import ═══════════════════════════ -->
+  @if (onglet === 'import') {
+    <section class="card ky-card">
+      <div class="section-heading">
+        <div>
+          <h2>Fichier de référence</h2>
+          <p>
+            Classeur Excel de tous les employés (feuille principale + feuilles « LISTE BOX » pour le N° BOX).
+            Toutes les colonnes sont reprises : N° Ordre, dates d'ancienneté / d'embauche / de sortie, poste,
+            type de contrat, nationalité, ville et date de naissance, sexe, situation familiale, CIN,
+            N° d'immatriculation, adresse, TEL 1 et TEL 2. Chaque employé est identifié par son nom
+            (casse, accents, espaces et ordre nom / prénom ignorés). <strong>Rien n'est enregistré avant votre validation.</strong>
+          </p>
+        </div>
+      </div>
+
+      <div class="depot">
+        <label class="depot-zone" [class.depot-zone--off]="analysing || applying">
+          <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" (change)="onFichier($event)" [disabled]="analysing || applying" />
+          <app-lucide-icon [icon]="icons.sheet" className="w-5 h-5" />
+          <span>{{ fichierNom || 'Choisir le fichier (.xlsx)' }}</span>
+        </label>
+        @if (analysing) { <span class="depot-etat">Analyse en cours…</span> }
+        @if (fichierNom && !analysing && !applying) {
+          <button type="button" class="ky-btn-secondary btn-sm" (click)="reinitialiser()">
+            <app-lucide-icon [icon]="icons.clear" className="w-3.5 h-3.5" /> Retirer
+          </button>
+        }
+      </div>
+
+      @if (erreur) {
+        <div class="fr-alert fr-alert--error">
+          <app-lucide-icon [icon]="icons.warn" className="w-4 h-4" /><span>{{ erreur }}</span>
+        </div>
+      }
+
+      @if (analyse; as a) {
+        <!-- Synthèse -->
+        <div class="fr-stats">
+          <div class="fr-stat"><span class="v">{{ a.compteurs.lignesLues }}</span><span class="l">Lignes lues</span></div>
+          <div class="fr-stat fr-stat--ok"><span class="v">{{ a.compteurs.identifies }}</span><span class="l">Identifiés</span></div>
+          <div class="fr-stat fr-stat--ok"><span class="v">{{ a.compteurs.aMettreAJour }}</span><span class="l">Fiches à mettre à jour ({{ a.compteurs.champsAModifier }} champs)</span></div>
+          <div class="fr-stat"><span class="v">{{ a.compteurs.sansChangement }}</span><span class="l">Déjà à jour</span></div>
+          <div class="fr-stat fr-stat--info"><span class="v">{{ a.compteurs.nouveaux }}</span><span class="l">Nouveaux employés</span></div>
+          <div class="fr-stat fr-stat--warn"><span class="v">{{ a.compteurs.aVerifier + a.compteurs.ambigus }}</span><span class="l">À vérifier / homonymes</span></div>
+          <div class="fr-stat fr-stat--warn"><span class="v">{{ a.compteurs.fichesIncompletes }}</span><span class="l">Fiches incomplètes</span></div>
+          <div class="fr-stat fr-stat--error"><span class="v">{{ a.compteurs.avecAnomalies }}</span><span class="l">Lignes avec valeurs refusées</span></div>
+          <div class="fr-stat"><span class="v">{{ a.compteurs.historiques + a.compteurs.sortisInconnus + a.compteurs.ignores }}</span><span class="l">Ignorées (historique, sortis, vides)</span></div>
+        </div>
+
+        <!-- Colonnes -->
+        <details class="fr-colonnes" [open]="a.colonnesManquantes.length > 0 || a.colonnesNonReprises.length > 0">
+          <summary>
+            Colonnes : {{ a.colonnesReconnues.length }} reconnue(s) dans la feuille « {{ a.feuille }} »
+            @if (a.colonnesManquantes.length) { — <strong class="txt-warn">{{ a.colonnesManquantes.length }} absente(s)</strong> }
+            @if (a.colonnesNonReprises.length) { — <strong class="txt-warn">{{ a.colonnesNonReprises.length }} non reprise(s)</strong> }
+            @if (a.feuillesBox.length) { — N° BOX lu dans : {{ a.feuillesBox.join(', ') }} }
+          </summary>
+          <div class="fr-colonnes-grille">
+            @for (c of a.colonnesReconnues; track c.cle) {
+              <span class="fr-col fr-col--ok" [title]="'Colonne ' + c.lettre + ' : ' + (c.enTeteFichier ?? '')">{{ c.lettre }} · {{ c.intitule }}</span>
+            }
+            @for (c of a.colonnesManquantes; track c) {
+              <span class="fr-col fr-col--manque">{{ c }} : absente du fichier</span>
+            }
+          </div>
+          @for (n of a.colonnesNonReprises; track n) { <p class="fr-note">{{ n }}</p> }
+        </details>
+
+        <!-- Filtres -->
+        <div class="fr-filtres">
+          @for (f of filtres; track f.valeur) {
+            <button type="button" class="fr-chip" [class.actif]="filtre === f.valeur" (click)="filtre = f.valeur">
+              {{ f.libelle }} <span class="fr-chip-n">{{ nombreFiltre(f.valeur) }}</span>
+            </button>
+          }
+          <label class="fr-recherche">
+            <app-lucide-icon [icon]="icons.search" className="w-4 h-4" />
+            <input type="search" [(ngModel)]="recherche" name="recherche" placeholder="Nom, N° d'ordre…" />
+          </label>
+        </div>
+
+        <!-- Lignes -->
+        <div class="table-wrap">
+          <table class="prime-table fr-table">
+            <thead>
+              <tr>
+                <th class="col-ouvrir"></th>
+                <th>Ligne</th>
+                <th>Employé (fichier)</th>
+                <th>N° d'ordre</th>
+                <th>Résultat</th>
+                <th>Changements</th>
+                <th>Contrôles</th>
+                <th class="col-choix">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (l of lignesAffichees; track l.numero) {
+                <tr [class.fr-row--off]="choix[l.numero] === 'ignorer'" [class.fr-row--conflit]="conflits.includes(l.numero)">
+                  <td class="col-ouvrir">
+                    <button type="button" class="fr-ouvrir" (click)="basculer(l.numero)" [attr.aria-expanded]="ouvertes.has(l.numero)" title="Détail">
+                      <app-lucide-icon [icon]="ouvertes.has(l.numero) ? icons.down : icons.right" className="w-4 h-4" />
+                    </button>
+                  </td>
+                  <td class="muted-cell">{{ l.numero }}</td>
+                  <td>
+                    <span class="name">{{ l.agent || '—' }}</span>
+                    @if (l.ficheApp && l.ficheApp.toUpperCase() !== (l.agent ?? '').toUpperCase()) {
+                      <span class="fr-sous">Fiche : {{ l.ficheApp }}{{ l.ficheActive ? '' : ' (inactive)' }}</span>
+                    }
+                    @if (l.sorti) { <span class="fr-sous">Sorti le {{ valeurLisible(l.dateSortie) }}</span> }
+                  </td>
+                  <td class="muted-cell">{{ l.numeroOrdre || '—' }}</td>
+                  <td><span class="fr-badge fr-badge--{{ l.statut }}">{{ libelleStatut[l.statut] }}</span></td>
+                  <td>
+                    @if (l.modifications.length) {
+                      <button type="button" class="fr-lien" (click)="basculer(l.numero)">{{ l.modifications.length }} champ(s)</button>
+                    } @else if (l.statut === 'identifie') {
+                      <span class="muted-cell">À jour</span>
+                    } @else { <span class="muted-cell">—</span> }
+                  </td>
+                  <td class="fr-controles">
+                    @if (l.anomalies.length) { <span class="fr-tag fr-tag--error" [title]="l.anomalies.join('\n')">{{ l.anomalies.length }} refusée(s)</span> }
+                    @if (l.avertissements.length) { <span class="fr-tag fr-tag--warn" [title]="l.avertissements.join('\n')">{{ l.avertissements.length }} à vérifier</span> }
+                    @if (l.champsManquants.length && !l.sorti) { <span class="fr-tag" [title]="l.champsManquants.join(', ')">{{ l.champsManquants.length }} manquant(s)</span> }
+                  </td>
+                  <td class="col-choix">
+                    @if (choisissable(l)) {
+                      <select class="ky-input fr-select" [ngModel]="choix[l.numero]" (ngModelChange)="onChoix(l, $event)" [name]="'choix-' + l.numero">
+                        @for (o of options(l); track o.valeur) {
+                          <option [value]="o.valeur">{{ o.libelle }}</option>
+                        }
+                      </select>
+                    } @else { <span class="muted-cell">Non appliquée</span> }
+                  </td>
+                </tr>
+                @if (ouvertes.has(l.numero)) {
+                  <tr class="fr-detail">
+                    <td></td>
+                    <td colspan="7">
+                      @if (l.message) { <p class="fr-message">{{ l.message }}</p> }
+                      @if (l.modifications.length) {
+                        <table class="fr-modifs">
+                          <thead><tr><th>Champ</th><th>Valeur actuelle</th><th>Valeur du fichier</th></tr></thead>
+                          <tbody>
+                            @for (m of l.modifications; track m.cle) {
+                              <tr>
+                                <td>{{ m.libelle }}</td>
+                                <td [class.fr-vide]="!m.ancienne">{{ valeurLisible(m.ancienne) }}</td>
+                                <td class="fr-nouvelle">{{ valeurLisible(m.nouvelle) }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      }
+                      @if (l.candidats.length && l.statut !== 'identifie') {
+                        <p class="fr-sous-titre">Fiches proposées</p>
+                        <ul class="fr-liste">
+                          @for (c of l.candidats; track c.userId) {
+                            <li>
+                              <a [routerLink]="['/users', c.userId]" target="_blank">{{ c.nom }} {{ c.prenom }}</a>
+                              @if (c.matricule) { · N° {{ c.matricule }} }
+                              {{ c.actif ? '' : '· inactive' }} — {{ c.raison }}
+                            </li>
+                          }
+                        </ul>
+                      }
+                      @if (l.anomalies.length) {
+                        <p class="fr-sous-titre txt-error">Valeurs refusées (non appliquées — à corriger dans le fichier)</p>
+                        <ul class="fr-liste">@for (x of l.anomalies; track x) { <li>{{ x }}</li> }</ul>
+                      }
+                      @if (l.avertissements.length) {
+                        <p class="fr-sous-titre txt-warn">À vérifier</p>
+                        <ul class="fr-liste">@for (x of l.avertissements; track x) { <li>{{ x }}</li> }</ul>
+                      }
+                      @if (l.champsManquants.length && !l.sorti) {
+                        <p class="fr-sous-titre">Champs encore vides après application</p>
+                        <p class="fr-note">{{ l.champsManquants.join(', ') }}</p>
+                      }
+                    </td>
+                  </tr>
+                }
+              } @empty {
+                <tr><td colspan="8" class="muted-cell fr-vide-liste">Aucune ligne pour ce filtre.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (a.actifsAbsentsDuFichier.length) {
+          <div class="fr-absents">
+            <button type="button" class="fr-lien" (click)="voirAbsents = !voirAbsents">
+              {{ a.actifsAbsentsDuFichier.length }} employé(s) actif(s) de l'application absent(s) du fichier
+              {{ voirAbsents ? '▲' : '▼' }}
+            </button>
+            @if (voirAbsents) {
+              <p class="fr-note">Information seulement : aucune fiche n'est modifiée ni désactivée pour cette raison.</p>
+              <ul class="fr-liste fr-liste--colonnes">
+                @for (x of a.actifsAbsentsDuFichier; track x.userId) {
+                  <li><a [routerLink]="['/users', x.userId]">{{ x.nom }} {{ x.prenom }}</a>{{ x.service ? ' · ' + x.service : '' }}</li>
+                }
+              </ul>
+            }
+          </div>
+        }
+
+        <div class="fr-actions">
+          <label class="fr-check">
+            <input type="checkbox" [(ngModel)]="desactiverSortis" name="desactiverSortis" />
+            <span>Désactiver aussi les comptes des employés sortis (date de sortie passée)</span>
+          </label>
+          @if (conflits.length) {
+            <span class="txt-error">Une même fiche est choisie sur plusieurs lignes ({{ conflits.join(', ') }}) : corrigez avant d'appliquer.</span>
+          }
+          <button type="button" class="ky-btn-primary" [disabled]="applying || conflits.length > 0 || (aAppliquer.majs + aAppliquer.creations) === 0" (click)="appliquer()">
+            <app-lucide-icon [icon]="icons.ok" className="w-4 h-4" />
+            @if (applying) { Application en cours… }
+            @else if (confirmerApplication) { Confirmer : {{ aAppliquer.majs }} fiche(s) et {{ aAppliquer.creations }} création(s) }
+            @else { Appliquer ({{ aAppliquer.majs }} fiche(s), {{ aAppliquer.creations }} création(s)) }
+          </button>
+        </div>
+      }
+    </section>
+
+    <!-- Rapport d'application -->
+    @if (rapport; as r) {
+      <section class="card ky-card">
+        <div class="section-heading">
+          <div>
+            <h2>Rapport d'import — {{ r.fichier }}</h2>
+            <p>Chaque modification est tracée (valeur avant / après) et peut être annulée depuis l'historique.</p>
+          </div>
+          <button type="button" class="ky-btn-secondary" (click)="telechargerRapport()">
+            <app-lucide-icon [icon]="icons.download" className="w-4 h-4" /> Rapport détaillé (CSV)
+          </button>
+        </div>
+        <div class="fr-stats">
+          <div class="fr-stat fr-stat--ok"><span class="v">{{ r.compteurs.misesAJour }}</span><span class="l">Fiches mises à jour</span></div>
+          <div class="fr-stat fr-stat--ok"><span class="v">{{ r.compteurs.champsModifies }}</span><span class="l">Champs modifiés</span></div>
+          <div class="fr-stat fr-stat--info"><span class="v">{{ r.compteurs.crees }}</span><span class="l">Nouveaux employés</span></div>
+          <div class="fr-stat"><span class="v">{{ r.compteurs.sansChangement }}</span><span class="l">Déjà à jour</span></div>
+          <div class="fr-stat"><span class="v">{{ r.compteurs.ignores }}</span><span class="l">Non appliquées</span></div>
+          <div class="fr-stat fr-stat--warn"><span class="v">{{ r.compteurs.fichesIncompletes }}</span><span class="l">Fiches incomplètes</span></div>
+          <div class="fr-stat fr-stat--error"><span class="v">{{ r.compteurs.erreurs }}</span><span class="l">Erreurs</span></div>
+          @if (r.compteurs.desactives) { <div class="fr-stat"><span class="v">{{ r.compteurs.desactives }}</span><span class="l">Comptes désactivés</span></div> }
+        </div>
+        @if (r.compteurs.annuaireNonSynchronise) {
+          <div class="fr-alert fr-alert--warn">
+            <app-lucide-icon [icon]="icons.warn" className="w-4 h-4" />
+            <span>{{ r.compteurs.annuaireNonSynchronise }} fiche(s) enregistrée(s) mais non transmise(s) à l'annuaire : réimportez le même fichier pour les renvoyer (les fiches déjà à jour ne sont pas modifiées).</span>
+          </div>
+        }
+        <div class="fr-filtres">
+          <button type="button" class="fr-chip" [class.actif]="filtreRapport === 'tous'" (click)="filtreRapport = 'tous'">Toutes</button>
+          <button type="button" class="fr-chip" [class.actif]="filtreRapport === 'modifies'" (click)="filtreRapport = 'modifies'">Modifiées</button>
+          <button type="button" class="fr-chip" [class.actif]="filtreRapport === 'incompletes'" (click)="filtreRapport = 'incompletes'">Incomplètes</button>
+          <button type="button" class="fr-chip" [class.actif]="filtreRapport === 'erreurs'" (click)="filtreRapport = 'erreurs'">Erreurs</button>
+        </div>
+        <div class="table-wrap">
+          <table class="prime-table fr-table">
+            <thead><tr><th>Ligne</th><th>Employé</th><th>Résultat</th><th>Informations modifiées</th><th>Champs manquants</th></tr></thead>
+            <tbody>
+              @for (l of lignesRapport; track l.numero) {
+                <tr>
+                  <td class="muted-cell">{{ l.numero }}</td>
+                  <td>
+                    @if (l.userId) { <a class="name" [routerLink]="['/users', l.userId]">{{ l.agent }}</a> } @else { <span class="name">{{ l.agent || '—' }}</span> }
+                    @if (l.message) { <span class="fr-sous">{{ l.message }}</span> }
+                  </td>
+                  <td>
+                    <span class="fr-res fr-res--{{ l.resultat }}">{{ libelleRes(l.resultat) }}</span>
+                    @if (!l.annuaireSynchronise) { <span class="fr-tag fr-tag--warn">annuaire non synchronisé</span> }
+                  </td>
+                  <td class="fr-modifs-courtes">
+                    @for (m of l.modifications; track m.cle) {
+                      <div><strong>{{ m.libelle }}</strong> : {{ valeurLisible(m.ancienne) }} → {{ valeurLisible(m.nouvelle) }}</div>
+                    } @empty { <span class="muted-cell">—</span> }
+                    @if (l.anomalies.length) { <div class="txt-error">Refusé : {{ l.anomalies.join(' · ') }}</div> }
+                  </td>
+                  <td class="fr-note">{{ l.champsManquants.length ? l.champsManquants.join(', ') : '—' }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="5" class="muted-cell fr-vide-liste">Aucune ligne.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+  }
+
+  <!-- ═══════════════════════════ Fiches incomplètes ═══════════════════════════ -->
+  @if (onglet === 'incompletes') {
+    <section class="card ky-card">
+      <div class="section-heading">
+        <div>
+          <h2>Fiches incomplètes <span class="fr-pill fr-pill--warn">{{ incompletes.length }}</span></h2>
+          <p>Employés actifs auxquels il manque au moins une information du fichier RH de référence.</p>
+        </div>
+        <div class="fr-boutons">
+          <button type="button" class="ky-btn-secondary" (click)="chargerIncompletes()" [disabled]="incompletesLoading">
+            <app-lucide-icon [icon]="icons.refresh" className="w-4 h-4" /> Actualiser
+          </button>
+          <button type="button" class="ky-btn-secondary" (click)="exporterIncompletes()" [disabled]="!incompletes.length">
+            <app-lucide-icon [icon]="icons.download" className="w-4 h-4" /> Exporter (CSV)
+          </button>
+        </div>
+      </div>
+      <label class="fr-recherche fr-recherche--large">
+        <app-lucide-icon [icon]="icons.search" className="w-4 h-4" />
+        <input type="search" [(ngModel)]="rechercheIncompletes" name="rechercheIncompletes" placeholder="Nom, service, champ manquant…" />
+      </label>
+      @if (incompletesLoading) {
+        <p class="muted-cell">Chargement…</p>
+      } @else {
+        <div class="table-wrap">
+          <table class="prime-table fr-table">
+            <thead><tr><th>Employé</th><th>N° d'ordre</th><th>Service</th><th>Rôle</th><th>Champs manquants</th><th></th></tr></thead>
+            <tbody>
+              @for (f of incompletesAffichees; track f.userId) {
+                <tr>
+                  <td><span class="name">{{ f.nom }} {{ f.prenom }}</span></td>
+                  <td class="muted-cell">{{ f.matricule || '—' }}</td>
+                  <td class="muted-cell">{{ f.service || '—' }}</td>
+                  <td class="muted-cell">{{ f.role }}</td>
+                  <td><span class="fr-tag">{{ f.champsManquants.length }}</span> <span class="fr-note">{{ f.champsManquants.join(', ') }}</span></td>
+                  <td><a class="ky-btn-secondary btn-sm" [routerLink]="['/users/edit', f.userId]">Compléter</a></td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="muted-cell fr-vide-liste">Toutes les fiches actives sont complètes.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+
+  <!-- ═══════════════════════════ Historique ═══════════════════════════ -->
+  @if (onglet === 'historique') {
+    <section class="card ky-card">
+      <div class="section-heading">
+        <div>
+          <h2>Historique des imports</h2>
+          <p>
+            Annuler un import remet les valeurs d'avant. Une valeur modifiée depuis par quelqu'un d'autre est conservée ;
+            une fiche créée par l'import est désactivée, jamais supprimée.
+          </p>
+        </div>
+        <button type="button" class="ky-btn-secondary" (click)="chargerHistorique()" [disabled]="historiqueLoading">
+          <app-lucide-icon [icon]="icons.refresh" className="w-4 h-4" /> Actualiser
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table class="prime-table fr-table">
+          <thead><tr><th class="col-ouvrir"></th><th>Date</th><th>Fichier</th><th>Par</th><th>Fiches</th><th>Champs</th><th>Créations</th><th>État</th><th></th></tr></thead>
+          <tbody>
+            @for (imp of historique; track imp.importId) {
+              <tr>
+                <td class="col-ouvrir">
+                  <button type="button" class="fr-ouvrir" (click)="basculerDetail(imp)" title="Détail">
+                    <app-lucide-icon [icon]="detailOuvert === imp.importId ? icons.down : icons.right" className="w-4 h-4" />
+                  </button>
+                </td>
+                <td>{{ imp.le | date: 'dd/MM/yyyy HH:mm' }}</td>
+                <td>{{ imp.fichier }}</td>
+                <td class="muted-cell">{{ imp.auteur }}</td>
+                <td>{{ imp.fiches }}</td>
+                <td>{{ imp.champs }}</td>
+                <td>{{ imp.creations }}</td>
+                <td>
+                  @if (imp.annule) { <span class="fr-res fr-res--ignore">Annulé</span> } @else { <span class="fr-res fr-res--mis-a-jour">Appliqué</span> }
+                </td>
+                <td>
+                  @if (!imp.annule) {
+                    <button type="button" class="ky-btn-secondary btn-sm" (click)="annuler(imp)" [disabled]="annulationEnCours === imp.importId">
+                      <app-lucide-icon [icon]="icons.undo" className="w-3.5 h-3.5" />
+                      {{ annulationEnCours === imp.importId ? 'Annulation…' : annulationAConfirmer === imp.importId ? 'Confirmer l\'annulation' : 'Annuler' }}
+                    </button>
+                  }
+                </td>
+              </tr>
+              @if (detailOuvert === imp.importId) {
+                <tr class="fr-detail">
+                  <td></td>
+                  <td colspan="8">
+                    @for (d of detail; track d.userId) {
+                      <div class="fr-detail-fiche">
+                        <a class="name" [routerLink]="['/users', d.userId]">{{ d.agent }}</a>
+                        <span class="fr-res fr-res--{{ d.resultat }}">{{ libelleRes(d.resultat) }}</span>
+                        @if (d.message) { <span class="fr-sous">{{ d.message }}</span> }
+                        <div class="fr-modifs-courtes">
+                          @for (m of d.modifications; track m.cle) {
+                            <div><strong>{{ m.libelle }}</strong> : {{ valeurLisible(m.ancienne) }} → {{ valeurLisible(m.nouvelle) }}</div>
+                          }
+                        </div>
+                      </div>
+                    } @empty { <p class="muted-cell">Chargement…</p> }
+                  </td>
+                </tr>
+              }
+            } @empty {
+              <tr><td colspan="9" class="muted-cell fr-vide-liste">{{ historiqueLoading ? 'Chargement…' : 'Aucun import pour le moment.' }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+</div>

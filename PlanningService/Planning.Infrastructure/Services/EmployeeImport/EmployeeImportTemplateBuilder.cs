@@ -95,6 +95,8 @@ public class EmployeeImportTemplateBuilder(AppDbContext db, IEmployeeFieldServic
             ["dateEvolutionPoste"] = "",
             ["ancienPoste"] = "",
             ["ancienService"] = "",
+            ["poste"] = "Pilote",
+            ["numeroBox"] = "",
             ["niveauScolaire"] = "Bac +5 (Master, ingénieur)",
             ["intitulesEtudes"] = "Master Informatique",
             ["enFormation"] = "Non",

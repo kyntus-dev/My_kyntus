@@ -252,6 +252,7 @@ public class EmployeeImportExecutor(
             await db.SaveChangesAsync(ct);
             journal.Commit();
             committed = true;
+            await EmployeeImportCompletude.CompleterRapportAsync(db, report, ct);
         }
         catch (Exception ex) when (!committed)
         {
@@ -423,6 +424,9 @@ public class EmployeeImportExecutor(
                 DateEvolutionPoste = hr.DateEvolutionPoste,
                 AncienPoste = hr.AncienPoste,
                 AncienService = hr.AncienService,
+                Poste = hr.Poste,
+                TypeContrat = hr.TypeContrat,
+                NumeroBox = hr.NumeroBox,
                 NiveauScolaire = hr.NiveauScolaire,
                 IntitulesEtudes = hr.IntitulesEtudes,
                 EnFormation = hr.EnFormation,

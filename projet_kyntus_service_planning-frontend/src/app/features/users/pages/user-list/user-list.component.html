@@ -16,6 +16,8 @@
           <div class="toolbar-dropdown">
             <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="generalMenu.open = false; goimport()">Importer</button>
             <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="generalMenu.open = false; openGroupReset()">Régénérer par groupe</button>
+            <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="generalMenu.open = false; ouvrirFichesReference()">Mettre à jour depuis le fichier RH</button>
+            <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="generalMenu.open = false; ouvrirFichesReference('incompletes')">Fiches incomplètes</button>
           </div>
         </details>
         <details *kyIfAdminAllowed="'admin.users.Export'" class="toolbar-menu" #exportMenu>

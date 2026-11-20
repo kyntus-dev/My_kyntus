@@ -11,7 +11,8 @@ namespace Planning.Infrastructure.Messaging.Consumers;
 public sealed class DirectoryEmployeeProjectionConsumer(
     AppDbContext db,
     IUserService userService,
-    ILogger<DirectoryEmployeeProjectionConsumer> logger) :
+    ILogger<DirectoryEmployeeProjectionConsumer> logger,
+    IDirectoryEmployeeWriteClient? directoryWrite = null) :
     IConsumer<DirectoryEmployeeChangedMessage>
 {
     public async Task Consume(ConsumeContext<DirectoryEmployeeChangedMessage> context)
@@ -44,6 +45,7 @@ public sealed class DirectoryEmployeeProjectionConsumer(
 
         var roleChanged = false;
         var isNew = false;
+        var reparerAnnuaire = false;
 
         if (user is null)
         {
@@ -107,7 +109,22 @@ public sealed class DirectoryEmployeeProjectionConsumer(
             {
                 // v51 : service de référence (déterministe même en cas de doublon dans le miroir).
                 var subId = await SubServiceCanonique.ResoudreAsync(db, msg.ServiceId, context.CancellationToken);
-                if (subId is int sid) user.SubServiceId = sid;
+                if (subId is int sid)
+                {
+                    // v63 : jamais de retour automatique dans un service quitté par réaffectation ;
+                    // l'annuaire, resté sur l'ancienne affectation, est réaligné.
+                    if (await AffectationDeReference.RetourInterditAsync(db, user.Id, user.SubServiceId, sid, context.CancellationToken))
+                    {
+                        reparerAnnuaire = true;
+                        logger.LogWarning(
+                            "Annuaire : {Email} renvoyé vers son ancien service {Ancien} — affectation de référence {Actuel} conservée.",
+                            user.Email, sid, user.SubServiceId);
+                    }
+                    else
+                    {
+                        user.SubServiceId = sid;
+                    }
+                }
             }
             else
             {
@@ -119,6 +136,12 @@ public sealed class DirectoryEmployeeProjectionConsumer(
 
         await SyncManagerIdsAsync(user, msg.ChefDeProjetId, msg.SuperviseurId, msg.ReferentTechniqueId, context.CancellationToken);
         await db.SaveChangesAsync(context.CancellationToken);
+
+        if (reparerAnnuaire && directoryWrite is not null)
+        {
+            await db.Entry(user).Reference(u => u.Role).LoadAsync(context.CancellationToken);
+            await directoryWrite.TryUpdateEmployeeAsync(user, context.CancellationToken);
+        }
 
         if (roleChanged || isNew)
         {

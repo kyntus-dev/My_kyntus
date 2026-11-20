@@ -55,6 +55,10 @@ public sealed class PublicEmployesService(IUserService users) : IPublicEmployesS
             "Telephone", "Contrat", "Pole", "Cellule", "Service", "SousService", "Role", "Niveau",
             "Planifiable", "EnFormation", "TypeFormation", "DateEmbauche", "DateEntree", "DateSortie",
             "Actif", "Statut", "IdTechnicienHtel",
+            // v63 : toutes les colonnes du fichier RH de référence.
+            "Poste", "TypeContrat", "DateAnciennete", "Nationalite", "VilleNaissance", "Sexe",
+            "SituationFamiliale", "NombreEnfants", "ImmatriculationCnss", "DateNaissance", "Adresse",
+            "TelephoneUrgence", "RelationUrgence", "NumeroBox",
         }));
 
         foreach (var e in lignes)
@@ -68,6 +72,10 @@ public sealed class PublicEmployesService(IUserService users) : IPublicEmployesS
                 e.NiveauContractuel.ToString(CultureInfo.InvariantCulture), B(e.Planifiable), B(e.EnFormation),
                 C(e.TypeFormation), D(e.DateEmbauche), D(e.DateEntree), D(e.DateSortie), B(e.Actif),
                 C(e.Statut), e.IdTechnicienHtel?.ToString(CultureInfo.InvariantCulture) ?? "",
+                C(e.Poste), C(e.TypeContrat), D(e.DateAnciennete), C(e.Nationalite), C(e.VilleNaissance), C(e.Sexe),
+                C(e.SituationFamiliale), e.NombreEnfants?.ToString(CultureInfo.InvariantCulture) ?? "",
+                C(e.ImmatriculationCnss), D(e.DateNaissance), C(e.Adresse), C(e.TelephoneUrgence),
+                C(e.RelationUrgence), C(e.NumeroBox),
             }));
         }
 
@@ -144,6 +152,9 @@ public sealed class PublicEmployesService(IUserService users) : IPublicEmployesS
                 DateEvolutionPoste = hr?.DateEvolutionPoste,
                 AncienPoste = hr?.AncienPoste,
                 AncienService = hr?.AncienService,
+                Poste = hr?.Poste,
+                TypeContrat = hr?.TypeContrat,
+                NumeroBox = hr?.NumeroBox,
                 CreeLe = u.CreatedAt,
 
                 EnFormation = hr?.EnFormation ?? false,

@@ -78,6 +78,11 @@ public static class EmployeeImportFieldRegistry
             ["ancien poste", "ancienposte", "poste precedent"]),
         new("ancienService", "Ancien service", true, false, 33,
             ["ancien service", "ancienservice", "service precedent"]),
+        // v63 — colonnes du fichier RH de référence.
+        new("poste", "Nomination de poste", true, false, 49,
+            ["nomination de poste", "nomination poste", "poste", "intitule du poste", "poste occupe"]),
+        new("numeroBox", "N° BOX", true, false, 50,
+            ["n box", "no box", "numero box", "box"]),
         new("niveauScolaire", "Niveau scolaire", true, false, 34,
             ["niveau scolaire", "niveauscolaire", "diplome", "formation initiale"]),
         new("intitulesEtudes", "Intitulés études", true, false, 35,

@@ -66,6 +66,8 @@ public class AppDbContext : DbContext
     public DbSet<HeureSortieAcces> HeureSortieAcces { get; set; } = null!;
     public DbSet<HeureSortieChoixJour> HeureSortieChoixJours { get; set; } = null!;
     public DbSet<ReaffectationAgent> ReaffectationsAgents { get; set; } = null!;
+    /// <summary>v63 : historique des synchronisations de fiches depuis le fichier RH de référence.</summary>
+    public DbSet<FicheReferenceModification> FichesReferenceModifications { get; set; } = null!;
     public DbSet<PlanningItHoraire> PlanningItHoraires { get; set; } = null!;
     public DbSet<PlanningItCommentaire> PlanningItCommentaires { get; set; } = null!;
     /// <summary>Tableau des présences : saisies des responsables (motif, retard autorisé, commentaire).</summary>
@@ -558,6 +560,9 @@ public class AppDbContext : DbContext
         {
             e.ToTable("user_hr_profiles");
             e.HasKey(x => x.UserId);
+            e.Property(x => x.Poste).HasMaxLength(160);
+            e.Property(x => x.TypeContrat).HasMaxLength(60);
+            e.Property(x => x.NumeroBox).HasMaxLength(40);
             e.HasOne(x => x.User)
                 .WithOne()
                 .HasForeignKey<UserHrProfile>(x => x.UserId)
@@ -669,6 +674,18 @@ public class AppDbContext : DbContext
             e.Property(x => x.Cible).HasMaxLength(16).IsRequired();
             e.HasIndex(x => new { x.Cible, x.CibleId }).IsUnique();
             e.HasIndex(x => x.RegimeHoraireId);
+        });
+
+        modelBuilder.Entity<FicheReferenceModification>(e =>
+        {
+            e.ToTable("FichesReferenceModifications");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Fichier).HasMaxLength(260);
+            e.Property(x => x.Auteur).HasMaxLength(160);
+            e.Property(x => x.Agent).HasMaxLength(200);
+            e.Property(x => x.Champ).HasMaxLength(60);
+            e.HasIndex(x => x.ImportId);
+            e.HasIndex(x => x.UserId);
         });
 
         modelBuilder.Entity<ReaffectationAgent>(e =>

@@ -377,6 +377,10 @@ export class UserListComponent implements OnInit, OnDestroy {
   }
 
   goimport(): void { this.router.navigate(['/import']); }
+  /** v63 — Mise à jour des fiches depuis le fichier RH de référence / fiches incomplètes. */
+  ouvrirFichesReference(onglet?: 'incompletes' | 'historique'): void {
+    this.router.navigate(['/users/fiches-reference'], onglet ? { queryParams: { onglet } } : {});
+  }
   viewUser(id: number): void { this.router.navigate(['/users', id]); }
   editUser(id: number): void { this.router.navigate(['/users', 'edit', id]); }
   createUser(): void { this.router.navigate(['/users/create']); }

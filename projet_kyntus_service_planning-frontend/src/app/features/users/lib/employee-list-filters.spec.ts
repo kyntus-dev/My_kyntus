@@ -87,3 +87,39 @@ describe('Employés — export Excel', () => {
     expect(employeeExportFileName('all', d)).toBe('employes-tous-2026-10-29-1405.xlsx');
   });
 });
+
+describe('export des employés — colonnes du fichier RH de référence (v63)', () => {
+  const perimetre = {} as UserOrgPerimeterView;
+  const base = {
+    id: 9, guid: 'g9', roleId: 1, roleName: 'Pilote', managedSubServices: [], managedServices: [],
+    firstName: 'Alpha', lastName: 'TESTEUR', email: 'testeur@kyntus.com', hireDate: '2020-01-02',
+    isActive: true, createdAt: '2020-01-02', level: 1,
+  };
+
+  it('reprend chaque colonne de la fiche et liste les champs manquants', () => {
+    const [ligne] = buildEmployeeExportRows([{
+      ...base,
+      hrProfile: {
+        immatriculationInterne: '000009', dateAnciennete: '2019-05-06', dateEmbauche: '2020-01-02', poste: 'Pilote télécom',
+        typeContrat: 'CDI', nationalite: 'Marocaine', villeNaissance: 'Ville', sexe: 'F', situationFamiliale: 'MARIE',
+        nombreEnfants: 2, cin: 'ZZ000009', immatriculationCnss: '111222333', dateNaissance: '1990-03-04',
+        adresse: 'Adresse fictive', telephone1: '0600000000', telephoneUrgence: '0611111111', relationUrgence: 'Sa sœur',
+        numeroBox: '12',
+      },
+    } as User], () => perimetre, 'all');
+    expect(ligne).toMatchObject({
+      poste: 'Pilote télécom', typeContrat: 'CDI', nationalite: 'Marocaine', sexe: 'F', situationFamiliale: 'Marié(e)',
+      nombreEnfants: '2', cin: 'ZZ000009', immatriculationCnss: '111222333', relationUrgence: 'Sa sœur', numeroBox: '12',
+      champsManquants: '',
+    });
+  });
+
+  it('signale une fiche active incomplète, pas une fiche inactive', () => {
+    const [actif, inactif] = buildEmployeeExportRows(
+      [{ ...base, hrProfile: { cin: 'ZZ1' } } as User, { ...base, id: 10, lastName: 'ZETA', isActive: false } as User],
+      () => perimetre, 'all');
+    expect(actif.champsManquants).toContain('TEL 1');
+    expect(actif.champsManquants).not.toContain('CIN');
+    expect(inactif.champsManquants).toBe('');
+  });
+});

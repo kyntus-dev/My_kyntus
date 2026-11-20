@@ -65,6 +65,16 @@
       (cancel)="deactivateOpen = false"
     />
 
+    @if (user && user.isActive !== false && champsManquantsFiche.length) {
+      <div class="ky-card fiche-incomplete" role="status">
+        <div>
+          <strong>Fiche incomplète — {{ champsManquantsFiche.length }} information(s) manquante(s)</strong>
+          <p>{{ champsManquantsFiche.join(', ') }}</p>
+        </div>
+        <button type="button" class="ky-btn-secondary" (click)="editUser()">Compléter la fiche</button>
+      </div>
+    }
+
     @if (resetCredentials) {
       <div class="ky-card credentials-oneshot-panel" style="margin-bottom: 1rem; padding: 1rem;">
         <h3>Nouveau mot de passe (une seule fois)</h3>

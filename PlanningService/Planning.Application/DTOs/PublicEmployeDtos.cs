@@ -69,6 +69,10 @@ public sealed class PublicEmployeDto
     public DateOnly? DateEvolutionPoste { get; set; }
     public string? AncienPoste { get; set; }
     public string? AncienService { get; set; }
+    /// <summary>v63 : champs du fichier RH de référence.</summary>
+    public string? Poste { get; set; }
+    public string? TypeContrat { get; set; }
+    public string? NumeroBox { get; set; }
     public DateTime CreeLe { get; set; }
 
     // Formation

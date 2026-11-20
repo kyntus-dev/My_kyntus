@@ -97,6 +97,38 @@ public static class PresenceAbsencesPlanning
     }
 
     /// <summary>
+    /// v63 — Rattrapage sur tous les plannings : toute journée couverte par un motif d'absence saisi
+    /// dans Présence (depuis <paramref name="depuis"/>) passe en absence, quelle que soit la semaine.
+    /// Seul l'indicateur change (créneau gardé). Renvoie le nombre de journées marquées.
+    /// </summary>
+    public static async Task<int> MarquerToutesAbsencesAsync(AppDbContext db, DateOnly depuis, CancellationToken ct = default)
+    {
+        var absences = await db.PresenceJours.AsNoTracking()
+            .Where(p => p.Jour >= depuis && p.Code != null && !p.AbsencePartielle)
+            .Select(p => new { p.UserId, p.Jour, p.Code })
+            .ToListAsync(ct);
+        var jours = absences
+            .Where(a => PresenceCodes.RetireDuPlanning(a.Code))
+            .Select(a => (a.UserId, a.Jour))
+            .ToHashSet();
+        if (jours.Count == 0)
+            return 0;
+        var ids = jours.Select(j => j.UserId).Distinct().ToList();
+        var lignes = await db.ShiftAssignments
+            .Where(a => ids.Contains(a.UserId) && a.AssignedDate >= depuis && !a.IsOnLeave && !a.IsHoliday)
+            .ToListAsync(ct);
+        var marquees = 0;
+        foreach (var a in lignes.Where(a => jours.Contains((a.UserId, a.AssignedDate))))
+        {
+            a.IsOnLeave = true;
+            marquees++;
+        }
+        if (marquees > 0)
+            await db.SaveChangesAsync(ct);
+        return marquees;
+    }
+
+    /// <summary>
     /// Jours contigus d'une liste de dates, regroupés en périodes (du, au) : une synchronisation par période.
     /// </summary>
     public static List<(DateOnly Du, DateOnly Au)> Periodes(IEnumerable<DateOnly> jours)

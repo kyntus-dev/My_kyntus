@@ -74,7 +74,8 @@ public partial class PlanningService
         var celluleId = planning.SubServiceId;
         var aujourdhui = DateOnly.FromDateTime(DateTime.Now);
 
-        // 1. Agents sortis : journées à venir retirées (jamais une journée déjà déclarée).
+        // 1. Agents sortis ou réaffectés ailleurs (v63) : journées à venir retirées (jamais une journée
+        //    déjà déclarée ; renforts et demandes exceptionnelles d'autres cellules gardés).
         var aVenir = await _context.ShiftAssignments
             .Where(a => a.WeeklyPlanningId == planning.Id
                         && a.AssignedDate >= premier
@@ -83,7 +84,8 @@ public partial class PlanningService
         var etatsAVenir = await ChargerEtatsAgentsAsync(aVenir.Select(a => a.UserId).Distinct().ToList(), ct);
         var sortants = aVenir
             .Where(a => etatsAVenir.TryGetValue(a.UserId, out var ag)
-                        && PlanningEffectifRules.MasqueeApresSortie(ag.Actif, ag.DateSortie, a.AssignedDate, aujourdhui))
+                        && (PlanningEffectifRules.MasqueeApresSortie(ag.Actif, ag.DateSortie, a.AssignedDate, aujourdhui)
+                            || PlanningEffectifRules.ReaffecteAilleurs(ag, celluleId, a.IsReinforcement || a.IsExceptionalRequest)))
             .ToList();
         if (sortants.Count > 0)
         {

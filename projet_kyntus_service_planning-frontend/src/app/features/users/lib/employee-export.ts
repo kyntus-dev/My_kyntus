@@ -9,6 +9,8 @@ import {
 import type { UserOrgPerimeterView } from '../../../core/org/user-org-perimeter';
 import type { User } from '../users-module';
 import { matchesStatusScope, orgFilterNames, type EmployeeStatusScope } from './employee-list-filters';
+import { champsManquants } from './fiche-completude';
+import { maritalStatusLabel } from '../../../core/hr/hr-form-options';
 
 export type EmployeeExportRow = {
   nom: string;
@@ -24,6 +26,24 @@ export type EmployeeExportRow = {
   anciennete: string;
   niveau: string;
   statut: 'Actif' | 'Inactif';
+  // v63 — colonnes du fichier RH de référence (toutes reprises dans chaque export d'employés).
+  dateAnciennete: string;
+  dateSortie: string;
+  poste: string;
+  typeContrat: string;
+  nationalite: string;
+  villeNaissance: string;
+  sexe: string;
+  situationFamiliale: string;
+  nombreEnfants: string;
+  cin: string;
+  immatriculationCnss: string;
+  dateNaissance: string;
+  adresse: string;
+  telephoneUrgence: string;
+  relationUrgence: string;
+  numeroBox: string;
+  champsManquants: string;
 };
 
 const COLUMNS: readonly { header: string; key: keyof EmployeeExportRow; width: number }[] = [
@@ -40,6 +60,23 @@ const COLUMNS: readonly { header: string; key: keyof EmployeeExportRow; width: n
   { header: 'Ancienneté', key: 'anciennete', width: 24 },
   { header: 'Niveau', key: 'niveau', width: 12 },
   { header: 'Statut', key: 'statut', width: 10 },
+  { header: "Date d'ancienneté", key: 'dateAnciennete', width: 16 },
+  { header: 'Date de sortie', key: 'dateSortie', width: 14 },
+  { header: 'Nomination de poste', key: 'poste', width: 26 },
+  { header: 'Type contrat', key: 'typeContrat', width: 14 },
+  { header: 'Nationalité', key: 'nationalite', width: 14 },
+  { header: 'Ville de naissance', key: 'villeNaissance', width: 18 },
+  { header: 'Sexe', key: 'sexe', width: 6 },
+  { header: 'Situation familiale', key: 'situationFamiliale', width: 16 },
+  { header: "Nombre d'enfants", key: 'nombreEnfants', width: 10 },
+  { header: 'CIN', key: 'cin', width: 12 },
+  { header: "N° d'immatriculation", key: 'immatriculationCnss', width: 16 },
+  { header: 'Date de naissance', key: 'dateNaissance', width: 16 },
+  { header: 'Adresse', key: 'adresse', width: 40 },
+  { header: 'TEL 2', key: 'telephoneUrgence', width: 16 },
+  { header: 'Relation (TEL 2)', key: 'relationUrgence', width: 16 },
+  { header: 'N° BOX', key: 'numeroBox', width: 10 },
+  { header: 'Champs manquants', key: 'champsManquants', width: 40 },
 ];
 
 export const EMPLOYEE_EXPORT_FILE_PREFIX: Record<EmployeeStatusScope, string> = {
@@ -85,11 +122,44 @@ export function buildEmployeeExportRows(
         anciennete: dash(formatSeniorityDuration(seniorityReferenceDate(u))),
         niveau: contractLevelLabel(u.level),
         statut: u.isActive === false ? 'Inactif' : 'Actif',
+        ...colonnesReference(u),
       } satisfies EmployeeExportRow;
     })
     .sort((a, b) =>
       a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' })
       || a.prenom.localeCompare(b.prenom, 'fr', { sensitivity: 'base' }));
+}
+
+function texte(value: string | number | null | undefined): string {
+  return value === null || value === undefined ? '' : String(value).trim();
+}
+
+/** Colonnes du fichier RH de référence, lues dans la fiche (vides si non renseignées). */
+function colonnesReference(u: User): Pick<EmployeeExportRow,
+  'dateAnciennete' | 'dateSortie' | 'poste' | 'typeContrat' | 'nationalite' | 'villeNaissance' | 'sexe'
+  | 'situationFamiliale' | 'nombreEnfants' | 'cin' | 'immatriculationCnss' | 'dateNaissance' | 'adresse'
+  | 'telephoneUrgence' | 'relationUrgence' | 'numeroBox' | 'champsManquants'> {
+  const hr = u.hrProfile ?? null;
+  const situation = texte(hr?.situationFamiliale);
+  return {
+    dateAnciennete: dateFr(hr?.dateAnciennete),
+    dateSortie: dateFr(hr?.dateSortie),
+    poste: texte(hr?.poste),
+    typeContrat: texte(hr?.typeContrat),
+    nationalite: texte(hr?.nationalite),
+    villeNaissance: texte(hr?.villeNaissance),
+    sexe: texte(hr?.sexe),
+    situationFamiliale: situation ? maritalStatusLabel(situation) : '',
+    nombreEnfants: texte(hr?.nombreEnfants),
+    cin: texte(hr?.cin),
+    immatriculationCnss: texte(hr?.immatriculationCnss),
+    dateNaissance: dateFr(hr?.dateNaissance),
+    adresse: texte(hr?.adresse),
+    telephoneUrgence: texte(hr?.telephoneUrgence),
+    relationUrgence: texte(hr?.relationUrgence),
+    numeroBox: texte(hr?.numeroBox),
+    champsManquants: u.isActive === false ? '' : champsManquants(hr).join(', '),
+  };
 }
 
 export function employeeExportFileName(scope: EmployeeStatusScope, now: Date = new Date()): string {

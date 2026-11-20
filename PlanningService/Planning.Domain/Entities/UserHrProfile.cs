@@ -33,6 +33,12 @@ public class UserHrProfile
     public DateOnly? DateSortie { get; set; }
     public DateOnly? DateEvolutionPoste { get; set; }
     public string? AncienPoste { get; set; }
+    /// <summary>v63 : intitulé du poste (« Nomination de poste » du fichier RH de référence).</summary>
+    public string? Poste { get; set; }
+    /// <summary>v63 : type de contrat tel qu'écrit dans le fichier RH (CDI, CDD, CI-Anapec, CDD-CDI…).</summary>
+    public string? TypeContrat { get; set; }
+    /// <summary>v63 : boîte d'archivage du dossier papier (« N° BOX »).</summary>
+    public string? NumeroBox { get; set; }
     public string? AncienService { get; set; }
     public string? NiveauScolaire { get; set; }
     public string? IntitulesEtudes { get; set; }

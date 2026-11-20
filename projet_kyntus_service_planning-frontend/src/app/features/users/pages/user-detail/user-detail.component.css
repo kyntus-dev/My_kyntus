@@ -610,3 +610,21 @@
     justify-content: flex-start;
   }
 }
+
+/* v63 — Bandeau de complétude de la fiche. */
+.fiche-incomplete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--warning);
+  background: color-mix(in srgb, var(--warning) 8%, var(--bg-card));
+}
+
+.fiche-incomplete p {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}

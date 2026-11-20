@@ -154,6 +154,8 @@ export interface EmployeeImportRowResult {
   temporaryPassword?: string | null;
   firstName?: string | null;
   lastName?: string | null;
+  /** v63 : champs obligatoires de la fiche encore vides après l'import. */
+  champsManquants?: string[];
 }
 
 export interface EmployeeImportReport {
@@ -169,6 +171,8 @@ export interface EmployeeImportReport {
   completedAt: string;
   lignes: EmployeeImportRowResult[];
   orgNodesCreated: OrgNodeCreatedReport[];
+  /** v63 : fiches créées ou mises à jour qui restent incomplètes. */
+  fichesIncompletes?: number;
 }
 
 export interface EmployeeImportJobSummary {

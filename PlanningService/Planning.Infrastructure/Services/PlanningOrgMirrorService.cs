@@ -101,6 +101,16 @@ public sealed class PlanningOrgMirrorService(
             if (user is null || user.SubServiceId == subId)
                 continue;
 
+            // v63 : affectation de référence = dernière réaffectation ; jamais de retour automatique
+            // dans un service quitté (sinon l'agent réapparaît dans son ancien planning).
+            if (await AffectationDeReference.RetourInterditAsync(db, user.Id, user.SubServiceId, subId, ct))
+            {
+                logger.LogWarning(
+                    "Synchro organisation : agent {UserId} non renvoyé vers son ancien service {Ancien} (réaffecté vers {Actuel}).",
+                    user.Id, subId, user.SubServiceId);
+                continue;
+            }
+
             user.SubServiceId = subId;
             updated++;
         }

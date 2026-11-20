@@ -49,6 +49,9 @@ public static class EmployeeDocumentFieldValueFlattener
             Set(values, "dateEvolutionPoste", FormatDate(hr.DateEvolutionPoste));
             Set(values, "ancienPoste", hr.AncienPoste);
             Set(values, "ancienService", hr.AncienService);
+            Set(values, "poste", hr.Poste);
+            Set(values, "typeContrat", hr.TypeContrat);
+            Set(values, "numeroBox", hr.NumeroBox);
             Set(values, "niveauScolaire", hr.NiveauScolaire);
             Set(values, "intitulesEtudes", hr.IntitulesEtudes);
             Set(values, "enFormation", hr.EnFormation ? "true" : "false");

@@ -1217,6 +1217,36 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>
+    /// v63 : champs du fichier RH de référence (poste, type de contrat, N° BOX) et historique des
+    /// synchronisations de fiches (valeur avant / après, par champ). Colonnes et table ajoutées seulement.
+    /// </summary>
+    public static async Task EnsureFichesReferenceAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "Poste" character varying(160) NULL;
+            ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "TypeContrat" character varying(60) NULL;
+            ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "NumeroBox" character varying(40) NULL;
+            CREATE TABLE IF NOT EXISTS "FichesReferenceModifications" (
+                "Id" bigserial PRIMARY KEY,
+                "ImportId" uuid NOT NULL,
+                "ImportLe" timestamp with time zone NOT NULL DEFAULT now(),
+                "Fichier" character varying(260) NULL,
+                "Auteur" character varying(160) NULL,
+                "UserId" integer NOT NULL,
+                "Agent" character varying(200) NULL,
+                "Champ" character varying(60) NOT NULL,
+                "AncienneValeur" text NULL,
+                "NouvelleValeur" text NULL,
+                "AnnuleeLe" timestamp with time zone NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_FichesReferenceModifications_ImportId" ON "FichesReferenceModifications" ("ImportId");
+            CREATE INDEX IF NOT EXISTS "IX_FichesReferenceModifications_UserId" ON "FichesReferenceModifications" ("UserId");
+            """,
+            ct);
+    }
+
     /// <summary>v31 : types de manquement et d'élément variable de paie ajoutés à la main.</summary>
     public static async Task EnsurePresenceTypesAsync(AppDbContext db, CancellationToken ct = default)
     {

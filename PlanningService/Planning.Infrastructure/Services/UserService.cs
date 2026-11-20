@@ -2446,6 +2446,9 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         TypeFormation = p.TypeFormation,
         DateDebutFormation = p.DateDebutFormation,
         DateFinFormationPrevue = p.DateFinFormationPrevue,
+        Poste = p.Poste,
+        TypeContrat = p.TypeContrat,
+        NumeroBox = p.NumeroBox,
     };
 
     private async Task<Dictionary<int, UserHrProfile>> LoadHrProfilesAsync(IReadOnlyList<int> userIds)
@@ -2569,9 +2572,19 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             profile.TypeFormation = dto.EnFormation ? Planning.Application.Presence.TypesFormation.Normaliser(dto.TypeFormation) : null;
             profile.DateDebutFormation = dto.DateDebutFormation;
             profile.DateFinFormationPrevue = dto.DateFinFormationPrevue;
+            // v63 : champs du fichier RH — null = non transmis (anciens écrans, imports) : inchangés.
+            if (dto.Poste is not null) profile.Poste = Nettoye(dto.Poste, 160);
+            if (dto.TypeContrat is not null) profile.TypeContrat = Nettoye(dto.TypeContrat, 60);
+            if (dto.NumeroBox is not null) profile.NumeroBox = Nettoye(dto.NumeroBox, 40);
         }
 
         profile.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static string? Nettoye(string valeur, int max)
+    {
+        var t = valeur.Trim();
+        return t.Length == 0 ? null : t.Length <= max ? t : t[..max];
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException ex)
