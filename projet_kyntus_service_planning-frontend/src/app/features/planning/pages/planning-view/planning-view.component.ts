@@ -4,6 +4,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { switchMap } from 'rxjs/operators';
 import { ABSENCE_TYPES } from '../../services/conge.service';
+import { libelleAbsence } from '../../lib/absence-code.util';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import { UserService } from '../../../users/services/user.service';
 import {
@@ -1164,7 +1165,7 @@ selectedHolidayShiftId      = 0;
   }
 
   htelStartCellClass(cell: HtelDayCell): string {
-    if (cell.kind === 'cp') return 'export-htel-cp';
+    if (cell.kind === 'absence') return 'export-htel-cp';
     if (cell.kind === 'f') return 'export-htel-f';
     return '';
   }
@@ -1611,8 +1612,8 @@ confirmHolidayOverride(): void {
   }
   
   getAbsenceLabel(value: string | null): string {
-  if (!value) return 'Congé';
-  return this.absenceTypes.find(t => t.value === value)?.label ?? 'Congé';
+  // v63.3 : la cause exacte (arrêt maladie, absence…) ; « Absence » si elle n'est pas connue.
+  return libelleAbsence(value);
 }
 getShiftNumber(label: string): string {
   // "Shift 1" → "1" | "Shift 2" → "2"

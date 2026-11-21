@@ -4,6 +4,7 @@ import {
   FILTRES_VIDES,
   encadrementDans,
   familleCode,
+  raisonCaseVide,
   filtrerAgents,
   joursDeLaPeriode,
   libellesUniques,
@@ -255,5 +256,31 @@ describe('v62 : listes superviseurs / référents pour les RH', () => {
     expect(filtrerAgents(agents, FILTRES_VIDES, act, false).map((a) => a.userId)).toEqual([1, 2, 3]);
     expect(estEncadrementNonPlace(agents[2])).toBe(true);
     expect(estEncadrementNonPlace(agents[1])).toBe(false);
+  });
+});
+
+describe('cases vides du tableau (v63.3)', () => {
+  const j = (p: Partial<PresenceJourDto>): PresenceJourDto => ({
+    jour: '2026-11-10', code: null, auto: true, codeAuto: null, statut: 'Repos', planning: null,
+    arrivee: null, depart: null, pointages: [], retardEntreeMinutes: 0, retardPauseMinutes: 0,
+    retardRetenuMinutes: 0, retardAutorise: false, retardPauseAutorise: false, manquePointage: false,
+    absencePartielle: false, commentaire: null, modifiePar: null, ...p,
+  } as PresenceJourDto);
+
+  it('ne donne aucune raison pour une journée qui porte un code', () => {
+    expect(raisonCaseVide(j({ code: 'ABS N', statut: 'SansPointage' }))).toBeNull();
+  });
+
+  it('distingue repos, jour à venir et compte sans pointeuse', () => {
+    expect(raisonCaseVide(j({ statut: 'Repos' }))?.marque).toBe('–');
+    expect(raisonCaseVide(j({ statut: 'Repos' }))?.raison).toContain('Repos');
+    expect(raisonCaseVide(j({ statut: 'AVenir' }))?.marque).toBe('');
+    const sansPointeuse = raisonCaseVide(j({ statut: 'Repos' }), false);
+    expect(sansPointeuse?.marque).toBe('?');
+    expect(sansPointeuse?.raison).toContain('Liaisons HTEL');
+  });
+
+  it('signale un pointage sans planning publié', () => {
+    expect(raisonCaseVide(j({ statut: 'SansPlanning' }))?.raison).toContain('planning publié');
   });
 });

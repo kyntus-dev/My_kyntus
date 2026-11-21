@@ -72,6 +72,11 @@ export interface PresenceAgentDto {
   role?: string | null;
   /** v48 : « contractuel » ou « non-contractuel » (agent en formation). */
   typeFormation?: string | null;
+  /**
+   * v63.3 : false = aucun identifiant de pointeuse relié au compte. Aucun pointage ne remonte,
+   * les journées restent vides (ou « ABS N » les jours planifiés) tant qu'aucun motif n'est saisi.
+   */
+  pointeuseReliee?: boolean;
   /** v61 : superviseur / référent : pôles (ids, noms) et cellules de son placement et des agents qui le désignent. */
   poleIdsEncadres?: string[] | null;
   polesEncadres?: string[] | null;

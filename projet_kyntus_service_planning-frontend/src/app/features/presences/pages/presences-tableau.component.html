@@ -120,6 +120,9 @@
               <tr [class.pz-row-formation]="a.enFormation" [class.pz-row-encadrement]="estSuperviseur(a.role) || estReferentTechnique(a.role)">
                 <th class="pz-agent" scope="row">
                   <b>{{ a.nom }}</b>
+                  @if (a.pointeuseReliee === false) {
+                    <span class="pz-badge pz-badge--alerte" title="Aucun identifiant de pointeuse relié : aucun pointage ne remonte pour cet agent. Liaison dans Utilisateurs › Liaisons HTEL.">Pointeuse non reliée</span>
+                  }
                   @if (a.enFormation) { <span class="pz-badge pz-badge--formation">{{ badgeFormation(a.typeFormation) }}</span> }
                   @if (estSuperviseur(a.role)) { <span class="pz-badge pz-badge--encadrement">Superviseur</span> }
                   @if (estReferentTechnique(a.role)) { <span class="pz-badge pz-badge--encadrement">Référent technique</span> }
@@ -141,7 +144,7 @@
                               [disabled]="verrouillee(a)"
                               [title]="a.enFormation && !saisieFormation() ? 'En formation : saisie réservée à l’équipe formation. ' + c.titre : (verrouillee(a) && data()?.peutModifier && !a.enFormation ? 'Consultation seule (droit « Présences des superviseurs et référents › Modifier »). ' + c.titre : c.titre)"
                               (click)="ouvrir(a, j)">
-                        @if (j.commentaire) { <i class="pz-dot"></i> }{{ j.code ?? '' }}
+                        @if (j.commentaire) { <i class="pz-dot"></i> }@if (j.code) { {{ j.code }} } @else { <span class="pz-vide">{{ c.marque }}</span> }
                       </button>
                     }
                   </td>
@@ -157,7 +160,16 @@
       <p class="ku-card-sub pz-note">
         Les jours planifiés sans pointage sont comptés « ABS N » jusqu’à ce qu’un motif soit choisi. Un retard autorisé ne compte plus
         dans le cumul des retards. Tolérance : {{ data()?.toleranceMinutes }} minutes.
+        Les jours fériés ne sont pas comptés dans « Abs. ».
+        Une case <b>–</b> est un jour de repos : ni planning publié, ni pointage ; une case <b>?</b> signale un agent sans pointeuse reliée ;
+        une case vide est un jour à venir. Cliquez sur une case pour saisir un motif.
       </p>
+      @if (nbSansPointeuse(); as n) {
+        <p class="ku-card-sub pz-note pz-note--alerte">
+          {{ n }} agent(s) affiché(s) ne sont reliés à aucune pointeuse : leurs journées restent vides tant qu'aucun motif n'est saisi.
+          La liaison se fait dans Utilisateurs › Liaisons HTEL.
+        </p>
+      }
     }
   </section>
 

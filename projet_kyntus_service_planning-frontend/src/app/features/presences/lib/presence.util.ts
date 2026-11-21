@@ -50,6 +50,29 @@ export function familleCode(code: string | null): 'present' | 'formation' | 'abs
   return 'absence';
 }
 
+/**
+ * v63.3 — Pourquoi une case est vide. Une case sans code n'est pas une anomalie en soi : le
+ * tableau n'affiche un code que si la journée est planifiée, pointée, fériée ou saisie à la main.
+ * `marque` est le repère discret affiché dans la case, `raison` l'explication de l'infobulle.
+ */
+export function raisonCaseVide(
+  jour: PresenceJourDto,
+  pointeuseReliee = true,
+): { marque: string; raison: string } | null {
+  if (jour.code) return null;
+  if (jour.statut === 'AVenir') return { marque: '', raison: 'Jour à venir.' };
+  if (jour.statut === 'EnCours') return { marque: '', raison: 'Journée en cours.' };
+  if (jour.statut === 'SansPlanning') {
+    return { marque: '·', raison: 'Pointage sans planning publié ce jour : retard non calculé.' };
+  }
+  // « Repos » = ni planning publié, ni pointage, ni congé : la cause la plus fréquente d'une case vide.
+  const raison = pointeuseReliee
+    ? 'Repos : aucun planning publié ce jour et aucun pointage. Cliquez pour saisir un motif.'
+    : 'Aucun identifiant de pointeuse relié à ce compte : aucun pointage ne remonte. '
+      + 'Reliez-le dans Utilisateurs › Liaisons HTEL, ou saisissez le motif à la main.';
+  return { marque: pointeuseReliee ? '–' : '?', raison };
+}
+
 export function formatMinutes(minutes: number): string {
   const m = Math.max(0, Math.round(minutes || 0));
   return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;

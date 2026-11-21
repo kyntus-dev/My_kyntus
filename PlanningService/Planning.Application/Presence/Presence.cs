@@ -12,6 +12,7 @@ public static class PresenceCodes
     public const string Present = "P";
     public const string Formation = "FOR";
     public const string AbsenceNonAutorisee = "ABS N";
+    public const string Ferie = "F";
 
     /// <summary>Liste du service paie, dans l'ordre de l'interface actuelle.</summary>
     public static readonly IReadOnlyList<PresenceCodeDto> Tous =
@@ -244,7 +245,10 @@ public sealed record PresenceAgentDto(
     // désignent, plus son propre placement. Sert aux listes filtrées par activité, pôle et cellule.
     IReadOnlyList<string>? PoleIdsEncadres = null,
     IReadOnlyList<string>? PolesEncadres = null,
-    IReadOnlyList<string>? CellulesEncadrees = null);
+    IReadOnlyList<string>? CellulesEncadrees = null,
+    // v63.3 : aucun identifiant de pointeuse relié à ce compte (ses journées restent vides tant
+    // qu'aucun motif n'est saisi) — liaison à faire dans Utilisateurs › Liaisons HTEL.
+    bool PointeuseReliee = true);
 
 public sealed record PresenceGrilleDto(
     string Perimetre,

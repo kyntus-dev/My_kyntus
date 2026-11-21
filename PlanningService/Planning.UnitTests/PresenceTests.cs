@@ -408,6 +408,47 @@ public class PresenceTests
         }
     }
 
+    /// <summary>v63.3 : un férié n'est pas une absence ; un compte sans pointeuse est signalé.</summary>
+    [Fact]
+    public async Task Ferie_hors_du_total_des_absences_et_compte_sans_pointeuse_signale()
+    {
+        await using var db = await SeedAsync();
+        var svc = new PresenceService(db, new FakePointageFerie(), new FakePerimetre([10, 20]),
+            new Monitor(new PointageOptions()));
+
+        var grille = await svc.GetGrilleAsync(new PresenceViewer(null, null, null, "RH", true), Lundi, Lundi, true);
+
+        var agent = grille!.Agents.First(a => a.UserId == 2);
+        Assert.Equal("F", agent.Jours.Single().Code);
+        Assert.Empty(agent.Totaux.Absences);
+        Assert.False(agent.PointeuseReliee);
+    }
+
+    /// <summary>Chaque agent : un jour férié, sans identifiant de pointeuse relié.</summary>
+    private sealed class FakePointageFerie : IPointageQueryService
+    {
+        private readonly FakePointage _base = new();
+
+        public Task<IReadOnlyList<PointageSuiviDto>> CalculerPourAsync(IReadOnlyList<int> userIds, DateOnly du, DateOnly au, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<PointageSuiviDto>>(userIds.Select(id => new PointageSuiviDto(
+                id, $"Agent {id}", null, [], du, au, 5, true, null,
+                new PointageTotauxDto(0, 0, 0, 0, [], []),
+                [Jour(PointageJourStatuts.Ferie, planning: null)])).ToList());
+
+        public Task<PointageSuiviDto?> GetMonSuiviAsync(PointageViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default) => _base.GetMonSuiviAsync(viewer, du, au, ct);
+        public Task<PointageSuiviDto?> GetSuiviCollaborateurAsync(PointageViewer viewer, int userId, DateOnly du, DateOnly au, CancellationToken ct = default) => _base.GetSuiviCollaborateurAsync(viewer, userId, du, au, ct);
+        public Task<PointageEquipeDto?> GetEquipeAsync(PointageViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default) => _base.GetEquipeAsync(viewer, du, au, ct);
+        public Task<PointageEquipeDetailDto?> GetEquipeDetailAsync(PointageViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default) => _base.GetEquipeDetailAsync(viewer, du, au, ct);
+        public Task<PointageAujourdhuiDto?> GetAujourdhuiAsync(PointageViewer viewer, CancellationToken ct = default) => _base.GetAujourdhuiAsync(viewer, ct);
+        public Task<IReadOnlyList<PointageCorrespondanceDto>> GetCorrespondancesAsync(string? statut, CancellationToken ct = default) => _base.GetCorrespondancesAsync(statut, ct);
+        public Task<PointageCorrespondanceDto?> UpdateCorrespondanceAsync(string empCode, PointageCorrespondanceUpdateRequest request, PointageViewer viewer, CancellationToken ct = default) => _base.UpdateCorrespondanceAsync(empCode, request, viewer, ct);
+        public Task<int> ValiderCorrespondancesAutoAsync(PointageViewer viewer, CancellationToken ct = default) => _base.ValiderCorrespondancesAutoAsync(viewer, ct);
+        public Task<PointageEtatDto> GetEtatAsync(CancellationToken ct = default) => _base.GetEtatAsync(ct);
+        public Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default) => _base.EnregistrerChoixProductionAsync(viewer, choix, ct);
+        public Task<bool> EnregistrerChoixProductionJourAsync(PointageViewer viewer, DateOnly jour, string? choix, CancellationToken ct = default) => _base.EnregistrerChoixProductionJourAsync(viewer, jour, choix, ct);
+        public Task<IReadOnlyList<ChoixProductionJourDto>> GetMesChoixProductionAsync(PointageViewer viewer, DateOnly au, CancellationToken ct = default) => _base.GetMesChoixProductionAsync(viewer, au, ct);
+    }
+
     private static async Task<AppDbContext> SeedAsync()
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);

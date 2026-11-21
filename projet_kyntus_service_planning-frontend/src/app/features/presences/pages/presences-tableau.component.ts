@@ -30,6 +30,7 @@ import {
   formatMinutes,
   joursDeLaPeriode,
   periodePaie,
+  raisonCaseVide,
   ymd,
 } from '../lib/presence.util';
 
@@ -199,6 +200,9 @@ export class PresencesTableauComponent implements OnInit {
     if (!d) return 0;
     return d.toutesActivites ? d.agents.filter((a) => !estEncadrementNonPlace(a)).length : d.agents.length;
   });
+  /** v63.3 : agents affichés dont le compte n'est relié à aucune pointeuse (journées vides). */
+  readonly nbSansPointeuse = computed(() => this.agents().filter((a) => a.pointeuseReliee === false).length);
+
   /** v46 : nombre d'agents en formation dans les données (filtre « Formation »). */
   readonly nbFormation = computed(() => (this.data()?.agents ?? []).filter((a) => a.enFormation).length);
   // v48 : nombre d'agents par type de formation (libellés des filtres).
@@ -232,11 +236,14 @@ export class PresencesTableauComponent implements OnInit {
         absences: this.absences(a),
         cases: entetes.map((e) => {
           const j = parJour.get(e.jour) ?? null;
+          // v63.3 : une case sans code porte le repère de sa raison (repos, à venir, pas de pointeuse).
+          const vide = j ? raisonCaseVide(j, a.pointeuseReliee !== false) : null;
           return {
             jour: e.jour,
             dim: e.weekend,
             today: e.today,
             j,
+            marque: vide?.marque ?? '',
             classe: j ? 'pz-f-' + familleCode(j.code) : '',
             titre: j ? this.infobulle(a, j) : '',
           };
@@ -328,7 +335,9 @@ export class PresencesTableauComponent implements OnInit {
     const date = j.jour.slice(0, 10).split('-').reverse().join('/');
     const parts = [
       `${a.nom} — ${date}`,
-      j.code ? `${j.code} : ${this.libelles().get(j.code) ?? ''}${j.auto ? ' (calculé)' : ' (saisi)'}` : 'Non planifié',
+      j.code
+        ? `${j.code} : ${this.libelles().get(j.code) ?? ''}${j.auto ? ' (calculé)' : ' (saisi)'}`
+        : (raisonCaseVide(j, a.pointeuseReliee !== false)?.raison ?? 'Aucun code.'),
       j.planning ? `Prévu ${j.planning}` : '',
       j.pointages.length ? `Pointages : ${j.pointages.map((p) => p.slice(0, 5)).join(' · ')}` : '',
       j.retardEntreeMinutes + j.retardPauseMinutes > 0

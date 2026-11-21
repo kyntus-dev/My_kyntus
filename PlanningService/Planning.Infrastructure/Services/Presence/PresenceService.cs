@@ -426,7 +426,10 @@ public sealed class PresenceService(
                 profil?.TypeFormation,
                 encadres.TryGetValue(s.UserId, out var perimetreEncadrant) ? perimetreEncadrant.PoleIds.OrderBy(x => x).ToList() : null,
                 perimetreEncadrant.Poles?.OrderBy(x => x).ToList(),
-                perimetreEncadrant.Cellules?.OrderBy(x => x).ToList()));
+                perimetreEncadrant.Cellules?.OrderBy(x => x).ToList(),
+                // v63.3 : sans identifiant de pointeuse, aucun pointage ne remonte : les journées
+                // restent vides (ou « ABS N » les jours planifiés) tant qu'un motif n'est pas saisi.
+                s.IdsPointeuse.Count > 0));
         }
         return result
             .OrderBy(a => a.Cellule ?? "", StringComparer.CurrentCultureIgnoreCase)
@@ -436,8 +439,9 @@ public sealed class PresenceService(
 
     private static PresenceTotauxDto Totaux(IReadOnlyList<PresenceJourDto> jours)
     {
+        // v63.3 : un jour férié n'est pas une absence (il ne doit plus gonfler la colonne « Abs. »).
         var absences = jours
-            .Where(j => j.Code is not null and not PresenceCodes.Present and not PresenceCodes.Formation)
+            .Where(j => j.Code is not null and not PresenceCodes.Present and not PresenceCodes.Formation and not PresenceCodes.Ferie)
             .GroupBy(j => j.Code!)
             .ToDictionary(g => g.Key, g => g.Count());
         return new PresenceTotauxDto(

@@ -2666,7 +2666,11 @@ public partial class PlanningService : IPlanningService
         var conges = await _context.Conges.AsNoTracking()
             .Where(c => ids.Contains(c.UserId) && c.Status == CongeStatus.Approved && c.StartDate <= au && c.EndDate >= du)
             .ToListAsync();
-        conges.AddRange(await PresenceAbsencesPlanning.CongesVirtuelsAsync(_context, ids, du, au));
+        // v63.3 : le motif saisi dans Présences est la décision la plus récente : il passe devant un
+        // congé validé qui couvrirait le même jour, pour que le planning et ses exports affichent la
+        // cause exacte (arrêt maladie, absence autorisée…) et non « congés payés ».
+        var saisis = await PresenceAbsencesPlanning.CongesVirtuelsAsync(_context, ids, du, au);
+        conges.InsertRange(0, saisis);
         return conges;
     }
 

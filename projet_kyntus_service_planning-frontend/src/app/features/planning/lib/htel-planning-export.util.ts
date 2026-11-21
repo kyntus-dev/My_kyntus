@@ -1,10 +1,12 @@
 import type { DayAssignment, EmployeePlanning, WeeklyPlanningResponse } from '../services/planning.service';
 import { PLANNING_EXPORT_DAYS, getExportAssignment } from './planning-week-export.util';
 import { normalizeHtelName } from '../../users/services/htel-name-match.util';
+import { codeAbsence } from './absence-code.util';
 
 export type HtelDayCell =
   | { kind: 'empty' }
-  | { kind: 'cp' }
+  /** v63.3 : cause exacte de l'absence (AM, ABS N, CP…), plus « CP » pour tout. */
+  | { kind: 'absence'; code: string }
   | { kind: 'f' }
   | { kind: 'time'; start: string; break: string };
 
@@ -55,7 +57,7 @@ export function resolveHtelExportName(emp: EmployeePlanning): string {
 
 export function mapAssignmentToHtelCell(a: DayAssignment | null): HtelDayCell {
   if (!a) return { kind: 'empty' };
-  if (a.isOnLeave) return { kind: 'cp' };
+  if (a.isOnLeave) return { kind: 'absence', code: codeAbsence(a.absenceType) };
   if (a.isHoliday) return { kind: 'f' };
   const start = (a.startTime ?? '').trim();
   const brk = (a.breakTime ?? '').trim();
@@ -141,7 +143,7 @@ export function htelTimeToExcelFraction(value: string): number | null {
 }
 
 export function htelCellStartDisplay(cell: HtelDayCell): string {
-  if (cell.kind === 'cp') return 'CP';
+  if (cell.kind === 'absence') return cell.code;
   if (cell.kind === 'f') return 'F';
   if (cell.kind === 'time') return cell.start || '';
   return '';
