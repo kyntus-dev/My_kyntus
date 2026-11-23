@@ -174,8 +174,8 @@ public static class PlatformAccessCatalog
         // v64 : absences saisies dans le planning (écran « Absences ») — consulter, ajouter, modifier,
         // réglables par rôle et par compte. Hors portée « Toute l'entreprise » : cellules du compte seulement.
         S("conges.planning", "Absences du planning — consulter", "Congés", View: ["Admin", "RH", "Manager", "Superviseur", "RP"]),
-        S("conges.planning-ajout", "Absences du planning — ajouter", "Congés", Act: AdminRh),
-        S("conges.planning-modification", "Absences du planning — modifier / supprimer", "Congés", Act: AdminRh),
+        S("conges.planning-ajout", "Absences du planning — ajouter", "Congés", View: AdminRh, Act: AdminRh),
+        S("conges.planning-modification", "Absences du planning — modifier / supprimer", "Congés", View: AdminRh, Act: AdminRh),
 
         S("documentation.module", "Module Documentation (accès au menu)", "Documentation", View: Self),
         // v48 : Process Bytel — tout le monde consulte (selon la visibilité du document) ;

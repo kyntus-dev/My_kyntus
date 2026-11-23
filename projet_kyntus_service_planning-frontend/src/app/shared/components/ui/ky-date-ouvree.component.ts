@@ -80,7 +80,7 @@ interface CaseJour {
             <button type="button" class="kdo-nav" (click)="decaler(1)" aria-label="Mois suivant">›</button>
           </div>
           <div class="kdo-grille" role="grid">
-            @for (j of joursSemaine; track j) { <span class="kdo-js" [class.kdo-js-dim]="j === 'D'">{{ j }}</span> }
+            @for (j of joursSemaine; track $index) { <span class="kdo-js" [class.kdo-js-dim]="j === 'D'">{{ j }}</span> }
             @for (c of cases; track c.iso) {
               <button
                 type="button"

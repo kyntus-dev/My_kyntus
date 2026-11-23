@@ -226,8 +226,8 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   // v64 : absences saisies dans le planning — consulter, ajouter, modifier (par rôle et par compte ; vérifié
   // côté serveur par l'évaluateur de droits, hors portée « Toute l'entreprise » : cellules du compte seulement).
   { id: 'conges.planning', label: 'Absences du planning — consulter', module: 'Congés', view: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur, KyntusRoleNames.Rp] },
-  { id: 'conges.planning-ajout', label: 'Absences du planning — ajouter', module: 'Congés', act: ADMIN_RH },
-  { id: 'conges.planning-modification', label: 'Absences du planning — modifier / supprimer', module: 'Congés', act: ADMIN_RH },
+  { id: 'conges.planning-ajout', label: 'Absences du planning — ajouter', module: 'Congés', view: ADMIN_RH, act: ADMIN_RH },
+  { id: 'conges.planning-modification', label: 'Absences du planning — modifier / supprimer', module: 'Congés', view: ADMIN_RH, act: ADMIN_RH },
 
   { id: 'documentation.module', label: 'Module Documentation (accès au menu)', module: 'Documentation', view: SELF, defaultScope: 'Self' },
   // v48 : Process Bytel — lecture pour tous (selon la visibilité choisie à l'envoi), dépôt pour RH / Admin / chef de projet.
