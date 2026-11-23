@@ -113,3 +113,28 @@ describe('complétude de la fiche', () => {
     expect(manquants).toEqual(['CIN', 'TEL 1']);
   });
 });
+
+describe('complétude de la fiche — sous-traitant (v64)', () => {
+  const base = {
+    typeEmploye: 'SOUS_TRAITANT', immatriculationInterne: 'ST-0001', dateAnciennete: '2024-01-02', dateEntree: '2024-01-02',
+    nationalite: 'Autre', sexe: 'M', situationFamiliale: 'CELIBATAIRE', numeroCarteAutoentrepreneur: '000000000000001',
+    dateNaissance: '1995-01-01', adresse: 'Adresse fictive', telephone1: '0600000000',
+  };
+
+  it('accepte la carte d’immatriculation ou le passeport comme pièce d’identité, sans CNSS ni contrat', () => {
+    expect(champsManquants({ ...base, carteImmatriculation: 'XX0000001' })).toEqual([]);
+    expect(champsManquants({ ...base, numeroPasseport: 'P0000001' })).toEqual([]);
+  });
+
+  it('exige une pièce d’identité et le N° du registre national', () => {
+    expect(champsManquants({ ...base, numeroCarteAutoentrepreneur: '' })).toEqual([
+      "Pièce d'identité (CIN, carte d'immatriculation ou passeport)",
+      "N° d'inscription au registre national",
+    ]);
+  });
+
+  it('déduit le type de la carte auto-entrepreneur quand il est absent (fiches antérieures)', () => {
+    const { typeEmploye: _ignore, ...sansType } = base;
+    expect(champsManquants({ ...sansType, cin: 'ZZ1' })).toEqual([]);
+  });
+});

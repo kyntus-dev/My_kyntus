@@ -121,6 +121,9 @@ public static class PlatformAccessCatalog
 
         S("audit.dashboard", "Tableau de bord conformité", "Audit", View: AdminAudit),
         S("audit.journal", "Journal unifié", "Audit", View: AdminAudit),
+        // v64 : journal d'actions (employés, réaffectations, présences, congés, plannings, horaires,
+        // imports / exports, droits d'accès, validations) — avant / après, auteur, date et heure.
+        S("audit.actions", "Journal d'actions", "Audit", View: AdminAudit),
         S("audit.access-history", "Historique d'accès", "Audit", View: AdminAudit),
         S("audit.anomalies", "Anomalies", "Audit", View: AdminAudit),
         S("audit.reporting", "Reporting", "Audit", View: AdminAudit),
@@ -168,6 +171,11 @@ public static class PlatformAccessCatalog
         // v29 : chef de projet = tout son département (Congés › Quotas).
         S("conges.quotas", "Quotas cellule / service", "Congés", View: ["Superviseur", "Admin", "RP"], Configure: ["Superviseur", "Admin", "RP"]),
         S("conges.periodes", "Périodes interdites", "Congés", View: AdminRh, Configure: AdminRh),
+        // v64 : absences saisies dans le planning (écran « Absences ») — consulter, ajouter, modifier,
+        // réglables par rôle et par compte. Hors portée « Toute l'entreprise » : cellules du compte seulement.
+        S("conges.planning", "Absences du planning — consulter", "Congés", View: ["Admin", "RH", "Manager", "Superviseur", "RP"]),
+        S("conges.planning-ajout", "Absences du planning — ajouter", "Congés", Act: AdminRh),
+        S("conges.planning-modification", "Absences du planning — modifier / supprimer", "Congés", Act: AdminRh),
 
         S("documentation.module", "Module Documentation (accès au menu)", "Documentation", View: Self),
         // v48 : Process Bytel — tout le monde consulte (selon la visibilité du document) ;
@@ -289,7 +297,8 @@ public static class PlatformAccessCatalog
     /// fois sur une base existante (tant qu'aucune ligne n'existe pour la rubrique, quel que soit le rôle).
     /// Une rubrique décochée ensuite garde sa ligne (refusée) : rien n'est réimposé au redémarrage.
     /// </summary>
-    public static readonly string[] RubriquesAjoutees = ["presences.encadrement"];
+    public static readonly string[] RubriquesAjoutees =
+        ["presences.encadrement", "conges.planning", "conges.planning-ajout", "conges.planning-modification", "audit.actions"];
 
     public static IEnumerable<(string Action, string Scope)> SeedRowsForRole(string role)
     {

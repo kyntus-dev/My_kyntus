@@ -41,10 +41,14 @@ describe('export paie', () => {
     expect(hhmmss(1505)).toBe('25:05:00');
   });
 
-  it('paie sur 26 jours : mois complet = 26 − absences ; prorata sinon ; jamais négatif', () => {
+  it('paie sur 26 jours : mois complet = 26 − absences ; jours de production sinon ; entier ; jamais négatif', () => {
     expect(joursPayes(27, 27, 3)).toBe(23);
     expect(joursPayes(26, 26, 0)).toBe(26);
-    expect(joursPayes(15, 27, 1)).toBe(13.44);
+    expect(joursPayes(24, 24, 0)).toBe(26); // février complet : forfait
+    expect(joursPayes(15, 27, 1)).toBe(14);
+    expect(joursPayes(12, 27, 0)).toBe(12); // l'ancien prorata donnait 11,56
+    expect(joursPayes(26, 27, 0)).toBe(26); // borné au forfait
+    for (let p = 0; p <= 27; p++) for (let a = 0; a <= 5; a++) expect(Number.isInteger(joursPayes(p, 27, a))).toBe(true);
     expect(joursPayes(1, 27, 1)).toBe(0);
     expect(joursPayes(0, 27, 0)).toBe(0);
   });
@@ -120,7 +124,7 @@ describe('export paie', () => {
     expect(l.statutPaie).toBe('En formation – hors paie');
   });
 
-  it('intégré en production le 15 : 26 au prorata des jours de production, absences de production seules', () => {
+  it('intégré en production le 15 : jours de production ouvrés (entiers), absences de production seules', () => {
     const du = '2026-10-01';
     const au = '2026-10-31';
     const codes: Record<string, string> = { '2026-10-06': 'ABS N', '2026-10-20': 'ABS N' };
@@ -129,7 +133,7 @@ describe('export paie', () => {
     expect(l.formation).toBe(12);
     expect(l.joursProduction).toBe(15);
     expect(l.deduits['ABS N']).toBe(1);
-    expect(l.jrsTravailles).toBe(13.44);
+    expect(l.jrsTravailles).toBe(14);
     expect(l.statutPaie).toBe('Intégré en production le 15/10/2026 (prorata)');
   });
 
@@ -216,7 +220,7 @@ describe('export paie v61 : mois civil + décalage (absences du 24 au 23)', () =
     expect(l.joursProduction).toBe(18);
     expect(l.totalAbsences).toBe(1);
     expect(l.absencesAvantMois).toBe(0);
-    expect(l.jrsTravailles).toBe(17.72); // 26 × 18 ÷ 25 − 1
+    expect(l.jrsTravailles).toBe(17); // v64 : 18 jours de production ouvrés − 1 (entier)
     expect(l.dateEntree).toBe('10/11/2026');
     expect(l.statutPaie).toBe('Prorata (entrée, sortie ou formation)');
   });
@@ -226,7 +230,7 @@ describe('export paie v61 : mois civil + décalage (absences du 24 au 23)', () =
     const l = lignePaie(ref, [], du, au, undefined, { mois, agentMois: civ });
     const cols = joursOuvres(mois.du, mois.au);
     expect(l.joursProduction).toBe(22);
-    expect(l.jrsTravailles).toBe(22.88);
+    expect(l.jrsTravailles).toBe(22); // v64 : 22 jours de production ouvrés (entier)
     expect(['2026-11-27', '2026-11-28', '2026-11-30'].map((d) => l.jours[cols.indexOf(d)])).toEqual(['', '', '']);
     expect(l.presentsParDefaut).toBe(3);
     expect(l.sortie).toBe('Sorti le 26/11/2026 (pendant la période) — à vérifier');

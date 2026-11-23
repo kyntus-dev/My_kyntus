@@ -159,10 +159,7 @@ public sealed class FichesReferenceService(
                               && l.Statut is FicheReferenceRapprochement.Identifie or FicheReferenceRapprochement.Nouveau),
             identifies.Sum(l => l.Modifications.Count));
 
-        var manquantes = FicheReference.Colonnes
-            .Where(c => classeur.Reconnues.All(r => r.Cle != c.Cle))
-            .Select(c => c.Intitule)
-            .ToList();
+        var manquantes = FicheReference.ColonnesManquantes(classeur.Reconnues.Select(r => r.Cle).ToList());
         var maintenant = DateTimeOffset.UtcNow;
         return new AnalyseFichesReferenceDto(
             jeton, nomFichier, classeur.Feuille, maintenant, maintenant.Add(DureeAnalyse),
@@ -196,7 +193,8 @@ public sealed class FichesReferenceService(
         return analyse;
     }
 
-    public SuiviApplicationFichesDto DemarrerApplication(AppliquerFichesReferenceRequest demande, string auteur, string? autorisation)
+    public SuiviApplicationFichesDto DemarrerApplication(AppliquerFichesReferenceRequest demande, string auteur, string? autorisation,
+        JournalAuteurExterne? acteurJournal = null)
     {
         if (scopeFactory is null || suivi is null)
             throw new InvalidOperationException("Application en arrière-plan indisponible.");
@@ -222,6 +220,21 @@ public sealed class FichesReferenceService(
                     etat.Resultat = await service.ExecuterAsync(analyse, demande, auteur, importId,
                         () => Interlocked.Increment(ref etat.Traitees), CancellationToken.None);
                     etat.Statut = FichesReferenceSuivi.Termine;
+                    // v64 : journal d'actions — import du fichier RH de référence.
+                    var k = etat.Resultat.Compteurs;
+                    await scope.ServiceProvider.GetRequiredService<IJournalActionsService>().EnregistrerAsync(new JournalEvenement(
+                        "Imports et exports", "Import", $"Fichier RH de référence « {apercu.Fichier} »", "FichesReference", importId.ToString(),
+                        Nouvelles: new Dictionary<string, string?>
+                        {
+                            ["Fiches mises à jour"] = k.MisesAJour.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            ["Fiches créées"] = k.Crees.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            ["Comptes désactivés"] = k.Desactives.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            ["Champs modifiés"] = k.ChampsModifies.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            ["Lignes ignorées"] = k.Ignores.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            ["Erreurs"] = k.Erreurs.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        },
+                        Details: "Le détail fiche par fiche est dans l'historique du fichier RH (annulable).",
+                        Source: "POST /api/users/fiches-reference/appliquer"), acteurJournal);
                 }
                 catch (Exception ex)
                 {
@@ -371,7 +384,7 @@ public sealed class FichesReferenceService(
         {
             journal.Add(Journal(compte.Cle, compte.Ancienne, compte.Nouvelle));
             modifs.Add(compte);
-            user.HireDate = DateTime.SpecifyKind(v.DateEmbauche!.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+            user.HireDate = DateTime.SpecifyKind(DateEmbaucheCompte(v)!.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
         }
 
         var manquants = FicheReference.ChampsManquants(profil);
@@ -402,7 +415,7 @@ public sealed class FichesReferenceService(
         if (!roles.TryGetValue(role, out var roleId) && !roles.TryGetValue(role = "Employee", out roleId))
             throw new InvalidOperationException("Rôle « Employee » introuvable : fiche non créée.");
 
-        var embauche = v.DateEmbauche ?? v.DateAnciennete ?? DateOnly.FromDateTime(importLe);
+        var embauche = DateEmbaucheCompte(v) ?? v.DateAnciennete ?? DateOnly.FromDateTime(importLe);
         var dto = new CreateUserDto
         {
             RoleId = roleId,
@@ -415,7 +428,7 @@ public sealed class FichesReferenceService(
                 ImmatriculationInterne = v.NumeroOrdre,
                 DateAnciennete = v.DateAnciennete,
                 DateEmbauche = v.DateEmbauche,
-                DateEntree = v.DateAnciennete ?? v.DateEmbauche,
+                DateEntree = v.DateEntree ?? v.DateAnciennete ?? v.DateEmbauche,
                 DateSortie = v.DateSortie,
                 Poste = v.Poste,
                 TypeContrat = v.TypeContrat,
@@ -432,6 +445,11 @@ public sealed class FichesReferenceService(
                 TelephoneUrgence = v.TelephoneUrgence,
                 RelationUrgence = v.RelationUrgence,
                 NumeroBox = v.NumeroBox,
+                // v64 : fichier des entrepreneurs et type d'employé (salarié par défaut).
+                NumeroCarteAutoentrepreneur = v.RegistreNational,
+                CarteImmatriculation = v.CarteImmatriculation,
+                NumeroPasseport = v.NumeroPasseport,
+                TypeEmploye = v.TypeEmploye ?? TypesEmploye.Salarie,
             },
         };
         var cree = await users.CreateUserAsync(dto);
@@ -640,8 +658,14 @@ public sealed class FichesReferenceService(
 
     private const string LibelleDateEmbaucheCompte = "Date d'embauche du compte";
 
+    /// <summary>
+    /// Date d'embauche du compte : la date d'embauche du fichier ; à défaut (fichier des entrepreneurs),
+    /// sa date d'entrée.
+    /// </summary>
+    private static DateOnly? DateEmbaucheCompte(FicheReference.Valeurs v) => v.DateEmbauche ?? v.DateEntree;
+
     private static FicheReference.Modification? ModifDateEmbaucheCompte(DateTime hireDate, FicheReference.Valeurs v) =>
-        v.DateEmbauche is DateOnly embauche && DateOnly.FromDateTime(hireDate) != embauche
+        DateEmbaucheCompte(v) is DateOnly embauche && DateOnly.FromDateTime(hireDate) != embauche
             ? new FicheReference.Modification(ChampDateEmbaucheCompte, LibelleDateEmbaucheCompte,
                 DateOnly.FromDateTime(hireDate).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 embauche.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))

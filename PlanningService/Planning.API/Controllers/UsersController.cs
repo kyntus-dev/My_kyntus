@@ -490,6 +490,9 @@ public class UsersController(
             if (target.AuthUserId is int targetAuth && targetAuth == User.GetAuthUserId())
                 return BadRequest(new { message = "Vous ne pouvez pas désactiver votre propre compte." });
         }
+        // v64 : la date de sortie effective n'est jamais un dimanche.
+        if (!isActive && dateSortie is DateOnly sortieDemandee && sortieDemandee.DayOfWeek == DayOfWeek.Sunday)
+            return BadRequest(new { message = $"La date de sortie ne peut pas être un dimanche ({sortieDemandee:dd/MM/yyyy})." });
         var found = await userService.SetUserActiveAsync(id, isActive, dateSortie, ct);
         if (!found)
             return NotFound(new { message = $"Utilisateur {id} introuvable." });

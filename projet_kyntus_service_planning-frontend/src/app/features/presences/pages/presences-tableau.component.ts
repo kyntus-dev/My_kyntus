@@ -31,6 +31,7 @@ import {
   joursDeLaPeriode,
   periodePaie,
   raisonCaseVide,
+  estHorsContrat,
   ymd,
 } from '../lib/presence.util';
 
@@ -244,6 +245,7 @@ export class PresencesTableauComponent implements OnInit {
             today: e.today,
             j,
             marque: vide?.marque ?? '',
+            horsContrat: estHorsContrat(j),
             classe: j ? 'pz-f-' + familleCode(j.code) : '',
             titre: j ? this.infobulle(a, j) : '',
           };
@@ -350,6 +352,7 @@ export class PresencesTableauComponent implements OnInit {
   }
 
   ouvrir(a: PresenceAgentDto, j: PresenceJourDto): void {
+    if (estHorsContrat(j)) return; // v64 : hors contrat, aucune saisie (refusée aussi côté serveur).
     const code = j.auto ? null : j.code;
     const mode: Edition['mode'] = code === null ? 'auto' : code === 'P' ? 'present' : code === 'FOR' ? 'formation' : 'absent';
     this.edition.set({

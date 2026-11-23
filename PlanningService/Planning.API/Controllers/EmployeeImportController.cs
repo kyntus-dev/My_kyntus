@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Planning.Application.DTOs;
+using Planning.Application.Abstractions;
 using Planning.Application.Abstractions.EmployeeImport;
 
 namespace Planning.API.Controllers;
@@ -120,6 +121,7 @@ public class EmployeeImportController(IEmployeeImportService importService, IEmp
     [HttpPost("execute")]
     public async Task<ActionResult<EmployeeImportReportDto>> Execute(
         [FromBody] EmployeeImportExecuteRequest request,
+        [FromServices] IJournalActionsService journal,
         CancellationToken ct)
     {
         var denied = DenyUnlessHrOrAdmin();
@@ -129,6 +131,19 @@ public class EmployeeImportController(IEmployeeImportService importService, IEmp
         {
             var email = GetClaimValue("email", ClaimTypes.Email);
             var report = await importService.ExecuteAsync(request, email, ct);
+            // v64 : journal d'actions — import guidé d'employés.
+            await journal.EnregistrerAsync(new JournalEvenement(
+                "Imports et exports", "Import", "Import guidé d'employés", "EmployeeImport", report.ImportJobId.ToString(),
+                Nouvelles: new Dictionary<string, string?>
+                {
+                    ["Lignes traitées"] = $"{report.ProcessedLignes} / {report.TotalLignes}",
+                    ["Employés créés"] = report.Crees.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["Employés mis à jour"] = report.MisAJour.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["Lignes ignorées"] = report.Ignores.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["Erreurs"] = report.Erreurs.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["Statut"] = report.Status,
+                },
+                Details: report.ErrorMessage), ct: ct);
             return Ok(report);
         }
         catch (InvalidOperationException ex)

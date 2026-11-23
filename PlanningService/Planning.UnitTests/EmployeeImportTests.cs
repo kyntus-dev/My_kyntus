@@ -30,6 +30,30 @@ public class EmployeeImportColumnMatcherTests
     }
 
     [Fact]
+    public void MatchHeaders_reconnait_les_colonnes_du_fichier_entrepreneurs_v64()
+    {
+        var fields = EmployeeImportFieldRegistry.DefaultFields
+            .Select(f => new FieldMatchTarget(f.FieldKey, f.Label, f.Aliases))
+            .ToList();
+        string[] headers =
+        [
+            "Référence", "Date d'Ancienntée", "Date d'Entrée", "Date Sortie", "Nationalité", "Sexe",
+            "Situation Familiale", "Carte d'Immatricualation", "N°Passeport",
+            "N° d'inscription au registre national", "Date de Naissance", "Adresse", "TEL 1", "TEL 2",
+        ];
+        string[] attendus =
+        [
+            "immatriculationInterne", "dateAnciennete", "dateEntree", "dateSortie", "nationalite", "sexe",
+            "situationFamiliale", "carteImmatriculation", "numeroPasseport",
+            "numeroCarteAutoentrepreneur", "dateNaissance", "adresse", "telephone1", "telephoneUrgence",
+        ];
+
+        var result = _matcher.MatchHeaders(headers, fields);
+
+        Assert.Equal(attendus, result.Select(r => r.SuggestedFieldKey).ToArray());
+    }
+
+    [Fact]
     public void MatchHeaders_department_does_not_map_to_pole()
     {
         var fields = EmployeeImportFieldRegistry.DefaultFields
@@ -185,7 +209,11 @@ public class EmployeeImportFieldRegistryTests
     [Fact]
     public void TemplateFields_has_full_hr_and_contract_columns()
     {
-        Assert.Equal(50, EmployeeImportFieldRegistry.TemplateFields.Count);
+        // v63 : + poste, N° BOX ; v64 : + type d'employé, carte d'immatriculation, passeport.
+        Assert.Equal(55, EmployeeImportFieldRegistry.TemplateFields.Count);
+        Assert.Contains(EmployeeImportFieldRegistry.TemplateFields, f => f.FieldKey == "typeEmploye");
+        Assert.Contains(EmployeeImportFieldRegistry.TemplateFields, f => f.FieldKey == "carteImmatriculation");
+        Assert.Contains(EmployeeImportFieldRegistry.TemplateFields, f => f.FieldKey == "numeroPasseport");
         Assert.Contains(EmployeeImportFieldRegistry.TemplateFields, f => f.FieldKey == "operationalDepartment");
         Assert.Contains(EmployeeImportFieldRegistry.TemplateFields, f => f.FieldKey == "contractType");
         Assert.Contains(EmployeeImportFieldRegistry.TemplateFields, f => f.FieldKey == "contractAlertThresholdDays");

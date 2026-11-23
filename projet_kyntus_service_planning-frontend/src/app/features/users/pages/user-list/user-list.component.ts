@@ -1,4 +1,5 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChild, ElementRef, inject } from '@angular/core';
+import { JournalActionsService } from '../../../../core/services/journal-actions.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -40,6 +41,7 @@ import {
   telephoneDisplay,
   userMatchesSearch,
 } from '../../../../core/hr/user-hr-display.util';
+import { TYPE_EMPLOYE_OPTIONS, typeEmployeCode, typeEmployeLibelle } from '../../../../core/hr/type-employe.util';
 import { libelleMail } from '../../lib/mail-interne.util';
 import { badgeTypeFormation } from '../../../../core/hr/type-formation.util';
 import { resolveUserGuid } from '../../../../core/lib/user-guid.util';
@@ -63,6 +65,7 @@ import { KyIfAdminAllowedDirective } from '../../../../shared/directives/ky-if-a
   styleUrls: ['./user-list.component.css']
 })
 export class UserListComponent implements OnInit, OnDestroy {
+  private readonly journalActions = inject(JournalActionsService);
   readonly icons = {
     warn: AlertTriangle,
     eye: Eye,
@@ -88,6 +91,9 @@ export class UserListComponent implements OnInit, OnDestroy {
   orgFilter: EmployeeOrgFilter = { ...EMPTY_ORG_FILTER };
   orgFilterOptions: EmployeeOrgFilterOptions = { activites: [], poles: [], cellules: [] };
   statusFilter: EmployeeStatusScope = 'all';
+  /** v64 : filtre Type d'employé ('' = tous, SALARIE, SOUS_TRAITANT). */
+  typeFilter: '' | 'SALARIE' | 'SOUS_TRAITANT' = '';
+  readonly typeEmployeOptions = TYPE_EMPLOYE_OPTIONS;
   readonly statusScopes = EMPLOYEE_STATUS_SCOPES;
   exporting: EmployeeStatusScope | null = null;
   loading = false;
@@ -182,13 +188,35 @@ export class UserListComponent implements OnInit, OnDestroy {
     this.onFiltersChanged();
   }
 
+  onTypeFilterChange(value: string): void {
+    this.typeFilter = parseTypeFilter(value);
+    this.onFiltersChanged();
+  }
+
+  typeCode(user: User): 'SALARIE' | 'SOUS_TRAITANT' {
+    return typeEmployeCode(user.hrProfile?.typeEmploye, user.hrProfile?.numeroCarteAutoentrepreneur);
+  }
+
+  typeLibelle(user: User): string {
+    return typeEmployeLibelle(user.hrProfile?.typeEmploye, user.hrProfile?.numeroCarteAutoentrepreneur);
+  }
+
+  /** Répartition Salariés / Sous-traitants de la liste filtrée (hors filtre type). */
+  get typeCounts(): { salaries: number; sousTraitants: number } {
+    let sousTraitants = 0;
+    for (const u of this.filteredUsers) if (this.typeCode(u) === 'SOUS_TRAITANT') sousTraitants++;
+    return { salaries: this.filteredUsers.length - sousTraitants, sousTraitants };
+  }
+
   get hasActiveFilters(): boolean {
-    return !!(this.orgFilter.activite || this.orgFilter.pole || this.orgFilter.cellule || this.statusFilter !== 'all');
+    return !!(this.orgFilter.activite || this.orgFilter.pole || this.orgFilter.cellule
+      || this.statusFilter !== 'all' || this.typeFilter);
   }
 
   clearFilters(): void {
     this.orgFilter = { ...EMPTY_ORG_FILTER };
     this.statusFilter = 'all';
+    this.typeFilter = '';
     this.onFiltersChanged();
   }
 
@@ -205,6 +233,7 @@ export class UserListComponent implements OnInit, OnDestroy {
     this.filteredUsers = this.users.filter((user) =>
       (!term || userMatchesSearch(user, term))
       && matchesStatusScope(user.isActive, this.statusFilter)
+      && (!this.typeFilter || this.typeCode(user) === this.typeFilter)
       && matchesOrgFilter(this.userPerimeter(user), this.orgFilter));
     this.currentPage = Math.min(this.currentPage, this.totalPages);
   }
@@ -239,7 +268,10 @@ export class UserListComponent implements OnInit, OnDestroy {
         scope,
       );
       if (count === 0) this.toastService.error('Aucun employé à exporter pour ce statut.');
-      else this.toastService.success(`${count} employé(s) exporté(s).`);
+      else {
+        this.toastService.success(`${count} employé(s) exporté(s).`);
+        this.journalActions.declarerExport('Export Excel des employés', `${count} employé(s) — ${scope}`);
+      }
     } catch {
       this.toastService.error("Échec de l'export Excel.");
     } finally {
@@ -255,15 +287,17 @@ export class UserListComponent implements OnInit, OnDestroy {
   // Only display preferences are persisted; never employee records or credentials.
   readonly columnChoices = [
     { key: 'organisation', label: 'Organisation' },
+    { key: 'type', label: "Type d'employé" },
     { key: 'matricule', label: 'Matricule' },
     { key: 'telephone', label: 'Téléphone' },
     { key: 'embauche', label: "Date d’embauche" },
     { key: 'anciennete', label: 'Ancienneté' },
   ];
-  visibleColumns = ['organisation', 'anciennete'];
+  visibleColumns = ['organisation', 'type', 'anciennete'];
   currentPage = 1;
   pageSize = 25;
   private readonly viewKey = 'kyntus.employee-list.view.v1';
+  private readonly typeColumnSeenKey = 'kyntus.employee-list.type-column.v64';
   private restoredScrollTop = 0;
   private restoredScrollLeft = 0;
   private tableElement?: HTMLElement;
@@ -317,6 +351,7 @@ export class UserListComponent implements OnInit, OnDestroy {
     try {
       sessionStorage.setItem(this.viewKey, JSON.stringify({
         searchTerm: this.searchTerm, orgFilter: this.orgFilter, statusFilter: this.statusFilter,
+        typeFilter: this.typeFilter,
         currentPage: this.currentPage, pageSize: this.pageSize,
         visibleColumns: this.visibleColumns, scrollTop: this.restoredScrollTop,
         scrollLeft: this.restoredScrollLeft,
@@ -332,10 +367,15 @@ export class UserListComponent implements OnInit, OnDestroy {
       const text = (x: unknown) => (typeof x === 'string' ? x.slice(0, 300) : '');
       this.orgFilter = { activite: text(f.activite), pole: text(f.pole), cellule: text(f.cellule) };
       this.statusFilter = parseStatusScope(v.statusFilter);
+      this.typeFilter = parseTypeFilter(v.typeFilter);
       this.currentPage = Number.isSafeInteger(v.currentPage) && v.currentPage > 0 ? v.currentPage : 1;
       this.pageSize = [25, 50, 100].includes(v.pageSize) ? v.pageSize : 25;
       if (Array.isArray(v.visibleColumns)) {
-        this.visibleColumns = this.columnChoices.map(c => c.key).filter(k => v.visibleColumns.includes(k));
+        const vues: string[] = v.visibleColumns.filter((k: unknown): k is string => typeof k === 'string');
+        // v64 : la nouvelle colonne Type s'affiche une première fois pour les vues enregistrées avant elle.
+        if (!sessionStorage.getItem(this.typeColumnSeenKey) && !vues.includes('type')) vues.push('type');
+        sessionStorage.setItem(this.typeColumnSeenKey, '1');
+        this.visibleColumns = this.columnChoices.map(c => c.key).filter(k => vues.includes(k));
       }
       this.restoredScrollTop = Number.isFinite(v.scrollTop) ? Math.max(0, v.scrollTop) : 0;
       this.restoredScrollLeft = Number.isFinite(v.scrollLeft) ? Math.max(0, v.scrollLeft) : 0;
@@ -734,4 +774,8 @@ export class UserListComponent implements OnInit, OnDestroy {
     }
     return null;
   }
+}
+
+function parseTypeFilter(value: unknown): '' | 'SALARIE' | 'SOUS_TRAITANT' {
+  return value === 'SALARIE' || value === 'SOUS_TRAITANT' ? value : '';
 }

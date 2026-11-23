@@ -2850,3 +2850,14 @@
   font-size: 0.82rem;
   color: var(--text-muted);
 }
+
+/* v64 : jours hors contrat (avant la date d'entrée réelle, après la date de sortie) */
+.td-hors-contrat {
+  background: repeating-linear-gradient(135deg, var(--surface-2, #f1f5f9) 0 6px, var(--surface-3, #e2e8f0) 6px 7px);
+}
+.shift-hors-contrat {
+  display: flex; align-items: center; justify-content: center; min-height: 30px;
+  font-size: 10px; font-weight: 600; letter-spacing: .02em; color: var(--text-muted, #94a3b8);
+  cursor: not-allowed; user-select: none;
+}
+.emp-ticket-st { background: color-mix(in srgb, #d97706 14%, transparent); color: #b45309; border-color: color-mix(in srgb, #d97706 30%, transparent); }

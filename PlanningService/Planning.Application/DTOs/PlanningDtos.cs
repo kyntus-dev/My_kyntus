@@ -691,4 +691,10 @@ public class EmployeePlanningDto
     public string? HtelCode { get; set; }
     /// <summary>Libellé HTEL (NOM Prénom) — export planning uniquement.</summary>
     public string? HtelTechnicienName { get; set; }
+    /// <summary>v64 : « SALARIE » ou « SOUS_TRAITANT » (fiche employé).</summary>
+    public string TypeEmploye { get; set; } = "SALARIE";
+    /// <summary>v64 : date d'entrée réelle — les jours d'avant sont grisés (aucun shift).</summary>
+    public DateOnly? DateEntreeContrat { get; set; }
+    /// <summary>v64 : date de sortie effective — les jours d'après sont grisés (aucun shift).</summary>
+    public DateOnly? DateSortieContrat { get; set; }
 }

@@ -181,6 +181,8 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
 
   { id: 'audit.dashboard', label: 'Tableau de bord conformité', module: 'Audit', view: ADMIN_AUDIT, serveur: SRV_ADMIN_AUDIT },
   { id: 'audit.journal', label: 'Journal unifié', module: 'Audit', view: ADMIN_AUDIT, serveur: SRV_ADMIN_AUDIT },
+  // v64 : journal d'actions (avant / après, auteur, date et heure) — vérifié côté serveur par l'évaluateur de droits.
+  { id: 'audit.actions', label: 'Journal d’actions', module: 'Audit', view: ADMIN_AUDIT },
   { id: 'audit.access-history', label: 'Historique d’accès', module: 'Audit', view: ADMIN_AUDIT, serveur: SRV_ADMIN_AUDIT },
   { id: 'audit.anomalies', label: 'Anomalies', module: 'Audit', view: ADMIN_AUDIT, serveur: SRV_ADMIN_AUDIT },
   { id: 'audit.reporting', label: 'Reporting', module: 'Audit', view: ADMIN_AUDIT, serveur: SRV_ADMIN_AUDIT },
@@ -221,6 +223,11 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   // v29 : superviseur = ses cellules ; chef de projet = tout son département.
   { id: 'conges.quotas', label: 'Quotas cellule / service', module: 'Congés', view: QUOTAS_CONGES, configure: QUOTAS_CONGES, serveurAgir: SRV_QUOTAS_CONGES },
   { id: 'conges.periodes', label: 'Périodes interdites', module: 'Congés', view: ADMIN_RH, configure: ADMIN_RH, serveurAgir: SRV_ADMIN_RH },
+  // v64 : absences saisies dans le planning — consulter, ajouter, modifier (par rôle et par compte ; vérifié
+  // côté serveur par l'évaluateur de droits, hors portée « Toute l'entreprise » : cellules du compte seulement).
+  { id: 'conges.planning', label: 'Absences du planning — consulter', module: 'Congés', view: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur, KyntusRoleNames.Rp] },
+  { id: 'conges.planning-ajout', label: 'Absences du planning — ajouter', module: 'Congés', act: ADMIN_RH },
+  { id: 'conges.planning-modification', label: 'Absences du planning — modifier / supprimer', module: 'Congés', act: ADMIN_RH },
 
   { id: 'documentation.module', label: 'Module Documentation (accès au menu)', module: 'Documentation', view: SELF, defaultScope: 'Self' },
   // v48 : Process Bytel — lecture pour tous (selon la visibilité choisie à l'envoi), dépôt pour RH / Admin / chef de projet.

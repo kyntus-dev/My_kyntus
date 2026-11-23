@@ -9,7 +9,7 @@
 
   <section class="employee-toolbar" aria-label="Recherche et actions employés">
     <div class="employee-heading">
-      <div><h1 class="ky-page-title">Employés</h1><p class="ky-page-subtitle" aria-live="polite">{{ filteredUsers.length }} employé(s) trouvé(s)</p></div>
+      <div><h1 class="ky-page-title">Employés</h1><p class="ky-page-subtitle" aria-live="polite">{{ filteredUsers.length }} employé(s) trouvé(s)@if (filteredUsers.length) { <span class="type-counts"> · {{ typeCounts.salaries }} salarié(s) · {{ typeCounts.sousTraitants }} sous-traitant(s)</span> }</p></div>
       <div class="toolbar-actions">
         <details class="toolbar-menu" #generalMenu>
           <summary class="ky-btn-secondary">Autres actions</summary>
@@ -43,6 +43,15 @@
         <select class="ky-input" [ngModel]="statusFilter" (ngModelChange)="onStatusFilterChange($event)" aria-label="Filtrer les employés par statut">
           @for (scope of statusScopes; track scope.value) {
             <option [value]="scope.value">{{ scope.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="service-filter">
+        <span>Type</span>
+        <select class="ky-input" [ngModel]="typeFilter" (ngModelChange)="onTypeFilterChange($event)" aria-label="Filtrer les employés par type d'employé">
+          <option value="">Tous les types</option>
+          @for (opt of typeEmployeOptions; track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
           }
         </select>
       </label>
@@ -117,6 +126,7 @@
             <th scope="col" class="col-person">Collaborateur</th>
             <th scope="col">Rôle</th>
             @if (showColumn('organisation')) { <th scope="col">Organisation</th> }
+            @if (showColumn('type')) { <th scope="col">Type</th> }
             @if (showColumn('matricule')) { <th scope="col">Matricule</th> }
             @if (showColumn('telephone')) { <th scope="col">Téléphone</th> }
             @if (showColumn('embauche')) { <th scope="col">Embauche</th> }
@@ -155,6 +165,9 @@
                       }
                     }
                   </td>
+                }
+                @if (showColumn('type')) {
+                  <td data-label="Type"><span class="type-employe-badge" [attr.data-type]="typeCode(user)">{{ typeLibelle(user) }}</span></td>
                 }
                 @if (showColumn('matricule')) { <td data-label="Matricule">{{ matriculeDisplay(user) }}</td> }
                 @if (showColumn('telephone')) { <td data-label="Téléphone">{{ telephoneDisplay(user) }}</td> }

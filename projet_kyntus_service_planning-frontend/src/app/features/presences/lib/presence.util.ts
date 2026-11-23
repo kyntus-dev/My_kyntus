@@ -50,6 +50,14 @@ export function familleCode(code: string | null): 'present' | 'formation' | 'abs
   return 'absence';
 }
 
+/** v64 : statut serveur d'un jour hors contrat (PointageJourStatuts.HorsContrat). */
+export const STATUT_HORS_CONTRAT = 'HorsContrat';
+
+/** v64 : jour hors contrat sans saisie ni pointage (case grisée, aucune saisie possible). */
+export function estHorsContrat(jour: PresenceJourDto | null | undefined): boolean {
+  return !!jour && jour.statut === STATUT_HORS_CONTRAT && !jour.code;
+}
+
 /**
  * v63.3 — Pourquoi une case est vide. Une case sans code n'est pas une anomalie en soi : le
  * tableau n'affiche un code que si la journée est planifiée, pointée, fériée ou saisie à la main.
@@ -60,6 +68,10 @@ export function raisonCaseVide(
   pointeuseReliee = true,
 ): { marque: string; raison: string } | null {
   if (jour.code) return null;
+  // v64 : avant la date d'entrée réelle ou après la date de sortie effective : case grisée, non saisissable.
+  if (jour.statut === STATUT_HORS_CONTRAT) {
+    return { marque: '', raison: "Hors contrat : avant la date d'entrée ou après la date de sortie. Aucune présence ni absence." };
+  }
   if (jour.statut === 'AVenir') return { marque: '', raison: 'Jour à venir.' };
   if (jour.statut === 'EnCours') return { marque: '', raison: 'Journée en cours.' };
   if (jour.statut === 'SansPlanning') {

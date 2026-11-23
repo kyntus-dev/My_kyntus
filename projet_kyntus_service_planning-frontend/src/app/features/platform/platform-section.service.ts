@@ -3,10 +3,10 @@ import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
 
 export type AdminSectionId = 'overview' | 'access' | 'comptes' | 'admins' | 'roles' | 'sync' | 'modules' | 'anomalies';
-export type AuditSectionId = 'dashboard' | 'journal' | 'access-history' | 'anomalies' | 'reporting';
+export type AuditSectionId = 'dashboard' | 'journal' | 'actions' | 'access-history' | 'anomalies' | 'reporting';
 
 const ADMIN_SECTIONS: AdminSectionId[] = ['overview', 'access', 'comptes', 'admins', 'roles', 'sync', 'modules', 'anomalies'];
-const AUDIT_SECTIONS: AuditSectionId[] = ['dashboard', 'journal', 'access-history', 'anomalies', 'reporting'];
+const AUDIT_SECTIONS: AuditSectionId[] = ['dashboard', 'journal', 'actions', 'access-history', 'anomalies', 'reporting'];
 
 @Injectable({ providedIn: 'root' })
 export class PlatformSectionService {

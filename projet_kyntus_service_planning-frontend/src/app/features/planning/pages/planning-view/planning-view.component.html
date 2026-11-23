@@ -409,6 +409,7 @@
                       <span class="emp-name">{{ row.emp.fullName }}</span>
                       <span class="lvl-badge lvl-{{ row.emp.level }}" *ngIf="!isPiloteViewer">{{ contractLevelLabel(row.emp.level) }}</span>
                       <span class="emp-mode-chip" *ngIf="row.modeTitle" [attr.data-mode-index]="row.modeIndex">{{ row.modeTitle }}</span>
+                      <span class="emp-ticket-chip emp-ticket-st" *ngIf="estSousTraitant(row.emp)" title="Sous-traitant (fiche employé)">ST</span>
                       <span
                         class="emp-ticket-chip emp-ticket-special"
                         *ngIf="!isPiloteViewer && row.emp.isSpecialCase"
@@ -453,7 +454,9 @@
                   [class.td-saturday]="day === 'Saturday'"
                   [class.cell-change-request-highlight]="isHighlightedAssignment(getAssignment(row.emp, day))"
                   [class.cell-exceptional]="getAssignment(row.emp, day)?.isExceptionalRequest"
-                  [class.cell-reinforcement]="getAssignment(row.emp, day)?.isReinforcement">
+                  [class.cell-reinforcement]="getAssignment(row.emp, day)?.isReinforcement"
+                  [class.td-hors-contrat]="!!horsContrat(row.emp, day)"
+                  [attr.title]="horsContrat(row.emp, day)">
 
                 <ng-container *ngIf="getAssignment(row.emp, day) as a; else noShift">
 
@@ -528,6 +531,11 @@
 
                 </ng-container>
                 <ng-template #noShift>
+                  <div class="shift-hors-contrat" *ngIf="horsContrat(row.emp, day) as motif; else offCell" [title]="motif">
+                    <span>Hors contrat</span>
+                  </div>
+                </ng-template>
+                <ng-template #offCell>
                   <div class="shift-off"
                        [class.shift-off-saturday]="day === 'Saturday' && canEdit"
                        (click)="day === 'Saturday' && canEdit ? openSaturdayOverride(row.emp, $event) : null">

@@ -84,8 +84,11 @@ public class PlatformAccessRoleFusionTests
 
         await new DirectoryIamAdminService(db).SeedDefaultsIfEmptyAsync();
 
-        // v61 : seules les rubriques ajoutées depuis (presences.encadrement) reçoivent leurs droits par défaut.
-        Assert.Equal(1, await db.IamPermissions.CountAsync(p => !p.Action.StartsWith("presences.encadrement.")));
+        // v61 : seules les rubriques ajoutées depuis (presences.encadrement ; v64 : absences du planning)
+        // reçoivent leurs droits par défaut.
+        var ajoutees = PlatformAccessCatalog.RubriquesAjoutees.Select(r => r + ".").ToList();
+        var lignes = await db.IamPermissions.Select(p => p.Action).ToListAsync();
+        Assert.Equal(1, lignes.Count(a => !ajoutees.Any(a.StartsWith)));
         Assert.True(await db.IamPermissions.AnyAsync(
             p => p.Role == "Superviseur" && p.Scope == "Global" && p.IsAllowed));
     }

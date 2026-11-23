@@ -421,11 +421,11 @@
 
                 <label for="hireDate">Date d'embauche <span class="required">*</span></label>
 
-                <input
-                  class="ky-input"
-                  id="hireDate"
+                <app-ky-date-ouvree
+                  inputId="hireDate"
                   name="hireDate"
-                  type="date"
+                  ariaLabel="Date d'embauche"
+                  [requis]="true"
                   [ngModel]="form.hireDate"
                   (ngModelChange)="onHireDateChange($event)"
                 />
@@ -507,21 +507,55 @@
                     />
                   </div>
                 }
+                <div class="form-group">
+                  <label for="typeEmploye">Type d'employé <span class="required">*</span></label>
+                  <select
+                    class="ky-input"
+                    id="typeEmploye"
+                    name="typeEmploye"
+                    [ngModel]="hrProfile.typeEmploye"
+                    (ngModelChange)="patchTypeEmploye($event)"
+                  >
+                    @for (opt of typeEmployeOptions; track opt.value) {
+                      <option [value]="opt.value">{{ opt.label }}</option>
+                    }
+                  </select>
+                  <span class="hint">Utilisé dans la présence, la paie, les plannings et les exports.</span>
+                </div>
                 @if (showRequiresAutoentrepreneur) {
-                  <div class="form-group form-group--full">
-                    <p class="hint">Statut : Autoentrepreneur (obligatoire uniquement pour « Autre »)</p>
-                  </div>
                   <div class="form-group">
-                    <label for="numeroCarteAutoentrepreneur">N° carte autoentrepreneur <span class="required">*</span></label>
+                    <label for="numeroCarteAutoentrepreneur">N° d'inscription au registre national (carte auto-entrepreneur) <span class="required">*</span></label>
                     <input
                       class="ky-input"
                       id="numeroCarteAutoentrepreneur"
                       name="numeroCarteAutoentrepreneur"
                       type="text"
+                      maxlength="64"
                       [(ngModel)]="hrProfile.numeroCarteAutoentrepreneur"
                     />
                   </div>
+                } @else if (hrProfile.numeroCarteAutoentrepreneur.trim()) {
+                  <div class="form-group">
+                    <label for="numeroCarteAutoentrepreneur">N° carte auto-entrepreneur (conservé)</label>
+                    <input
+                      class="ky-input"
+                      id="numeroCarteAutoentrepreneur"
+                      name="numeroCarteAutoentrepreneur"
+                      type="text"
+                      maxlength="64"
+                      [(ngModel)]="hrProfile.numeroCarteAutoentrepreneur"
+                    />
+                    <span class="hint">Videz le champ pour le supprimer de la fiche.</span>
+                  </div>
                 }
+                <div class="form-group">
+                  <label for="carteImmatriculation">Carte d'immatriculation (étrangers)</label>
+                  <input class="ky-input" id="carteImmatriculation" name="carteImmatriculation" type="text" maxlength="32" [(ngModel)]="hrProfile.carteImmatriculation" />
+                </div>
+                <div class="form-group">
+                  <label for="numeroPasseport">N° passeport</label>
+                  <input class="ky-input" id="numeroPasseport" name="numeroPasseport" type="text" maxlength="32" [(ngModel)]="hrProfile.numeroPasseport" />
+                </div>
                 <div class="form-group">
                   <label for="situationFamiliale">Situation familiale</label>
                   <select
@@ -1160,11 +1194,10 @@
             <div class="form-grid form-grid--dense">
                 <div class="form-group">
                   <label for="dateEntree">Date d'entrée</label>
-                  <input
-                    class="ky-input"
-                    id="dateEntree"
+                  <app-ky-date-ouvree
+                    inputId="dateEntree"
                     name="dateEntree"
-                    type="date"
+                    ariaLabel="Date d'entrée"
                     [(ngModel)]="hrProfile.dateEntree"
                     (ngModelChange)="onDateEntreeChange($event)"
                   />
@@ -1197,7 +1230,8 @@
                 @if (isEditMode) {
                   <div class="form-group">
                     <label for="dateSortie">Date de sortie</label>
-                    <input class="ky-input" id="dateSortie" name="dateSortie" type="date" [(ngModel)]="hrProfile.dateSortie" />
+                    <app-ky-date-ouvree inputId="dateSortie" name="dateSortie" ariaLabel="Date de sortie" [(ngModel)]="hrProfile.dateSortie" />
+                    <span class="hint">Les jours après la sortie sont grisés dans le planning et la présence.</span>
                   </div>
                 }
                 <div class="form-group">

@@ -12,8 +12,10 @@ import { libelleTypeFormation } from '../../../core/hr/type-formation.util';
  * - absences déduites : ABS N, AM, AR, CSS, MAT → « Total des absences » ;
  *   ABS, CP, DF et REC sont affichés mais ne sont pas déduits ;
  * v30 (règles validées par la direction) :
- * - paie sur 26 jours : Jrs travaillés = 26 × jours de production ÷ jours lundi-samedi de la période
- *   − absences déduites (mois complet : 26 − absences déduites) ;
+ * - paie sur 26 jours : mois complet = 26 − absences déduites ;
+ *   v64 : période incomplète (entrée, sortie, intégration après formation) = jours de production
+ *   réellement ouvrés (lundi-samedi, bornés à 26) − absences déduites. Le résultat est toujours un
+ *   nombre entier de jours (l'ancien prorata 26 × prod ÷ jours de la période donnait 11,58) ;
  * - jours de production : entre la date d'entrée et la date de sortie, hors formation ;
  * - agent en formation : présent dans l'export, mais hors paie (0) tant qu'il n'a pas intégré la
  *   production ; intégré en cours de période : au prorata de ses jours de production ;
@@ -200,7 +202,6 @@ export function hhmmss(minutes: number): string {
   return `${pad(Math.floor(m / 60))}:${pad(m % 60)}:00`;
 }
 
-const arrondi2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * v61 : mois civil d'une période de paie 24 → 23 (le mois du 23) : 1er → dernier jour.
@@ -241,11 +242,17 @@ export function detailEvp(elements: readonly EvpDto[]): string {
   }).join(' | ');
 }
 
-/** 26 jours au prorata des jours de production, moins les absences déduites (jamais négatif). */
+/**
+ * Jours payés, toujours entiers (v64). Mois complet : forfait de 26 jours. Période incomplète : chaque
+ * jour de production ouvré (lundi-samedi) compte pour un jour, sans dépasser le forfait de 26.
+ * Les absences déduites (jours entiers) sont retirées ; le résultat n'est jamais négatif.
+ */
 export function joursPayes(joursProduction: number, joursPeriode: number, absencesDeduites: number): number {
-  if (joursProduction <= 0 || joursPeriode <= 0) return 0;
-  const base = joursProduction >= joursPeriode ? JOURS_PAIE : (JOURS_PAIE * joursProduction) / joursPeriode;
-  return Math.max(0, arrondi2(base - absencesDeduites));
+  const production = Math.max(0, Math.trunc(joursProduction));
+  const periode = Math.max(0, Math.trunc(joursPeriode));
+  if (production <= 0 || periode <= 0) return 0;
+  const base = production >= periode ? JOURS_PAIE : Math.min(JOURS_PAIE, production);
+  return Math.max(0, base - Math.max(0, Math.trunc(absencesDeduites)));
 }
 
 export function typePaie(type: string): string {

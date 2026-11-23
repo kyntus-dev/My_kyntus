@@ -125,6 +125,8 @@ import {
   syncNationalityCodeFromLabel,
 } from '../../../../core/hr/hr-form-options';
 import { contractLevelLabel, formatSeniorityDuration } from '../../../../core/hr/user-hr-display.util';
+import { TYPE_EMPLOYE_OPTIONS, normaliserTypeEmploye } from '../../../../core/hr/type-employe.util';
+import { KyDateOuvreeComponent, estDimancheIso } from '../../../../shared/components/ui/ky-date-ouvree.component';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
 import { ContractFieldsComponent } from '../../../../shared/components/contract-fields/contract-fields.component';
@@ -162,7 +164,7 @@ type WizardStepId = 'identity' | 'position' | 'pathway' | 'finalize';
 @Component({
   selector: 'app-user-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, LucideIconComponent, KyntusSelectSyncDirective, KyntusPageHeaderComponent, ContractFieldsComponent, OrgScopeTreeSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, LucideIconComponent, KyntusSelectSyncDirective, KyntusPageHeaderComponent, ContractFieldsComponent, OrgScopeTreeSelectComponent, KyDateOuvreeComponent],
   templateUrl: './user-form.component.html',
   styleUrls: ['./user-form.component.css']
 })
@@ -241,7 +243,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
     firstName: '',
     lastName: '',
     email: '',
-    hireDate: this.toDateInputValue(new Date()),
+    hireDate: this.toDateInputValue(jourOuvre(new Date())),
     isActive: true,
     level: 1,
     chefDeProjetId: '',
@@ -276,6 +278,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
     poste: '',
     typeContrat: '',
     numeroBox: '',
+    typeEmploye: 'SALARIE',
+    carteImmatriculation: '',
+    numeroPasseport: '',
     niveauScolaire: '',
     intitulesEtudes: '',
     enFormation: false,
@@ -508,7 +513,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
       firstName: '',
       lastName: '',
       email: '',
-      hireDate: this.toDateInputValue(new Date()),
+      hireDate: this.toDateInputValue(jourOuvre(new Date())),
       isActive: true,
       level: 1,
       chefDeProjetId: '',
@@ -542,6 +547,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
       poste: '',
       typeContrat: '',
       numeroBox: '',
+      typeEmploye: 'SALARIE',
+      carteImmatriculation: '',
+      numeroPasseport: '',
       niveauScolaire: '',
       intitulesEtudes: '',
       enFormation: false,
@@ -982,8 +990,16 @@ export class UserFormComponent implements OnInit, OnDestroy {
     return this.showSituationEnfantsChoice && this.situationAvecEnfants === 'OUI';
   }
 
+  /** v64 : la carte auto-entrepreneur (registre national) est exigée pour un sous-traitant. */
   get showRequiresAutoentrepreneur(): boolean {
-    return requiresAutoentrepreneur(this.nationaliteCode);
+    return this.hrProfile.typeEmploye === 'SOUS_TRAITANT';
+  }
+
+  readonly typeEmployeOptions = TYPE_EMPLOYE_OPTIONS;
+
+  patchTypeEmploye(value: string): void {
+    this.hrProfile.typeEmploye = normaliserTypeEmploye(value) ?? 'SALARIE';
+    this.cdr.detectChanges();
   }
 
   get showNiveauScolaireAutre(): boolean {
@@ -1128,6 +1144,10 @@ export class UserFormComponent implements OnInit, OnDestroy {
       poste: profile.poste ?? '',
       typeContrat: profile.typeContrat ?? '',
       numeroBox: profile.numeroBox ?? '',
+      typeEmploye: normaliserTypeEmploye(profile.typeEmploye)
+        ?? (profile.numeroCarteAutoentrepreneur?.trim() ? 'SOUS_TRAITANT' : 'SALARIE'),
+      carteImmatriculation: profile.carteImmatriculation ?? '',
+      numeroPasseport: profile.numeroPasseport ?? '',
       niveauScolaire: profile.niveauScolaire ?? '',
       intitulesEtudes: profile.intitulesEtudes ?? '',
       enFormation: profile.enFormation ?? false,
@@ -1136,6 +1156,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
       dateFinFormationPrevue: this.dateToInputValue(profile.dateFinFormationPrevue),
     };
     this.syncSituationAvecEnfantsFromProfile();
+    // v64 : dates déjà enregistrées (un ancien import peut porter un dimanche : il reste accepté).
+    this.datesInitiales.dateEntree = this.hrProfile.dateEntree;
+    this.datesInitiales.dateSortie = this.hrProfile.dateSortie;
   }
 
   private syncSituationAvecEnfantsFromProfile(): void {
@@ -1165,9 +1188,8 @@ export class UserFormComponent implements OnInit, OnDestroy {
       dateNaissance: this.toOptionalDateIso(this.hrProfile.dateNaissance),
       villeNaissance: this.hrProfile.villeNaissance.trim() || null,
       nationalite: this.hrProfile.nationalite.trim() || null,
-      numeroCarteAutoentrepreneur: this.showRequiresAutoentrepreneur
-        ? this.hrProfile.numeroCarteAutoentrepreneur.trim() || null
-        : null,
+      // v64 : la carte n'est plus effacée selon la nationalité ; elle suit le type d'employé.
+      numeroCarteAutoentrepreneur: this.hrProfile.numeroCarteAutoentrepreneur.trim() || null,
       sexe: this.hrProfile.sexe.trim() || null,
       situationFamiliale: this.hrProfile.situationFamiliale.trim() || null,
       nombreEnfants: this.resolveNombreEnfantsForSave(),
@@ -1196,6 +1218,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
       poste: this.hrProfile.poste.trim(),
       typeContrat: this.hrProfile.typeContrat.trim(),
       numeroBox: this.hrProfile.numeroBox.trim(),
+      typeEmploye: this.hrProfile.typeEmploye,
+      carteImmatriculation: this.hrProfile.carteImmatriculation.trim().toUpperCase(),
+      numeroPasseport: this.hrProfile.numeroPasseport.trim().toUpperCase(),
       niveauScolaire: this.hrProfile.niveauScolaire.trim() || null,
       intitulesEtudes: this.hrProfile.intitulesEtudes.trim() || null,
       enFormation: this.hrProfile.enFormation,
@@ -1397,8 +1422,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
       this.nationaliteAutre = '';
       this.hrProfile.nationalite = nationalityLabelForCode(value);
     }
-    if (!requiresAutoentrepreneur(value)) {
-      this.hrProfile.numeroCarteAutoentrepreneur = '';
+    // v64 : à la création, « Autre » propose le type Sous-traitant (modifiable) ; rien n'est effacé.
+    if (!this.isEditMode && requiresAutoentrepreneur(value)) {
+      this.hrProfile.typeEmploye = 'SOUS_TRAITANT';
     }
     this.cdr.detectChanges();
   }
@@ -2626,9 +2652,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
           lastName: user.lastName,
           // v47 : adresse provisoire = pas de mail interne → champ vide, modifiable à tout moment.
           email: mailAffiche(user.email),
-          hireDate: user.hireDate
+          hireDate: (this.datesInitiales.hireDate = user.hireDate
             ? this.toDateInputValue(new Date(user.hireDate))
-            : this.toDateInputValue(new Date()),
+            : this.toDateInputValue(new Date())),
           isActive: user.isActive,
           level: user.level ?? 1,
           chefDeProjetId: user.chefDeProjetId ?? '',
@@ -3199,7 +3225,31 @@ export class UserFormComponent implements OnInit, OnDestroy {
     void this.submitAsync();
   }
 
+  /** v64 : dates chargées avec la fiche (comparées à la saisie pour la règle des dimanches). */
+  private readonly datesInitiales: Record<'hireDate' | 'dateEntree' | 'dateSortie', string> = {
+    hireDate: '', dateEntree: '', dateSortie: '',
+  };
+
+  /** v64 : une date d'embauche, d'entrée ou de sortie saisie ne tombe jamais un dimanche. */
+  private refusDimanche(): string | null {
+    const champs: ['hireDate' | 'dateEntree' | 'dateSortie', string, string][] = [
+      ['hireDate', this.form.hireDate, "La date d'embauche"],
+      ['dateEntree', this.hrProfile.dateEntree, "La date d'entrée"],
+      ['dateSortie', this.hrProfile.dateSortie, 'La date de sortie'],
+    ];
+    for (const [cle, valeur, libelle] of champs) {
+      const iso = (valeur ?? '').slice(0, 10);
+      if (iso && estDimancheIso(iso) && iso !== this.datesInitiales[cle]) return `${libelle} ne peut pas être un dimanche.`;
+    }
+    return null;
+  }
+
   private async submitAsync(): Promise<void> {
+    const dimanche = this.refusDimanche();
+    if (dimanche) {
+      this.error = dimanche;
+      return;
+    }
     const identityErr = this.validateWizardStepIdentity();
     if (identityErr) {
       this.error = identityErr;
@@ -3497,7 +3547,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
       return 'Précisez la nationalité lorsque « Autre » est sélectionné.';
     }
     if (this.showRequiresAutoentrepreneur && !this.hrProfile.numeroCarteAutoentrepreneur.trim()) {
-      return 'Le numéro de carte autoentrepreneur est obligatoire pour la nationalité « Autre ».';
+      return 'Le N° d\'inscription au registre national (carte auto-entrepreneur) est obligatoire pour un sous-traitant.';
     }
     return null;
   }
@@ -3663,4 +3713,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     }
   }
+}
+
+/** v64 : la date elle-même, ou le lundi suivant si elle tombe un dimanche (date d'embauche proposée). */
+function jourOuvre(d: Date): Date {
+  return d.getDay() === 0 ? new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1) : d;
 }

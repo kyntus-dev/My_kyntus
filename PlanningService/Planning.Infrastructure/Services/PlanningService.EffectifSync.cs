@@ -233,12 +233,11 @@ public partial class PlanningService
         var users = await _context.Users
             .AsNoTracking()
             .Where(u => ids.Contains(u.Id))
-            .Select(u => new { u.Id, u.IsActive, u.SubServiceId })
+            .Select(u => new { u.Id, u.IsActive, u.SubServiceId, u.HireDate })
             .ToListAsync(ct);
         var profils = (await _context.UserHrProfiles
                 .AsNoTracking()
                 .Where(p => ids.Contains(p.UserId))
-                .Select(p => new { p.UserId, p.DateEntree, p.DateSortie })
                 .ToListAsync(ct))
             .GroupBy(p => p.UserId)
             .ToDictionary(g => g.Key, g => g.First());
@@ -246,8 +245,9 @@ public partial class PlanningService
             u => u.Id,
             u =>
             {
-                profils.TryGetValue(u.Id, out var p);
-                return new PlanningEffectifRules.Agent(u.Id, u.IsActive, u.SubServiceId, p?.DateEntree, p?.DateSortie);
+                // v64 : même période sous contrat que le générateur (entrée réelle, sortie effective).
+                var contrat = ContratPeriode.De(profils.GetValueOrDefault(u.Id), u.HireDate);
+                return new PlanningEffectifRules.Agent(u.Id, u.IsActive, u.SubServiceId, contrat.Entree, contrat.Sortie);
             });
     }
 

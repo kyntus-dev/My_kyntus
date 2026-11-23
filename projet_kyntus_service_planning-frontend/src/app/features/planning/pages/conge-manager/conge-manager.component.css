@@ -650,3 +650,14 @@
     width: 100%;
   }
 }
+
+/* v64 : modification d'une absence */
+.btn-edit {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border, #d1d5db); background: var(--surface, #fff); color: var(--text-primary, #111827); cursor: pointer;
+}
+.btn-edit:hover { background: var(--surface-2, #f1f5f9); }
+.ci-origine-badge {
+  display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  background: color-mix(in srgb, var(--info, #2563eb) 12%, transparent); color: var(--info, #1d4ed8);
+}

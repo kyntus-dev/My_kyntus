@@ -4,6 +4,7 @@ import { PlatformAccessService } from '../../../core/platform-access/platform-ac
 import { PlatformSectionService } from '../platform-section.service';
 import { AuditDashboardComponent } from './audit-dashboard.component';
 import { AuditJournalComponent } from './audit-journal.component';
+import { AuditActionsComponent } from './audit-actions.component';
 import { AuditAccessHistoryComponent } from './audit-access-history.component';
 import { AuditAnomaliesComponent } from './audit-anomalies.component';
 import { AuditReportingComponent } from './audit-reporting.component';
@@ -15,6 +16,7 @@ import { AuditReportingComponent } from './audit-reporting.component';
     KyntusPageHeaderComponent,
     AuditDashboardComponent,
     AuditJournalComponent,
+    AuditActionsComponent,
     AuditAccessHistoryComponent,
     AuditAnomaliesComponent,
     AuditReportingComponent,
@@ -23,7 +25,7 @@ import { AuditReportingComponent } from './audit-reporting.component';
     <section class="plat-page">
       <app-kyntus-page-header
         title="Audit et conformité"
-        subtitle="Lecture seule — journal unifié, anomalies et reporting, avec filtre par module."
+        subtitle="Lecture seule — journal unifié, journal d’actions, anomalies et reporting, avec filtre par module."
       />
       <nav class="plat-tabs" aria-label="Sections audit">
         @for (tab of visibleTabs(); track tab.id) {
@@ -40,6 +42,7 @@ import { AuditReportingComponent } from './audit-reporting.component';
       @switch (section()) {
         @case ('dashboard') { <app-audit-dashboard /> }
         @case ('journal') { <app-audit-journal /> }
+        @case ('actions') { <app-audit-actions /> }
         @case ('access-history') { <app-audit-access-history /> }
         @case ('anomalies') { <app-audit-anomalies /> }
         @case ('reporting') { <app-audit-reporting /> }
@@ -73,6 +76,7 @@ export class AuditRootComponent {
   readonly tabs = [
     { id: 'dashboard' as const, label: 'Tableau de bord', capability: 'audit.dashboard' },
     { id: 'journal' as const, label: 'Journal', capability: 'audit.journal' },
+    { id: 'actions' as const, label: 'Journal d’actions', capability: 'audit.actions' },
     { id: 'access-history' as const, label: 'Historique d’accès', capability: 'audit.access-history' },
     { id: 'anomalies' as const, label: 'Anomalies', capability: 'audit.anomalies' },
     { id: 'reporting' as const, label: 'Reporting', capability: 'audit.reporting' },

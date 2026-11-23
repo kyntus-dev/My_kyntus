@@ -196,6 +196,12 @@ export interface EmployeePlanning {
   htelCode?: string | null;
   /** Libellé HTEL (NOM Prénom) — export uniquement. */
   htelTechnicienName?: string | null;
+  /** v64 : « SALARIE » ou « SOUS_TRAITANT » (fiche employé). */
+  typeEmploye?: string | null;
+  /** v64 : date d'entrée réelle (yyyy-MM-dd) — jours d'avant grisés. */
+  dateEntreeContrat?: string | null;
+  /** v64 : date de sortie effective (yyyy-MM-dd) — jours d'après grisés. */
+  dateSortieContrat?: string | null;
 }
 
 export interface WeeklyPlanningResponse {

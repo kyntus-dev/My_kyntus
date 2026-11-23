@@ -39,6 +39,15 @@ public class UserHrProfile
     public string? TypeContrat { get; set; }
     /// <summary>v63 : boîte d'archivage du dossier papier (« N° BOX »).</summary>
     public string? NumeroBox { get; set; }
+    /// <summary>
+    /// v64 : « SALARIE » ou « SOUS_TRAITANT » (voir <see cref="TypesEmploye"/>). null sur une fiche antérieure :
+    /// le type est alors déduit de la carte d'auto-entrepreneur.
+    /// </summary>
+    public string? TypeEmploye { get; set; }
+    /// <summary>v64 : N° de carte d'immatriculation (pièce d'identité des résidents étrangers).</summary>
+    public string? CarteImmatriculation { get; set; }
+    /// <summary>v64 : N° de passeport.</summary>
+    public string? NumeroPasseport { get; set; }
     public string? AncienService { get; set; }
     public string? NiveauScolaire { get; set; }
     public string? IntitulesEtudes { get; set; }

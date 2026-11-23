@@ -443,6 +443,8 @@ public partial class PlanningService : IPlanningService
     public async Task EnsureWeekSnapshotAsync(
         int subServiceId, string weekCode, DateOnly weekStartDate, bool forceRefresh = false)
     {
+        // v64 : copie technique des horaires de la semaine — pas une modification des horaires (journal).
+        using var silenceJournal = Planning.Infrastructure.Persistence.JournalActions.JournalScope.Silence(typeof(SubServiceShiftConfig));
         var existing = await _context.SubServiceShiftConfigs
             .Where(c => c.SubServiceId == subServiceId
                      && !c.IsTemplate
@@ -685,6 +687,10 @@ public partial class PlanningService : IPlanningService
     public async Task<WeeklyPlanningResponseDto> GeneratePlanningFromConfigAsync(
        GeneratePlanningFromConfigDto dto)
     {
+        // v64 : la génération est tracée en bloc (journal d'actions) ; ses journées et la copie des
+        // horaires de la semaine ne sont pas tracées une à une.
+        using var silenceJournal = Planning.Infrastructure.Persistence.JournalActions.JournalScope.Silence(
+            typeof(ShiftAssignment), typeof(SubServiceShiftConfig), typeof(WeeklyShiftConfig));
         var planning = await _context.WeeklyPlannings
             .Include(p => p.SubService)
             .FirstOrDefaultAsync(p => p.Id == dto.WeeklyPlanningId)
@@ -826,6 +832,14 @@ public partial class PlanningService : IPlanningService
 
         var userIds = employees.Select(e => e.Id).ToList();
 
+        // v64 : période sous contrat (date d'entrée réelle → date de sortie effective). Aucun shift,
+        // congé ni férié n'est posé en dehors, à chaque génération comme à chaque régénération ;
+        // les journées figées (corrections, switchs) tombées hors contrat sont retirées des jours régénérés.
+        var contrats = await ChargerContratsAsync(employees);
+        bool HorsContrat(int userId, DateOnly jour) => contrats.TryGetValue(userId, out var cp) && !cp.Couvre(jour);
+        if (isPartial)
+            await RetirerJoursHorsContratAsync(planning.Id, regenerateFrom!.Value, contrats, frozenSnapshot);
+
         var saturdayGroups = await _context.SaturdayGroups
             .Where(sg => userIds.Contains(sg.UserId))
             .ToListAsync();
@@ -926,7 +940,7 @@ public partial class PlanningService : IPlanningService
             {
                 foreach (var emp in employees)
                 {
-                    if (modeOverrideKeys.Contains((emp.Id, date)))
+                    if (modeOverrideKeys.Contains((emp.Id, date)) || HorsContrat(emp.Id, date))
                         continue;
 
                     assignments.Add(new ShiftAssignment
@@ -948,6 +962,7 @@ public partial class PlanningService : IPlanningService
 
             var availableEmployees = employees.Where(e =>
                 !modeOverrideKeys.Contains((e.Id, date))
+                && !HorsContrat(e.Id, date)
                 && !conges.Any(c =>
                     c.UserId == e.Id &&
                     c.StartDate <= date &&
@@ -955,6 +970,7 @@ public partial class PlanningService : IPlanningService
 
             var onLeaveEmployees = employees.Where(e =>
                 !modeOverrideKeys.Contains((e.Id, date))
+                && !HorsContrat(e.Id, date)
                 && conges.Any(c =>
                     c.UserId == e.Id &&
                     c.StartDate <= date &&
@@ -986,15 +1002,29 @@ public partial class PlanningService : IPlanningService
                     pinsByUser[emp.Id] = pinnedShift;
             }
 
+            // v64 : couverture des absences — quand des agents sont en congé, arrêt maladie ou autre
+            // absence, les places du jour sont redistribuées sur l'effectif réellement disponible
+            // (créneaux critiques d'abord, puis au prorata), au lieu de laisser les derniers créneaux vides.
+            IReadOnlyList<SubServiceShiftConfig> shiftsDuJour = orderedShifts;
+            Func<int, IReadOnlyList<SubServiceShiftConfig>> shiftsPourAgentDuJour = ShiftsForEmployee;
+            var quotasCouverture = QuotasCouvertureDuJour(availableEmployees, employeeModeMap, orderedShifts);
+            if (quotasCouverture is not null)
+            {
+                var ajustes = CloneWithRequiredCounts(orderedShifts, c => quotasCouverture.GetValueOrDefault(c.Id, c.RequiredCount));
+                var ajustesParId = ajustes.ToDictionary(c => c.Id);
+                shiftsDuJour = ajustes;
+                shiftsPourAgentDuJour = id => ShiftsForEmployee(id).Select(c => ajustesParId.GetValueOrDefault(c.Id, c)).ToList();
+            }
+
             var chosen = AssignDayByMode(
                 availableEmployees,
                 employeeModeMap,
-                ShiftsForEmployee,
+                shiftsPourAgentDuJour,
                 patternSeeds,
                 weekShiftHistoryByUser,
                 usersByIdForSelect,
                 pinsByUser,
-                orderedShifts);
+                shiftsDuJour);
 
             foreach (var emp in availableEmployees)
             {
@@ -1064,7 +1094,7 @@ public partial class PlanningService : IPlanningService
             // Samedi férié → affichage FÉRIÉ pour tous ; rotation intended déjà calculée
             foreach (var emp in employees)
             {
-                if (modeOverrideKeys.Contains((emp.Id, saturdayDate)))
+                if (modeOverrideKeys.Contains((emp.Id, saturdayDate)) || HorsContrat(emp.Id, saturdayDate))
                     continue;
 
                 assignments.Add(new ShiftAssignment
@@ -1091,7 +1121,7 @@ public partial class PlanningService : IPlanningService
             for (int empIndex = 0; empIndex < employees.Count; empIndex++)
             {
                 var employee = employees[empIndex];
-                if (modeOverrideKeys.Contains((employee.Id, saturdayDate)))
+                if (modeOverrideKeys.Contains((employee.Id, saturdayDate)) || HorsContrat(employee.Id, saturdayDate))
                     continue;
 
                 var empSatShifts = SatShiftsForEmployee(employee.Id);
@@ -1271,6 +1301,10 @@ public partial class PlanningService : IPlanningService
                 assignments, shiftConfigs, usersById);
         }
 
+        // v64 : rotation équitable des heures de fin de journée (échanges même jour, même mode, même niveau,
+        // d'après 8 semaines d'historique) — quotas et équilibre des niveaux inchangés.
+        await EquilibrerFinsDeJourneeAsync(planning, assignments, frozenSnapshot, shiftConfigs, usersById, isPartial ? regenerateFrom : null);
+
         if (regenerateSaturday)
         {
             await SaveSaturdayHistoryAsync(new SetSaturdayHistoryDto(
@@ -1282,6 +1316,9 @@ public partial class PlanningService : IPlanningService
                 )).ToList()
             ), false);
         }
+
+        // v64 : filet de sécurité — aucune journée hors contrat, quelle que soit la passe qui l'a produite.
+        assignments.RemoveAll(hc => HorsContrat(hc.UserId, hc.AssignedDate));
 
         // Passé figé : déjà en base — ne pas ré-insérer (conflit unique UserId+AssignedDate).
         // Les jours régénérés peuvent encore exister dans un autre planning (mutation / import).
@@ -1453,6 +1490,59 @@ public partial class PlanningService : IPlanningService
                                    && !a.IsReinforcement
                                    && !a.IsExceptionalRequest
                                    && !agentsDeLaCellule.Contains(a.UserId));
+    }
+
+    /// <summary>v64 — Période sous contrat de chaque agent (fiche RH + date d'embauche du compte).</summary>
+    private async Task<Dictionary<int, ContratPeriode>> ChargerContratsAsync(IReadOnlyCollection<User> agents)
+    {
+        if (agents.Count == 0) return new Dictionary<int, ContratPeriode>();
+        var ids = agents.Select(u => u.Id).ToList();
+        var profils = (await _context.UserHrProfiles.AsNoTracking()
+                .Where(p => ids.Contains(p.UserId))
+                .ToListAsync())
+            .GroupBy(p => p.UserId)
+            .ToDictionary(g => g.Key, g => g.First());
+        return agents
+            .GroupBy(u => u.Id)
+            .ToDictionary(g => g.Key, g => ContratPeriode.De(g.First(), profils.GetValueOrDefault(g.Key)));
+    }
+
+    /// <summary>
+    /// v64 — Journées régénérables (à partir de <paramref name="depuis"/>) tombées hors contrat (avant
+    /// l'entrée ou après la sortie) : retirées, corrections figées comprises, sauf journée déjà déclarée
+    /// (historique de présence et de paie).
+    /// </summary>
+    private async Task RetirerJoursHorsContratAsync(
+        int weeklyPlanningId, DateOnly depuis, IReadOnlyDictionary<int, ContratPeriode> contrats, List<ShiftAssignment> jeuDeDepart)
+    {
+        var candidates = await _context.ShiftAssignments
+            .Where(a => a.WeeklyPlanningId == weeklyPlanningId
+                        && a.AssignedDate >= depuis
+                        && !a.Declarations.Any())
+            .ToListAsync();
+        var horsContrat = candidates
+            .Where(a => contrats.TryGetValue(a.UserId, out var cp) && !cp.Couvre(a.AssignedDate))
+            .ToList();
+        if (horsContrat.Count == 0)
+            return;
+        _context.ShiftAssignments.RemoveRange(horsContrat);
+        await _context.SaveChangesAsync();
+        var cles = horsContrat.Select(a => (a.UserId, a.AssignedDate)).ToHashSet();
+        jeuDeDepart.RemoveAll(a => cles.Contains((a.UserId, a.AssignedDate)));
+    }
+
+    /// <summary>
+    /// v64 — Refuse une correction manuelle (shift, samedi, férié) sur une journée hors contrat.
+    /// </summary>
+    private async Task RefuserSiHorsContratAsync(int userId, DateOnly jour)
+    {
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+        if (user is null) return;
+        var profil = await _context.UserHrProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == userId);
+        var motif = ContratPeriode.De(user, profil).MotifHorsContrat(jour);
+        if (motif is not null)
+            throw new InvalidOperationException(
+                $"Journée du {jour:dd/MM/yyyy} hors contrat ({motif}) : aucun shift ne peut y être posé.");
     }
 
     /// <summary>
@@ -1914,6 +2004,10 @@ public partial class PlanningService : IPlanningService
             .Include(a => a.SubServiceShiftConfig)
             .FirstOrDefaultAsync(a => a.Id == dto.ShiftAssignmentId)
             ?? throw new Exception("Assignment introuvable.");
+
+        // v64 : aucun shift avant la date d'entrée ni après la date de sortie.
+        if (dto.NewSubServiceShiftConfigId > 0)
+            await RefuserSiHorsContratAsync(assignment.UserId, assignment.AssignedDate);
 
         // ? TOUJOURS remettre IsHoliday � false lors d'un override
         assignment.IsHoliday = false;
@@ -2890,6 +2984,13 @@ public partial class PlanningService : IPlanningService
             .Where(c => c.WeeklyPlanningId == id)
             .ToListAsync();
 
+        // v64 : type d'employé et période sous contrat de chaque agent affiché (cases grisées hors contrat).
+        var profilsVue = (await _context.UserHrProfiles.AsNoTracking()
+                .Where(p => idsAffectes.Contains(p.UserId))
+                .ToListAsync())
+            .GroupBy(p => p.UserId)
+            .ToDictionary(g => g.Key, g => g.First());
+
         // ? AJOUTER � charger les cong�s de la semaine
         var userIds = planning.ShiftAssignments.Select(a => a.UserId).Distinct().ToList();
         var weekEnd = planning.WeekStartDate.AddDays(6);
@@ -3008,6 +3109,9 @@ public partial class PlanningService : IPlanningService
                         IdTechnicien = user.IdTechnicien,
                         HtelCode = user.HtelCode,
                         HtelTechnicienName = user.HtelTechnicienName,
+                        TypeEmploye = TypesEmploye.Code(profilsVue.GetValueOrDefault(g.Key)),
+                        DateEntreeContrat = ContratPeriode.De(user, profilsVue.GetValueOrDefault(g.Key)).Entree,
+                        DateSortieContrat = ContratPeriode.De(user, profilsVue.GetValueOrDefault(g.Key)).Sortie,
                         Days = g.OrderBy(a => a.AssignedDate)
                                  .Select(a => MapToDayDtoNew(a, conges, exceptionalApplied))
                                  .ToList()
@@ -3063,6 +3167,9 @@ public partial class PlanningService : IPlanningService
                 .FirstOrDefaultAsync(a => a.Id == dto.ShiftAssignmentId)
                 ?? throw new Exception("Assignment introuvable.");
 
+            // v64 : aucun shift avant la date d'entrée ni après la date de sortie.
+            if (dto.NewSubServiceShiftConfigId > 0)
+                await RefuserSiHorsContratAsync(assignment.UserId, assignment.AssignedDate);
             assignment.SubServiceShiftConfigId = dto.NewSubServiceShiftConfigId;
             assignment.IsManagerOverride = true;
         }
@@ -3075,6 +3182,9 @@ public partial class PlanningService : IPlanningService
             var planning = await _context.WeeklyPlannings
                 .FirstOrDefaultAsync(p => p.Id == dto.WeeklyPlanningId)
                 ?? throw new Exception("Planning introuvable.");
+
+            if (dto.NewSubServiceShiftConfigId > 0)
+                await RefuserSiHorsContratAsync(dto.UserId, planning.WeekStartDate.AddDays(5));
 
             var existing = await _context.ShiftAssignments
                 .FirstOrDefaultAsync(a =>
@@ -4620,6 +4730,104 @@ public partial class PlanningService : IPlanningService
         return merged;
     }
 
+    /// <summary>
+    /// v64 — Quotas du jour ajustés à l'effectif disponible, mode par mode (null si aucun ajustement).
+    /// Même découpage que <see cref="AssignDayByMode"/> : sans plan de modes, un seul groupe.
+    /// </summary>
+    private static Dictionary<int, int>? QuotasCouvertureDuJour(
+        IReadOnlyList<User> available,
+        Dictionary<int, int>? employeeModeMap,
+        IReadOnlyList<SubServiceShiftConfig> orderedShifts)
+    {
+        if (orderedShifts.Count == 0) return null;
+        Dictionary<int, int>? resultat = null;
+        void Fusionner(Dictionary<int, int>? part)
+        {
+            if (part is null) return;
+            resultat ??= new Dictionary<int, int>();
+            foreach (var (id, n) in part) resultat[id] = n;
+        }
+
+        if (employeeModeMap is null || employeeModeMap.Count == 0)
+        {
+            Fusionner(CouvertureAbsences.QuotasDuJour(orderedShifts, available.Count));
+            return resultat;
+        }
+        foreach (var groupe in available.GroupBy(e => employeeModeMap.GetValueOrDefault(e.Id)))
+        {
+            // Agents sans mode : ils piochent dans tous les créneaux, pas de quota propre à ajuster.
+            if (groupe.Key == 0) continue;
+            var creneaux = orderedShifts.Where(s => s.ShiftModeProfileId == groupe.Key).ToList();
+            if (creneaux.Count == 0) continue;
+            Fusionner(CouvertureAbsences.QuotasDuJour(creneaux, groupe.Count()));
+        }
+        return resultat;
+    }
+
+    /// <summary>
+    /// v64 — Rotation équitable des fins de journée : charge historique (8 semaines) puis échanges.
+    /// </summary>
+    private async Task EquilibrerFinsDeJourneeAsync(
+        WeeklyPlanning planning,
+        List<ShiftAssignment> assignments,
+        IReadOnlyList<ShiftAssignment> figees,
+        IReadOnlyList<SubServiceShiftConfig> shiftConfigs,
+        IReadOnlyDictionary<int, User> usersById,
+        DateOnly? depuis)
+    {
+        var configs = shiftConfigs.GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
+        var aTraiter = assignments
+            .Where(a => !a.IsSaturday && (depuis is null || a.AssignedDate >= depuis.Value))
+            .ToList();
+        if (aTraiter.Count == 0 || configs.Count < 2) return;
+
+        var ids = aTraiter.Select(a => a.UserId).Distinct().ToList();
+        var debutHistorique = planning.WeekStartDate.AddDays(-56);
+        var passees = await _context.ShiftAssignments.AsNoTracking()
+            .Where(a => ids.Contains(a.UserId)
+                        && a.AssignedDate >= debutHistorique
+                        && a.AssignedDate < planning.WeekStartDate
+                        && !a.IsSaturday && !a.IsOnLeave && !a.IsHoliday
+                        && a.SubServiceShiftConfigId != null)
+            .Select(a => new
+            {
+                a.UserId,
+                a.WeeklyPlanningId,
+                a.SubServiceShiftConfig!.StartTime,
+                a.SubServiceShiftConfig.WorkHours,
+                a.SubServiceShiftConfig.BreakDurationMinutes,
+            })
+            .ToListAsync();
+        // Charge passée : écart entre la fin de chaque journée et la fin moyenne des horaires de sa semaine.
+        var historique = new Dictionary<int, double>();
+        foreach (var semainePassee in passees.GroupBy(p => p.WeeklyPlanningId))
+        {
+            double Fin(TimeOnly debut, int heures, int pause) => debut.Hour * 60 + debut.Minute + heures * 60 + Math.Max(0, pause);
+            var moyenne = semainePassee
+                .Select(p => (p.StartTime, p.WorkHours, p.BreakDurationMinutes)).Distinct()
+                .Average(p => Fin(p.StartTime, p.WorkHours, p.BreakDurationMinutes));
+            foreach (var p in semainePassee)
+                historique[p.UserId] = historique.GetValueOrDefault(p.UserId)
+                                       + (Fin(p.StartTime, p.WorkHours, p.BreakDurationMinutes) - moyenne) / 60.0;
+        }
+
+        var semaine = assignments.Concat(figees.Where(f => !assignments.Any(a => a.UserId == f.UserId && a.AssignedDate == f.AssignedDate))).ToList();
+        if (configs.Values.Any(c => c.ShiftModeProfileId != null))
+        {
+            foreach (var mode in configs.Values.GroupBy(c => c.ShiftModeProfileId ?? 0))
+            {
+                var modeConfigs = mode.ToDictionary(c => c.Id);
+                RotationFinJournee.Equilibrer(
+                    aTraiter.Where(a => a.SubServiceShiftConfigId is int id && modeConfigs.ContainsKey(id)).ToList(),
+                    semaine, modeConfigs, usersById, historique);
+            }
+        }
+        else
+        {
+            RotationFinJournee.Equilibrer(aTraiter, semaine, configs, usersById, historique);
+        }
+    }
+
     private static List<SubServiceShiftConfig> CloneWithRequiredCounts(
         IEnumerable<SubServiceShiftConfig> configs,
         Func<SubServiceShiftConfig, int> requiredOf)
@@ -4635,7 +4843,15 @@ public partial class PlanningService : IPlanningService
             ShiftKind = c.ShiftKind,
             ShiftModeProfileId = c.ShiftModeProfileId,
             IsTemplate = c.IsTemplate,
-            AppliesToSaturday = c.AppliesToSaturday
+            AppliesToSaturday = c.AppliesToSaturday,
+            // v64 : clones fidèles (couverture des absences) — criticité et pause conservées.
+            IsCriticalCell = c.IsCriticalCell,
+            BreakDurationMinutes = c.BreakDurationMinutes,
+            BreakRangeStart = c.BreakRangeStart,
+            BreakRangeEnd = c.BreakRangeEnd,
+            BreakSlotsJson = c.BreakSlotsJson,
+            WeekCode = c.WeekCode,
+            WeekStartDate = c.WeekStartDate,
         }).ToList();
 
     private static void RebalanceSaturdayModeQuotas(

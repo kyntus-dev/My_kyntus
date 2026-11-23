@@ -14,6 +14,15 @@ export interface CongeItem {
   reason:      string;
   absenceType: string; // ✅
   status:      string;
+  /** v64 : « Planning » (saisie ici, modifiable) ou « Demande » (workflow Congés, lecture seule ici). */
+  origine?:    string;
+}
+
+/** v64 : droits de l'utilisateur sur les absences du planning (Accès par rôle). */
+export interface DroitsConges {
+  consulter: boolean;
+  ajouter:   boolean;
+  modifier:  boolean;
 }
 
 export interface CreateCongeDto {
@@ -66,6 +75,10 @@ export class CongeService {
     return this.http.get<CongeItem[]>(`${this.base}/subservice/${subServiceId}${params}`);
   }
 
+  droits(): Observable<DroitsConges> {
+    return this.http.get<DroitsConges>(`${this.base}/droits`);
+  }
+
   getById(id: number): Observable<CongeItem> {
     return this.http.get<CongeItem>(`${this.base}/${id}`);
   }
@@ -85,7 +98,13 @@ export class CongeService {
   }
 
   update(id: number, dto: CreateCongeDto): Observable<CongeItem> {
-    return this.http.put<CongeItem>(`${this.base}/${id}`, dto);
+    return this.http.put<CongeItem>(`${this.base}/${id}`, {
+      userId: dto.userId,
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      reason: dto.reason ?? '',
+      absenceType: dto.absenceType,
+    });
   }
 
   delete(id: number): Observable<void> {

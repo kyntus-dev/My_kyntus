@@ -1,5 +1,6 @@
 using System.Globalization;
 using Planning.Application.DTOs;
+using Planning.Domain.Entities;
 
 namespace Planning.Infrastructure.Services.EmployeeImport;
 
@@ -52,6 +53,9 @@ public static class EmployeeDocumentFieldValueFlattener
             Set(values, "poste", hr.Poste);
             Set(values, "typeContrat", hr.TypeContrat);
             Set(values, "numeroBox", hr.NumeroBox);
+            Set(values, "typeEmploye", TypesEmploye.Libelle(hr.TypeEmploye, hr.NumeroCarteAutoentrepreneur));
+            Set(values, "carteImmatriculation", hr.CarteImmatriculation);
+            Set(values, "numeroPasseport", hr.NumeroPasseport);
             Set(values, "niveauScolaire", hr.NiveauScolaire);
             Set(values, "intitulesEtudes", hr.IntitulesEtudes);
             Set(values, "enFormation", hr.EnFormation ? "true" : "false");

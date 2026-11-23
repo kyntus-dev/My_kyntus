@@ -400,6 +400,7 @@ public class PlanningController(
     [HttpPost("week/{weekCode}/auto-generate")]
     public async Task<IActionResult> AutoGenerateWeek(
         string weekCode,
+        [FromServices] IJournalActionsService journal,
         [FromQuery] bool force = false)
     {
         if (await ForbidUnlessAsync(CapGenerate) is { } denied) return denied;
@@ -407,6 +408,10 @@ public class PlanningController(
         {
             var actorId = await ResolvePlanningUserIdAsync();
             var result = await _planningService.AutoGenerateWeekAsync(weekCode, force, actorId);
+            // v64 : journal d'actions.
+            await journal.EnregistrerAsync(new JournalEvenement(
+                "Planning", "Génération automatique", $"Plannings de la semaine {weekCode}", "WeeklyPlanning", weekCode,
+                Details: force ? "Génération forcée (plannings existants remplacés)." : null));
             try
             {
                 await _pendingAlerts.SendValidationRemindersAsync(weekCode);
@@ -465,13 +470,28 @@ public class PlanningController(
     // POST api/planning/generate-from-config
     [HttpPost("generate-from-config")]
     public async Task<IActionResult> GenerateFromConfig(
-        [FromBody] GeneratePlanningFromConfigDto dto)
+        [FromBody] GeneratePlanningFromConfigDto dto,
+        [FromServices] IJournalActionsService journal)
     {
         if (await ForbidUnlessAsync(CapGenerate) is { } denied) return denied;
         if (await ForbidOutsidePerimeterAsync(dto.SubServiceId, CapGenerate) is { } outside) return outside;
         try
         {
             var result = await _planningService.GeneratePlanningFromConfigAsync(dto);
+            // v64 : journal d'actions — génération / régénération tracée en bloc.
+            await journal.EnregistrerAsync(new JournalEvenement(
+                "Planning",
+                dto.RegenerateFromDate is null ? "Génération" : "Régénération",
+                $"Planning de la semaine {result.WeekCode} — {result.SubServiceName}",
+                "WeeklyPlanning",
+                result.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Nouvelles: new Dictionary<string, string?>
+                {
+                    ["Agents planifiés"] = result.Assignments.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["Statut"] = result.Status == "Published" ? "Validé (publié)" : "À valider (brouillon)",
+                    ["Régénéré à partir du"] = dto.RegenerateFromDate?.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture),
+                },
+                Details: string.IsNullOrWhiteSpace(dto.RepublishReason) ? null : "Motif : " + dto.RepublishReason));
             return Ok(result);
         }
         catch (SupervisorModesPendingException ex)

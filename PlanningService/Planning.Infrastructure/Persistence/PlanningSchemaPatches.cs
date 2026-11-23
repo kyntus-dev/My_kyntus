@@ -1247,6 +1247,57 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>
+    /// v64 : type d'employé explicite (salarié / sous-traitant), carte d'immatriculation et passeport.
+    /// Les fiches existantes reçoivent le type qu'elles affichaient déjà (sous-traitant si une carte
+    /// d'auto-entrepreneur est renseignée) : rien ne change à l'écran, la règle devient explicite.
+    /// </summary>
+    public static async Task EnsureTypeEmployeAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "TypeEmploye" character varying(20) NULL;
+            ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "CarteImmatriculation" character varying(32) NULL;
+            ALTER TABLE user_hr_profiles ADD COLUMN IF NOT EXISTS "NumeroPasseport" character varying(32) NULL;
+            UPDATE user_hr_profiles
+               SET "TypeEmploye" = CASE WHEN coalesce(trim("NumeroCarteAutoentrepreneur"), '') <> ''
+                                        THEN 'SOUS_TRAITANT' ELSE 'SALARIE' END
+             WHERE "TypeEmploye" IS NULL;
+            """,
+            ct);
+    }
+
+    /// <summary>v64 : journal d'actions (Audit et conformité).</summary>
+    public static async Task EnsureJournalActionsAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS journal_actions (
+                "Id" bigserial PRIMARY KEY,
+                "Horodatage" timestamp with time zone NOT NULL DEFAULT now(),
+                "ActeurId" integer NULL,
+                "ActeurGuid" uuid NULL,
+                "ActeurNom" character varying(160) NOT NULL DEFAULT '',
+                "ActeurRole" character varying(60) NULL,
+                "Module" character varying(60) NOT NULL,
+                "Operation" character varying(60) NOT NULL,
+                "Entite" character varying(60) NOT NULL,
+                "EntiteId" character varying(80) NULL,
+                "Element" character varying(400) NOT NULL DEFAULT '',
+                "CibleUserId" integer NULL,
+                "AnciennesValeurs" text NULL,
+                "NouvellesValeurs" text NULL,
+                "Details" character varying(2000) NULL,
+                "Source" character varying(200) NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_journal_actions_Horodatage" ON journal_actions ("Horodatage");
+            CREATE INDEX IF NOT EXISTS "IX_journal_actions_Module_Horodatage" ON journal_actions ("Module", "Horodatage");
+            CREATE INDEX IF NOT EXISTS "IX_journal_actions_ActeurId" ON journal_actions ("ActeurId");
+            CREATE INDEX IF NOT EXISTS "IX_journal_actions_CibleUserId" ON journal_actions ("CibleUserId");
+            """,
+            ct);
+    }
+
     /// <summary>v31 : types de manquement et d'élément variable de paie ajoutés à la main.</summary>
     public static async Task EnsurePresenceTypesAsync(AppDbContext db, CancellationToken ct = default)
     {

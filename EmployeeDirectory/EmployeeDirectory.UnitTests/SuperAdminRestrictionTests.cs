@@ -139,6 +139,10 @@ public class SuperAdminRestrictionTests : IDisposable
     [InlineData("GET", "/api/parrainage/admin/export", "parrainage.module", "Export")]
     [InlineData("PUT", "/api/prime/admin/rbac/roles", "prime.rbac", "Configure")]
     [InlineData("GET", "/api/auth/audit/access", "audit.access-history", "View")]
+    [InlineData("GET", "/api/planning/journal", "audit.actions", "View")]
+    [InlineData("GET", "/api/planning/journal/export", "audit.actions", "View")]
+    [InlineData("POST", "/api/planning/journal/evenements", null, null)]
+    [InlineData("GET", "/api/Conges/droits", null, null)]
     [InlineData("POST", "/api/auth/login", null, null)]
     public void Route_map_resolves_expected_feature(string method, string path, string? screen, string? verb)
     {

@@ -30,6 +30,10 @@ public static class DependencyInjection
         bool isTesting)
     {
         services.AddSingleton<SlowQueryCommandInterceptor>();
+        // v64 : journal d'actions (Audit et conformité).
+        services.AddHttpContextAccessor();
+        services.AddSingleton<Planning.Infrastructure.Persistence.JournalActions.JournalActionsInterceptor>();
+        services.AddScoped<IJournalActionsService, JournalActionsService>();
         if (isTesting)
         {
             services.AddDbContext<AppDbContext>((sp, options) =>
@@ -44,7 +48,9 @@ public static class DependencyInjection
             services.AddDbContext<AppDbContext>((sp, options) =>
             {
                 options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"));
-                options.AddInterceptors(sp.GetRequiredService<SlowQueryCommandInterceptor>());
+                options.AddInterceptors(
+                    sp.GetRequiredService<SlowQueryCommandInterceptor>(),
+                    sp.GetRequiredService<Planning.Infrastructure.Persistence.JournalActions.JournalActionsInterceptor>());
             });
         }
 
@@ -215,6 +221,7 @@ public static class DependencyInjection
                 x.AddConsumer<TrainingQuizResultReadyConsumer>();
                 x.AddConsumer<CatalogEnrollmentDeadlineReminderConsumer>();
                 x.AddConsumer<CatalogFormationAvailableConsumer>();
+                x.AddConsumer<JournalActionConsumer>();
 
                 x.UsingRabbitMq((ctx, cfg) =>
                 {
@@ -238,6 +245,12 @@ public static class DependencyInjection
                     {
                         e.UseMessageRetry(r => r.Intervals(1000, 5000, 15000));
                         e.ConfigureConsumer<NotificationEmailRequestedConsumer>(ctx);
+                    });
+                    // v64 : journal d'actions (droits d'accès publiés par l'annuaire…).
+                    cfg.ReceiveEndpoint("planning-journal-actions", e =>
+                    {
+                        e.UseMessageRetry(r => r.Intervals(1000, 5000, 15000));
+                        e.ConfigureConsumer<JournalActionConsumer>(ctx);
                     });
                     cfg.ReceiveEndpoint("planning-org-structure", e =>
                         e.ConfigureConsumer<OrgStructureConsumer>(ctx));

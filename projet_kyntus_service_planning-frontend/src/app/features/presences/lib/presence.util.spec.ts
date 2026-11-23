@@ -5,6 +5,7 @@ import {
   encadrementDans,
   familleCode,
   raisonCaseVide,
+  estHorsContrat,
   filtrerAgents,
   joursDeLaPeriode,
   libellesUniques,
@@ -282,5 +283,23 @@ describe('cases vides du tableau (v63.3)', () => {
 
   it('signale un pointage sans planning publié', () => {
     expect(raisonCaseVide(j({ statut: 'SansPlanning' }))?.raison).toContain('planning publié');
+  });
+});
+
+describe('jour hors contrat (v64)', () => {
+  const jour = (p: Partial<PresenceJourDto>): PresenceJourDto => ({
+    jour: '2026-11-02', code: null, auto: true, codeAuto: null, statut: 'HorsContrat', planning: null, arrivee: null, depart: null,
+    pointages: [], retardEntreeMinutes: 0, retardPauseMinutes: 0, retardAutorise: false, retardPauseAutorise: false,
+    motifAutorisation: null, retardRetenuMinutes: 0, retardAutoriseMinutes: 0, manquePointage: false, commentaire: null,
+    modifiePar: null, modifieLe: null, absencePartielle: false, ...p,
+  } as PresenceJourDto);
+
+  it('grise la case sans repère et la rend non saisissable', () => {
+    expect(estHorsContrat(jour({}))).toBe(true);
+    expect(raisonCaseVide(jour({}))?.marque).toBe('');
+    expect(raisonCaseVide(jour({}))?.raison).toContain('Hors contrat');
+    // Une saisie existante (historique) reste affichée et n'est pas grisée.
+    expect(estHorsContrat(jour({ code: 'AM', auto: false }))).toBe(false);
+    expect(estHorsContrat(jour({ statut: 'Repos' }))).toBe(false);
   });
 });

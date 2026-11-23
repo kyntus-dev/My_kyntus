@@ -252,6 +252,9 @@ public static class AdminFeatureRouteMap
         yield return R("/api/planning/regimes-horaires", "pointage.regimes", Methods.Write, "Configure");
 
         // ───────────── Présences et paie ─────────────
+        // v64 : journal d'actions (consultation, export) ; déclaration d'un export fait dans le navigateur.
+        yield return R("/api/planning/journal/evenements", Core, Methods.Write);
+        yield return R("/api/planning/journal", "audit.actions", Methods.Read, "View");
         yield return R("/api/planning/presences/paie", "presences.export", Methods.Read, "View");
         yield return R("/api/planning/presences/paie", "presences.export", Methods.Write, "Validate");
         yield return R("/api/planning/presences/catalogues", Core, Methods.Read);
@@ -292,8 +295,11 @@ public static class AdminFeatureRouteMap
         yield return R("/api/conges/saturday-slot", "conges.validation", Methods.All, "Act");
         yield return R("/api/conges/absence-days", "conges.validation", Methods.All, "Act");
         // Planning : DELETE /api/Conges/{id} (absence saisie dans le planning).
-        yield return R("/api/conges", "conges.self|conges.equipe|conges.validation", Methods.Read, "View");
-        yield return R("/api/conges", "conges.self|conges.validation", Methods.Write);
+        // v64 : rubriques « Absences du planning » (consulter / ajouter / modifier).
+        yield return R("/api/conges/droits", Core, Methods.Read);
+        yield return R("/api/conges/user", "conges.planning|conges.validation", Methods.Read, "View");
+        yield return R("/api/conges", "conges.self|conges.equipe|conges.validation|conges.planning", Methods.Read, "View");
+        yield return R("/api/conges", "conges.self|conges.validation|conges.planning-ajout|conges.planning-modification", Methods.Write);
 
         // ───────────── Documentation ─────────────
         yield return R("/api/documentation/data/admin/ai-api-keys", "documentation.admin-config", Methods.Read, "View");

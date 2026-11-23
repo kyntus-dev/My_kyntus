@@ -78,7 +78,7 @@ export const routes: Routes = [
         canActivate: [AuthGuard],
         data: {
           roles: [KyntusRoleNames.Admin, KyntusRoleNames.Audit],
-          capabilities: ['audit.dashboard', 'audit.journal', 'audit.access-history', 'audit.anomalies', 'audit.reporting'],
+          capabilities: ['audit.dashboard', 'audit.journal', 'audit.actions', 'audit.access-history', 'audit.anomalies', 'audit.reporting'],
         },
         loadComponent: () =>
           import('./features/platform/pages/audit-root.component')
@@ -420,7 +420,8 @@ export const routes: Routes = [
       {
         path: 'absences-planning',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.congesManager, capability: 'conges.validation' },
+        // v64 : rubrique « Absences du planning — consulter » (Accès par rôle, par rôle et par compte).
+        data: { roles: ROLE_SETS.congesManager, capabilities: ['conges.planning'] },
         loadComponent: () =>
           import('./features/planning/pages/conge-manager/conge-manager.component')
             .then(m => m.CongeManagerComponent),

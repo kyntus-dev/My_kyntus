@@ -123,3 +123,25 @@ describe('export des employés — colonnes du fichier RH de référence (v63)',
     expect(inactif.champsManquants).toBe('');
   });
 });
+
+describe('export des employés — type d’employé (v64)', () => {
+  const perimetre = {} as UserOrgPerimeterView;
+  const base = {
+    id: 11, guid: 'g11', roleId: 1, roleName: 'Pilote', managedSubServices: [], managedServices: [],
+    firstName: 'Beta', lastName: 'FICTIF', email: 'fictif@kyntus.com', hireDate: '2024-01-02',
+    isActive: true, createdAt: '2024-01-02', level: 1,
+  };
+
+  it('exporte le type et les pièces des sous-traitants', () => {
+    const [st, sal, legacy] = buildEmployeeExportRows([
+      { ...base, hrProfile: { typeEmploye: 'SOUS_TRAITANT', numeroCarteAutoentrepreneur: '000000000000002',
+        carteImmatriculation: 'XX0000002', numeroPasseport: 'P0000002', dateEntree: '2024-01-02' } } as User,
+      { ...base, id: 12, lastName: 'GAMMA', hrProfile: { typeEmploye: 'SALARIE' } } as User,
+      { ...base, id: 13, lastName: 'OMEGA', hrProfile: { numeroCarteAutoentrepreneur: '000000000000003' } } as User,
+    ], () => perimetre, 'all');
+    expect(st).toMatchObject({ typeEmploye: 'Sous-traitant', carteAutoentrepreneur: '000000000000002',
+      carteImmatriculation: 'XX0000002', numeroPasseport: 'P0000002' });
+    expect(sal.typeEmploye).toBe('Salarié');
+    expect(legacy.typeEmploye).toBe('Sous-traitant');
+  });
+});

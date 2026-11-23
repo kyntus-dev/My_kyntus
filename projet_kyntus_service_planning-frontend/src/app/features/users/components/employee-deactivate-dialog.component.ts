@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BodyPortalDirective } from '../../../shared/directives/body-portal.directive';
+import { KyDateOuvreeComponent, estDimancheIso } from '../../../shared/components/ui/ky-date-ouvree.component';
 
 /** Date du jour au format AAAA-MM-JJ (heure locale), valeur par défaut de la date de sortie. */
 export function todayIsoDate(now: Date = new Date()): string {
@@ -15,7 +16,7 @@ export function todayIsoDate(now: Date = new Date()): string {
 @Component({
   selector: 'app-employee-deactivate-dialog',
   standalone: true,
-  imports: [FormsModule, BodyPortalDirective],
+  imports: [FormsModule, BodyPortalDirective, KyDateOuvreeComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (open) {
@@ -31,7 +32,7 @@ export function todayIsoDate(now: Date = new Date()): string {
           </ul>
           <label class="ky-deactivate-date">
             <span>Date de sortie</span>
-            <input type="date" class="ky-input" [(ngModel)]="dateSortie" [max]="maxDate" />
+            <app-ky-date-ouvree ariaLabel="Date de sortie" [requis]="true" [max]="maxDate" [(ngModel)]="dateSortie" />
           </label>
           <div class="ky-deactivate-actions">
             <button type="button" class="ky-btn-secondary" [disabled]="busy" (click)="cancel.emit()">Annuler</button>
@@ -60,11 +61,19 @@ export class EmployeeDeactivateDialogComponent implements OnChanges {
   @Output() confirmed = new EventEmitter<string>();
   @Output() cancel = new EventEmitter<void>();
 
-  dateSortie = todayIsoDate();
+  dateSortie = jourOuvreAuPlusTard(todayIsoDate());
   readonly maxDate = todayIsoDate(new Date(Date.now() + 365 * 86_400_000));
 
   ngOnChanges(changes: SimpleChanges): void {
     // Date du jour proposée à chaque ouverture.
-    if (changes['open'] && this.open) this.dateSortie = todayIsoDate();
+    // v64 : jamais un dimanche — le dimanche, le samedi précédent est proposé.
+    if (changes['open'] && this.open) this.dateSortie = jourOuvreAuPlusTard(todayIsoDate());
   }
+}
+
+/** v64 : la date elle-même, ou la veille si elle tombe un dimanche. */
+function jourOuvreAuPlusTard(iso: string): string {
+  if (!estDimancheIso(iso)) return iso;
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
 }

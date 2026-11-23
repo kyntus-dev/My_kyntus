@@ -20,7 +20,8 @@ public static class EmployeeImportHrProfileMapper
         "dateNaissance", "villeNaissance", "nationalite", "numeroCarteAutoentrepreneur", "sexe", "situationFamiliale", "nombreEnfants",
         "cin", "adresse", "telephone1", "telephoneUrgence", "relationUrgence", "rib",
         "immatriculationInterne", "immatriculationCnss", "dateEntree", "dateAnciennete", "dateSortie",
-        "dateEvolutionPoste", "ancienPoste", "ancienService", "poste", "numeroBox", "niveauScolaire", "intitulesEtudes",
+        "dateEvolutionPoste", "ancienPoste", "ancienService", "poste", "numeroBox", "typeEmploye", "carteImmatriculation",
+        "numeroPasseport", "niveauScolaire", "intitulesEtudes",
         "enFormation", "dateDebutFormation", "dateFinFormationPrevue", "niveauExpertiseMetier"
     ];
 
@@ -308,6 +309,16 @@ public static class EmployeeImportHrProfileMapper
         if (mapped.ContainsKey("numeroBox"))
             profile.NumeroBox = TrimOrNull(mapped, "numeroBox");
 
+        // v64 — type d'employé (une valeur non reconnue ne remplace pas la valeur connue) et pièces d'identité.
+        if (mapped.ContainsKey("typeEmploye"))
+            profile.TypeEmploye = TypesEmploye.Normaliser(mapped["typeEmploye"]) ?? profile.TypeEmploye;
+
+        if (mapped.ContainsKey("carteImmatriculation"))
+            profile.CarteImmatriculation = TrimOrNull(mapped, "carteImmatriculation");
+
+        if (mapped.ContainsKey("numeroPasseport"))
+            profile.NumeroPasseport = TrimOrNull(mapped, "numeroPasseport");
+
         if (mapped.ContainsKey("contractType"))
             profile.TypeContrat = TrimOrNull(mapped, "contractType") ?? profile.TypeContrat;
 
@@ -347,12 +358,20 @@ public static class EmployeeImportHrProfileMapper
         if (!mapped.ContainsKey("nationalite") && !mapped.ContainsKey("numeroCarteAutoentrepreneur"))
             return;
 
-        var nationalite = profile.Nationalite;
-        if (string.IsNullOrWhiteSpace(nationalite) && mapped.TryGetValue("nationalite", out var raw))
-            nationalite = NormalizeNationalite(raw);
-
-        if (string.IsNullOrWhiteSpace(nationalite) || !RequiresAutoentrepreneur(nationalite))
+        // v64 : le type d'employé décide. Un sous-traitant doit avoir sa carte d'auto-entrepreneur ;
+        // un salarié étranger n'en a pas besoin. Sans type connu, l'ancienne règle (nationalité) s'applique.
+        var type = TypesEmploye.Normaliser(profile.TypeEmploye);
+        if (type == TypesEmploye.Salarie)
             return;
+        if (type is null)
+        {
+            var nationalite = profile.Nationalite;
+            if (string.IsNullOrWhiteSpace(nationalite) && mapped.TryGetValue("nationalite", out var raw))
+                nationalite = NormalizeNationalite(raw);
+
+            if (string.IsNullOrWhiteSpace(nationalite) || !RequiresAutoentrepreneur(nationalite))
+                return;
+        }
 
         var hasCarte = !string.IsNullOrWhiteSpace(profile.NumeroCarteAutoentrepreneur)
             || mapped.TryGetValue("numeroCarteAutoentrepreneur", out var carteRaw)
@@ -608,6 +627,9 @@ public static class EmployeeImportHrProfileMapper
             AncienPoste = source.AncienPoste,
             AncienService = source.AncienService,
             Poste = source.Poste,
+            TypeEmploye = source.TypeEmploye,
+            CarteImmatriculation = source.CarteImmatriculation,
+            NumeroPasseport = source.NumeroPasseport,
             TypeContrat = source.TypeContrat,
             NumeroBox = source.NumeroBox,
             NiveauScolaire = source.NiveauScolaire,
@@ -646,6 +668,9 @@ public static class EmployeeImportHrProfileMapper
             && a.AncienPoste == b.AncienPoste
             && a.AncienService == b.AncienService
             && a.Poste == b.Poste
+            && a.TypeEmploye == b.TypeEmploye
+            && a.CarteImmatriculation == b.CarteImmatriculation
+            && a.NumeroPasseport == b.NumeroPasseport
             && a.TypeContrat == b.TypeContrat
             && a.NumeroBox == b.NumeroBox
             && a.NiveauScolaire == b.NiveauScolaire

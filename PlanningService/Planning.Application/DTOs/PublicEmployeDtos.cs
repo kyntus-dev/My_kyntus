@@ -1,3 +1,5 @@
+using Planning.Domain.Entities;
+
 namespace Planning.Application.DTOs;
 
 /// <summary>
@@ -73,6 +75,10 @@ public sealed class PublicEmployeDto
     public string? Poste { get; set; }
     public string? TypeContrat { get; set; }
     public string? NumeroBox { get; set; }
+    /// <summary>v64 : « Salarié » ou « Sous-traitant » (type de la fiche employé).</summary>
+    public string TypeEmploye { get; set; } = TypesEmploye.LibelleSalarie;
+    public string? CarteImmatriculation { get; set; }
+    public string? NumeroPasseport { get; set; }
     public DateTime CreeLe { get; set; }
 
     // Formation

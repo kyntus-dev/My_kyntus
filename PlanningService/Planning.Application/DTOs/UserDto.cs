@@ -101,6 +101,15 @@ public class UserHrProfileDto
     public string? TypeContrat { get; set; }
     /// <summary>v63 : boîte d'archivage du dossier papier (« N° BOX »).</summary>
     public string? NumeroBox { get; set; }
+    /// <summary>
+    /// v64 : « SALARIE » ou « SOUS_TRAITANT ». Toujours renseigné en lecture (déduit pour une fiche
+    /// ancienne) ; en écriture, null = inchangé.
+    /// </summary>
+    public string? TypeEmploye { get; set; }
+    /// <summary>v64 : N° de carte d'immatriculation (résidents étrangers). null = inchangé, "" = effacé.</summary>
+    public string? CarteImmatriculation { get; set; }
+    /// <summary>v64 : N° de passeport. null = inchangé, "" = effacé.</summary>
+    public string? NumeroPasseport { get; set; }
     public string? NiveauScolaire { get; set; }
     public string? IntitulesEtudes { get; set; }
     public bool EnFormation { get; set; }

@@ -165,6 +165,7 @@ export const MICROSERVICES: Microservice[] = [
     children: [
       { label: 'Tableau de bord', route: '/audit?section=dashboard', platformAuditSection: 'dashboard', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.dashboard' },
       { label: 'Journal', route: '/audit?section=journal', platformAuditSection: 'journal', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.journal' },
+      { label: 'Journal d’actions', route: '/audit?section=actions', platformAuditSection: 'actions', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.actions' },
       { label: 'Historique d’accès', route: '/audit?section=access-history', platformAuditSection: 'access-history', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.access-history' },
       { label: 'Anomalies', route: '/audit?section=anomalies', platformAuditSection: 'anomalies', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.anomalies' },
       { label: 'Reporting', route: '/audit?section=reporting', platformAuditSection: 'reporting', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.reporting' },
@@ -319,7 +320,7 @@ export const MICROSERVICES: Microservice[] = [
       { label: 'Congés de ma cellule', route: '/conges/ma-cellule', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'conges.self' },
       { label: 'Valider les congés', route: '/conges/validation', roles: [...MANAGER_ROLES, 'Superviseur'], hat: 'team', capability: 'conges.validation' },
       { label: "Congés de l'équipe", route: '/conges/equipe', roles: ROLE_SETS.congesEquipe, hat: 'team', ouvertureIam: 'conges.equipe' },
-      { label: 'Absences', route: '/absences-planning', roles: MANAGER_ROLES, hat: 'team', capability: 'conges.validation' },
+      { label: 'Absences', route: '/absences-planning', roles: MANAGER_ROLES, hat: 'team', capability: 'conges.planning' },
       { label: 'Historique des congés', route: '/conges/historique', roles: MANAGER_ROLES, hat: 'team', capability: 'conges.history' },
       { label: 'Quotas cellule / service', route: '/conges/quotas-service', roles: ['Superviseur', 'Admin', 'RP', 'Chef de projet'], hat: 'team', capability: 'conges.quotas' },
       { label: 'Périodes interdites', route: '/conges/periodes-interdites', roles: ADMIN_RH, hat: 'team', capability: 'conges.periodes' },

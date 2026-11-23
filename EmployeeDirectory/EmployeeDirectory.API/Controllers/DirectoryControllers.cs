@@ -709,13 +709,21 @@ public class IamUserAccessController(IIamUserAccessService access) : ControllerB
         Guid subjectId,
         [FromBody] UserAccessUpdateRequest body,
         [FromServices] IIamAdminRestrictionService restrictions,
+        [FromServices] EmployeeDirectory.Infrastructure.Persistence.DirectoryDbContext db,
+        [FromServices] Kyntus.Messaging.Outbox.IOutboxWriter outbox,
+        [FromServices] ILogger<IamUserAccessController> logger,
         CancellationToken ct)
     {
         var refus = await IamCaller.GuardAsync(User, restrictions, (body.Changes ?? []).Select(c => (body.Role, c.Action)), ct);
         if (refus is not null) return refus;
         try
         {
-            return Ok(await access.UpdateAsync(subjectId, body, User.GetEmail() ?? User.Identity?.Name, ct));
+            UserAccessDto? avant = null;
+            try { avant = await access.GetAsync(subjectId, body.Role ?? "Employee", ct); } catch { /* journal seulement */ }
+            var resultat = await access.UpdateAsync(subjectId, body, User.GetEmail() ?? User.Identity?.Name, ct);
+            // v64 : journal d'actions (Audit et conformité).
+            await JournalDroitsPublisher.PublierCompteAsync(User, db, outbox, subjectId, body, avant, logger, ct);
+            return Ok(resultat);
         }
         catch (ArgumentException ex)
         {
@@ -820,13 +828,20 @@ public class IamController(IMediator mediator) : ControllerBase
     public async Task<ActionResult<IamPermissionRowDto>> Upsert(
         [FromBody] UpsertIamPermissionRequest body,
         [FromServices] IIamAdminRestrictionService restrictions,
+        [FromServices] EmployeeDirectory.Infrastructure.Persistence.DirectoryDbContext db,
+        [FromServices] Kyntus.Messaging.Outbox.IOutboxWriter outbox,
+        [FromServices] ILogger<IamController> logger,
         CancellationToken ct)
     {
         var refus = await IamCaller.GuardAsync(User, restrictions, [(body.Role, body.Action)], ct);
         if (refus is not null) return refus;
         try
         {
-            return Ok(await mediator.Send(new UpsertIamPermissionCommand(body), ct));
+            var avant = await JournalDroitsPublisher.EtatRoleAsync(db, body, ct);
+            var resultat = await mediator.Send(new UpsertIamPermissionCommand(body), ct);
+            // v64 : journal d'actions (Audit et conformité).
+            await JournalDroitsPublisher.PublierRolesAsync(User, db, outbox, [(body, avant)], logger, ct);
+            return Ok(resultat);
         }
         catch (ArgumentException ex)
         {
@@ -839,13 +854,22 @@ public class IamController(IMediator mediator) : ControllerBase
     public async Task<ActionResult<object>> UpsertBulk(
         [FromBody] UpsertIamPermissionsBulkRequest body,
         [FromServices] IIamAdminRestrictionService restrictions,
+        [FromServices] EmployeeDirectory.Infrastructure.Persistence.DirectoryDbContext db,
+        [FromServices] Kyntus.Messaging.Outbox.IOutboxWriter outbox,
+        [FromServices] ILogger<IamController> logger,
         CancellationToken ct)
     {
         var refus = await IamCaller.GuardAsync(User, restrictions, (body.Items ?? []).Select(i => (i.Role, i.Action)), ct);
         if (refus is not null) return refus;
         try
         {
-            var upserted = await mediator.Send(new UpsertIamPermissionsBulkCommand(body.Items ?? []), ct);
+            var demandes = body.Items ?? [];
+            var avant = new List<(UpsertIamPermissionRequest, bool?)>(demandes.Count);
+            foreach (var d in demandes)
+                avant.Add((d, await JournalDroitsPublisher.EtatRoleAsync(db, d, ct)));
+            var upserted = await mediator.Send(new UpsertIamPermissionsBulkCommand(demandes), ct);
+            // v64 : journal d'actions (Audit et conformité).
+            await JournalDroitsPublisher.PublierRolesAsync(User, db, outbox, avant, logger, ct);
             return Ok(new { upserted });
         }
         catch (ArgumentException ex)

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { JournalActionsService } from '../../../core/services/journal-actions.service';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
@@ -51,6 +52,7 @@ export class PresencesExportComponent implements OnInit {
   private readonly annuaire = inject(DirectoryFacadeService);
   private readonly toast = inject(KyntusToastService);
   private readonly session = inject(KyntusSessionService);
+  private readonly journalActions = inject(JournalActionsService);
 
   readonly codesDeduits = CODES_DEDUITS;
   readonly codesNonDeduits = CODES_NON_DEDUITS;
@@ -369,6 +371,11 @@ export class PresencesExportComponent implements OnInit {
     try {
       await telechargerExportPaie(lignes, g.du.slice(0, 10), g.au.slice(0, 10), this.mois() ?? undefined);
       this.toast.success(`Export paie : ${lignes.length} ligne(s).`);
+      // v64 : journal d'actions.
+      this.journalActions.declarerExport(
+        `Export paie du ${g.du.slice(0, 10).split('-').reverse().join('/')} au ${g.au.slice(0, 10).split('-').reverse().join('/')}`,
+        `${lignes.length} ligne(s)`,
+      );
     } catch {
       this.toast.error('Génération du fichier impossible.');
     } finally {

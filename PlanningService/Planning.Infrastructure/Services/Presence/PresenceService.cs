@@ -151,6 +151,23 @@ public sealed class PresenceService(
                     + "(droit « Présences des superviseurs et référents › Modifier »).", horsPerimetre: true);
         }
 
+        // v64 : hors contrat (avant l'entrée réelle, après la sortie effective), aucune présence ni absence.
+        if (code is not null || request.AbsencePartielle || request.RetardAutorise || request.RetardPauseAutorise)
+        {
+            var embaucheCible = await db.Users.AsNoTracking()
+                .Where(u => u.Id == request.UserId)
+                .Select(u => (DateTime?)u.HireDate)
+                .FirstOrDefaultAsync(ct);
+            var profilCible = await db.UserHrProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == request.UserId, ct);
+            var contratCible = ContratPeriode.De(profilCible, embaucheCible);
+            for (var jourHc = request.Jour; jourHc <= fin; jourHc = jourHc.AddDays(1))
+            {
+                if (contratCible.MotifHorsContrat(jourHc) is string motifHc)
+                    throw new PresenceRefusException(
+                        $"Journée du {jourHc:dd/MM/yyyy} hors contrat ({motifHc}) : aucune présence ni absence ne peut y être saisie.");
+            }
+        }
+
         var commentaire = Nettoyer(request.Commentaire, 1000);
         var motif = Nettoyer(request.MotifAutorisation, 300);
         var auteur = me is null ? viewer.Email : NomCourt(me);
@@ -308,6 +325,7 @@ public sealed class PresenceService(
                 PoleId = u.SubService != null ? u.SubService.Service.Floor.PrimePoleId : null,
                 Role = u.Role != null ? u.Role.Name : null,
                 u.Guid,
+                u.HireDate,
             })
             .ToDictionaryAsync(u => u.Id, ct);
         var profils = await db.UserHrProfiles.AsNoTracking()
@@ -361,8 +379,14 @@ public sealed class PresenceService(
         {
             var org = users.GetValueOrDefault(s.UserId);
             var profil = profils.GetValueOrDefault(s.UserId);
-            var jours = s.Jours.Select(j =>
+            // v64 : période sous contrat. Hors contrat, une journée sans pointage ni saisie n'a ni
+            // présence ni absence (case grisée) ; un pointage ou une saisie existants restent affichés.
+            var contrat = ContratPeriode.De(profil, org?.HireDate);
+            var jours = s.Jours.Select(jBrut =>
             {
+                var j = !contrat.Couvre(jBrut.Jour) && jBrut.Pointages.Count == 0
+                    ? jBrut with { Statut = PointageJourStatuts.HorsContrat }
+                    : jBrut;
                 var conge = congesParAgent.TryGetValue(s.UserId, out var siens)
                     ? siens.FirstOrDefault(c => c.StartDate <= j.Jour && c.EndDate >= j.Jour)
                     : null;
@@ -407,14 +431,16 @@ public sealed class PresenceService(
             result.Add(new PresenceAgentDto(
                 s.UserId,
                 s.Collaborateur,
-                string.IsNullOrWhiteSpace(profil?.NumeroCarteAutoentrepreneur) ? "Salarié" : "Sous-traitant",
+                // v64 : type de la fiche employé (même règle partout : fiche, présences, paie, exports).
+                TypesEmploye.Libelle(profil),
                 org?.Pole,
                 org?.PoleId,
                 org?.Cellule,
                 org?.CelluleId,
                 org?.Service ?? s.Cellule,
-                profil?.DateEntree,
-                profil?.DateSortie,
+                // v64 : bornes du contrat (entrée réelle, sortie effective), mêmes que le planning et la paie.
+                contrat.Entree,
+                contrat.Sortie,
                 jours,
                 Totaux(jours),
                 ADejaEteEnFormation(profil) ? profil!.DateDebutFormation ?? profil.DateEntree : null,

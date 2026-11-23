@@ -1,4 +1,5 @@
 import type { User, UserHrProfile } from '../../features/users/users-module';
+import { typeEmployeLibelle } from './type-employe.util';
 import { orgPerimeterSummary, type UserOrgPerimeterView } from '../org/user-org-perimeter';
 import {
   HR_EDUCATION_LEVEL_OPTIONS,
@@ -128,7 +129,13 @@ export function buildCompleteHrProfileDisplayRows(profile: UserHrProfile | null 
     { label: 'Date de naissance', value: dateDisplay(p.dateNaissance) },
     { label: 'Ville de naissance', value: hrDisplayValue(p.villeNaissance) },
     { label: 'Nationalité', value: nationaliteDisplay(p.nationalite) },
-    { label: 'N° carte autoentrepreneur', value: hrDisplayValue(p.numeroCarteAutoentrepreneur) },
+    { label: "Type d'employé", value: typeEmployeLibelle(p.typeEmploye, p.numeroCarteAutoentrepreneur) },
+    {
+      label: "N° registre national (carte auto-entrepreneur)",
+      value: hrDisplayValue(p.numeroCarteAutoentrepreneur),
+    },
+    { label: "Carte d'immatriculation", value: hrDisplayValue(p.carteImmatriculation) },
+    { label: 'N° passeport', value: hrDisplayValue(p.numeroPasseport) },
     { label: 'Sexe', value: sexeDisplay(p.sexe) },
     { label: 'Situation familiale', value: situationFamilialeDisplay(p.situationFamiliale) },
     {

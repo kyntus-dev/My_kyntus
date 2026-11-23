@@ -17,7 +17,17 @@ namespace Planning.Application.Employes;
 public static partial class FicheReference
 {
     /// <summary>Colonne du fichier : clé interne, intitulé du fichier, variantes d'intitulé acceptées.</summary>
-    public sealed record Colonne(string Cle, string Intitule, IReadOnlyList<string> Variantes);
+    /// <summary>
+    /// v64 : <paramref name="Profil"/> dit dans quel fichier la colonne est attendue — commune aux deux,
+    /// propre au fichier des salariés, propre au fichier des entrepreneurs (sous-traitants), ou facultative.
+    /// Les colonnes « manquantes » ne sont signalées que pour le profil du fichier lu.
+    /// </summary>
+    public sealed record Colonne(string Cle, string Intitule, IReadOnlyList<string> Variantes, string Profil = ProfilCommun);
+
+    public const string ProfilCommun = "commun";
+    public const string ProfilSalaries = "salaries";
+    public const string ProfilSousTraitants = "sousTraitants";
+    public const string ProfilFacultatif = "facultatif";
 
     public const string CleNumeroOrdre = "numeroOrdre";
     public const string CleAgents = "agents";
@@ -26,33 +36,67 @@ public static partial class FicheReference
     /// <summary>Colonnes dans l'ordre du fichier de référence.</summary>
     public static readonly IReadOnlyList<Colonne> Colonnes =
     [
-        new(CleNumeroOrdre, "N° Ordre", ["n ordre", "no ordre", "numero ordre", "numero d ordre", "n d ordre", "matricule"]),
+        new(CleNumeroOrdre, "N° Ordre", ["n ordre", "no ordre", "numero ordre", "numero d ordre", "n d ordre", "matricule",
+            // v64 : fichier des entrepreneurs (« Référence »).
+            "reference", "ref", "n reference", "numero reference"]),
         new(CleAgents, "Agents", ["agents", "agent", "salaries", "salarie", "nom et prenom", "nom prenom", "employe"]),
-        new("dateAnciennete", "Date d'ancienneté", ["date d anciennete", "date d anciennte", "date anciennete", "anciennete"]),
-        new("dateEmbauche", "Date d'Embauche", ["date d embauche", "date embauche", "embauche"]),
+        new("dateAnciennete", "Date d'ancienneté", ["date d anciennete", "date d anciennte", "date anciennete", "anciennete",
+            "date d ancienntee", "date d anciennetee", "date ancienntee"]),
+        // v64 : « Date d'Entrée » (fichier des entrepreneurs).
+        new("dateEntree", "Date d'Entrée", ["date d entree", "date entree", "entree", "date d integration", "date integration"], ProfilSousTraitants),
+        new("dateEmbauche", "Date d'Embauche", ["date d embauche", "date embauche", "embauche"], ProfilSalaries),
         new("dateSortie", "Date de Sortie", ["date de sortie", "date sortie", "sortie"]),
-        new("poste", "Nomination de poste", ["nomination de poste", "nomination poste", "poste", "fonction", "intitule du poste"]),
-        new("typeContrat", "Type Contrat", ["type contrat", "type de contrat", "contrat"]),
+        new("poste", "Nomination de poste", ["nomination de poste", "nomination poste", "poste", "fonction", "intitule du poste"], ProfilSalaries),
+        new("typeContrat", "Type Contrat", ["type contrat", "type de contrat", "contrat"], ProfilSalaries),
         new("nationalite", "Nationalité", ["nationalite"]),
-        new("villeNaissance", "Ville de Naissance", ["ville de naissance", "ville naissance", "lieu de naissance"]),
+        new("villeNaissance", "Ville de Naissance", ["ville de naissance", "ville naissance", "lieu de naissance"], ProfilSalaries),
         new("sexe", "Sexe", ["sexe", "genre"]),
         new("situationFamiliale", "Situation Familiale", ["situation familiale", "situation de famille"]),
-        new("cin", "CIN", ["cin", "cni", "carte d identite"]),
-        new("immatriculationCnss", "N° d'Immatriculation", ["n d immatriculation", "n immatriculation", "numero d immatriculation", "immatriculation", "cnss", "n cnss"]),
+        new("cin", "CIN", ["cin", "cni", "carte d identite"], ProfilSalaries),
+        new("immatriculationCnss", "N° d'Immatriculation", ["n d immatriculation", "n immatriculation", "numero d immatriculation", "immatriculation", "cnss", "n cnss"], ProfilSalaries),
         new("dateNaissance", "Date de Naissance", ["date de naissance", "date naissance", "naissance"]),
         new("adresse", "Adresse", ["adresse", "domicile"]),
         new("telephone1", "TEL 1", ["tel 1", "tel1", "telephone 1", "telephone", "tel", "gsm"]),
         new("telephone2", "TEL 2", ["tel 2", "tel2", "telephone 2", "telephone urgence", "tel urgence"]),
-        new(CleBox, "N° BOX", ["n box", "no box", "numero box", "box"]),
+        new(CleBox, "N° BOX", ["n box", "no box", "numero box", "box"], ProfilSalaries),
+        // v64 : colonnes du fichier des entrepreneurs (sous-traitants) et type d'employé.
+        new("carteImmatriculation", "Carte d'Immatriculation", ["carte d immatriculation", "carte d immatricualation",
+            "carte immatriculation", "n carte d immatriculation", "carte de sejour", "carte de residence"], ProfilSousTraitants),
+        new("passeport", "N° Passeport", ["n passeport", "no passeport", "numero passeport", "n de passeport", "passeport"], ProfilSousTraitants),
+        new("registreNational", "N° d'inscription au registre national", ["n d inscription au registre national",
+            "n inscription au registre national", "n d inscription registre national", "inscription au registre national",
+            "registre national", "n registre national", "n carte auto entrepreneur", "carte auto entrepreneur",
+            "carte autoentrepreneur", "numero carte autoentrepreneur", "n carte autoentrepreneur"], ProfilSousTraitants),
+        new("typeEmploye", "Type d'employé", ["type d employe", "type employe", "type de salarie", "statut employe",
+            "type d agent", "salarie ou sous traitant"], ProfilFacultatif),
     ];
 
-    /// <summary>Champs exigés pour qu'une fiche d'employé actif soit complète.</summary>
+    /// <summary>Champs exigés pour qu'une fiche de salarié actif soit complète (fichier des salariés).</summary>
     public static readonly IReadOnlyList<string> ChampsObligatoires =
     [
         "immatriculationInterne", "dateAnciennete", "dateEmbauche", "poste", "typeContrat", "nationalite",
         "villeNaissance", "sexe", "situationFamiliale", "cin", "immatriculationCnss", "dateNaissance",
         "adresse", "telephone1",
     ];
+
+    /// <summary>
+    /// v64 : champs exigés pour un sous-traitant (fichier des entrepreneurs). Pas de CNSS, de type de
+    /// contrat ni de poste : à la place, l'inscription au registre national et une pièce d'identité
+    /// (CIN, carte d'immatriculation ou passeport : <see cref="ChampPieceIdentite"/>).
+    /// </summary>
+    public static readonly IReadOnlyList<string> ChampsObligatoiresSousTraitant =
+    [
+        "immatriculationInterne", "dateAnciennete", "dateEntree", "nationalite", "sexe", "situationFamiliale",
+        ChampPieceIdentite, "registreNational", "dateNaissance", "adresse", "telephone1",
+    ];
+
+    /// <summary>Champ virtuel : au moins une pièce d'identité (CIN, carte d'immatriculation ou passeport).</summary>
+    public const string ChampPieceIdentite = "pieceIdentite";
+    public const string LibellePieceIdentite = "Pièce d'identité (CIN, carte d'immatriculation ou passeport)";
+
+    /// <summary>Champs obligatoires selon le type d'employé de la fiche.</summary>
+    public static IReadOnlyList<string> ChampsObligatoiresPour(string typeEmploye) =>
+        typeEmploye == TypesEmploye.SousTraitant ? ChampsObligatoiresSousTraitant : ChampsObligatoires;
 
     // ── Normalisation ────────────────────────────────────────────────────────────────────────
 
@@ -88,6 +132,28 @@ public static partial class FicheReference
             if (NormaliserTexte(c.Intitule).ToLowerInvariant() == n || c.Variantes.Contains(n))
                 return c.Cle;
         return null;
+    }
+
+    /// <summary>
+    /// v64 : profil du fichier lu — « entrepreneurs » s'il porte plus de colonnes propres aux sous-traitants
+    /// que de colonnes propres aux salariés, sinon « salariés ».
+    /// </summary>
+    public static string ProfilFichier(IEnumerable<string> clesReconnues)
+    {
+        var cles = clesReconnues.ToHashSet(StringComparer.Ordinal);
+        int Nb(string profil) => Colonnes.Count(c => c.Profil == profil && cles.Contains(c.Cle));
+        return Nb(ProfilSousTraitants) > Nb(ProfilSalaries) ? ProfilSousTraitants : ProfilSalaries;
+    }
+
+    /// <summary>Colonnes attendues et absentes du fichier, selon son profil (les facultatives ne sont jamais signalées).</summary>
+    public static IReadOnlyList<string> ColonnesManquantes(IReadOnlyCollection<string> clesReconnues)
+    {
+        var profil = ProfilFichier(clesReconnues);
+        return Colonnes
+            .Where(c => c.Profil == ProfilCommun || c.Profil == profil)
+            .Where(c => !clesReconnues.Contains(c.Cle))
+            .Select(c => c.Intitule)
+            .ToList();
     }
 
     /// <summary>
@@ -264,6 +330,14 @@ public static partial class FicheReference
         public string? TelephoneUrgence { get; set; }
         public string? RelationUrgence { get; set; }
         public string? NumeroBox { get; set; }
+        /// <summary>v64 : « Date d'Entrée » (fichier des entrepreneurs).</summary>
+        public DateOnly? DateEntree { get; set; }
+        public string? CarteImmatriculation { get; set; }
+        public string? NumeroPasseport { get; set; }
+        /// <summary>v64 : N° d'inscription au registre national = N° de carte d'auto-entrepreneur.</summary>
+        public string? RegistreNational { get; set; }
+        /// <summary>v64 : type d'employé lu dans le fichier ou déduit de ses colonnes (null = inconnu).</summary>
+        public string? TypeEmploye { get; set; }
 
         /// <summary>Valeurs refusées (non appliquées) : à corriger dans le fichier.</summary>
         public List<string> Anomalies { get; } = [];
@@ -291,6 +365,9 @@ public static partial class FicheReference
             Adresse = LireTexte(V("adresse")),
             Telephone1 = LireTexte(V("telephone1")),
             NumeroBox = LireTexte(V(CleBox)),
+            CarteImmatriculation = LireTexte(V("carteImmatriculation"))?.Replace(" ", string.Empty).ToUpperInvariant(),
+            NumeroPasseport = LireTexte(V("passeport"))?.Replace(" ", string.Empty).ToUpperInvariant(),
+            RegistreNational = LireTexte(V("registreNational"))?.Replace(" ", string.Empty),
         };
 
         var nationalite = LireTexte(V("nationalite"));
@@ -313,6 +390,7 @@ public static partial class FicheReference
         Date("dateAnciennete", "Date d'ancienneté", d => r.DateAnciennete = d);
         Date("dateEmbauche", "Date d'embauche", d => r.DateEmbauche = d);
         Date("dateSortie", "Date de sortie", d => r.DateSortie = d);
+        Date("dateEntree", "Date d'entrée", d => r.DateEntree = d);
 
         // Date de naissance et n° d'immatriculation inversés (un nombre en naissance, une date en immatriculation).
         var naissanceBrute = V("dateNaissance");
@@ -348,10 +426,23 @@ public static partial class FicheReference
         r.TelephoneUrgence = numero;
         r.RelationUrgence = relation;
 
+        // v64 : type d'employé — colonne du fichier, sinon déduit : une inscription au registre national
+        // (carte d'auto-entrepreneur) désigne un sous-traitant ; un N° CNSS ou un type de contrat, un salarié.
+        var typeLu = LireTexte(V("typeEmploye"));
+        if (typeLu is not null)
+        {
+            r.TypeEmploye = TypesEmploye.Normaliser(typeLu);
+            if (r.TypeEmploye is null)
+                r.Anomalies.Add($"Type d'employé « {typeLu} » non reconnu (Salarié ou Sous-traitant attendu)");
+        }
+        r.TypeEmploye ??= r.RegistreNational is not null ? TypesEmploye.SousTraitant
+            : r.ImmatriculationCnss is not null || r.TypeContrat is not null ? TypesEmploye.Salarie
+            : null;
+
         // Cohérence entre dates.
         if (r.DateNaissance is DateOnly n)
         {
-            var reference = r.DateEmbauche ?? r.DateAnciennete ?? aujourdhui;
+            var reference = r.DateEmbauche ?? r.DateEntree ?? r.DateAnciennete ?? aujourdhui;
             var age = reference.Year - n.Year - (reference < n.AddYears(reference.Year - n.Year) ? 1 : 0);
             if (age is < 15 or > 75)
             {
@@ -359,7 +450,7 @@ public static partial class FicheReference
                 r.DateNaissance = null;
             }
         }
-        if (r.DateSortie is DateOnly s && (r.DateEmbauche ?? r.DateAnciennete) is DateOnly debut && s < debut)
+        if (r.DateSortie is DateOnly s && (r.DateEmbauche ?? r.DateEntree ?? r.DateAnciennete) is DateOnly debut && s < debut)
         {
             r.Anomalies.Add($"Date de sortie {s:dd/MM/yyyy} antérieure à l'embauche {debut:dd/MM/yyyy} : non appliquée");
             r.DateSortie = null;
@@ -386,6 +477,9 @@ public static partial class FicheReference
         r.TelephoneUrgence = Borne(r.TelephoneUrgence, 32, "TEL 2");
         r.RelationUrgence = Borne(r.RelationUrgence, 100, "Relation (TEL 2)");
         r.NumeroBox = Borne(r.NumeroBox, 40, "N° BOX");
+        r.CarteImmatriculation = Borne(r.CarteImmatriculation, 32, "Carte d'immatriculation");
+        r.NumeroPasseport = Borne(r.NumeroPasseport, 32, "N° de passeport");
+        r.RegistreNational = Borne(r.RegistreNational, 64, "N° d'inscription au registre national");
         return r;
     }
 
@@ -428,12 +522,24 @@ public static partial class FicheReference
         new("telephoneUrgence", "TEL 2 (urgence)", p => p.TelephoneUrgence, (p, v) => p.TelephoneUrgence = Vide(v), v => v.TelephoneUrgence),
         new("relationUrgence", "Relation (TEL 2)", p => p.RelationUrgence, (p, v) => p.RelationUrgence = Vide(v), v => v.RelationUrgence),
         new("numeroBox", "N° BOX", p => p.NumeroBox, (p, v) => p.NumeroBox = Vide(v), v => v.NumeroBox),
+        // v64 : fichier des entrepreneurs et type d'employé.
+        new("dateEntree", "Date d'entrée", p => D(p.DateEntree), (p, v) => p.DateEntree = VersDate(v), v => D(v.DateEntree)),
+        new("carteImmatriculation", "Carte d'immatriculation", p => p.CarteImmatriculation, (p, v) => p.CarteImmatriculation = Vide(v), v => v.CarteImmatriculation),
+        new("numeroPasseport", "N° de passeport", p => p.NumeroPasseport, (p, v) => p.NumeroPasseport = Vide(v), v => v.NumeroPasseport),
+        new("registreNational", "N° d'inscription au registre national (carte d'auto-entrepreneur)",
+            p => p.NumeroCarteAutoentrepreneur, (p, v) => p.NumeroCarteAutoentrepreneur = Vide(v), v => v.RegistreNational),
+        new("typeEmploye", "Type d'employé",
+            p => p.TypeEmploye is null ? null : TypesEmploye.LibelleDe(TypesEmploye.Code(p)),
+            (p, v) => p.TypeEmploye = TypesEmploye.Normaliser(v),
+            v => v.TypeEmploye is null ? null : TypesEmploye.LibelleDe(v.TypeEmploye)),
     ];
 
     /// <summary>Champs complétés seulement s'ils sont vides (jamais remplacés).</summary>
     public static readonly IReadOnlyList<Champ> ChampsSiVides =
     [
-        new("dateEntree", "Date d'entrée", p => D(p.DateEntree), (p, v) => p.DateEntree = VersDate(v), v => D(v.DateAnciennete ?? v.DateEmbauche)),
+        // Sans colonne « Date d'Entrée » : la date d'entrée vide reprend l'ancienneté (ou l'embauche).
+        new("dateEntree", "Date d'entrée", p => D(p.DateEntree), (p, v) => p.DateEntree = VersDate(v),
+            v => v.DateEntree is null ? D(v.DateAnciennete ?? v.DateEmbauche) : null),
     ];
 
     public static string? Libelle(string cle) =>
@@ -488,13 +594,18 @@ public static partial class FicheReference
         cle == "ancienPoste" ? Vide(fiche.AncienPoste)
         : Vide(Champs.Concat(ChampsSiVides).FirstOrDefault(c => c.Cle == cle)?.Lire(fiche));
 
-    /// <summary>Champs obligatoires encore vides (libellés), pour une fiche d'employé actif.</summary>
+    /// <summary>
+    /// Champs obligatoires encore vides (libellés), pour une fiche d'employé actif. v64 : la liste
+    /// dépend du type d'employé (salarié / sous-traitant).
+    /// </summary>
     public static List<string> ChampsManquants(UserHrProfile? fiche)
     {
         var f = fiche ?? new UserHrProfile();
-        return ChampsObligatoires
-            .Where(cle => Lire(f, cle) is null)
-            .Select(cle => Libelle(cle) ?? cle)
+        return ChampsObligatoiresPour(TypesEmploye.Code(f))
+            .Where(cle => cle == ChampPieceIdentite
+                ? Vide(f.Cin) is null && Vide(f.CarteImmatriculation) is null && Vide(f.NumeroPasseport) is null
+                : Lire(f, cle) is null)
+            .Select(cle => cle == ChampPieceIdentite ? LibellePieceIdentite : Libelle(cle) ?? cle)
             .ToList();
     }
 
@@ -502,8 +613,11 @@ public static partial class FicheReference
     public static List<string> ChampsManquants(Valeurs v)
     {
         var fiche = new UserHrProfile();
-        foreach (var c in Champs)
-            c.Ecrire(fiche, c.Proposer(v));
+        foreach (var c in Champs.Concat(ChampsSiVides))
+        {
+            var valeur = c.Proposer(v);
+            if (valeur is not null) c.Ecrire(fiche, valeur);
+        }
         return ChampsManquants(fiche);
     }
 

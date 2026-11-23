@@ -1,3 +1,4 @@
+import { typeEmployeLibelle } from '../../../core/hr/type-employe.util';
 import type * as ExcelJSTypes from 'exceljs';
 import {
   contractLevelLabel,
@@ -26,6 +27,8 @@ export type EmployeeExportRow = {
   anciennete: string;
   niveau: string;
   statut: 'Actif' | 'Inactif';
+  /** v64 */
+  typeEmploye: 'Salarié' | 'Sous-traitant';
   // v63 — colonnes du fichier RH de référence (toutes reprises dans chaque export d'employés).
   dateAnciennete: string;
   dateSortie: string;
@@ -43,6 +46,11 @@ export type EmployeeExportRow = {
   telephoneUrgence: string;
   relationUrgence: string;
   numeroBox: string;
+  // v64 — colonnes du fichier « entrepreneurs ».
+  dateEntree: string;
+  carteAutoentrepreneur: string;
+  carteImmatriculation: string;
+  numeroPasseport: string;
   champsManquants: string;
 };
 
@@ -60,6 +68,7 @@ const COLUMNS: readonly { header: string; key: keyof EmployeeExportRow; width: n
   { header: 'Ancienneté', key: 'anciennete', width: 24 },
   { header: 'Niveau', key: 'niveau', width: 12 },
   { header: 'Statut', key: 'statut', width: 10 },
+  { header: "Type d'employé", key: 'typeEmploye', width: 14 },
   { header: "Date d'ancienneté", key: 'dateAnciennete', width: 16 },
   { header: 'Date de sortie', key: 'dateSortie', width: 14 },
   { header: 'Nomination de poste', key: 'poste', width: 26 },
@@ -76,6 +85,10 @@ const COLUMNS: readonly { header: string; key: keyof EmployeeExportRow; width: n
   { header: 'TEL 2', key: 'telephoneUrgence', width: 16 },
   { header: 'Relation (TEL 2)', key: 'relationUrgence', width: 16 },
   { header: 'N° BOX', key: 'numeroBox', width: 10 },
+  { header: "Date d'entrée", key: 'dateEntree', width: 14 },
+  { header: "N° d'inscription au registre national", key: 'carteAutoentrepreneur', width: 22 },
+  { header: "Carte d'immatriculation", key: 'carteImmatriculation', width: 18 },
+  { header: 'N° passeport', key: 'numeroPasseport', width: 16 },
   { header: 'Champs manquants', key: 'champsManquants', width: 40 },
 ];
 
@@ -122,6 +135,7 @@ export function buildEmployeeExportRows(
         anciennete: dash(formatSeniorityDuration(seniorityReferenceDate(u))),
         niveau: contractLevelLabel(u.level),
         statut: u.isActive === false ? 'Inactif' : 'Actif',
+        typeEmploye: typeEmployeLibelle(u.hrProfile?.typeEmploye, u.hrProfile?.numeroCarteAutoentrepreneur),
         ...colonnesReference(u),
       } satisfies EmployeeExportRow;
     })
@@ -138,7 +152,8 @@ function texte(value: string | number | null | undefined): string {
 function colonnesReference(u: User): Pick<EmployeeExportRow,
   'dateAnciennete' | 'dateSortie' | 'poste' | 'typeContrat' | 'nationalite' | 'villeNaissance' | 'sexe'
   | 'situationFamiliale' | 'nombreEnfants' | 'cin' | 'immatriculationCnss' | 'dateNaissance' | 'adresse'
-  | 'telephoneUrgence' | 'relationUrgence' | 'numeroBox' | 'champsManquants'> {
+  | 'telephoneUrgence' | 'relationUrgence' | 'numeroBox' | 'dateEntree' | 'carteAutoentrepreneur'
+  | 'carteImmatriculation' | 'numeroPasseport' | 'champsManquants'> {
   const hr = u.hrProfile ?? null;
   const situation = texte(hr?.situationFamiliale);
   return {
@@ -158,6 +173,10 @@ function colonnesReference(u: User): Pick<EmployeeExportRow,
     telephoneUrgence: texte(hr?.telephoneUrgence),
     relationUrgence: texte(hr?.relationUrgence),
     numeroBox: texte(hr?.numeroBox),
+    dateEntree: dateFr(hr?.dateEntree),
+    carteAutoentrepreneur: texte(hr?.numeroCarteAutoentrepreneur),
+    carteImmatriculation: texte(hr?.carteImmatriculation),
+    numeroPasseport: texte(hr?.numeroPasseport),
     champsManquants: u.isActive === false ? '' : champsManquants(hr).join(', '),
   };
 }

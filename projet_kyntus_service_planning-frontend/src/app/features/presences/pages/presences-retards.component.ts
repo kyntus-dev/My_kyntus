@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { JournalActionsService } from '../../../core/services/journal-actions.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PresencesNavComponent } from '../components/presences-nav.component';
@@ -36,6 +37,7 @@ export class PresencesRetardsComponent implements OnInit {
   private readonly svc = inject(PresenceService);
   private readonly http = inject(HttpClient);
   private readonly toast = inject(KyntusToastService);
+  private readonly journalActions = inject(JournalActionsService);
 
   readonly formatMinutes = formatMinutes;
   readonly decalage = signal(0);
@@ -152,6 +154,7 @@ export class PresencesRetardsComponent implements OnInit {
         lignes: lignesExportRetards(this.lignes()),
         largeurs: [28, 22, 18, 26, 12, 9, 9, 14, 14, 13, 22, 36],
       }]);
+      this.journalActions.declarerExport(`Export des retards du ${du.split('-').reverse().join('/')} au ${au.split('-').reverse().join('/')}`);
     } catch {
       this.toast.error('Export Excel impossible.');
     }

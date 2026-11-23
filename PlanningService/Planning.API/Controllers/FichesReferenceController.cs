@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text;
+using Kyntus.Identity.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Planning.Application.Abstractions;
@@ -42,7 +43,8 @@ public class FichesReferenceController(IFichesReferenceService service) : Contro
     {
         try
         {
-            var suivi = service.DemarrerApplication(demande, Auteur(), Request.Headers.Authorization.ToString());
+            var suivi = service.DemarrerApplication(demande, Auteur(), Request.Headers.Authorization.ToString(),
+                new JournalAuteurExterne(User.GetSubjectId(), User.GetEmail(), User.GetAuthRole()));
             return Accepted(suivi);
         }
         catch (InvalidOperationException ex)

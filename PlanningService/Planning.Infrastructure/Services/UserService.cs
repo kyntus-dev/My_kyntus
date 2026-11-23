@@ -309,6 +309,10 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             throw new InvalidOperationException($"L'adresse email « {dto.Email.Trim()} » est déjà utilisée.");
 
         ValidateCreateUserHrDates(dto);
+        // v64 : date d'embauche, d'entrée et de sortie jamais un dimanche (saisie de l'écran Employés).
+        RefuserDimanche(DateOnly.FromDateTime(dto.HireDate.Date), null, "La date d'embauche");
+        RefuserDimanche(dto.HrProfile?.DateEntree, null, "La date d'entrée");
+        RefuserDimanche(dto.HrProfile?.DateSortie, null, "La date de sortie");
         await _fieldService.ValidateCustomFieldsForCreateAsync(dto.CustomFields);
 
         if (IsDirectoryWriteMaster())
@@ -1237,6 +1241,13 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         return defaut;
     }
 
+    /// <summary>v64 : refuse une date (nouvelle ou modifiée) tombant un dimanche.</summary>
+    internal static void RefuserDimanche(DateOnly? valeur, DateOnly? actuelle, string libelle)
+    {
+        if (valeur is DateOnly d && d.DayOfWeek == DayOfWeek.Sunday && d != actuelle)
+            throw new InvalidOperationException($"{libelle} ne peut pas être un dimanche ({d:dd/MM/yyyy}).");
+    }
+
     private static void ValidateCreateUserHrDates(CreateUserDto dto)
     {
         var hr = dto.HrProfile;
@@ -1609,6 +1620,16 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         if (dto.NiveauExpertiseMetier.HasValue && !IsHrOrAdminRole(callerRole))
             throw new UnauthorizedAccessException("Seuls RH et Admin peuvent modifier l'expertise métier.");
 
+        // v64 : une date d'entrée, de sortie ou d'embauche modifiée ne peut pas tomber un dimanche
+        // (une date déjà enregistrée, issue d'un ancien import, reste acceptée telle quelle).
+        RefuserDimanche(DateOnly.FromDateTime(dto.HireDate.Date), DateOnly.FromDateTime(user.HireDate.Date), "La date d'embauche");
+        if (dto.HrProfile is not null)
+        {
+            var profilActuel = await _context.UserHrProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == id);
+            RefuserDimanche(dto.HrProfile.DateEntree, profilActuel?.DateEntree, "La date d'entrée");
+            RefuserDimanche(dto.HrProfile.DateSortie, profilActuel?.DateSortie, "La date de sortie");
+        }
+
         var ancienSubServiceId = user.SubServiceId;
         var ancienRoleId = user.RoleId;
         user.RoleId = dto.RoleId;
@@ -1701,7 +1722,10 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
                 _context.UserHrProfiles.Add(profile);
             }
             profile.ChangerEnFormation(false, DateOnly.FromDateTime(DateTime.UtcNow));
-            profile.DateSortie = dateSortie ?? profile.DateSortie ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            // v64 : sortie par défaut aujourd'hui, ramenée au samedi si l'on est dimanche.
+            var sortieParDefaut = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (sortieParDefaut.DayOfWeek == DayOfWeek.Sunday) sortieParDefaut = sortieParDefaut.AddDays(-1);
+            profile.DateSortie = dateSortie ?? profile.DateSortie ?? sortieParDefaut;
         }
         else if (profile is not null)
         {
@@ -2449,6 +2473,9 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         Poste = p.Poste,
         TypeContrat = p.TypeContrat,
         NumeroBox = p.NumeroBox,
+        TypeEmploye = TypesEmploye.Code(p),
+        CarteImmatriculation = p.CarteImmatriculation,
+        NumeroPasseport = p.NumeroPasseport,
     };
 
     private async Task<Dictionary<int, UserHrProfile>> LoadHrProfilesAsync(IReadOnlyList<int> userIds)
@@ -2576,6 +2603,11 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             if (dto.Poste is not null) profile.Poste = Nettoye(dto.Poste, 160);
             if (dto.TypeContrat is not null) profile.TypeContrat = Nettoye(dto.TypeContrat, 60);
             if (dto.NumeroBox is not null) profile.NumeroBox = Nettoye(dto.NumeroBox, 40);
+            // v64 : type d'employé explicite ; une valeur non reconnue ne remplace pas la valeur connue.
+            if (dto.TypeEmploye is not null)
+                profile.TypeEmploye = TypesEmploye.Normaliser(dto.TypeEmploye) ?? profile.TypeEmploye ?? TypesEmploye.Code(profile);
+            if (dto.CarteImmatriculation is not null) profile.CarteImmatriculation = Nettoye(dto.CarteImmatriculation, 32);
+            if (dto.NumeroPasseport is not null) profile.NumeroPasseport = Nettoye(dto.NumeroPasseport, 32);
         }
 
         profile.UpdatedAt = DateTimeOffset.UtcNow;

@@ -91,6 +91,7 @@
       <span class="pz-code pz-f-present"><i class="pz-dot"></i>P</span> Commentaire
       <span class="pz-code pz-f-present pz-partiel">P</span> Absence partielle
       <span class="pz-code pz-f-present pz-manuel">P</span> Saisi par un responsable
+      <span class="pz-code pz-leg-hors-contrat"></span> Hors contrat (avant l’entrée / après la sortie)
       <span class="pz-leg-formation">Ligne bleue : en formation</span>
     </div>
 
@@ -133,7 +134,7 @@
                 </th>
                 @for (c of l.cases; track c.jour) {
                   @let j = c.j;
-                  <td class="pz-cell" [class.pz-dim]="c.dim" [class.pz-today]="c.today">
+                  <td class="pz-cell" [class.pz-dim]="c.dim" [class.pz-today]="c.today" [class.pz-hors-contrat]="c.horsContrat">
                     @if (j) {
                       <button type="button" class="pz-code"
                               [ngClass]="c.classe"
@@ -141,7 +142,7 @@
                               [class.pz-manuel]="!j.auto"
                               [class.pz-manque]="j.manquePointage"
                               [class.pz-partiel]="j.absencePartielle"
-                              [disabled]="verrouillee(a)"
+                              [disabled]="verrouillee(a) || c.horsContrat"
                               [title]="a.enFormation && !saisieFormation() ? 'En formation : saisie réservée à l’équipe formation. ' + c.titre : (verrouillee(a) && data()?.peutModifier && !a.enFormation ? 'Consultation seule (droit « Présences des superviseurs et référents › Modifier »). ' + c.titre : c.titre)"
                               (click)="ouvrir(a, j)">
                         @if (j.commentaire) { <i class="pz-dot"></i> }@if (j.code) { {{ j.code }} } @else { <span class="pz-vide">{{ c.marque }}</span> }
@@ -162,7 +163,8 @@
         dans le cumul des retards. Tolérance : {{ data()?.toleranceMinutes }} minutes.
         Les jours fériés ne sont pas comptés dans « Abs. ».
         Une case <b>–</b> est un jour de repos : ni planning publié, ni pointage ; une case <b>?</b> signale un agent sans pointeuse reliée ;
-        une case vide est un jour à venir. Cliquez sur une case pour saisir un motif.
+        une case vide est un jour à venir ; une case grisée est hors contrat (avant la date d’entrée ou après la date de sortie).
+        Cliquez sur une case pour saisir un motif.
       </p>
       @if (nbSansPointeuse(); as n) {
         <p class="ku-card-sub pz-note pz-note--alerte">

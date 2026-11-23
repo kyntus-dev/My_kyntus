@@ -16,7 +16,8 @@ public interface IFichesReferenceService
     /// v63.2 — Lance l'application en arrière-plan (indépendante de la requête HTTP) et rend son suivi.
     /// <paramref name="autorisation"/> : en-tête Authorization de l'appelant, transmis à l'annuaire.
     /// </summary>
-    SuiviApplicationFichesDto DemarrerApplication(AppliquerFichesReferenceRequest demande, string auteur, string? autorisation);
+    SuiviApplicationFichesDto DemarrerApplication(AppliquerFichesReferenceRequest demande, string auteur, string? autorisation,
+        JournalAuteurExterne? acteurJournal = null);
 
     SuiviApplicationFichesDto? SuiviApplication(Guid importId);
 

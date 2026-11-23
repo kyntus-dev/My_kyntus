@@ -41,6 +41,12 @@ export interface UserHrProfile {
   typeContrat?: string | null;
   /** v63 : boîte d'archivage du dossier papier. */
   numeroBox?: string | null;
+  /** v64 : « SALARIE » ou « SOUS_TRAITANT » (toujours renseigné en lecture ; null = inchangé en écriture). */
+  typeEmploye?: string | null;
+  /** v64 : carte d'immatriculation (étrangers) — "" = vidé, null = inchangé. */
+  carteImmatriculation?: string | null;
+  /** v64 : numéro de passeport — "" = vidé, null = inchangé. */
+  numeroPasseport?: string | null;
   niveauScolaire?: string | null;
   intitulesEtudes?: string | null;
   enFormation?: boolean;

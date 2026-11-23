@@ -90,6 +90,8 @@ public static class PresenceRegles
     /// </summary>
     public static string? CodeAuto(PointageJourDto jour, string? codeConge, bool enFormation)
     {
+        // v64 : hors contrat (avant l'entrée, après la sortie) : ni présence ni absence calculée.
+        if (jour.Statut == PointageJourStatuts.HorsContrat) return null;
         if (codeConge is not null) return codeConge;
         if (jour.Statut == PointageJourStatuts.Ferie) return "F";
         if (jour.Statut == PointageJourStatuts.Conge) return "CP";

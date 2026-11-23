@@ -3,10 +3,12 @@
     title="Absences"
     [subtitle]="filteredConges.length + ' absence(s) affichée(s) — Enregistrement et suivi des absences'">
     <div actions>
-      <button type="button" class="ky-btn-primary btn-add" (click)="openForm()">
-        <app-lucide-icon [icon]="icons.plus" className="w-4 h-4" />
-        Nouvelle absence
-      </button>
+      @if (droits.ajouter) {
+        <button type="button" class="ky-btn-primary btn-add" (click)="openForm()">
+          <app-lucide-icon [icon]="icons.plus" className="w-4 h-4" />
+          Nouvelle absence
+        </button>
+      }
     </div>
   </app-kyntus-page-header>
 
@@ -126,6 +128,9 @@
                 <div class="ci-top-row">
                   <span class="ci-name">{{ c.fullName }}</span>
                   <span class="ci-type-badge">{{ getAbsenceLabel(c.absenceType) }}</span>
+                  @if (c.origine === 'Demande') {
+                    <span class="ci-origine-badge" title="Issue d'une demande de congé validée : modifiable dans Congés (soldes)">Demande de congé</span>
+                  }
                 </div>
                 <span class="ci-org">{{ orgPerimeterSummary(userPerimeter(c.userId)) }}</span>
                 <span class="ci-dates">{{ formatDate(c.startDate) }} → {{ formatDate(c.endDate) }}</span>
@@ -136,16 +141,30 @@
             </div>
             <div class="ci-right">
               <span class="ci-days">{{ getDaysCount(c.startDate, c.endDate) }}j</span>
-              <button
-                type="button"
-                class="btn-delete"
-                (click)="deleteConge(c.id)"
-                title="Supprimer"
-                aria-label="Supprimer l'absence"
-              >
-                <app-lucide-icon [icon]="icons.trash" className="w-4 h-4" />
-                <span>Supprimer</span>
-              </button>
+              @if (estModifiable(c)) {
+                <button
+                  type="button"
+                  class="btn-edit"
+                  (click)="openEdit(c)"
+                  title="Modifier"
+                  aria-label="Modifier l'absence"
+                >
+                  <app-lucide-icon [icon]="icons.edit" className="w-4 h-4" />
+                  <span>Modifier</span>
+                </button>
+              }
+              @if (droits.modifier) {
+                <button
+                  type="button"
+                  class="btn-delete"
+                  (click)="deleteConge(c.id)"
+                  title="Supprimer"
+                  aria-label="Supprimer l'absence"
+                >
+                  <app-lucide-icon [icon]="icons.trash" className="w-4 h-4" />
+                  <span>Supprimer</span>
+                </button>
+              }
             </div>
           </div>
         }
@@ -158,7 +177,7 @@
   <div class="modal-overlay" appBodyPortal (click)="closeForm()">
     <div class="modal-card" (click)="$event.stopPropagation()">
       <div class="modal-header">
-        <h3 class="modal-title">Nouvelle absence</h3>
+        <h3 class="modal-title">{{ editId !== null ? 'Modifier l’absence' : 'Nouvelle absence' }}</h3>
         <button type="button" class="modal-close" (click)="closeForm()" aria-label="Fermer">
           <app-lucide-icon [icon]="icons.close" className="w-5 h-5" />
         </button>
@@ -297,6 +316,14 @@
               Durée : <strong>{{ getDaysCount(formStartDate, formEndDate) }} jour(s)</strong>
             </div>
           }
+          @if (formUserId && (contratSelectionne().entree || contratSelectionne().sortie)) {
+            <p class="form-hint">
+              Contrat :
+              @if (contratSelectionne().entree) { entrée le {{ formatDate(contratSelectionne().entree!) }} }
+              @if (contratSelectionne().sortie) { · sortie le {{ formatDate(contratSelectionne().sortie!) }} }
+              — l’absence doit rester dans cette période.
+            </p>
+          }
 
           <div class="form-group form-group--last">
             <label>Motif <span class="optional">(optionnel)</span></label>
@@ -308,7 +335,7 @@
       <div class="modal-footer">
         <button type="button" class="ky-btn-secondary btn-cancel" (click)="closeForm()">Annuler</button>
         <button type="button" class="ky-btn-primary btn-confirm" [disabled]="saving" (click)="saveConge()">
-          {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
+          {{ saving ? 'Enregistrement…' : (editId !== null ? 'Enregistrer les modifications' : 'Enregistrer') }}
         </button>
       </div>
     </div>
