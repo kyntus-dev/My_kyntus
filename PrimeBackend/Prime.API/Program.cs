@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Kyntus.Identity.Jwt;
+using Kyntus.Iam;
 using Microsoft.EntityFrameworkCore;
 using Prime.API.Middlewares;
 using Prime.Application;
@@ -39,6 +40,9 @@ builder.Services.AddKyntusJwtAuthentication(builder.Configuration);
 builder.Services.AddPrimeApplication();
 builder.Services.AddPrimeInfrastructure(builder.Configuration, isTesting);
 
+// v60 — Restrictions des administrateurs par le Super Admin (contrôle à l'entrée de chaque API).
+builder.Services.AddKyntusAdminRestrictions(builder.Configuration);
+
 var app = builder.Build();
 
 if (isTesting)
@@ -52,6 +56,7 @@ if (isTesting)
 app.UseCors("devCors");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseKyntusAdminRestrictions();
 app.UseMiddleware<ApiExceptionMiddleware>();
 app.MapControllers();
 app.Run();

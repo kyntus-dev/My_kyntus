@@ -99,8 +99,12 @@ describe('HTEL planning export mapping', () => {
     ).toBe('DUPONT Jean');
   });
 
-  it('maps leave to CP, holiday to F, times, and empty OFF', () => {
-    expect(mapAssignmentToHtelCell(day('Monday', { isOnLeave: true }))).toEqual({ kind: 'cp' });
+  it('maps leave to its exact code, holiday to F, times, and empty OFF', () => {
+    expect(mapAssignmentToHtelCell(day('Monday', { isOnLeave: true, absenceType: 'ArretMaladie' })))
+      .toEqual({ kind: 'absence', code: 'AM' });
+    expect(mapAssignmentToHtelCell(day('Monday', { isOnLeave: true, absenceType: 'CongesPayes' })))
+      .toEqual({ kind: 'absence', code: 'CP' });
+    expect(mapAssignmentToHtelCell(day('Monday', { isOnLeave: true }))).toEqual({ kind: 'absence', code: 'ABS' });
     expect(mapAssignmentToHtelCell(day('Tuesday', { isHoliday: true, holidayName: 'Aid' }))).toEqual({
       kind: 'f',
     });
@@ -120,7 +124,7 @@ describe('HTEL planning export mapping', () => {
           lastName: 'Bouchamma',
           days: [
             day('Monday', { startTime: '08:00', endTime: '16:00', breakTime: '12:00' }),
-            day('Tuesday', { isOnLeave: true }),
+            day('Tuesday', { isOnLeave: true, absenceType: 'ArretMaladie' }),
             day('Wednesday', { isHoliday: true }),
           ],
         }),
@@ -130,7 +134,7 @@ describe('HTEL planning export mapping', () => {
     expect(rows[0].name).toBe('BOUCHAMMA Nour');
     expect(htelCellStartDisplay(rows[0].days[0])).toBe('08:00');
     expect(htelCellBreakDisplay(rows[0].days[0])).toBe('12:00');
-    expect(htelCellStartDisplay(rows[0].days[1])).toBe('CP');
+    expect(htelCellStartDisplay(rows[0].days[1])).toBe('AM');
     expect(htelCellBreakDisplay(rows[0].days[1])).toBe('');
     expect(htelCellStartDisplay(rows[0].days[2])).toBe('F');
     expect(htelCellBreakDisplay(rows[0].days[2])).toBe('');

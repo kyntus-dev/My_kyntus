@@ -28,6 +28,37 @@ public class AuthController : ControllerBase
     private readonly IMediator _mediator;
     private readonly ILogger<AuthController> _logger;
 
+    /// <summary>v60 — Claim signée du compte Super Admin.</summary>
+    private const string SuperAdminClaim = "kyntus_super_admin";
+
+    /// <summary>
+    /// v60 — Posé par Planning (appel interne authentifié par clé) quand l'utilisateur à l'origine de
+    /// l'action est le Super Admin. Sans lui, le compte Super Admin ne peut être ni modifié (rôle,
+    /// mot de passe), ni désactivé, ni supprimé : un administrateur ne peut pas s'en emparer.
+    /// </summary>
+    public const string ActingSuperAdminHeader = "X-Kyntus-Acting-Super-Admin";
+
+    private bool ActionParSuperAdmin =>
+        string.Equals(Request.Headers[ActingSuperAdminHeader].ToString(), "true", StringComparison.OrdinalIgnoreCase);
+
+    private ObjectResult CompteSuperAdminProtege() =>
+        StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            code = "SUPER_ADMIN_PROTECTED",
+            message = "Compte Super Admin : seul le Super Admin peut le modifier, le désactiver ou le supprimer.",
+        });
+
+    private static async Task<bool> CibleSuperAdminAsync(
+        IUserRepository users, string? email, Guid? employeeId, int? authUserId, CancellationToken ct)
+    {
+        if (authUserId is > 0 && (await users.GetByIdAsync(authUserId.Value, ct))?.EstSuperAdminEffectif == true)
+            return true;
+        if (!string.IsNullOrWhiteSpace(email) && (await users.GetByEmailAsync(email.Trim(), ct))?.EstSuperAdminEffectif == true)
+            return true;
+        return employeeId is { } g && g != Guid.Empty
+               && (await users.GetBySubjectIdAsync(g, ct))?.EstSuperAdminEffectif == true;
+    }
+
     public AuthController(IMediator mediator, ILogger<AuthController> logger)
     {
         _mediator = mediator;
@@ -116,6 +147,8 @@ public class AuthController : ControllerBase
             Email = email,
             Role = role,
             TenantId = "atlas-tech-demo",
+            IsSuperAdmin = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+                           && string.Equals(User.FindFirstValue(SuperAdminClaim), "true", StringComparison.OrdinalIgnoreCase),
         });
     }
 
@@ -146,7 +179,7 @@ public class AuthController : ControllerBase
         if (user is null)
             return NotFound(new { message = "Compte introuvable." });
 
-        return Ok(new { role = user.Role?.Name ?? "User", isActive = user.IsActive });
+        return Ok(new { role = user.Role?.Name ?? "User", isActive = user.IsActive, isSuperAdmin = user.EstSuperAdminEffectif });
     }
 
     [HttpGet("audit/access")]
@@ -209,10 +242,23 @@ public class AuthController : ControllerBase
 
     [HttpPost("register-from-planning")]
     [RequireInternalService]
-    public async Task<IActionResult> RegisterFromPlanning([FromBody] RegisterFromPlanningDto dto)
+    public async Task<IActionResult> RegisterFromPlanning(
+        [FromBody] RegisterFromPlanningDto dto,
+        [FromServices] IUserRepository users,
+        CancellationToken ct)
     {
         try
         {
+            // v60 — Compte Super Admin : ni rôle ni mot de passe modifiés par un autre que lui.
+            if (!ActionParSuperAdmin && await CibleSuperAdminAsync(users, dto.Email, dto.EmployeeId, null, ct))
+            {
+                var protege = await users.GetByEmailAsync(dto.Email.Trim(), ct)
+                              ?? (dto.EmployeeId != Guid.Empty ? await users.GetBySubjectIdAsync(dto.EmployeeId, ct) : null);
+                _logger.LogWarning("Compte Super Admin protégé : synchronisation Planning ignorée pour {Email}.", dto.Email);
+                if (protege is not null)
+                    return Ok(new RegisterFromPlanningResponseDto { Id = protege.Id, Email = protege.Email, SubjectId = protege.SubjectId });
+                return CompteSuperAdminProtege();
+            }
             var response = await _mediator.Send(new RegisterFromPlanningCommand(dto));
             return Ok(response);
         }
@@ -235,15 +281,38 @@ public class AuthController : ControllerBase
 
     [HttpPost("register-from-planning-batch")]
     [RequireInternalService]
-    public async Task<IActionResult> RegisterFromPlanningBatch([FromBody] RegisterFromPlanningBatchDto dto)
+    public async Task<IActionResult> RegisterFromPlanningBatch(
+        [FromBody] RegisterFromPlanningBatchDto dto,
+        [FromServices] IUserRepository users,
+        CancellationToken ct)
     {
         try
         {
             if (dto.Items is null || dto.Items.Count == 0)
                 return BadRequest(new { message = "items requis." });
 
+            // v60 — Le compte Super Admin n'est jamais modifié par un import ou une synchronisation.
+            var proteges = new List<RegisterFromPlanningBatchItemResultDto>();
+            if (!ActionParSuperAdmin)
+            {
+                foreach (var item in dto.Items.ToList())
+                {
+                    if (!await CibleSuperAdminAsync(users, item.Email, item.EmployeeId, null, ct))
+                        continue;
+                    dto.Items.Remove(item);
+                    proteges.Add(new RegisterFromPlanningBatchItemResultDto
+                    {
+                        Email = item.Email,
+                        Success = false,
+                        Message = "Compte Super Admin protégé : non modifié.",
+                    });
+                }
+                if (dto.Items.Count == 0)
+                    return Ok(proteges);
+            }
+
             var response = await _mediator.Send(new RegisterFromPlanningBatchCommand(dto));
-            return Ok(response);
+            return Ok(proteges.Count == 0 ? response : response.Concat(proteges).ToList());
         }
         catch (Exception ex)
         {
@@ -255,8 +324,14 @@ public class AuthController : ControllerBase
     /// <summary>Active / désactive un compte (sortie d'un collaborateur) sans le supprimer.</summary>
     [HttpPut("users/from-planning/{authUserId:int}/active")]
     [RequireInternalService]
-    public async Task<IActionResult> SetActiveFromPlanning(int authUserId, [FromBody] SetActiveFromPlanningRequest body)
+    public async Task<IActionResult> SetActiveFromPlanning(
+        int authUserId,
+        [FromBody] SetActiveFromPlanningRequest body,
+        [FromServices] IUserRepository users,
+        CancellationToken ct)
     {
+        if (!body.IsActive && !ActionParSuperAdmin && await CibleSuperAdminAsync(users, null, null, authUserId, ct))
+            return CompteSuperAdminProtege();
         var found = await _mediator.Send(new SetActiveFromPlanningCommand(authUserId, body.IsActive));
         if (!found)
             return NotFound(new { message = $"Utilisateur Auth {authUserId} introuvable." });
@@ -264,10 +339,21 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>v60 — Le compte est-il le Super Admin ? (Planning protège ce compte dans ses écrans.)</summary>
+    [HttpGet("users/from-planning/{authUserId:int}/super-admin")]
+    [RequireInternalService]
+    public async Task<IActionResult> EstSuperAdmin(int authUserId, [FromServices] IUserRepository users, CancellationToken ct) =>
+        Ok(new { superAdmin = (await users.GetByIdAsync(authUserId, ct))?.EstSuperAdminEffectif == true });
+
     [HttpDelete("users/from-planning/{authUserId:int}")]
     [RequireInternalService]
-    public async Task<IActionResult> DeleteFromPlanning(int authUserId)
+    public async Task<IActionResult> DeleteFromPlanning(
+        int authUserId,
+        [FromServices] IUserRepository users,
+        CancellationToken ct)
     {
+        if (!ActionParSuperAdmin && await CibleSuperAdminAsync(users, null, null, authUserId, ct))
+            return CompteSuperAdminProtege();
         try
         {
             var deleted = await _mediator.Send(new DeleteFromPlanningUserCommand(authUserId));
@@ -331,8 +417,13 @@ public class AuthController : ControllerBase
 
     [HttpPost("admin/reset-password")]
     [RequireInternalService]
-    public async Task<IActionResult> AdminResetPassword([FromBody] AdminResetPasswordDto dto)
+    public async Task<IActionResult> AdminResetPassword(
+        [FromBody] AdminResetPasswordDto dto,
+        [FromServices] IUserRepository users,
+        CancellationToken ct)
     {
+        if (!ActionParSuperAdmin && await CibleSuperAdminAsync(users, dto.Email, dto.EmployeeId, dto.AuthUserId, ct))
+            return CompteSuperAdminProtege();
         try
         {
             var r = await _mediator.Send(new AdminResetPasswordCommand(dto));

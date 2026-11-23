@@ -18,6 +18,7 @@
 		<ProjectReference Include="..\src\Services\Formation\Formation.Application\Formation.Application.csproj" />
 		<ProjectReference Include="..\src\Services\Formation\Formation.Infrastructure\Formation.Infrastructure.csproj" />
 		<ProjectReference Include="..\..\Kyntus.Identity.Jwt\Kyntus.Identity.Jwt.csproj" />
+		<ProjectReference Include="..\..\Kyntus.Iam\Kyntus.Iam.csproj" />
 		<ProjectReference Include="..\..\Kyntus.Caching\Kyntus.Caching.csproj" />
 		<ProjectReference Include="..\..\Messaging.Contracts\Messaging.Contracts.csproj" />
 	</ItemGroup>

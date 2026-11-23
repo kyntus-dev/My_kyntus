@@ -4,7 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
-import { CongeService, CongeItem, ABSENCE_TYPES } from '../../services/conge.service';
+import { CongeService, CongeItem, ABSENCE_TYPES, type DroitsConges } from '../../services/conge.service';
+import { controlerPeriodeConge } from '../../lib/conge-periode.util';
 import { SubServiceService } from '../../../sub-services/services/sub-service.service';
 import { UserService } from '../../../users/services/user.service';
 import { PrimeOrgApiService } from '../../../prime/services/prime-org-api.service';
@@ -12,7 +13,7 @@ import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
 import { KyntusSelectSyncDirective } from '../../../../shared/directives/kyntus-select-sync.directive';
 import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
 import { BodyPortalDirective } from '../../../../shared/directives/body-portal.directive';
-import { Inbox, Plus, Search, Trash2, X } from 'lucide';
+import { Inbox, Pencil, Plus, Search, Trash2, X } from 'lucide';
 import type { Department } from '../../../prime/models';
 import type { OperationalDepartmentNode, OrgPoleNode } from '../../../prime/models/org-tree.types';
 import type { SubService } from '../../../sub-services/sub-services-module';
@@ -42,7 +43,12 @@ import { KyntusConfirmService } from '../../../../shared/components/kyntus-confi
   styleUrls: ['./conge-manager.component.css'],
 })
 export class CongeManagerComponent implements OnInit {
-  readonly icons = { inbox: Inbox, plus: Plus, search: Search, trash: Trash2, close: X };
+  readonly icons = { inbox: Inbox, plus: Plus, search: Search, trash: Trash2, close: X, edit: Pencil };
+
+  /** v64 : droits « Absences du planning » (Accès par rôle) ; le serveur les vérifie aussi. */
+  droits: DroitsConges = { consulter: false, ajouter: false, modifier: false };
+  /** v64 : absence en cours de modification (null = ajout). */
+  editId: number | null = null;
 
   operationalDepartments: OperationalDepartmentNode[] = [];
   unassignedPoles: OrgPoleNode[] = [];
@@ -107,6 +113,10 @@ export class CongeManagerComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.congeService.droits().pipe(catchError(() => of(this.droits))).subscribe((d) => {
+      this.droits = d;
+      this.cdr.detectChanges();
+    });
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -290,6 +300,8 @@ export class CongeManagerComponent implements OnInit {
   }
 
   openForm(): void {
+    if (!this.droits.ajouter) return;
+    this.editId = null;
     this.showForm = true;
     this.formUserId = 0;
     this.selectedFormEmployee = null;
@@ -385,37 +397,81 @@ export class CongeManagerComponent implements OnInit {
 
   closeForm(): void {
     this.showForm = false;
+    this.editId = null;
+  }
+
+  /** v64 : une absence issue d'une demande de congé se modifie dans Congés (soldes). */
+  estModifiable(c: CongeItem): boolean {
+    return this.droits.modifier && (c.origine ?? 'Planning') !== 'Demande';
+  }
+
+  /** v64 : ouvre le formulaire prérempli pour modifier une absence. */
+  openEdit(c: CongeItem): void {
+    if (!this.estModifiable(c)) return;
+    this.editId = c.id;
+    this.showForm = true;
+    this.formEmployeeSearch = '';
+    this.formFilterOperationalDepartment = '';
+    this.formFilterPole = '';
+    this.formFilterCellule = '';
+    this.formFilterService = '';
+    this.formUserId = c.userId;
+    this.selectedFormEmployee = this.employeeRows.find((r) => r.user.id === c.userId) ?? null;
+    this.formStartDate = (c.startDate ?? '').slice(0, 10);
+    this.formEndDate = (c.endDate ?? '').slice(0, 10);
+    this.formReason = c.reason ?? '';
+    this.formAbsenceType = c.absenceType;
+    this.error = '';
+    this.refreshFormEmployeeFilters();
+  }
+
+  /** v64 : bornes du contrat de l'employé sélectionné (fiche RH), pour contrôler la période. */
+  contratSelectionne(): { entree: string | null; sortie: string | null } {
+    const u = this.allUsers.find((x) => x.id === Number(this.formUserId));
+    const hr = u?.hrProfile;
+    return {
+      entree: (hr?.dateEntree || hr?.dateEmbauche || null)?.slice(0, 10) ?? null,
+      sortie: hr?.dateSortie?.slice(0, 10) ?? null,
+    };
   }
 
   saveConge(): void {
     const userId = Number(this.formUserId);
-    if (!userId) {
-      this.error = 'Veuillez sélectionner un employé dans la liste.';
-      return;
-    }
-    if (!this.formStartDate || !this.formEndDate || !this.formAbsenceType) {
+    if (!this.formAbsenceType) {
       this.error = 'Veuillez remplir tous les champs obligatoires.';
       return;
     }
-    if (this.formStartDate > this.formEndDate) {
-      this.error = 'La date de fin doit être après la date de début.';
+    // v64 : contrôle de la période (dates, durée, contrat, chevauchement) — le serveur revérifie.
+    const controle = controlerPeriodeConge(
+      { id: this.editId ?? undefined, userId, startDate: this.formStartDate, endDate: this.formEndDate },
+      this.allConges.filter((c) => c.status === 'Approved'),
+      this.contratSelectionne(),
+    );
+    if (controle) {
+      this.error = controle;
+      return;
+    }
+    const enModification = this.editId !== null;
+    if (enModification ? !this.droits.modifier : !this.droits.ajouter) {
+      this.error = 'Droit insuffisant (Accès par rôle › Absences du planning).';
       return;
     }
     this.saving = true;
     this.error = '';
-    this.congeService
-      .create({
-        userId,
-        startDate: this.formStartDate,
-        endDate: this.formEndDate,
-        reason: this.formReason,
-        absenceType: this.formAbsenceType,
-      })
+    const dto = {
+      userId,
+      startDate: this.formStartDate,
+      endDate: this.formEndDate,
+      reason: this.formReason,
+      absenceType: this.formAbsenceType,
+    };
+    (enModification ? this.congeService.update(this.editId!, dto) : this.congeService.create(dto))
       .subscribe({
         next: () => {
           this.saving = false;
           this.showForm = false;
-          this.successMsg = 'Absence enregistrée avec succès !';
+          this.editId = null;
+          this.successMsg = enModification ? 'Absence modifiée : le planning a été mis à jour.' : 'Absence enregistrée avec succès !';
           this.loadConges();
           setTimeout(() => {
             this.successMsg = '';
@@ -431,7 +487,7 @@ export class CongeManagerComponent implements OnInit {
           } else if (body && typeof body === 'object' && body.message) {
             this.error = body.message;
           } else {
-            this.error = err.message ?? `Erreur lors de la création (${err.status ?? ''}).`;
+            this.error = err.message ?? `Erreur lors de l'enregistrement (${err.status ?? ''}).`;
           }
           this.cdr.detectChanges();
         },
@@ -443,6 +499,7 @@ export class CongeManagerComponent implements OnInit {
   }
 
   async deleteConge(id: number): Promise<void> {
+    if (!this.droits.modifier) return;
     const ok = await this.confirmService.confirm({
       title: 'Supprimer l\'absence',
       message: 'Supprimer cette absence ?',
@@ -454,6 +511,10 @@ export class CongeManagerComponent implements OnInit {
       next: () => {
         this.allConges = this.allConges.filter((c) => c.id !== id);
         this.applyFilters();
+        this.cdr.detectChanges();
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.error = err.error?.message ?? 'Suppression impossible.';
         this.cdr.detectChanges();
       },
     });

@@ -12,7 +12,8 @@ namespace Planning.Infrastructure.Messaging.Consumers;
 /// Congés par e-mail : nouvelle demande → valideur ; congé validé, refusé ou annulé → employé.
 /// File RabbitMQ dédiée : n'interfère pas avec la mise à jour des absences Planning.
 /// </summary>
-public sealed class CongeNotificationEmailConsumer(AppDbContext db, INotificationEmailQueue queue)
+// v62 : décision aussi notifiée dans l’application (cloche), avec lien vers « Mes congés ».
+public sealed class CongeNotificationEmailConsumer(AppDbContext db, INotificationEmailQueue queue, IAppNotifier? notifier = null)
     : IConsumer<CongeDemandeMessage>, IConsumer<CongeValideMessage>, IConsumer<CongeRefuseMessage>
 {
     private static readonly CultureInfo Fr = CultureInfo.GetCultureInfo("fr-FR");
@@ -40,6 +41,13 @@ public sealed class CongeNotificationEmailConsumer(AppDbContext db, INotificatio
         if (msg.EmployeId == Guid.Empty || msg.DemandeId == Guid.Empty)
             return;
         var by = string.IsNullOrWhiteSpace(msg.ValidateurNom) ? string.Empty : $" par {msg.ValidateurNom.Trim()}";
+        if (notifier is not null)
+            await notifier.NotifierAsync(
+                new NotificationEmailRecipients(EmployeeIds: [msg.EmployeId]),
+                new AppNotification("conges", "Congé validé",
+                    $"Votre congé {Period(msg.DateDebut, msg.DateFin)} ({Days(msg.NombreJours)}) a été validé{by}. Votre planning en tient compte.",
+                    "/mes-conges", $"CONGE-{msg.DemandeId:N}"),
+                ct: context.CancellationToken);
         await queue.EnqueueNotificationAsync(
             new NotificationEmailRecipients(EmployeeIds: [msg.EmployeId]),
             new NotificationEmailContent(
@@ -63,6 +71,12 @@ public sealed class CongeNotificationEmailConsumer(AppDbContext db, INotificatio
             : "Votre demande de congé a été refusée.";
         if (motif.Length > 0 && !cancelled)
             body += $" Motif : {motif}";
+        if (notifier is not null)
+            await notifier.NotifierAsync(
+                new NotificationEmailRecipients(EmployeeIds: [msg.EmployeId]),
+                new AppNotification("conges", cancelled ? "Congé annulé" : "Demande de congé refusée", body,
+                    "/mes-conges", $"CONGE-{msg.DemandeId:N}"),
+                ct: context.CancellationToken);
         await queue.EnqueueNotificationAsync(
             new NotificationEmailRecipients(EmployeeIds: [msg.EmployeId]),
             new NotificationEmailContent(

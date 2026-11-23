@@ -38,6 +38,16 @@ public static class AuthDatabaseInitializer
             return;
         }
 
+        // v60 — Colonne du marqueur Super Admin (faux pour tous les comptes existants).
+        try
+        {
+            EnsureSuperAdminColumn(db);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WARNING: colonne IsSuperAdmin non vérifiée : {ex.Message}");
+        }
+
         try
         {
             EnsureSubjectIdColumn(db);
@@ -122,6 +132,16 @@ public static class AuthDatabaseInitializer
             Console.WriteLine($"WARNING: superviseur/qualiticien seed skipped: {ex.Message}");
         }
 
+        // v60 — Compte Super Admin « test admin » (créé s'il manque ; aucun autre compte modifié).
+        try
+        {
+            EnsureSuperAdminAccount(db, passwordHasher, configuration, subjectIdResolver);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WARNING: compte Super Admin non vérifié : {ex.Message}");
+        }
+
         try
         {
             RealignKnownSubjectIds(db, subjectIdResolver);
@@ -165,6 +185,84 @@ public static class AuthDatabaseInitializer
             db.SaveChanges();
             Console.WriteLine($"Auth SubjectId realigned ({changed}).");
         }
+    }
+
+    static void EnsureSuperAdminColumn(AuthDbContext db)
+    {
+        db.Database.ExecuteSqlRaw(
+            "ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"IsSuperAdmin\" boolean NOT NULL DEFAULT false;");
+        Console.WriteLine("Auth IsSuperAdmin column ensured.");
+    }
+
+    /// <summary>
+    /// v60 — Compte Super Admin : rôle Admin + marqueur Super Admin. Nom du compte : « test admin »
+    /// (SuperAdminSeed:Username), e-mail SuperAdminSeed:Email (défaut test.admin@kyntus.ma), mot de
+    /// passe SuperAdminSeed:Password (KYNTUS_SUPERADMIN_PASSWORD), à défaut celui du compte admin démo.
+    /// Un compte existant garde son mot de passe ; seuls le marqueur et le rôle Admin sont garantis.
+    /// </summary>
+    static void EnsureSuperAdminAccount(
+        AuthDbContext db,
+        IPasswordHasher hasher,
+        IConfiguration configuration,
+        ISubjectIdResolver subjectIdResolver)
+    {
+        if (!configuration.GetValue("SuperAdminSeed:Enabled", true))
+        {
+            Console.WriteLine("SuperAdminSeed désactivé — compte Super Admin non vérifié.");
+            return;
+        }
+
+        var email = configuration["SuperAdminSeed:Email"]?.Trim();
+        if (string.IsNullOrWhiteSpace(email))
+            email = "test.admin@kyntus.ma";
+        var username = configuration["SuperAdminSeed:Username"]?.Trim();
+        if (string.IsNullOrWhiteSpace(username))
+            username = "test admin";
+
+        var adminRole = db.Roles.FirstOrDefault(r => r.Name == "Admin");
+        if (adminRole is null)
+        {
+            Console.WriteLine("WARNING: rôle Admin introuvable — compte Super Admin non créé.");
+            return;
+        }
+
+        var emailLower = email.ToLower();
+        var user = db.Users.FirstOrDefault(u => u.Email.ToLower() == emailLower);
+        if (user is null)
+        {
+            var password = configuration["SuperAdminSeed:Password"]?.Trim();
+            if (string.IsNullOrWhiteSpace(password))
+                password = configuration["DemoSeed:Passwords:Admin"]?.Trim();
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                Console.WriteLine(
+                    "WARNING: SuperAdminSeed:Password non défini (KYNTUS_SUPERADMIN_PASSWORD) — compte Super Admin non créé.");
+                return;
+            }
+
+            db.Users.Add(new User
+            {
+                Username = username.Length > 50 ? username[..50] : username,
+                Email = email,
+                SubjectId = subjectIdResolver.ResolveForEmail(email),
+                PasswordHash = hasher.HashPassword(password),
+                RoleId = adminRole.Id,
+                IsActive = true,
+                IsSuperAdmin = true,
+                CreatedAt = DateTime.UtcNow,
+            });
+            db.SaveChanges();
+            Console.WriteLine($"Auth Super Admin « {username} » ({email}) créé.");
+            return;
+        }
+
+        if (user.IsSuperAdmin && user.RoleId == adminRole.Id)
+            return;
+        user.IsSuperAdmin = true;
+        user.RoleId = adminRole.Id;
+        user.UpdatedAt = DateTime.UtcNow;
+        db.SaveChanges();
+        Console.WriteLine($"Auth Super Admin ({email}) : marqueur Super Admin et rôle Admin rétablis.");
     }
 
     static void EnsureAccessAuditTable(AuthDbContext db)

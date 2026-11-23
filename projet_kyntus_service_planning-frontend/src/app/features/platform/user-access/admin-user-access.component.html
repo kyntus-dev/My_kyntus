@@ -74,8 +74,13 @@
         </dl>
       </header>
 
-      @if (a.admin) {
-        <div class="ua-info">Rôle Admin : accès complet à toutes les rubriques. Les exceptions ne s’appliquent pas à ce rôle.</div>
+      @if (a.admin && superAdmin()) {
+        <div class="ua-info">
+          Compte administrateur : tous les droits par défaut. En tant que Super Admin, réglez ses fonctionnalités dans
+          <button type="button" class="ua-lien-admins" (click)="ouvrirDroitsAdmin(a.subjectId)">Droits des administrateurs</button>.
+        </div>
+      } @else if (a.admin) {
+        <div class="ua-info">Compte administrateur : ses droits sont gérés par le Super Admin. Les exceptions ne s’appliquent pas à ce rôle.</div>
       } @else if (!peutModifier) {
         <div class="ua-info">Lecture seule : seul l’Admin modifie les droits d’un compte.</div>
       }

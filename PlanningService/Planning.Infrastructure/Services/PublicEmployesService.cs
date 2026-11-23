@@ -3,6 +3,7 @@ using System.Text;
 using Planning.Application.Abstractions;
 using Planning.Application.DTOs;
 using Planning.Application.Users;
+using Planning.Domain.Entities;
 
 namespace Planning.Infrastructure.Services;
 
@@ -55,6 +56,12 @@ public sealed class PublicEmployesService(IUserService users) : IPublicEmployesS
             "Telephone", "Contrat", "Pole", "Cellule", "Service", "SousService", "Role", "Niveau",
             "Planifiable", "EnFormation", "TypeFormation", "DateEmbauche", "DateEntree", "DateSortie",
             "Actif", "Statut", "IdTechnicienHtel",
+            // v63 : toutes les colonnes du fichier RH de référence.
+            "Poste", "TypeContrat", "DateAnciennete", "Nationalite", "VilleNaissance", "Sexe",
+            "SituationFamiliale", "NombreEnfants", "ImmatriculationCnss", "DateNaissance", "Adresse",
+            "TelephoneUrgence", "RelationUrgence", "NumeroBox",
+            // v64 : type d'employé et colonnes du fichier des entrepreneurs.
+            "TypeEmploye", "NumeroCarteAutoentrepreneur", "CarteImmatriculation", "NumeroPasseport",
         }));
 
         foreach (var e in lignes)
@@ -68,6 +75,11 @@ public sealed class PublicEmployesService(IUserService users) : IPublicEmployesS
                 e.NiveauContractuel.ToString(CultureInfo.InvariantCulture), B(e.Planifiable), B(e.EnFormation),
                 C(e.TypeFormation), D(e.DateEmbauche), D(e.DateEntree), D(e.DateSortie), B(e.Actif),
                 C(e.Statut), e.IdTechnicienHtel?.ToString(CultureInfo.InvariantCulture) ?? "",
+                C(e.Poste), C(e.TypeContrat), D(e.DateAnciennete), C(e.Nationalite), C(e.VilleNaissance), C(e.Sexe),
+                C(e.SituationFamiliale), e.NombreEnfants?.ToString(CultureInfo.InvariantCulture) ?? "",
+                C(e.ImmatriculationCnss), D(e.DateNaissance), C(e.Adresse), C(e.TelephoneUrgence),
+                C(e.RelationUrgence), C(e.NumeroBox),
+                C(e.TypeEmploye), C(e.NumeroCarteAutoentrepreneur), C(e.CarteImmatriculation), C(e.NumeroPasseport),
             }));
         }
 
@@ -108,6 +120,9 @@ public sealed class PublicEmployesService(IUserService users) : IPublicEmployesS
                 NiveauScolaire = hr?.NiveauScolaire,
                 IntitulesEtudes = hr?.IntitulesEtudes,
                 NumeroCarteAutoentrepreneur = hr?.NumeroCarteAutoentrepreneur,
+                TypeEmploye = TypesEmploye.Libelle(hr?.TypeEmploye, hr?.NumeroCarteAutoentrepreneur),
+                CarteImmatriculation = hr?.CarteImmatriculation,
+                NumeroPasseport = hr?.NumeroPasseport,
 
                 MailInterne = MailInterne.EstProvisoire(u.Email) ? null : u.Email,
                 EmailPersonnel = hr?.EmailPersonnel,
@@ -144,6 +159,9 @@ public sealed class PublicEmployesService(IUserService users) : IPublicEmployesS
                 DateEvolutionPoste = hr?.DateEvolutionPoste,
                 AncienPoste = hr?.AncienPoste,
                 AncienService = hr?.AncienService,
+                Poste = hr?.Poste,
+                TypeContrat = hr?.TypeContrat,
+                NumeroBox = hr?.NumeroBox,
                 CreeLe = u.CreatedAt,
 
                 EnFormation = hr?.EnFormation ?? false,

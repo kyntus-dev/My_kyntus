@@ -46,13 +46,14 @@ function applyTimeCell(cell: ExcelJSTypes.Cell, hhmm: string): void {
 function applyCodeOrEmpty(cell: ExcelJSTypes.Cell, value: string): void {
   cell.value = value || null;
   cell.alignment = { horizontal: 'center', vertical: 'middle' };
-  if (value === 'CP' || value === 'F') {
+  if (value) {
     cell.font = { ...(cell.font ?? {}), bold: true, size: 11 };
   }
 }
 
 function writeDayStart(cell: ExcelJSTypes.Cell, day: HtelDayCell): void {
-  if (day.kind === 'cp') applyCodeOrEmpty(cell, 'CP');
+  // v63.3 : la cause exacte (AM, ABS N, CP…), pas « CP » pour toute absence.
+  if (day.kind === 'absence') applyCodeOrEmpty(cell, day.code);
   else if (day.kind === 'f') applyCodeOrEmpty(cell, 'F');
   else if (day.kind === 'time') applyTimeCell(cell, day.start);
   else applyCodeOrEmpty(cell, '');

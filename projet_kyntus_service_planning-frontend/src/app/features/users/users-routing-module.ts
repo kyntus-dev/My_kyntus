@@ -11,6 +11,12 @@ const routes: Routes = [
       import('./pages/htel-liaisons/htel-liaisons-page.component').then((m) => m.HtelLiaisonsPageComponent),
   },
   {
+    // v63 — Fiches employés : fichier RH de référence, complétude, historique.
+    path: 'fiches-reference',
+    loadComponent: () =>
+      import('./pages/fiches-reference/fiches-reference-page.component').then((m) => m.FichesReferencePageComponent),
+  },
+  {
     path: 'mails-internes',
     loadComponent: () =>
       import('./pages/mails-internes/mails-internes-page.component').then((m) => m.MailsInternesPageComponent),

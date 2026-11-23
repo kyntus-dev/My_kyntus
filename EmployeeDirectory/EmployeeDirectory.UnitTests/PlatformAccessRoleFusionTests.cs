@@ -1,3 +1,4 @@
+using EmployeeDirectory.Application.Dtos;
 using EmployeeDirectory.Application.Iam;
 using EmployeeDirectory.Domain.Entities;
 using EmployeeDirectory.Infrastructure.Persistence;
@@ -83,9 +84,38 @@ public class PlatformAccessRoleFusionTests
 
         await new DirectoryIamAdminService(db).SeedDefaultsIfEmptyAsync();
 
-        Assert.Equal(1, await db.IamPermissions.CountAsync());
+        // v61 : seules les rubriques ajoutées depuis (presences.encadrement ; v64 : absences du planning)
+        // reçoivent leurs droits par défaut.
+        var ajoutees = PlatformAccessCatalog.RubriquesAjoutees.Select(r => r + ".").ToList();
+        var lignes = await db.IamPermissions.Select(p => p.Action).ToListAsync();
+        Assert.Equal(1, lignes.Count(a => !ajoutees.Any(a.StartsWith)));
         Assert.True(await db.IamPermissions.AnyAsync(
             p => p.Role == "Superviseur" && p.Scope == "Global" && p.IsAllowed));
+    }
+
+    [Fact]
+    public async Task Rubrique_ajoutee_v61_droits_par_defaut_poses_une_seule_fois()
+    {
+        var db = new DirectoryDbContext(new DbContextOptionsBuilder<DirectoryDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        db.IamPermissions.Add(new IamPermission
+        {
+            Id = Guid.NewGuid(), Role = "RP", Action = "presences.View", Scope = "Pole", IsAllowed = true,
+        });
+        await db.SaveChangesAsync();
+        var service = new DirectoryIamAdminService(db);
+
+        await service.SeedDefaultsIfEmptyAsync();
+
+        Assert.True(await db.IamPermissions.AnyAsync(p => p.Role == "RP" && p.Action == "presences.encadrement.View" && p.Scope == "Pole" && p.IsAllowed));
+        Assert.True(await db.IamPermissions.AnyAsync(p => p.Role == "RP" && p.Action == "presences.encadrement.Act" && p.IsAllowed));
+        Assert.False(await db.IamPermissions.AnyAsync(p => p.Role == "Superviseur" && p.Action.StartsWith("presences.encadrement.")));
+
+        // Décoché par le Super Admin : jamais recoché au redémarrage suivant.
+        await service.UpsertAsync(new UpsertIamPermissionRequest("RP", "presences.encadrement.Act", "Pole", false));
+        await service.SeedDefaultsIfEmptyAsync();
+        Assert.False(await db.IamPermissions.AnyAsync(p => p.Role == "RP" && p.Action == "presences.encadrement.Act" && p.IsAllowed));
+        Assert.Equal(1, await db.IamPermissions.CountAsync(p => p.Role == "RP" && p.Action == "presences.encadrement.View"));
     }
 
     [Fact]

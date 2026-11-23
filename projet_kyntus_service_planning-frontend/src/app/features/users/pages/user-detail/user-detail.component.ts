@@ -46,6 +46,7 @@ import {
 } from '../../../../core/hr/user-hr-display.util';
 import { PilotRotationHistoryModalComponent } from '../../../prime/components/pilot-rotation-history-modal.component';
 import { libelleMail } from '../../lib/mail-interne.util';
+import { champsManquants } from '../../lib/fiche-completude';
 import { EmployeeDeactivateDialogComponent } from '../../components/employee-deactivate-dialog.component';
 
 @Component({
@@ -285,6 +286,11 @@ export class UserDetailComponent implements OnInit {
 
   goBack(): void { this.router.navigate(['/users']); }
   editUser(): void { this.router.navigate(['/users', 'edit', this.user?.id]); }
+
+  /** v63 — Champs du fichier RH de référence encore vides sur la fiche. */
+  get champsManquantsFiche(): string[] {
+    return this.user ? champsManquants(this.user.hrProfile) : [];
+  }
 
   changerService(): void {
     if (this.user?.id) void this.router.navigate(['/reaffectations'], { queryParams: { agent: this.user.id } });

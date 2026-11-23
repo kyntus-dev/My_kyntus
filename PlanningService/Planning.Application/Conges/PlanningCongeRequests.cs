@@ -64,3 +64,30 @@ public sealed class GetBulkAbsenceDaysCommandHandler(IPlanningCongeService conge
     public Task<BulkAbsenceDaysResponseDto> Handle(GetBulkAbsenceDaysCommand request, CancellationToken ct) =>
         conges.GetBulkAbsenceDaysAsync(request.Request, ct);
 }
+
+public record GetPlanningCongeByIdQuery(int Id) : IRequest<PlanningCongeListItemDto?>;
+
+public sealed class GetPlanningCongeByIdQueryHandler(IPlanningCongeService conges)
+    : IRequestHandler<GetPlanningCongeByIdQuery, PlanningCongeListItemDto?>
+{
+    public Task<PlanningCongeListItemDto?> Handle(GetPlanningCongeByIdQuery request, CancellationToken ct) =>
+        conges.GetByIdAsync(request.Id, ct);
+}
+
+public record GetPlanningCongesByUserQuery(int UserId) : IRequest<IReadOnlyList<PlanningCongeListItemDto>>;
+
+public sealed class GetPlanningCongesByUserQueryHandler(IPlanningCongeService conges)
+    : IRequestHandler<GetPlanningCongesByUserQuery, IReadOnlyList<PlanningCongeListItemDto>>
+{
+    public Task<IReadOnlyList<PlanningCongeListItemDto>> Handle(GetPlanningCongesByUserQuery request, CancellationToken ct) =>
+        conges.GetByUserAsync(request.UserId, ct);
+}
+
+public record UpdatePlanningCongeCommand(int Id, CreateCongeDto Dto) : IRequest<PlanningCongeListItemDto?>;
+
+public sealed class UpdatePlanningCongeCommandHandler(IPlanningCongeService conges)
+    : IRequestHandler<UpdatePlanningCongeCommand, PlanningCongeListItemDto?>
+{
+    public Task<PlanningCongeListItemDto?> Handle(UpdatePlanningCongeCommand request, CancellationToken ct) =>
+        conges.UpdateAsync(request.Id, request.Dto, ct);
+}

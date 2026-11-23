@@ -21,6 +21,8 @@ public static class PointageJourStatuts
     /// <summary>Ni planning ni pointage.</summary>
     public const string Repos = "Repos";
     public const string AVenir = "AVenir";
+    /// <summary>v64 : avant la date d'entrée réelle ou après la date de sortie effective (case grisée).</summary>
+    public const string HorsContrat = "HorsContrat";
 }
 
 /// <summary>

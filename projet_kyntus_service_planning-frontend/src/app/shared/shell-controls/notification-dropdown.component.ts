@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import {
   KyntusNotificationHubService,
   type KyntusNotification,
 } from '../../core/notifications/kyntus-notification-hub.service';
 import { KyntusShellUiService } from '../../core/notifications/kyntus-shell-ui.service';
+import { depuis } from '../../core/notifications/app-notification.util';
 
 const SOURCE_LABELS: Record<string, string> = {
   prime: 'PRIME',
@@ -35,12 +36,12 @@ const SOURCE_LABELS: Record<string, string> = {
             <p class="ks-notif-empty">Aucune notification</p>
           } @else {
             <ul>
-              @for (n of hub.notifications(); track n.id) {
+              @for (n of recentes(); track n.id) {
                 <li>
-                  <button type="button" class="ks-notif-item" (click)="onOpen(n)">
+                  <button type="button" class="ks-notif-item" (click)="onOpen(n)" [title]="n.action?.route ? 'Ouvrir la page concernée' : ''">
                     <span class="ks-notif-dot" [class.read]="n.read"></span>
                     <span class="ks-notif-item-body">
-                      <span class="ks-notif-source">{{ sourceLabel(n.source) }}</span>
+                      <span class="ks-notif-source">{{ n.sourceLabel || sourceLabel(n.source) }} · {{ depuis(n.createdAt) }}</span>
                       <span class="ks-notif-title">{{ n.title }}</span>
                       <span class="ks-notif-msg">{{ n.body }}</span>
                     </span>
@@ -61,14 +62,18 @@ const SOURCE_LABELS: Record<string, string> = {
 export class ShellNotificationDropdownComponent {
   readonly hub = inject(KyntusNotificationHubService);
   readonly shellUi = inject(KyntusShellUiService);
+  readonly depuis = (d: Date) => depuis(d);
+  /** v62 : les 20 plus récentes dans le menu ; toutes dans le centre de notifications. */
+  readonly recentes = computed(() => this.hub.notifications().slice(0, 20));
 
   sourceLabel(source: string): string {
     return SOURCE_LABELS[source] ?? source;
   }
 
   async onOpen(n: KyntusNotification): Promise<void> {
-    await this.hub.openNotification(n);
+    // v62 : le menu se ferme tout de suite, puis la page concernée s'ouvre.
     this.shellUi.closeDropdown();
+    await this.hub.openNotification(n);
   }
 
   async openCenter(): Promise<void> {

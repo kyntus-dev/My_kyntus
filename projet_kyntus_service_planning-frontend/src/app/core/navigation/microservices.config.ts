@@ -66,6 +66,13 @@ export interface MenuItem {
   capability?: string;
   /** En-tête de section non cliquable dans le menu latéral. */
   isSectionHeader?: boolean;
+  /** v60 — Entrée réservée au Super Admin (droits des administrateurs). */
+  superAdminOnly?: boolean;
+  /**
+   * v60.2 — Seul écran pris en compte pour un administrateur restreint par le Super Admin (les autres
+   * écrans de capability / ouvertureIam ne valent que pour les autres comptes).
+   */
+  iamStrict?: string;
   /** Badge numérique (ex. compteur inbox). */
   menuBadge?: number;
   /**
@@ -137,7 +144,10 @@ export const MICROSERVICES: Microservice[] = [
     children: [
       { label: 'Vue d’ensemble', route: '/admin?section=overview', platformAdminSection: 'overview', roles: ADMIN_RH, hat: 'both', capability: 'admin.overview' },
       { label: 'Accès par rôle', route: '/admin?section=access', platformAdminSection: 'access', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
-      { label: 'Accès par compte', route: '/admin?section=comptes', platformAdminSection: 'comptes', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.access' },
+      // v60.2 : rubrique à part ; « Accès par rôle » l'ouvre encore, sauf pour un admin restreint.
+      { label: 'Accès par compte', route: '/admin?section=comptes', platformAdminSection: 'comptes', roles: [KyntusRoleNames.Admin], hat: 'both', ouvertureIam: ['admin.comptes', 'admin.access'], iamStrict: 'admin.comptes' },
+      // v60 — Super Admin : fonctionnalités accordées ou retirées à chaque administrateur.
+      { label: 'Droits des administrateurs', route: '/admin?section=admins', platformAdminSection: 'admins', roles: [KyntusRoleNames.Admin], hat: 'both', superAdminOnly: true },
       { label: 'Rôles', route: '/admin?section=roles', platformAdminSection: 'roles', roles: [KyntusRoleNames.Admin], hat: 'both', capability: 'admin.roles' },
       // v31 : une entrée par rubrique « Administration » de « Accès par rôle », dans le même ordre.
       { label: 'Utilisateurs', route: '/users', roles: ADMIN_RH, hat: 'both', capability: 'admin.users' },
@@ -155,6 +165,7 @@ export const MICROSERVICES: Microservice[] = [
     children: [
       { label: 'Tableau de bord', route: '/audit?section=dashboard', platformAuditSection: 'dashboard', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.dashboard' },
       { label: 'Journal', route: '/audit?section=journal', platformAuditSection: 'journal', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.journal' },
+      { label: 'Journal d’actions', route: '/audit?section=actions', platformAuditSection: 'actions', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.actions' },
       { label: 'Historique d’accès', route: '/audit?section=access-history', platformAuditSection: 'access-history', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.access-history' },
       { label: 'Anomalies', route: '/audit?section=anomalies', platformAuditSection: 'anomalies', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.anomalies' },
       { label: 'Reporting', route: '/audit?section=reporting', platformAuditSection: 'reporting', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.reporting' },
@@ -309,7 +320,7 @@ export const MICROSERVICES: Microservice[] = [
       { label: 'Congés de ma cellule', route: '/conges/ma-cellule', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'conges.self' },
       { label: 'Valider les congés', route: '/conges/validation', roles: [...MANAGER_ROLES, 'Superviseur'], hat: 'team', capability: 'conges.validation' },
       { label: "Congés de l'équipe", route: '/conges/equipe', roles: ROLE_SETS.congesEquipe, hat: 'team', ouvertureIam: 'conges.equipe' },
-      { label: 'Absences', route: '/absences-planning', roles: MANAGER_ROLES, hat: 'team', capability: 'conges.validation' },
+      { label: 'Absences', route: '/absences-planning', roles: MANAGER_ROLES, hat: 'team', capability: 'conges.planning' },
       { label: 'Historique des congés', route: '/conges/historique', roles: MANAGER_ROLES, hat: 'team', capability: 'conges.history' },
       { label: 'Quotas cellule / service', route: '/conges/quotas-service', roles: ['Superviseur', 'Admin', 'RP', 'Chef de projet'], hat: 'team', capability: 'conges.quotas' },
       { label: 'Périodes interdites', route: '/conges/periodes-interdites', roles: ADMIN_RH, hat: 'team', capability: 'conges.periodes' },

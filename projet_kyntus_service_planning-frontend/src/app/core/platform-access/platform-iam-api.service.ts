@@ -43,6 +43,12 @@ export interface EffectivePermissionsDto {
   subjectId: string;
   role: string;
   permissions: string[];
+  /** v60 — Compte Super Admin. */
+  superAdmin?: boolean;
+  /** v60 — Administrateur à qui le Super Admin a retiré des fonctionnalités. */
+  adminRestreint?: boolean;
+  /** v60 — Fonctionnalités retirées (« écran.Verbe »). */
+  retraits?: string[] | null;
 }
 
 @Injectable({ providedIn: 'root' })

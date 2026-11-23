@@ -92,6 +92,24 @@ public class UserHrProfileDto
     public DateOnly? DateEvolutionPoste { get; set; }
     public string? AncienPoste { get; set; }
     public string? AncienService { get; set; }
+    /// <summary>
+    /// v63 : intitulé du poste (« Nomination de poste »). null = non transmis (inchangé) ;
+    /// chaîne vide = effacé. Même règle pour <see cref="TypeContrat"/> et <see cref="NumeroBox"/>.
+    /// </summary>
+    public string? Poste { get; set; }
+    /// <summary>v63 : type de contrat tel qu'écrit dans le fichier RH (CDI, CDD, CI-Anapec…).</summary>
+    public string? TypeContrat { get; set; }
+    /// <summary>v63 : boîte d'archivage du dossier papier (« N° BOX »).</summary>
+    public string? NumeroBox { get; set; }
+    /// <summary>
+    /// v64 : « SALARIE » ou « SOUS_TRAITANT ». Toujours renseigné en lecture (déduit pour une fiche
+    /// ancienne) ; en écriture, null = inchangé.
+    /// </summary>
+    public string? TypeEmploye { get; set; }
+    /// <summary>v64 : N° de carte d'immatriculation (résidents étrangers). null = inchangé, "" = effacé.</summary>
+    public string? CarteImmatriculation { get; set; }
+    /// <summary>v64 : N° de passeport. null = inchangé, "" = effacé.</summary>
+    public string? NumeroPasseport { get; set; }
     public string? NiveauScolaire { get; set; }
     public string? IntitulesEtudes { get; set; }
     public bool EnFormation { get; set; }

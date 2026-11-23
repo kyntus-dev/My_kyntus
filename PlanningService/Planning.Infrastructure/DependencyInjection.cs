@@ -30,6 +30,10 @@ public static class DependencyInjection
         bool isTesting)
     {
         services.AddSingleton<SlowQueryCommandInterceptor>();
+        // v64 : journal d'actions (Audit et conformité).
+        services.AddHttpContextAccessor();
+        services.AddSingleton<Planning.Infrastructure.Persistence.JournalActions.JournalActionsInterceptor>();
+        services.AddScoped<IJournalActionsService, JournalActionsService>();
         if (isTesting)
         {
             services.AddDbContext<AppDbContext>((sp, options) =>
@@ -44,12 +48,17 @@ public static class DependencyInjection
             services.AddDbContext<AppDbContext>((sp, options) =>
             {
                 options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"));
-                options.AddInterceptors(sp.GetRequiredService<SlowQueryCommandInterceptor>());
+                options.AddInterceptors(
+                    sp.GetRequiredService<SlowQueryCommandInterceptor>(),
+                    sp.GetRequiredService<Planning.Infrastructure.Persistence.JournalActions.JournalActionsInterceptor>());
             });
         }
 
         services.AddKyntusOutbox<AppDbContext>();
         services.AddKyntusCaching(configuration);
+        // v60 — Appels Auth : signale le Super Admin (protection de son compte).
+        services.AddHttpContextAccessor();
+        services.AddTransient<ActingSuperAdminHeaderHandler>();
         services.AddKyntusIamViaDirectoryHttp(
             configuration["Directory:BaseUrl"] ?? "http://employee-directory-backend:8080");
         services.AddDesktopPushClient(configuration);
@@ -64,6 +73,8 @@ public static class DependencyInjection
         // E-mails des plannings et des notifications : file d'envoi + boucle d'envoi à cadence limitée.
         services.Configure<NotificationEmailOptions>(configuration.GetSection(NotificationEmailOptions.SectionName));
         services.AddScoped<INotificationEmailQueue, NotificationEmailQueue>();
+        // v62 : cloche de l'application (notification à la personne concernée après chaque action).
+        services.AddScoped<IAppNotifier, Planning.Infrastructure.Services.Notifications.AppNotifier>();
         services.AddScoped<EmailOutboxProcessor>();
         services.AddScoped<INotificationEmailSettingsService, NotificationEmailSettingsService>();
         if (!isTesting)
@@ -110,7 +121,7 @@ public static class DependencyInjection
             var apiKey = configuration["InternalServices:ApiKey"];
             if (!string.IsNullOrWhiteSpace(apiKey))
                 client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Service-Key", apiKey);
-        });
+        }).AddHttpMessageHandler<ActingSuperAdminHeaderHandler>();
         // Réaffectations (v21) : implémentées par UserService (mêmes synchronisations que la fiche).
         services.AddScoped<IAgentReaffectation>(sp => (IAgentReaffectation)sp.GetRequiredService<IUserService>());
         services.AddHttpClient<IUserService, UserService>((sp, client) =>
@@ -125,7 +136,7 @@ public static class DependencyInjection
                 client.DefaultRequestHeaders.Remove("X-Internal-Service-Key");
                 client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Service-Key", apiKey);
             }
-        });
+        }).AddHttpMessageHandler<ActingSuperAdminHeaderHandler>();
         // v56 : « mot de passe oublié » (écran de connexion) et API publique des employés.
         services.AddScoped<IMotDePasseOublieService, MotDePasseOublieService>();
         // v58 : validation du tableau de paie par les RH (verrouillage de la période).
@@ -143,6 +154,8 @@ public static class DependencyInjection
         services.AddScoped<IPlanningReinforcementRequestService, PlanningReinforcementRequestService>();
         services.AddScoped<IPlanningPendingRequestsAlertService, PlanningPendingRequestsAlertService>();
         services.AddHostedService<WeeklyPlanningAutoGeneratorHostedService>();
+        // v61 — Plannings alignés sur les agents réels (sortis retirés, arrivés ajoutés).
+        services.AddHostedService<PlanningEffectifSyncHostedService>();
         services.AddHostedService<PendingRequestsReminderHostedService>();
         services.AddScoped<IPlanningOrgMirrorService, PlanningOrgMirrorService>();
         services.AddScoped<IDirectoryOrgWriteClient, DirectoryOrgWriteClient>();
@@ -165,6 +178,9 @@ public static class DependencyInjection
         services.AddSingleton<EmployeeImportColumnMatcher>();
         services.AddScoped<IEmployeeDocumentFieldQueryService, EmployeeDocumentFieldQueryService>();
         services.AddScoped<EmployeeImportTemplateBuilder>();
+        // v63 — Fiches employés : fichier RH de référence + complétude.
+        services.AddScoped<IFichesReferenceService, FichesReferenceService>();
+        services.AddSingleton<FichesReferenceSuivi>();
 
         services.AddScoped<IReclamationService, ReclamationService>();
         services.AddScoped<IPropositionService, PropositionService>();
@@ -205,6 +221,7 @@ public static class DependencyInjection
                 x.AddConsumer<TrainingQuizResultReadyConsumer>();
                 x.AddConsumer<CatalogEnrollmentDeadlineReminderConsumer>();
                 x.AddConsumer<CatalogFormationAvailableConsumer>();
+                x.AddConsumer<JournalActionConsumer>();
 
                 x.UsingRabbitMq((ctx, cfg) =>
                 {
@@ -228,6 +245,12 @@ public static class DependencyInjection
                     {
                         e.UseMessageRetry(r => r.Intervals(1000, 5000, 15000));
                         e.ConfigureConsumer<NotificationEmailRequestedConsumer>(ctx);
+                    });
+                    // v64 : journal d'actions (droits d'accès publiés par l'annuaire…).
+                    cfg.ReceiveEndpoint("planning-journal-actions", e =>
+                    {
+                        e.UseMessageRetry(r => r.Intervals(1000, 5000, 15000));
+                        e.ConfigureConsumer<JournalActionConsumer>(ctx);
                     });
                     cfg.ReceiveEndpoint("planning-org-structure", e =>
                         e.ConfigureConsumer<OrgStructureConsumer>(ctx));

@@ -68,6 +68,7 @@ public partial class EmployeeImportService
         };
 
         _credentialsStore.ApplyToReport(report);
+        await EmployeeImportCompletude.CompleterRapportAsync(_db, report, ct);
         return report;
     }
 

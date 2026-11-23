@@ -2,6 +2,7 @@ using EmployeeDirectory.Application;
 using EmployeeDirectory.API.Middlewares;
 using EmployeeDirectory.Infrastructure;
 using EmployeeDirectory.Infrastructure.Persistence;
+using Kyntus.Iam;
 using Kyntus.Identity.Jwt;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,6 +23,8 @@ builder.Services.AddCors(o => o.AddPolicy("lanCors", p => p
 builder.Services.AddEmployeeDirectoryApplication();
 builder.Services.AddDirectoryInfrastructure(builder.Configuration);
 builder.Services.AddKyntusJwtAuthentication(builder.Configuration);
+// v60 — Restrictions des administrateurs par le Super Admin (fournisseur local : base de l'annuaire).
+builder.Services.AddKyntusAdminRestrictions(builder.Configuration, useDirectoryHttp: false);
 
 var app = builder.Build();
 
@@ -63,6 +66,7 @@ app.UseMiddleware<InternalServiceAuthMiddleware>();
 app.UseCors("lanCors");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseKyntusAdminRestrictions();
 app.MapControllers();
 
 app.Run();

@@ -18,6 +18,8 @@ export interface PlanningNotification {
   weeklyPlanningId?: number;
   /** Route SPA optionnelle (formation continue animateur / bénéficiaire). */
   deepLink?: string;
+  /** v62 : presences, conges, documentation, affectation… (notifications d'application). */
+  categorie?: string;
 }
 
 export interface NewsletterNotification {
@@ -80,6 +82,12 @@ export class NotificationService {
   private connection!: signalR.HubConnection;
   private reclamationConnection!: signalR.HubConnection;
   private readonly TOKEN_KEY = 'token';
+
+  /** v62 : notifications reçues en direct (titre + message), pour un bandeau dans l'application. */
+
+  private readonly recueSubject = new Subject<{ weekCode: string; titre: string; message: string }>();
+
+  readonly recue$ = this.recueSubject.asObservable();
 
   private notificationsSubject = new BehaviorSubject<PlanningNotification[]>([]);
   public notifications$ = this.notificationsSubject.asObservable();
@@ -191,6 +199,7 @@ export class NotificationService {
               type,
               icon: type === 'formation' ? 'book' : 'calendar',
               weeklyPlanningId: r.weeklyPlanningId,
+              categorie: r.categorie ?? undefined,
               deepLink:
                 r.deepLink
                 ?? (type === 'formation'
@@ -243,6 +252,7 @@ private connectPlanningHub(): void {
       message: string;
       weeklyPlanningId?: number;
       deepLink?: string;
+      categorie?: string;
       createdAt?: string;
       isRead?: boolean;
     }) => {
@@ -257,10 +267,13 @@ private connectPlanningHub(): void {
         type,
         icon:           type === 'formation' ? 'book' : 'calendar',
         weeklyPlanningId: data.weeklyPlanningId,
+        categorie: data.categorie,
         deepLink: type === 'formation'
           ? resolveFormationDeepLink(data.weekCode ?? '', data.deepLink)
           : data.deepLink,
       });
+      // v62 : nouvelle notification reçue en direct (bandeau discret dans l'application).
+      if (!data.isRead) this.recueSubject.next({ weekCode: data.weekCode ?? '', titre: data.subServiceName ?? '', message: data.message ?? '' });
     });
 
     const joinPlanningGroups = async (): Promise<void> => {

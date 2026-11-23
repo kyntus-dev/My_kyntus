@@ -470,6 +470,21 @@
         <span class="ky-stat-value">{{ report.erreurs }}</span>
         <span class="ky-stat-label">Erreurs</span>
       </div>
+      <div class="ky-stat-card" *ngIf="report.fichesIncompletes">
+        <span class="ky-stat-value">{{ report.fichesIncompletes }}</span>
+        <span class="ky-stat-label">Fiches incomplètes</span>
+      </div>
+    </div>
+    <div
+      class="ky-alert"
+      *ngIf="report.fichesIncompletes"
+      style="margin: 1rem 0; border-left: 4px solid var(--warning); background: var(--warning-bg); padding: 0.85rem 1rem;"
+    >
+      <strong>{{ report.fichesIncompletes }} fiche(s) incomplète(s) après l'import.</strong>
+      <p style="margin: 0.35rem 0 0;">
+        Les champs manquants sont listés ligne par ligne ci-dessous. Complétez-les sur la fiche ou par
+        <a routerLink="/users/fiches-reference">la mise à jour depuis le fichier RH de référence</a>.
+      </p>
     </div>
     <div class="org-created" *ngIf="report.orgNodesCreated?.length">
       <h3 class="ky-card-title mb-2">Organisations créées</h3>
@@ -521,6 +536,7 @@
             <th>Email</th>
             <th>Action</th>
             <th>Message</th>
+            <th>Champs manquants</th>
             <th>Mot de passe</th>
           </tr>
         </thead>
@@ -530,6 +546,7 @@
             <td>{{ line.email ?? '—' }}</td>
             <td>{{ actionLabel(line.action) }}</td>
             <td>{{ line.message ?? '—' }}</td>
+            <td>{{ line.champsManquants?.length ? line.champsManquants!.join(', ') : '—' }}</td>
             <td>
               <ng-container *ngIf="line.temporaryPassword; else noPwd">
                 <code>{{ isPasswordRevealed(line) ? line.temporaryPassword : '••••••••••••••••' }}</code>

@@ -7,7 +7,7 @@
     </div>
     <div class="ku-hero-actions">
       <div class="ku-seg" role="tablist">
-        <button type="button" [class.is-active]="mode() === 'paie'" (click)="choisirMode('paie')">Paie (24 → 23)</button>
+        <button type="button" [class.is-active]="mode() === 'paie'" (click)="choisirMode('paie')" title="Colonnes du 1er à la fin du mois ; absences du 24 au 23">Paie (mois + 24 → 23)</button>
         <button type="button" [class.is-active]="mode() === 'mois'" (click)="choisirMode('mois')">Mois civil</button>
       </div>
       <button type="button" class="ku-btn" (click)="changerPeriode(-1)" aria-label="Période précédente">‹</button>
@@ -20,13 +20,17 @@
 
   <div class="ku-kpis">
     <div class="ku-kpi"><span class="ku-kpi-label">Agents exportés</span><span class="ku-kpi-value">{{ synthese().agents }}</span>
-      <span class="ku-kpi-sub">du {{ dateFr(periode().du) }} au {{ dateFr(periode().au) }} · {{ jours().length }} jours (lun.–sam.)</span></div>
+      @if (mois(); as m) {
+        <span class="ku-kpi-sub">colonnes du {{ dateFr(m.du) }} au {{ dateFr(m.au) }} · {{ jours().length }} jours (lun.–sam.) · absences du {{ dateFr(periode().du) }} au {{ dateFr(periode().au) }}</span>
+      } @else {
+        <span class="ku-kpi-sub">du {{ dateFr(periode().du) }} au {{ dateFr(periode().au) }} · {{ jours().length }} jours (lun.–sam.)</span>
+      }</div>
     <div class="ku-kpi"><span class="ku-kpi-label">Jours travaillés</span><span class="ku-kpi-value">{{ synthese().jrsTravailles }}</span>
       <span class="ku-kpi-sub">base 26 jours · {{ synthese().absences }} jour(s) d’absence déduits · {{ synthese().horsPaie }} hors paie</span></div>
     <div class="ku-kpi" [class.ku-kpi--danger]="synthese().penalites < 0"><span class="ku-kpi-label">Pénalités (référentiel)</span>
       <span class="ku-kpi-value">{{ montantFr(synthese().penalites) }}</span><span class="ku-kpi-sub">{{ synthese().agentsPenalises }} agent(s) · retards et manquements saisis</span></div>
     <div class="ku-kpi"><span class="ku-kpi-label">Total EVP</span><span class="ku-kpi-value">{{ montantFr(synthese().evp) }}</span>
-      <span class="ku-kpi-sub">éléments variables de la période</span></div>
+      <span class="ku-kpi-sub">éléments variables de la période · {{ synthese().hs }} h supp. détectées au pointage</span></div>
   </div>
 
   <!-- v58 : validation du tableau de paie — réservée au RH, visible de tous. -->
@@ -162,7 +166,7 @@
               <th colspan="5" class="pze-g-deduit">Absences déduites</th>
               <th colspan="4">Non déduites</th>
               <th colspan="5" class="pze-g-paie">Paie</th>
-              <th colspan="3">EVP et commentaires</th>
+              <th colspan="4">EVP, heures supp. et commentaires</th>
               <th rowspan="2">À vérifier</th>
             </tr>
             <tr>
@@ -183,6 +187,7 @@
               <th class="pze-g-paie">Pénalité</th>
               <th>Manq.</th>
               <th>Total EVP</th>
+              <th title="Heures supplémentaires détectées au pointage (après la fin prévue, tranches de 30 min ; dimanche / férié)">HS (h)</th>
               <th>Détail</th>
             </tr>
           </thead>
@@ -218,7 +223,8 @@
                 <td class="pze-n pze-g-paie" [class.ku-neg]="l.penalite < 0" [title]="l.originePenalite">{{ l.penalite || '' }}</td>
                 <td class="pze-n">{{ l.manques || '' }}</td>
                 <td class="pze-n" [class.ku-neg]="l.totalEvp < 0" [class.ku-pos]="l.totalEvp > 0">{{ l.totalEvp ? montantFr(l.totalEvp) : '' }}</td>
-                <td class="pze-detail" [title]="(l.originePenalite ? 'Pénalités : ' + l.originePenalite + '\n\n' : '') + (l.evp ? 'EVP : ' + l.evp : '') + (l.commentaires ? '\n\nCommentaires : ' + l.commentaires : '') + (l.sortie ? '\n\n' + l.sortie : '')">
+                <td class="pze-n" [title]="l.hsDetail ? 'Avant 21h : ' + l.hsAvant21 + ' h · après 21h : ' + l.hsApres21 + ' h · dim./férié : ' + l.hsDimancheFerie + ' h\n' + l.hsDetail : ''">{{ l.hsTotal || '' }}</td>
+                <td class="pze-detail" [title]="(l.originePenalite ? 'Pénalités : ' + l.originePenalite + '\n\n' : '') + (l.evp ? 'EVP : ' + l.evp : '') + (l.absencesAvantMois ? '\n\nAbsences déduites avant le 1er : ' + l.absencesAvantMois : '') + (l.commentaires ? '\n\nCommentaires : ' + l.commentaires : '') + (l.sortie ? '\n\n' + l.sortie : '')">
                   @if (l.originePenalite) { <span class="pze-tag pze-tag--ko">Pén.</span> }
                   @if (l.evp) { <span class="pze-tag">EVP</span> }
                   @if (l.commentaires) { <span class="pze-tag">Com.</span> }
@@ -233,6 +239,8 @@
         </table>
       </div>
       <p class="ku-card-sub pz-note">
+        En mode paie, les colonnes vont du 1er à la fin du mois : du 24 à la fin du mois, l’agent est présent par défaut et ses absences seront
+        déduites le mois suivant ; les absences, EVP, retards et heures supplémentaires sont ceux du 24 du mois précédent au 23.
         Aperçu condensé : le fichier Excel contient les 3 colonnes d’identité, un jour par colonne (lundi → samedi) et les colonnes de paie,
         dans l’ordre du récapitulatif actuel, avec les commentaires, le détail des EVP et l’origine des pénalités (code, rang, montant) en texte,
         puis la colonne « Statut paie ». Survolez « Pénalité » ou « Détail » pour lire ces textes.

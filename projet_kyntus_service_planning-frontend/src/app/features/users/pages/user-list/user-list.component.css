@@ -440,3 +440,8 @@
 .organisation-cell .org-service{font-style:italic}
 .toolbar-dropdown button:disabled{opacity:.55;cursor:not-allowed}
 .toolbar-dropdown button:disabled:hover{background:none}
+
+/* v64 : type d'employé */
+.type-counts{color:var(--text-muted);font-weight:500}
+.type-employe-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;background:color-mix(in srgb,var(--primary,#2563eb) 10%,transparent);color:var(--primary,#2563eb)}
+.type-employe-badge[data-type="SOUS_TRAITANT"]{background:color-mix(in srgb,#d97706 14%,transparent);color:#b45309}

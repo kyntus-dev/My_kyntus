@@ -140,3 +140,18 @@ button.pz-code:disabled { cursor: default; }
 /* v46.1 : tableau des superviseurs / référents */
 .pz-vue-encadrement { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 10px; padding: 8px 12px; border-radius: 8px;
   font-size: 0.8rem; background: color-mix(in srgb, #7c3aed 10%, var(--bg-card)); border-left: 4px solid #7c3aed; }
+
+/* v63.3 — Case sans code : le repère dit pourquoi (repos, pointeuse non reliée). */
+.pz-vide { color: var(--text-muted, #9ca3af); font-weight: 400; }
+.pz-badge--alerte { background: #b45309; }
+.pz-note--alerte { color: var(--warning-text, #b45309); }
+
+/* v64 : hors contrat (avant l'entrée, après la sortie) — case grisée, non saisissable. */
+.pz-table tbody td.pz-hors-contrat {
+  background: repeating-linear-gradient(135deg, var(--surface-2, #f1f5f9) 0 6px, var(--surface-3, #e2e8f0) 6px 7px);
+}
+.pz-table tbody td.pz-hors-contrat button.pz-code { opacity: .35; background: transparent; border-color: transparent; }
+.pz-leg-hors-contrat {
+  min-width: 22px;
+  background: repeating-linear-gradient(135deg, var(--surface-2, #f1f5f9) 0 4px, var(--surface-3, #e2e8f0) 4px 5px);
+}

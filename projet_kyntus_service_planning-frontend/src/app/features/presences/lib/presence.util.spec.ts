@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { PresenceAgentDto, PresenceJourDto } from '../../../core/models/presence.models';
 import {
   FILTRES_VIDES,
+  encadrementDans,
   familleCode,
+  raisonCaseVide,
+  estHorsContrat,
   filtrerAgents,
   joursDeLaPeriode,
   libellesUniques,
   lignesRetards,
   optionsActivites,
   optionsOrganisation,
+  optionsPerimetre,
   periodePaie,
   structureDeLActivite,
 } from './presence.util';
@@ -196,5 +200,106 @@ describe('listes déroulantes Présence et Paie (v58)', () => {
   it('les activités proposées viennent de l’organisation puis des agents, sans doublon', () => {
     expect(optionsActivites(activites, ['bytel kyntus', 'Formation & Qualité']))
       .toEqual(['Bytel Kyntus', 'Formation & Qualité']);
+  });
+});
+
+describe('v61 : périmètre du RP, superviseurs et référents par contrat', () => {
+  const activiteDuPole = (poleId: string | null) =>
+    ({ 'p-bytel': 'Bytel Kyntus', 'p-sfr': 'SFR', 'p-sfr2': 'SFR' } as Record<string, string>)[poleId ?? ''] ?? null;
+  const agents = [
+    agent({ userId: 1, nom: 'AGENT Bytel', pole: 'Pôle Bytel', poleId: 'p-bytel', cellule: 'Bytel 1' }),
+    agent({ userId: 2, nom: 'AGENT Sfr', pole: 'Pôle SFR', poleId: 'p-sfr', cellule: 'Sfr Ftth' }),
+    // Superviseur sans placement, désigné par les agents Bytel.
+    agent({ userId: 10, nom: 'SUP Bytel', role: 'Superviseur', pole: null, poleId: null, cellule: null,
+      poleIdsEncadres: ['p-bytel'], polesEncadres: ['Pôle Bytel'], cellulesEncadrees: ['Bytel 1'] }),
+    // Référent placé côté SFR.
+    agent({ userId: 11, nom: 'RT Sfr', role: 'Référent technique', pole: 'Pôle SFR', poleId: 'p-sfr', cellule: 'Sfr Ftth',
+      poleIdsEncadres: ['p-sfr'], polesEncadres: ['Pôle SFR'], cellulesEncadrees: ['Sfr Ftth'] }),
+  ];
+
+  it('un superviseur n’est proposé que pour le contrat, le pôle et la cellule de ses agents', () => {
+    const sup = agents[2];
+    expect(encadrementDans(sup, { activite: 'Bytel Kyntus', pole: '', cellule: '' }, activiteDuPole)).toBe(true);
+    expect(encadrementDans(sup, { activite: 'SFR', pole: '', cellule: '' }, activiteDuPole)).toBe(false);
+    expect(encadrementDans(sup, { activite: 'Bytel Kyntus', pole: 'pôle bytel', cellule: 'Bytel 1' }, activiteDuPole)).toBe(true);
+    expect(encadrementDans(sup, { activite: 'Bytel Kyntus', pole: '', cellule: 'Autre' }, activiteDuPole)).toBe(false);
+  });
+
+  it('tableau des superviseurs filtré par contrat ; référents de l’autre contrat exclus', () => {
+    const f = { ...FILTRES_VIDES, activite: 'Bytel Kyntus', superviseurs: '*' };
+    expect(filtrerAgents(agents, f, activiteDuPole, true).map((a) => a.userId)).toEqual([10]);
+    const g = { ...FILTRES_VIDES, activite: 'Bytel Kyntus', referents: '*' };
+    expect(filtrerAgents(agents, g, activiteDuPole, true)).toEqual([]);
+  });
+
+  it('périmètre limité : contrats, pôles et cellules de ses agents seulement ; toute l’entreprise : organisation', () => {
+    const structure = [
+      { id: 'd1', name: 'Bytel Kyntus', isActive: true, poles: [{ id: 'x', name: 'Pôle Bytel', cellules: [{ id: 'c', name: 'Bytel 1' }] }] },
+      { id: 'd2', name: 'Autre contrat', isActive: true, poles: [] },
+    ] as never;
+    const depuis = { activites: ['Bytel Kyntus', 'Bytel Kyntus'], poles: ['Pôle Bytel'], cellules: ['Bytel 1'] };
+    expect(optionsPerimetre(false, structure, '', '', depuis).activites).toEqual(['Bytel Kyntus']);
+    expect(optionsPerimetre(true, structure, '', '', depuis).activites).toEqual(['Autre contrat', 'Bytel Kyntus']);
+  });
+});
+
+describe('v62 : listes superviseurs / référents pour les RH', () => {
+  it('le choix ouvre leur tableau sans être chef de projet ; non placés masqués du tableau principal', async () => {
+    const { filtrerAgents, FILTRES_VIDES, estEncadrementNonPlace } = await import('./presence.util');
+    const agents = [
+      agent({ userId: 1, nom: 'AGENT', role: 'Pilote' }),
+      agent({ userId: 2, nom: 'SUP placé', role: 'Superviseur' }),
+      agent({ userId: 3, nom: 'SUP organisation', role: 'Superviseur', pole: null, poleId: null, cellule: null, celluleId: null }),
+    ];
+    const act = () => null;
+    expect(filtrerAgents(agents, { ...FILTRES_VIDES, superviseurs: '*' }, act, false).map((a) => a.userId)).toEqual([2, 3]);
+    expect(filtrerAgents(agents, FILTRES_VIDES, act, false, true).map((a) => a.userId)).toEqual([1, 2]);
+    expect(filtrerAgents(agents, FILTRES_VIDES, act, false).map((a) => a.userId)).toEqual([1, 2, 3]);
+    expect(estEncadrementNonPlace(agents[2])).toBe(true);
+    expect(estEncadrementNonPlace(agents[1])).toBe(false);
+  });
+});
+
+describe('cases vides du tableau (v63.3)', () => {
+  const j = (p: Partial<PresenceJourDto>): PresenceJourDto => ({
+    jour: '2026-11-10', code: null, auto: true, codeAuto: null, statut: 'Repos', planning: null,
+    arrivee: null, depart: null, pointages: [], retardEntreeMinutes: 0, retardPauseMinutes: 0,
+    retardRetenuMinutes: 0, retardAutorise: false, retardPauseAutorise: false, manquePointage: false,
+    absencePartielle: false, commentaire: null, modifiePar: null, ...p,
+  } as PresenceJourDto);
+
+  it('ne donne aucune raison pour une journée qui porte un code', () => {
+    expect(raisonCaseVide(j({ code: 'ABS N', statut: 'SansPointage' }))).toBeNull();
+  });
+
+  it('distingue repos, jour à venir et compte sans pointeuse', () => {
+    expect(raisonCaseVide(j({ statut: 'Repos' }))?.marque).toBe('–');
+    expect(raisonCaseVide(j({ statut: 'Repos' }))?.raison).toContain('Repos');
+    expect(raisonCaseVide(j({ statut: 'AVenir' }))?.marque).toBe('');
+    const sansPointeuse = raisonCaseVide(j({ statut: 'Repos' }), false);
+    expect(sansPointeuse?.marque).toBe('?');
+    expect(sansPointeuse?.raison).toContain('Liaisons HTEL');
+  });
+
+  it('signale un pointage sans planning publié', () => {
+    expect(raisonCaseVide(j({ statut: 'SansPlanning' }))?.raison).toContain('planning publié');
+  });
+});
+
+describe('jour hors contrat (v64)', () => {
+  const jour = (p: Partial<PresenceJourDto>): PresenceJourDto => ({
+    jour: '2026-11-02', code: null, auto: true, codeAuto: null, statut: 'HorsContrat', planning: null, arrivee: null, depart: null,
+    pointages: [], retardEntreeMinutes: 0, retardPauseMinutes: 0, retardAutorise: false, retardPauseAutorise: false,
+    motifAutorisation: null, retardRetenuMinutes: 0, retardAutoriseMinutes: 0, manquePointage: false, commentaire: null,
+    modifiePar: null, modifieLe: null, absencePartielle: false, ...p,
+  } as PresenceJourDto);
+
+  it('grise la case sans repère et la rend non saisissable', () => {
+    expect(estHorsContrat(jour({}))).toBe(true);
+    expect(raisonCaseVide(jour({}))?.marque).toBe('');
+    expect(raisonCaseVide(jour({}))?.raison).toContain('Hors contrat');
+    // Une saisie existante (historique) reste affichée et n'est pas grisée.
+    expect(estHorsContrat(jour({ code: 'AM', auto: false }))).toBe(false);
+    expect(estHorsContrat(jour({ statut: 'Repos' }))).toBe(false);
   });
 });

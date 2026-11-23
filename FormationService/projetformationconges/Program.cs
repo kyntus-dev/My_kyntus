@@ -6,6 +6,7 @@ using Formation.Domain.Interfaces;
 using Formation.API.Middlewares;
 using Kyntus.Caching;
 using Kyntus.Identity.Jwt;
+using Kyntus.Iam;
 using Kyntus.Messaging.Contracts;
 using MassTransit;
 using Microsoft.AspNetCore.Authorization;
@@ -137,6 +138,9 @@ builder.Services.AddControllers(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// v60 — Restrictions des administrateurs par le Super Admin (contrôle à l'entrée de chaque API).
+builder.Services.AddKyntusAdminRestrictions(builder.Configuration);
+
 var app = builder.Build();
 
 app.UseMiddleware<ExceptionMiddleware>();
@@ -147,6 +151,7 @@ if (app.Environment.IsDevelopment())
 }
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseKyntusAdminRestrictions();
 app.MapControllers();
 
 // Migration automatique au démarrage

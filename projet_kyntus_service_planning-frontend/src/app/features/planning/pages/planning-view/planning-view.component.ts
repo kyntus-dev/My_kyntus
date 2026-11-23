@@ -1,9 +1,11 @@
-import { Component, OnInit, ViewEncapsulation, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ViewEncapsulation, ChangeDetectorRef, inject } from '@angular/core';
+import { JournalActionsService } from '../../../../core/services/journal-actions.service';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { switchMap } from 'rxjs/operators';
 import { ABSENCE_TYPES } from '../../services/conge.service';
+import { libelleAbsence } from '../../lib/absence-code.util';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import { UserService } from '../../../users/services/user.service';
 import {
@@ -72,6 +74,7 @@ type PlanningGridRow =
   encapsulation: ViewEncapsulation.None
 })
 export class PlanningViewComponent implements OnInit {
+  private readonly journalActions = inject(JournalActionsService);
 
   readonly contractLevelLabel = contractLevelLabel;
   planning:     WeeklyPlanningResponse | null = null;
@@ -1164,7 +1167,7 @@ selectedHolidayShiftId      = 0;
   }
 
   htelStartCellClass(cell: HtelDayCell): string {
-    if (cell.kind === 'cp') return 'export-htel-cp';
+    if (cell.kind === 'absence') return 'export-htel-cp';
     if (cell.kind === 'f') return 'export-htel-f';
     return '';
   }
@@ -1196,6 +1199,7 @@ selectedHolidayShiftId      = 0;
     try {
       await downloadHtelPlanningExcel([this.planning]);
       this.successMsg = `Export Excel — ${this.planning.weekCode}`;
+      this.journalActions.declarerExport(`Export Excel du planning — semaine ${this.planning.weekCode}`, this.planning.subServiceName);
     } catch (err) {
       console.error(err);
       this.error = 'Impossible d’exporter le planning.';
@@ -1611,14 +1615,40 @@ confirmHolidayOverride(): void {
   }
   
   getAbsenceLabel(value: string | null): string {
-  if (!value) return 'Congé';
-  return this.absenceTypes.find(t => t.value === value)?.label ?? 'Congé';
+  // v63.3 : la cause exacte (arrêt maladie, absence…) ; « Absence » si elle n'est pas connue.
+  return libelleAbsence(value);
 }
 getShiftNumber(label: string): string {
   // "Shift 1" → "1" | "Shift 2" → "2"
   const match = label?.match(/\d+/);
   return match ? match[0] : label;
 }
+  /** v64 : date ISO (yyyy-MM-dd) d'un jour de la semaine affichée. */
+  private isoDateForDay(day: string): string | null {
+    const start = this.planning?.weekStartDate?.slice(0, 10);
+    const offset = this.days.indexOf(day);
+    if (!start || offset < 0) return null;
+    const [y, m, d] = start.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d + offset));
+    return date.toISOString().slice(0, 10);
+  }
+
+  /** v64 : jour hors contrat (avant la date d'entrée réelle, après la date de sortie) : case grisée. */
+  horsContrat(emp: EmployeePlanning, day: string): string | null {
+    const iso = this.isoDateForDay(day);
+    if (!iso) return null;
+    const entree = emp.dateEntreeContrat?.slice(0, 10);
+    const sortie = emp.dateSortieContrat?.slice(0, 10);
+    const fr = (v: string) => v.split('-').reverse().join('/');
+    if (entree && iso < entree) return `Hors contrat : entrée le ${fr(entree)}`;
+    if (sortie && iso > sortie) return `Hors contrat : sorti le ${fr(sortie)}`;
+    return null;
+  }
+
+  estSousTraitant(emp: EmployeePlanning): boolean {
+    return emp.typeEmploye === 'SOUS_TRAITANT';
+  }
+
   getDateForDay(weekStartDate: string, day: string): string {
     const offsets: Record<string, number> = {
       Monday: 0, Tuesday: 1, Wednesday: 2,

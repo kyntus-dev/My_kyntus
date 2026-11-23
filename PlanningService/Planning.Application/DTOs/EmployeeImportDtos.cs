@@ -362,6 +362,9 @@ public class EmployeeImportRowResultDto
 
     public string? LastName { get; set; }
 
+    /// <summary>v63 : champs obligatoires de la fiche encore vides après l'import (créations et mises à jour).</summary>
+    public List<string> ChampsManquants { get; set; } = new();
+
 }
 
 
@@ -396,6 +399,9 @@ public class EmployeeImportReportDto
     public List<OrgNodeCreatedReportDto> OrgNodesCreated { get; set; } = new();
 
     public List<string> OrgNodesSkipped { get; set; } = new();
+
+    /// <summary>v63 : fiches créées ou mises à jour qui restent incomplètes.</summary>
+    public int FichesIncompletes { get; set; }
 
 }
 

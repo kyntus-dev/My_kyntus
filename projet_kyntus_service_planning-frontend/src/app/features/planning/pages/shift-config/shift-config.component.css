@@ -1092,3 +1092,12 @@
   color: var(--blue-600);
 }
 
+/* v61 : nombre d'agents correspondant au % (effectif réel de la cellule). */
+.pct-agents {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ky-text-muted, #6b7280);
+  white-space: nowrap;
+}
+.ss-pct .pct-agents { display: inline; margin-top: 0; }

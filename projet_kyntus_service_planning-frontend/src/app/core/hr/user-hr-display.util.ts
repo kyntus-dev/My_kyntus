@@ -1,4 +1,5 @@
 import type { User, UserHrProfile } from '../../features/users/users-module';
+import { typeEmployeLibelle } from './type-employe.util';
 import { orgPerimeterSummary, type UserOrgPerimeterView } from '../org/user-org-perimeter';
 import {
   HR_EDUCATION_LEVEL_OPTIONS,
@@ -61,9 +62,10 @@ export function dateDisplay(value: string | null | undefined): string {
   return d.toLocaleDateString('fr-FR');
 }
 
-/** Date de référence pour l'ancienneté : date d'entrée, sinon embauche. */
+/** Date de référence pour l'ancienneté : date d'ancienneté du fichier RH (v63), sinon entrée, sinon embauche. */
 export function seniorityReferenceDate(user: User): string {
-  return user.hrProfile?.dateEntree?.trim()
+  return user.hrProfile?.dateAnciennete?.trim()
+    || user.hrProfile?.dateEntree?.trim()
     || user.hireDate
     || user.hrProfile?.dateAnciennete?.trim()
     || '';
@@ -127,7 +129,13 @@ export function buildCompleteHrProfileDisplayRows(profile: UserHrProfile | null 
     { label: 'Date de naissance', value: dateDisplay(p.dateNaissance) },
     { label: 'Ville de naissance', value: hrDisplayValue(p.villeNaissance) },
     { label: 'Nationalité', value: nationaliteDisplay(p.nationalite) },
-    { label: 'N° carte autoentrepreneur', value: hrDisplayValue(p.numeroCarteAutoentrepreneur) },
+    { label: "Type d'employé", value: typeEmployeLibelle(p.typeEmploye, p.numeroCarteAutoentrepreneur) },
+    {
+      label: "N° registre national (carte auto-entrepreneur)",
+      value: hrDisplayValue(p.numeroCarteAutoentrepreneur),
+    },
+    { label: "Carte d'immatriculation", value: hrDisplayValue(p.carteImmatriculation) },
+    { label: 'N° passeport', value: hrDisplayValue(p.numeroPasseport) },
     { label: 'Sexe', value: sexeDisplay(p.sexe) },
     { label: 'Situation familiale', value: situationFamilialeDisplay(p.situationFamiliale) },
     {
@@ -145,12 +153,16 @@ export function buildCompleteHrProfileDisplayRows(profile: UserHrProfile | null 
     { label: 'Immatriculation CNSS', value: hrDisplayValue(p.immatriculationCnss) },
     { label: "Date d'entrée", value: dateDisplay(p.dateEntree) },
     { label: "Date d'embauche (RH)", value: dateDisplay(p.dateEmbauche) },
+    { label: "Date d'ancienneté", value: dateDisplay(p.dateAnciennete) },
     {
       label: 'Ancienneté',
-      value: formatSeniorityDuration(p.dateEntree || p.dateEmbauche || p.dateAnciennete),
+      value: formatSeniorityDuration(p.dateAnciennete || p.dateEntree || p.dateEmbauche),
     },
     { label: 'Date de sortie', value: dateDisplay(p.dateSortie) },
     { label: 'Date évolution poste', value: dateDisplay(p.dateEvolutionPoste) },
+    { label: 'Nomination de poste', value: hrDisplayValue(p.poste) },
+    { label: 'Type de contrat (fichier RH)', value: hrDisplayValue(p.typeContrat) },
+    { label: 'N° BOX', value: hrDisplayValue(p.numeroBox) },
     { label: 'Ancien poste', value: hrDisplayValue(p.ancienPoste) },
     { label: 'Ancien service', value: hrDisplayValue(p.ancienService) },
     { label: 'Niveau scolaire', value: niveauScolaireDisplay(p.niveauScolaire) },
@@ -250,7 +262,8 @@ export function buildEmployeeDetailSections(
       rows: [
         { label: "Date d'embauche (compte)", value: dateDisplay(user.hireDate) },
         ...allHr.filter((r) =>
-          ["Date d'entrée", "Date d'embauche (RH)", "Date d'ancienneté", 'Date de sortie', 'Date évolution poste', 'Ancien poste', 'Ancien service'].includes(r.label),
+          ["Date d'entrée", "Date d'embauche (RH)", "Date d'ancienneté", 'Ancienneté', 'Date de sortie', 'Nomination de poste',
+            'Type de contrat (fichier RH)', 'N° BOX', 'Date évolution poste', 'Ancien poste', 'Ancien service'].includes(r.label),
         ),
       ],
     },

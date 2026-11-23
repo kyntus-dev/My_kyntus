@@ -20,7 +20,8 @@ public static class EmployeeImportHrProfileMapper
         "dateNaissance", "villeNaissance", "nationalite", "numeroCarteAutoentrepreneur", "sexe", "situationFamiliale", "nombreEnfants",
         "cin", "adresse", "telephone1", "telephoneUrgence", "relationUrgence", "rib",
         "immatriculationInterne", "immatriculationCnss", "dateEntree", "dateAnciennete", "dateSortie",
-        "dateEvolutionPoste", "ancienPoste", "ancienService", "niveauScolaire", "intitulesEtudes",
+        "dateEvolutionPoste", "ancienPoste", "ancienService", "poste", "numeroBox", "typeEmploye", "carteImmatriculation",
+        "numeroPasseport", "niveauScolaire", "intitulesEtudes",
         "enFormation", "dateDebutFormation", "dateFinFormationPrevue", "niveauExpertiseMetier"
     ];
 
@@ -227,23 +228,30 @@ public static class EmployeeImportHrProfileMapper
         DateTime hireDate,
         bool isCreate)
     {
+        // v63 : en mise à jour, une case vide du fichier ne vide jamais la fiche
+        // (une information fiable n'est pas écrasée par une valeur absente).
+        if (!isCreate)
+            mapped = mapped
+                .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
+
         if (mapped.ContainsKey("dateNaissance"))
-            profile.DateNaissance = ParseDateOnly(mapped, "dateNaissance");
+            profile.DateNaissance = ParseDateOnly(mapped, "dateNaissance") ?? (isCreate ? null : profile.DateNaissance);
 
         if (mapped.ContainsKey("villeNaissance"))
             profile.VilleNaissance = TrimOrNull(mapped, "villeNaissance");
 
         if (mapped.ContainsKey("nationalite"))
-            profile.Nationalite = NormalizeNationalite(mapped["nationalite"]);
+            profile.Nationalite = NormalizeNationalite(mapped["nationalite"]) ?? (isCreate ? null : profile.Nationalite);
 
         if (mapped.ContainsKey("numeroCarteAutoentrepreneur"))
             profile.NumeroCarteAutoentrepreneur = TrimOrNull(mapped, "numeroCarteAutoentrepreneur");
 
         if (mapped.ContainsKey("sexe"))
-            profile.Sexe = NormalizeSexe(mapped["sexe"]);
+            profile.Sexe = NormalizeSexe(mapped["sexe"]) ?? (isCreate ? null : profile.Sexe);
 
         if (mapped.ContainsKey("situationFamiliale"))
-            profile.SituationFamiliale = NormalizeSituationFamiliale(mapped["situationFamiliale"]);
+            profile.SituationFamiliale = NormalizeSituationFamiliale(mapped["situationFamiliale"]) ?? (isCreate ? null : profile.SituationFamiliale);
 
         if (mapped.ContainsKey("nombreEnfants")
             && int.TryParse(mapped["nombreEnfants"]?.Trim(), out var nb))
@@ -277,16 +285,16 @@ public static class EmployeeImportHrProfileMapper
             profile.ImmatriculationCnss = TrimOrNull(mapped, "immatriculationCnss");
 
         if (mapped.ContainsKey("dateEntree"))
-            profile.DateEntree = ParseDateOnly(mapped, "dateEntree");
+            profile.DateEntree = ParseDateOnly(mapped, "dateEntree") ?? (isCreate ? null : profile.DateEntree);
 
         if (mapped.ContainsKey("dateAnciennete"))
-            profile.DateAnciennete = ParseDateOnly(mapped, "dateAnciennete");
+            profile.DateAnciennete = ParseDateOnly(mapped, "dateAnciennete") ?? (isCreate ? null : profile.DateAnciennete);
 
         if (mapped.ContainsKey("dateSortie"))
-            profile.DateSortie = ParseDateOnly(mapped, "dateSortie");
+            profile.DateSortie = ParseDateOnly(mapped, "dateSortie") ?? (isCreate ? null : profile.DateSortie);
 
         if (mapped.ContainsKey("dateEvolutionPoste"))
-            profile.DateEvolutionPoste = ParseDateOnly(mapped, "dateEvolutionPoste");
+            profile.DateEvolutionPoste = ParseDateOnly(mapped, "dateEvolutionPoste") ?? (isCreate ? null : profile.DateEvolutionPoste);
 
         if (mapped.ContainsKey("ancienPoste"))
             profile.AncienPoste = TrimOrNull(mapped, "ancienPoste");
@@ -294,8 +302,28 @@ public static class EmployeeImportHrProfileMapper
         if (mapped.ContainsKey("ancienService"))
             profile.AncienService = TrimOrNull(mapped, "ancienService");
 
+        // v63 — poste, N° BOX et type de contrat (texte) : champs de la fiche du fichier RH de référence.
+        if (mapped.ContainsKey("poste"))
+            profile.Poste = TrimOrNull(mapped, "poste");
+
+        if (mapped.ContainsKey("numeroBox"))
+            profile.NumeroBox = TrimOrNull(mapped, "numeroBox");
+
+        // v64 — type d'employé (une valeur non reconnue ne remplace pas la valeur connue) et pièces d'identité.
+        if (mapped.ContainsKey("typeEmploye"))
+            profile.TypeEmploye = TypesEmploye.Normaliser(mapped["typeEmploye"]) ?? profile.TypeEmploye;
+
+        if (mapped.ContainsKey("carteImmatriculation"))
+            profile.CarteImmatriculation = TrimOrNull(mapped, "carteImmatriculation");
+
+        if (mapped.ContainsKey("numeroPasseport"))
+            profile.NumeroPasseport = TrimOrNull(mapped, "numeroPasseport");
+
+        if (mapped.ContainsKey("contractType"))
+            profile.TypeContrat = TrimOrNull(mapped, "contractType") ?? profile.TypeContrat;
+
         if (mapped.ContainsKey("niveauScolaire"))
-            profile.NiveauScolaire = NormalizeNiveauScolaire(mapped["niveauScolaire"]);
+            profile.NiveauScolaire = NormalizeNiveauScolaire(mapped["niveauScolaire"]) ?? (isCreate ? null : profile.NiveauScolaire);
 
         if (mapped.ContainsKey("intitulesEtudes"))
             profile.IntitulesEtudes = TrimOrNull(mapped, "intitulesEtudes");
@@ -316,7 +344,8 @@ public static class EmployeeImportHrProfileMapper
                 ?? (isCreate && profile.EnFormation ? ToDateOnly(hireDate) : profile.DateDebutFormation);
 
         if (profile.EnFormation || mapped.ContainsKey("dateFinFormationPrevue"))
-            profile.DateFinFormationPrevue = ParseDateOnly(mapped, "dateFinFormationPrevue");
+            profile.DateFinFormationPrevue = ParseDateOnly(mapped, "dateFinFormationPrevue")
+                ?? (isCreate ? null : profile.DateFinFormationPrevue);
 
         ValidateNombreEnfantsForSituationFamiliale(mapped, profile);
         ValidateAutoentrepreneurCarte(mapped, profile);
@@ -329,12 +358,20 @@ public static class EmployeeImportHrProfileMapper
         if (!mapped.ContainsKey("nationalite") && !mapped.ContainsKey("numeroCarteAutoentrepreneur"))
             return;
 
-        var nationalite = profile.Nationalite;
-        if (string.IsNullOrWhiteSpace(nationalite) && mapped.TryGetValue("nationalite", out var raw))
-            nationalite = NormalizeNationalite(raw);
-
-        if (string.IsNullOrWhiteSpace(nationalite) || !RequiresAutoentrepreneur(nationalite))
+        // v64 : le type d'employé décide. Un sous-traitant doit avoir sa carte d'auto-entrepreneur ;
+        // un salarié étranger n'en a pas besoin. Sans type connu, l'ancienne règle (nationalité) s'applique.
+        var type = TypesEmploye.Normaliser(profile.TypeEmploye);
+        if (type == TypesEmploye.Salarie)
             return;
+        if (type is null)
+        {
+            var nationalite = profile.Nationalite;
+            if (string.IsNullOrWhiteSpace(nationalite) && mapped.TryGetValue("nationalite", out var raw))
+                nationalite = NormalizeNationalite(raw);
+
+            if (string.IsNullOrWhiteSpace(nationalite) || !RequiresAutoentrepreneur(nationalite))
+                return;
+        }
 
         var hasCarte = !string.IsNullOrWhiteSpace(profile.NumeroCarteAutoentrepreneur)
             || mapped.TryGetValue("numeroCarteAutoentrepreneur", out var carteRaw)
@@ -589,6 +626,12 @@ public static class EmployeeImportHrProfileMapper
             DateEvolutionPoste = source.DateEvolutionPoste,
             AncienPoste = source.AncienPoste,
             AncienService = source.AncienService,
+            Poste = source.Poste,
+            TypeEmploye = source.TypeEmploye,
+            CarteImmatriculation = source.CarteImmatriculation,
+            NumeroPasseport = source.NumeroPasseport,
+            TypeContrat = source.TypeContrat,
+            NumeroBox = source.NumeroBox,
             NiveauScolaire = source.NiveauScolaire,
             IntitulesEtudes = source.IntitulesEtudes,
             EnFormation = source.EnFormation,
@@ -624,6 +667,12 @@ public static class EmployeeImportHrProfileMapper
             && a.DateEvolutionPoste == b.DateEvolutionPoste
             && a.AncienPoste == b.AncienPoste
             && a.AncienService == b.AncienService
+            && a.Poste == b.Poste
+            && a.TypeEmploye == b.TypeEmploye
+            && a.CarteImmatriculation == b.CarteImmatriculation
+            && a.NumeroPasseport == b.NumeroPasseport
+            && a.TypeContrat == b.TypeContrat
+            && a.NumeroBox == b.NumeroBox
             && a.NiveauScolaire == b.NiveauScolaire
             && a.IntitulesEtudes == b.IntitulesEtudes
             && a.EnFormation == b.EnFormation

@@ -66,6 +66,8 @@ public class AppDbContext : DbContext
     public DbSet<HeureSortieAcces> HeureSortieAcces { get; set; } = null!;
     public DbSet<HeureSortieChoixJour> HeureSortieChoixJours { get; set; } = null!;
     public DbSet<ReaffectationAgent> ReaffectationsAgents { get; set; } = null!;
+    /// <summary>v63 : historique des synchronisations de fiches depuis le fichier RH de référence.</summary>
+    public DbSet<FicheReferenceModification> FichesReferenceModifications { get; set; } = null!;
     public DbSet<PlanningItHoraire> PlanningItHoraires { get; set; } = null!;
     public DbSet<PlanningItCommentaire> PlanningItCommentaires { get; set; } = null!;
     /// <summary>Tableau des présences : saisies des responsables (motif, retard autorisé, commentaire).</summary>
@@ -75,6 +77,8 @@ public class AppDbContext : DbContext
     public DbSet<ElementVariablePaie> ElementsVariablesPaie { get; set; } = null!;
     /// <summary>v58 : validation du tableau de paie par les RH (verrouillage de la période).</summary>
     public DbSet<PaiePeriodeValidation> PaiePeriodeValidations { get; set; } = null!;
+    /// <summary>v64 : journal d'actions (Audit et conformité).</summary>
+    public DbSet<JournalAction> JournalActions { get; set; } = null!;
     public DbSet<DossierDocument> DossierDocuments { get; set; } = null!;
     /// <summary>v48 : bibliothèque « Process Bytel » (procédures partagées aux agents).</summary>
     public DbSet<ProcessDocument> ProcessDocuments { get; set; } = null!;
@@ -508,6 +512,8 @@ public class AppDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.WeekCode).HasMaxLength(64);
             e.Property(x => x.SubServiceName).HasMaxLength(200);
+            e.Property(x => x.Lien).HasMaxLength(300);
+            e.Property(x => x.Categorie).HasMaxLength(40);
             e.HasIndex(x => x.AuthUserId);
         });
 
@@ -556,6 +562,12 @@ public class AppDbContext : DbContext
         {
             e.ToTable("user_hr_profiles");
             e.HasKey(x => x.UserId);
+            e.Property(x => x.Poste).HasMaxLength(160);
+            e.Property(x => x.TypeContrat).HasMaxLength(60);
+            e.Property(x => x.NumeroBox).HasMaxLength(40);
+            e.Property(x => x.TypeEmploye).HasMaxLength(20);
+            e.Property(x => x.CarteImmatriculation).HasMaxLength(32);
+            e.Property(x => x.NumeroPasseport).HasMaxLength(32);
             e.HasOne(x => x.User)
                 .WithOne()
                 .HasForeignKey<UserHrProfile>(x => x.UserId)
@@ -669,6 +681,18 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.RegimeHoraireId);
         });
 
+        modelBuilder.Entity<FicheReferenceModification>(e =>
+        {
+            e.ToTable("FichesReferenceModifications");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Fichier).HasMaxLength(260);
+            e.Property(x => x.Auteur).HasMaxLength(160);
+            e.Property(x => x.Agent).HasMaxLength(200);
+            e.Property(x => x.Champ).HasMaxLength(60);
+            e.HasIndex(x => x.ImportId);
+            e.HasIndex(x => x.UserId);
+        });
+
         modelBuilder.Entity<ReaffectationAgent>(e =>
         {
             e.ToTable("ReaffectationsAgents");
@@ -743,6 +767,25 @@ public class AppDbContext : DbContext
             e.Property(x => x.Commentaire).HasMaxLength(1000).IsRequired();
             e.Property(x => x.CreatedByNom).HasMaxLength(120);
             e.HasIndex(x => new { x.UserId, x.Date });
+        });
+
+        modelBuilder.Entity<JournalAction>(e =>
+        {
+            e.ToTable("journal_actions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ActeurNom).HasMaxLength(160).IsRequired();
+            e.Property(x => x.ActeurRole).HasMaxLength(60);
+            e.Property(x => x.Module).HasMaxLength(60).IsRequired();
+            e.Property(x => x.Operation).HasMaxLength(60).IsRequired();
+            e.Property(x => x.Entite).HasMaxLength(60).IsRequired();
+            e.Property(x => x.EntiteId).HasMaxLength(80);
+            e.Property(x => x.Element).HasMaxLength(400).IsRequired();
+            e.Property(x => x.Details).HasMaxLength(2000);
+            e.Property(x => x.Source).HasMaxLength(200);
+            e.HasIndex(x => x.Horodatage);
+            e.HasIndex(x => new { x.Module, x.Horodatage });
+            e.HasIndex(x => x.ActeurId);
+            e.HasIndex(x => x.CibleUserId);
         });
 
         modelBuilder.Entity<PaiePeriodeValidation>(e =>

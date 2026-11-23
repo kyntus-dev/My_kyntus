@@ -9,16 +9,18 @@
 
   <section class="employee-toolbar" aria-label="Recherche et actions employés">
     <div class="employee-heading">
-      <div><h1 class="ky-page-title">Employés</h1><p class="ky-page-subtitle" aria-live="polite">{{ filteredUsers.length }} employé(s) trouvé(s)</p></div>
+      <div><h1 class="ky-page-title">Employés</h1><p class="ky-page-subtitle" aria-live="polite">{{ filteredUsers.length }} employé(s) trouvé(s)@if (filteredUsers.length) { <span class="type-counts"> · {{ typeCounts.salaries }} salarié(s) · {{ typeCounts.sousTraitants }} sous-traitant(s)</span> }</p></div>
       <div class="toolbar-actions">
         <details class="toolbar-menu" #generalMenu>
           <summary class="ky-btn-secondary">Autres actions</summary>
           <div class="toolbar-dropdown">
-            <button type="button" (click)="generalMenu.open = false; goimport()">Importer</button>
-            <button type="button" (click)="generalMenu.open = false; openGroupReset()">Régénérer par groupe</button>
+            <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="generalMenu.open = false; goimport()">Importer</button>
+            <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="generalMenu.open = false; openGroupReset()">Régénérer par groupe</button>
+            <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="generalMenu.open = false; ouvrirFichesReference()">Mettre à jour depuis le fichier RH</button>
+            <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="generalMenu.open = false; ouvrirFichesReference('incompletes')">Fiches incomplètes</button>
           </div>
         </details>
-        <details class="toolbar-menu" #exportMenu>
+        <details *kyIfAdminAllowed="'admin.users.Export'" class="toolbar-menu" #exportMenu>
           <summary class="ky-btn-secondary" [attr.aria-busy]="!!exporting">{{ exporting ? 'Export en cours…' : 'Exporter' }}</summary>
           <div class="toolbar-dropdown">
             <p>Fichier Excel avec l'organisation (activité, pôle, cellule).</p>
@@ -27,7 +29,7 @@
             <button type="button" [disabled]="!!exporting || loading" (click)="exportMenu.open = false; exportEmployees('inactive')">Employés inactifs</button>
           </div>
         </details>
-        <button type="button" class="ky-btn-primary" (click)="createUser()"><span aria-hidden="true">+</span> Nouvel employé</button>
+        <button *kyIfAdminAllowed="'admin.users.Act'" type="button" class="ky-btn-primary" (click)="createUser()"><span aria-hidden="true">+</span> Nouvel employé</button>
       </div>
     </div>
     <div class="employee-filters">
@@ -41,6 +43,15 @@
         <select class="ky-input" [ngModel]="statusFilter" (ngModelChange)="onStatusFilterChange($event)" aria-label="Filtrer les employés par statut">
           @for (scope of statusScopes; track scope.value) {
             <option [value]="scope.value">{{ scope.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="service-filter">
+        <span>Type</span>
+        <select class="ky-input" [ngModel]="typeFilter" (ngModelChange)="onTypeFilterChange($event)" aria-label="Filtrer les employés par type d'employé">
+          <option value="">Tous les types</option>
+          @for (opt of typeEmployeOptions; track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
           }
         </select>
       </label>
@@ -115,6 +126,7 @@
             <th scope="col" class="col-person">Collaborateur</th>
             <th scope="col">Rôle</th>
             @if (showColumn('organisation')) { <th scope="col">Organisation</th> }
+            @if (showColumn('type')) { <th scope="col">Type</th> }
             @if (showColumn('matricule')) { <th scope="col">Matricule</th> }
             @if (showColumn('telephone')) { <th scope="col">Téléphone</th> }
             @if (showColumn('embauche')) { <th scope="col">Embauche</th> }
@@ -154,6 +166,9 @@
                     }
                   </td>
                 }
+                @if (showColumn('type')) {
+                  <td data-label="Type"><span class="type-employe-badge" [attr.data-type]="typeCode(user)">{{ typeLibelle(user) }}</span></td>
+                }
                 @if (showColumn('matricule')) { <td data-label="Matricule">{{ matriculeDisplay(user) }}</td> }
                 @if (showColumn('telephone')) { <td data-label="Téléphone">{{ telephoneDisplay(user) }}</td> }
                 @if (showColumn('embauche')) { <td data-label="Embauche">{{ user.hireDate | date:'dd/MM/yyyy' }}</td> }
@@ -165,7 +180,7 @@
                 <td class="col-actions" (click)="$event.stopPropagation()">
                   <div class="action-group">
                     <button type="button" class="btn-action btn-detail" (click)="viewUser(user.id)" [attr.aria-label]="'Détails de ' + user.lastName + ' ' + user.firstName">Détails</button>
-                    <button type="button" class="btn-action edit" (click)="editUser(user.id)" title="Modifier" [attr.aria-label]="'Modifier ' + user.lastName + ' ' + user.firstName"><app-lucide-icon [icon]="icons.edit" className="w-4 h-4" /></button>
+                    <button *kyIfAdminAllowed="'admin.users.Act'" type="button" class="btn-action edit" (click)="editUser(user.id)" title="Modifier" [attr.aria-label]="'Modifier ' + user.lastName + ' ' + user.firstName"><app-lucide-icon [icon]="icons.edit" className="w-4 h-4" /></button>
                     <button type="button" class="btn-action more-actions" (click)="openActions(user, $event)" aria-haspopup="dialog" [attr.aria-expanded]="actionUser?.id === user.id" [attr.aria-label]="'Autres actions pour ' + user.lastName + ' ' + user.firstName">⋯</button>
                   </div>
                 </td>
@@ -191,13 +206,13 @@
       <div id="employee-actions-panel" class="employee-action-panel" role="dialog" aria-modal="true" aria-labelledby="employee-actions-title"
         [style.top.px]="actionTop" [style.left.px]="actionLeft" (click)="$event.stopPropagation()" (keydown)="actionKeydown($event)">
         <div class="action-panel-heading"><strong id="employee-actions-title">{{ selected.lastName }} {{ selected.firstName }}</strong><button type="button" aria-label="Fermer les actions" (click)="closeActions()">×</button></div>
-        <button type="button" (click)="runAction('level', selected)">Modifier le niveau contractuel</button>
+        <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="runAction('level', selected)">Modifier le niveau contractuel</button>
         <button type="button" (click)="runAction('history', selected)">Historique des rotations</button>
-        <button type="button" [disabled]="resettingUserId !== null" (click)="runAction('reset', selected)">Réinitialiser le mot de passe</button>
+        <button *kyIfAdminAllowed="'admin.users.Act'" type="button" [disabled]="resettingUserId !== null" (click)="runAction('reset', selected)">Réinitialiser le mot de passe</button>
         @if (selected.isActive !== false) {
-          <button type="button" class="danger-action" (click)="runAction('deactivate', selected)">Désactiver (sortie)</button>
+          <button *kyIfAdminAllowed="'admin.users.Delete'" type="button" class="danger-action" (click)="runAction('deactivate', selected)">Désactiver (sortie)</button>
         } @else {
-          <button type="button" (click)="runAction('reactivate', selected)">Réactiver</button>
+          <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="runAction('reactivate', selected)">Réactiver</button>
         }
       </div>
     </div>

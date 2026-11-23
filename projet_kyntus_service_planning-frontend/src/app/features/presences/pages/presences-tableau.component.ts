@@ -13,12 +13,14 @@ import type {
   PresenceJourDto,
 } from '../../../core/models/presence.models';
 import { DirectoryFacadeService } from '../../../core/directory/directory-facade.service';
-import { ActiviteStructure, optionsActivites, optionsOrganisation } from '../lib/presence.util';
+import { ActiviteStructure, encadrementDans, optionsPerimetre } from '../lib/presence.util';
 import { PresencesNavComponent } from '../components/presences-nav.component';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import {
   FILTRES_VIDES,
   TYPES_CONTRAT,
+  estEncadrement as estEncadrementRole,
+  estEncadrementNonPlace,
   estReferentTechnique,
   estSuperviseur,
   type FiltresPresence,
@@ -28,6 +30,8 @@ import {
   formatMinutes,
   joursDeLaPeriode,
   periodePaie,
+  raisonCaseVide,
+  estHorsContrat,
   ymd,
 } from '../lib/presence.util';
 
@@ -69,11 +73,30 @@ export class PresencesTableauComponent implements OnInit {
   private readonly annuaire = inject(DirectoryFacadeService);
   /** v37 : agents en formation visibles, saisie réservée à l'équipe formation, aux RH et aux Admin. */
   readonly saisieFormation = computed(() => peutSaisirFormation(this.auth.getRole()));
-  /** v46 : chef de projet (ou RP) : listes « Superviseurs » et « Référents techniques ». */
+  /**
+   * v46 : listes « Superviseurs » et « Référents techniques ».
+   * v61 : rubrique « Présences des superviseurs et référents › Consulter » (Accès par rôle, RP par défaut),
+   * décidée par le serveur ; ancien serveur : chef de projet (ou RP) comme avant.
+   */
   readonly estChefDeProjet = computed(() => {
+    const dedie = this.data()?.encadrementDedie;
+    if (dedie !== undefined) return dedie;
     const r = (this.auth.getRole() || '').trim().toLowerCase();
     return r === 'chef de projet' || r === 'rp';
   });
+  /**
+   * v62 : listes Superviseurs / Référents proposées : RP, et aussi RH, Admin et portée globale selon
+   * « Présences des superviseurs et référents › Consulter ». Le tableau principal des RH reste complet.
+   */
+  readonly filtreEncadrement = computed(() => this.data()?.filtreEncadrement ?? this.estChefDeProjet());
+  /** v61 : « … › Modifier » : saisie des présences des superviseurs et référents. */
+  readonly encadrementModifiable = computed(() => this.data()?.encadrementModifiable ?? this.estChefDeProjet());
+  /** v61 : case non modifiable : agent en formation (équipe formation) ou encadrement en consultation seule. */
+  verrouillee(a: PresenceAgentDto): boolean {
+    if (!this.data()?.peutModifier) return true;
+    if (a.enFormation && !this.saisieFormation()) return true;
+    return this.filtreEncadrement() && estEncadrementRole(a.role) && !this.encadrementModifiable();
+  }
   /** v46 : superviseurs et référents techniques n'autorisent pas les retards (le serveur le refuse aussi). */
   readonly peutAutoriserRetard = computed(() => this.data()?.peutAutoriserRetard !== false);
 
@@ -127,20 +150,37 @@ export class PresencesTableauComponent implements OnInit {
     const dansActivite = agents.filter((a) => !f.activite || this.activiteDuPole(a.poleId, a) === f.activite);
     const dansPole = dansActivite.filter((a) => !f.pole || a.pole === f.pole);
     // v58 : l'organisation fait foi — pas de doublon, hiérarchie respectée, rien qui n'existe plus.
-    const listes = optionsOrganisation(this.structure(), f.activite, f.pole, {
-      poles: dansActivite.map((a) => a.pole),
-      cellules: dansPole.map((a) => a.cellule),
+    // v61 : périmètre limité (RP, superviseur…) : seulement ses contrats, pôles et cellules ; les
+    // superviseurs et référents qu'il voit y ajoutent les niveaux de leurs agents.
+    const toutes = this.data()?.toutesActivites ?? true;
+    const encadrants = agents.filter((a) => estEncadrementRole(a.role));
+    const polesEncadrants = (filtre: (a: PresenceAgentDto) => boolean) => encadrants.filter(filtre)
+      .flatMap((a) => (a.poleIdsEncadres ?? []).map((id) => this.activiteDuPole(id)));
+    const listes = optionsPerimetre(toutes, this.structure(), f.activite, f.pole, {
+      activites: [
+        ...agents.map((a) => this.activiteDuPole(a.poleId, a)),
+        ...polesEncadrants(() => true),
+        // v46 : Formation & Qualité toujours proposée (toute l'entreprise ; sinon si elle a des agents).
+        ...(toutes ? [this.activiteFormation()] : []),
+      ],
+      poles: [
+        ...dansActivite.map((a) => a.pole),
+        ...encadrants.filter((a) => encadrementDans(a, { activite: f.activite, pole: '', cellule: '' }, this.activiteDuPole))
+          .flatMap((a) => a.polesEncadres ?? []),
+      ],
+      cellules: [
+        ...dansPole.map((a) => a.cellule),
+        ...encadrants.filter((a) => encadrementDans(a, { activite: f.activite, pole: f.pole, cellule: '' }, this.activiteDuPole))
+          .flatMap((a) => a.cellulesEncadrees ?? []),
+      ],
     });
-    const personnes = (test: (r?: string | null) => boolean) => agents
-      .filter((a) => test(a.role))
-      .map((a) => ({ id: String(a.userId), nom: a.nom }))
+    // v61 : seulement ceux du contrat, du pôle et de la cellule choisis (pas d'autre périmètre, pas de doublon).
+    const personnes = (test: (r?: string | null) => boolean) => [...new Map<number, { id: string; nom: string }>(agents
+      .filter((a) => test(a.role) && encadrementDans(a, f, this.activiteDuPole))
+      .map((a) => [a.userId, { id: String(a.userId), nom: a.nom }])).values()]
       .sort((x, y) => x.nom.localeCompare(y.nom, 'fr', { sensitivity: 'base' }));
     return {
-      // v46 : Formation & Qualité toujours proposée.
-      activites: optionsActivites(this.structure(), [
-        ...agents.map((a) => this.activiteDuPole(a.poleId, a)),
-        this.activiteFormation(),
-      ]),
+      activites: listes.activites,
       // v48.1 : complétées par l'organisation — une activité sans agent propose quand même
       // ses pôles et ses cellules (ex. Formation & Qualité).
       poles: listes.poles,
@@ -153,7 +193,17 @@ export class PresencesTableauComponent implements OnInit {
   });
 
   readonly agents = computed(() =>
-    filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole, this.estChefDeProjet()));
+    filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole, this.estChefDeProjet(),
+      this.data()?.toutesActivites === true));
+  /** v62 : total du tableau principal (sans les superviseurs / référents ajoutés pour leurs tableaux dédiés). */
+  readonly totalAgents = computed(() => {
+    const d = this.data();
+    if (!d) return 0;
+    return d.toutesActivites ? d.agents.filter((a) => !estEncadrementNonPlace(a)).length : d.agents.length;
+  });
+  /** v63.3 : agents affichés dont le compte n'est relié à aucune pointeuse (journées vides). */
+  readonly nbSansPointeuse = computed(() => this.agents().filter((a) => a.pointeuseReliee === false).length);
+
   /** v46 : nombre d'agents en formation dans les données (filtre « Formation »). */
   readonly nbFormation = computed(() => (this.data()?.agents ?? []).filter((a) => a.enFormation).length);
   // v48 : nombre d'agents par type de formation (libellés des filtres).
@@ -187,11 +237,15 @@ export class PresencesTableauComponent implements OnInit {
         absences: this.absences(a),
         cases: entetes.map((e) => {
           const j = parJour.get(e.jour) ?? null;
+          // v63.3 : une case sans code porte le repère de sa raison (repos, à venir, pas de pointeuse).
+          const vide = j ? raisonCaseVide(j, a.pointeuseReliee !== false) : null;
           return {
             jour: e.jour,
             dim: e.weekend,
             today: e.today,
             j,
+            marque: vide?.marque ?? '',
+            horsContrat: estHorsContrat(j),
             classe: j ? 'pz-f-' + familleCode(j.code) : '',
             titre: j ? this.infobulle(a, j) : '',
           };
@@ -257,6 +311,18 @@ export class PresencesTableauComponent implements OnInit {
     if (patch.superviseurs) next.referents = '';
     if (patch.referents) next.superviseurs = '';
     this.filtres.set(next);
+    // v61 : une personne choisie hors du nouveau contrat / pôle / cellule est retirée du choix.
+    if ('activite' in patch || 'pole' in patch || 'cellule' in patch) {
+      const o = this.options();
+      const garder = (choix: string, liste: { id: string }[]) => !choix || choix === '*' || liste.some((p) => p.id === choix);
+      if (!garder(next.superviseurs, o.superviseurs) || !garder(next.referents, o.referents)) {
+        this.filtres.set({
+          ...next,
+          superviseurs: garder(next.superviseurs, o.superviseurs) ? next.superviseurs : '',
+          referents: garder(next.referents, o.referents) ? next.referents : '',
+        });
+      }
+    }
   }
 
   reinitialiser(): void {
@@ -271,7 +337,9 @@ export class PresencesTableauComponent implements OnInit {
     const date = j.jour.slice(0, 10).split('-').reverse().join('/');
     const parts = [
       `${a.nom} — ${date}`,
-      j.code ? `${j.code} : ${this.libelles().get(j.code) ?? ''}${j.auto ? ' (calculé)' : ' (saisi)'}` : 'Non planifié',
+      j.code
+        ? `${j.code} : ${this.libelles().get(j.code) ?? ''}${j.auto ? ' (calculé)' : ' (saisi)'}`
+        : (raisonCaseVide(j, a.pointeuseReliee !== false)?.raison ?? 'Aucun code.'),
       j.planning ? `Prévu ${j.planning}` : '',
       j.pointages.length ? `Pointages : ${j.pointages.map((p) => p.slice(0, 5)).join(' · ')}` : '',
       j.retardEntreeMinutes + j.retardPauseMinutes > 0
@@ -284,6 +352,7 @@ export class PresencesTableauComponent implements OnInit {
   }
 
   ouvrir(a: PresenceAgentDto, j: PresenceJourDto): void {
+    if (estHorsContrat(j)) return; // v64 : hors contrat, aucune saisie (refusée aussi côté serveur).
     const code = j.auto ? null : j.code;
     const mode: Edition['mode'] = code === null ? 'auto' : code === 'P' ? 'present' : code === 'FOR' ? 'formation' : 'absent';
     this.edition.set({

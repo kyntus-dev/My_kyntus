@@ -26,6 +26,7 @@ public class AuthDbContext : DbContext
             e.Property(u => u.Username).HasMaxLength(50);
             e.Property(u => u.Email).HasMaxLength(100);
             e.HasIndex(u => u.SubjectId).IsUnique();
+            e.Ignore(u => u.EstSuperAdminEffectif);
             e.HasOne(u => u.Role).WithMany(r => r.Users).HasForeignKey(u => u.RoleId);
         });
 

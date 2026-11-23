@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Planning.Application.Abstractions;
+using Planning.Application.NotificationEmail;
 using Planning.Application.Pointage;
 using Planning.Application.Presence;
 using Planning.Domain.Entities;
@@ -167,6 +169,47 @@ public class PresenceTests
     }
 
     [Fact]
+    public async Task Rubrique_presences_superviseurs_et_referents_v61()
+    {
+        await using var db = await SeedAsync();
+        db.Roles.AddRange(new Role { Id = 2, Name = "Superviseur" }, new Role { Id = 3, Name = "RP" }, new Role { Id = 4, Name = "Référent technique" });
+        var supGuid = Guid.NewGuid();
+        db.Users.AddRange(
+            new User { Id = 7, RoleId = 3, FirstName = "Resp", LastName = "Projet", Email = "rp@kyntus.com", AuthUserId = 700, IsActive = true },
+            new User { Id = 8, RoleId = 2, FirstName = "Sup", LastName = "Designe", Email = "s8@kyntus.com", Guid = supGuid, IsActive = true },
+            new User { Id = 9, RoleId = 4, FirstName = "Ref", LastName = "Place", Email = "r9@kyntus.com", SubServiceId = 10, IsActive = true });
+        await db.SaveChangesAsync();
+        (await db.UserHrProfiles.SingleAsync(p => p.UserId == 2)).SuperviseurId = supGuid;
+        await db.SaveChangesAsync();
+        var svc = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()));
+
+        // Consulter + Modifier (défaut du RP) : listes dédiées, périmètre du superviseur = cellule de ses agents.
+        var complet = new PresenceViewer(700, null, null, "RP", false, EncadrementVoir: true, EncadrementAgir: true);
+        var grille = await svc.GetGrilleAsync(complet, Lundi, Lundi, true);
+        Assert.True(grille!.EncadrementDedie);
+        Assert.True(grille.EncadrementModifiable);
+        Assert.Equal(new[] { 2, 8, 9 }, grille.Agents.Select(a => a.UserId).OrderBy(i => i).ToArray());
+        var sup = grille.Agents.Single(a => a.UserId == 8);
+        Assert.Equal(new[] { "pole-1" }, sup.PoleIdsEncadres);
+        Assert.Equal(new[] { "Cellule A" }, sup.CellulesEncadrees);
+        Assert.Null(grille.Agents.Single(a => a.UserId == 2).PoleIdsEncadres);
+
+        // Consulter seulement : visibles, saisie refusée sur un superviseur, permise sur un agent.
+        var lecture = new PresenceViewer(700, null, null, "RP", false, EncadrementVoir: true, EncadrementAgir: false);
+        Assert.False((await svc.GetGrilleAsync(lecture, Lundi, Lundi, true))!.EncadrementModifiable);
+        await Assert.ThrowsAsync<PresenceRefusException>(() =>
+            svc.SaisirAsync(lecture, new PresenceSaisieRequest(8, Lundi, null, "P", false, false, null, null), Lundi, Lundi));
+        var agent = await svc.SaisirAsync(lecture, new PresenceSaisieRequest(2, Lundi, null, "P", false, false, null, null), Lundi, Lundi);
+        Assert.Equal("P", agent.Jours.Single().Code);
+
+        // Droit retiré : ni superviseur ni référent, même placé dans le service du RP.
+        var sans = new PresenceViewer(700, null, null, "RP", false, EncadrementVoir: false, EncadrementAgir: false);
+        var reduite = await svc.GetGrilleAsync(sans, Lundi, Lundi, true);
+        Assert.False(reduite!.EncadrementDedie);
+        Assert.Equal(new[] { 2 }, reduite.Agents.Select(a => a.UserId).ToArray());
+    }
+
+    [Fact]
     public async Task Avertissements_et_evp_limites_au_perimetre()
     {
         await using var db = await SeedAsync();
@@ -256,6 +299,154 @@ public class PresenceTests
 
         var rh = await export.GetPlanningRhAsync(new PresenceViewer(null, null, null, "RH", true), Lundi, Lundi);
         Assert.Equal(2, rh.Agents.Count);
+    }
+
+    [Fact]
+    public async Task Arret_maladie_saisi_retire_le_shift_puis_le_rend_et_previent_l_agent_v62()
+    {
+        await using var db = await SeedAsync();
+        (await db.Users.SingleAsync(u => u.Id == 2)).AuthUserId = 902;
+        var semaine = new WeeklyPlanning { Id = 50, SubServiceId = 10, WeekCode = "S45", WeekStartDate = Lundi, Status = PlanningStatus.Published };
+        db.WeeklyPlannings.Add(semaine);
+        db.ShiftAssignments.AddRange(
+            new ShiftAssignment { WeeklyPlanningId = 50, UserId = 2, AssignedDate = Lundi, DayOfWeek = DayOfWeekEnum.Monday, ShiftId = 1, BreakTime = new TimeOnly(13, 0) },
+            new ShiftAssignment { WeeklyPlanningId = 50, UserId = 2, AssignedDate = Lundi.AddDays(1), DayOfWeek = DayOfWeekEnum.Tuesday, ShiftId = 1 });
+        await db.SaveChangesAsync();
+        var notifier = new NotifierEnregistreur();
+        var svc = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()), notifier: notifier);
+        var sup = new PresenceViewer(500, null, null, "Superviseur", Global: false);
+
+        // AM du lundi au mardi : plus de shift, créneau et pause gardés pour le retour.
+        await svc.SaisirAsync(sup, new PresenceSaisieRequest(2, Lundi, Lundi.AddDays(1), "AM", false, false, null, null), Lundi, Lundi);
+        var jours = await db.ShiftAssignments.AsNoTracking().Where(a => a.UserId == 2).OrderBy(a => a.AssignedDate).ToListAsync();
+        Assert.All(jours, a => Assert.True(a.IsOnLeave));
+        Assert.Equal(new TimeOnly(13, 0), jours[0].BreakTime);
+        Assert.Equal("Absence enregistrée : Arrêt maladie", Assert.Single(notifier.Envois).Titre);
+        Assert.Equal("/mes-plannings", notifier.Envois[0].Lien);
+
+        // Motif retiré le mardi : le shift revient ce jour-là seulement.
+        await svc.SaisirAsync(sup, new PresenceSaisieRequest(2, Lundi.AddDays(1), null, null, false, false, null, null), Lundi, Lundi);
+        jours = await db.ShiftAssignments.AsNoTracking().Where(a => a.UserId == 2).OrderBy(a => a.AssignedDate).ToListAsync();
+        Assert.True(jours[0].IsOnLeave);
+        Assert.False(jours[1].IsOnLeave);
+        Assert.Equal("Absence retirée", notifier.Envois[1].Titre);
+
+        // Absence partielle : l'agent reste planifié.
+        await svc.SaisirAsync(sup, new PresenceSaisieRequest(2, Lundi.AddDays(1), null, "ABS", false, false, null, null, AbsencePartielle: true), Lundi, Lundi);
+        Assert.False((await db.ShiftAssignments.AsNoTracking().SingleAsync(a => a.UserId == 2 && a.AssignedDate == Lundi.AddDays(1))).IsOnLeave);
+    }
+
+    [Fact]
+    public async Task Motif_retire_ne_rend_pas_un_jour_couvert_par_un_conge_valide_v62()
+    {
+        await using var db = await SeedAsync();
+        db.WeeklyPlannings.Add(new WeeklyPlanning { Id = 51, SubServiceId = 10, WeekCode = "S45", WeekStartDate = Lundi });
+        db.ShiftAssignments.Add(new ShiftAssignment { WeeklyPlanningId = 51, UserId = 2, AssignedDate = Lundi, DayOfWeek = DayOfWeekEnum.Monday, ShiftId = 1 });
+        db.Conges.Add(new Conge { UserId = 2, StartDate = Lundi, EndDate = Lundi, Status = CongeStatus.Approved });
+        await db.SaveChangesAsync();
+        var svc = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()));
+        var sup = new PresenceViewer(500, null, null, "Superviseur", Global: false);
+
+        await svc.SaisirAsync(sup, new PresenceSaisieRequest(2, Lundi, null, "AM", false, false, null, null), Lundi, Lundi);
+        await svc.SaisirAsync(sup, new PresenceSaisieRequest(2, Lundi, null, null, false, false, null, null), Lundi, Lundi);
+
+        Assert.True((await db.ShiftAssignments.AsNoTracking().SingleAsync()).IsOnLeave);
+    }
+
+    [Fact]
+    public void Motifs_de_presence_vus_par_le_planning_v62()
+    {
+        Assert.True(PresenceCodes.RetireDuPlanning("AM"));
+        Assert.True(PresenceCodes.RetireDuPlanning("abs n"));
+        Assert.False(PresenceCodes.RetireDuPlanning("P"));
+        Assert.False(PresenceCodes.RetireDuPlanning("FOR"));
+        Assert.False(PresenceCodes.RetireDuPlanning("F"));
+        Assert.False(PresenceCodes.RetireDuPlanning(null));
+        Assert.Equal(AbsenceType.ArretMaladie, PresenceCodes.VersAbsenceType("AM"));
+
+        var conges = PresenceAbsencesPlanning.Convertir([(2, Lundi, "AM"), (2, Lundi.AddDays(1), "P"), (3, Lundi, "CP")]);
+        Assert.Equal(2, conges.Count);
+        Assert.All(conges, c => Assert.Equal(PresenceAbsencesPlanning.Raison, c.Reason));
+
+        var periodes = PresenceAbsencesPlanning.Periodes([Lundi.AddDays(3), Lundi, Lundi.AddDays(1), Lundi.AddDays(1)]);
+        Assert.Equal(new[] { (Lundi, Lundi.AddDays(1)), (Lundi.AddDays(3), Lundi.AddDays(3)) }, periodes);
+    }
+
+    [Fact]
+    public async Task RH_voit_les_listes_superviseurs_et_referents_meme_non_places_v62()
+    {
+        await using var db = await SeedAsync();
+        db.Roles.Add(new Role { Id = 2, Name = "Superviseur" });
+        db.Users.Add(new User { Id = 8, RoleId = 2, FirstName = "Sup", LastName = "Organisation", Email = "s8@kyntus.com", IsActive = true });
+        await db.SaveChangesAsync();
+        var svc = new PresenceService(db, new FakePointage(), new FakePerimetre([10]), new Monitor(new PointageOptions()));
+
+        var rh = new PresenceViewer(null, null, null, "RH", true, EncadrementVoir: true, EncadrementAgir: false);
+        var grille = await svc.GetGrilleAsync(rh, Lundi, Lundi, true);
+        Assert.True(grille!.FiltreEncadrement);
+        Assert.False(grille.EncadrementModifiable);
+        Assert.False(grille.EncadrementDedie); // tableau principal des RH inchangé
+        Assert.Contains(grille.Agents, a => a.UserId == 8);
+        await Assert.ThrowsAsync<PresenceRefusException>(() =>
+            svc.SaisirAsync(rh, new PresenceSaisieRequest(8, Lundi, null, "P", false, false, null, null), Lundi, Lundi));
+
+        var sansDroit = new PresenceViewer(null, null, null, "RH", true, EncadrementVoir: false, EncadrementAgir: false);
+        var reduite = await svc.GetGrilleAsync(sansDroit, Lundi, Lundi, true);
+        Assert.False(reduite!.FiltreEncadrement);
+        Assert.DoesNotContain(reduite.Agents, a => a.UserId == 8);
+    }
+
+    private sealed class NotifierEnregistreur : IAppNotifier
+    {
+        public List<AppNotification> Envois { get; } = [];
+
+        public Task<int> NotifierAsync(NotificationEmailRecipients destinataires, AppNotification notification,
+            IReadOnlyCollection<string>? rolesExclus = null, CancellationToken ct = default)
+        {
+            Envois.Add(notification);
+            return Task.FromResult(1);
+        }
+    }
+
+    /// <summary>v63.3 : un férié n'est pas une absence ; un compte sans pointeuse est signalé.</summary>
+    [Fact]
+    public async Task Ferie_hors_du_total_des_absences_et_compte_sans_pointeuse_signale()
+    {
+        await using var db = await SeedAsync();
+        var svc = new PresenceService(db, new FakePointageFerie(), new FakePerimetre([10, 20]),
+            new Monitor(new PointageOptions()));
+
+        var grille = await svc.GetGrilleAsync(new PresenceViewer(null, null, null, "RH", true), Lundi, Lundi, true);
+
+        var agent = grille!.Agents.First(a => a.UserId == 2);
+        Assert.Equal("F", agent.Jours.Single().Code);
+        Assert.Empty(agent.Totaux.Absences);
+        Assert.False(agent.PointeuseReliee);
+    }
+
+    /// <summary>Chaque agent : un jour férié, sans identifiant de pointeuse relié.</summary>
+    private sealed class FakePointageFerie : IPointageQueryService
+    {
+        private readonly FakePointage _base = new();
+
+        public Task<IReadOnlyList<PointageSuiviDto>> CalculerPourAsync(IReadOnlyList<int> userIds, DateOnly du, DateOnly au, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<PointageSuiviDto>>(userIds.Select(id => new PointageSuiviDto(
+                id, $"Agent {id}", null, [], du, au, 5, true, null,
+                new PointageTotauxDto(0, 0, 0, 0, [], []),
+                [Jour(PointageJourStatuts.Ferie, planning: null)])).ToList());
+
+        public Task<PointageSuiviDto?> GetMonSuiviAsync(PointageViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default) => _base.GetMonSuiviAsync(viewer, du, au, ct);
+        public Task<PointageSuiviDto?> GetSuiviCollaborateurAsync(PointageViewer viewer, int userId, DateOnly du, DateOnly au, CancellationToken ct = default) => _base.GetSuiviCollaborateurAsync(viewer, userId, du, au, ct);
+        public Task<PointageEquipeDto?> GetEquipeAsync(PointageViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default) => _base.GetEquipeAsync(viewer, du, au, ct);
+        public Task<PointageEquipeDetailDto?> GetEquipeDetailAsync(PointageViewer viewer, DateOnly du, DateOnly au, CancellationToken ct = default) => _base.GetEquipeDetailAsync(viewer, du, au, ct);
+        public Task<PointageAujourdhuiDto?> GetAujourdhuiAsync(PointageViewer viewer, CancellationToken ct = default) => _base.GetAujourdhuiAsync(viewer, ct);
+        public Task<IReadOnlyList<PointageCorrespondanceDto>> GetCorrespondancesAsync(string? statut, CancellationToken ct = default) => _base.GetCorrespondancesAsync(statut, ct);
+        public Task<PointageCorrespondanceDto?> UpdateCorrespondanceAsync(string empCode, PointageCorrespondanceUpdateRequest request, PointageViewer viewer, CancellationToken ct = default) => _base.UpdateCorrespondanceAsync(empCode, request, viewer, ct);
+        public Task<int> ValiderCorrespondancesAutoAsync(PointageViewer viewer, CancellationToken ct = default) => _base.ValiderCorrespondancesAutoAsync(viewer, ct);
+        public Task<PointageEtatDto> GetEtatAsync(CancellationToken ct = default) => _base.GetEtatAsync(ct);
+        public Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default) => _base.EnregistrerChoixProductionAsync(viewer, choix, ct);
+        public Task<bool> EnregistrerChoixProductionJourAsync(PointageViewer viewer, DateOnly jour, string? choix, CancellationToken ct = default) => _base.EnregistrerChoixProductionJourAsync(viewer, jour, choix, ct);
+        public Task<IReadOnlyList<ChoixProductionJourDto>> GetMesChoixProductionAsync(PointageViewer viewer, DateOnly au, CancellationToken ct = default) => _base.GetMesChoixProductionAsync(viewer, au, ct);
     }
 
     private static async Task<AppDbContext> SeedAsync()

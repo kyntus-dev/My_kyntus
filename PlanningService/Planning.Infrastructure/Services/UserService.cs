@@ -34,6 +34,8 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IRebacClient _rebac;
     private readonly IPlanningPerimeterResolver _perimeter;
+    /// <summary>v62 : cloche de l'application (agent prévenu de sa réaffectation).</summary>
+    private readonly IAppNotifier? _notifier;
 
     public UserService(
            AppDbContext context,
@@ -48,7 +50,8 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
            IEmployeeFieldService fieldService,
            IHttpContextAccessor httpContextAccessor,
            IRebacClient rebac,
-           IPlanningPerimeterResolver perimeter)
+           IPlanningPerimeterResolver perimeter,
+           IAppNotifier? notifier = null)
     {
         _context = context;
         _employePublisher = employePublisher;
@@ -63,6 +66,7 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         _httpContextAccessor = httpContextAccessor;
         _rebac = rebac;
         _perimeter = perimeter;
+        _notifier = notifier;
     }
 
     public async Task<List<UserDto>> GetAllUsersAsync()
@@ -305,6 +309,10 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             throw new InvalidOperationException($"L'adresse email « {dto.Email.Trim()} » est déjà utilisée.");
 
         ValidateCreateUserHrDates(dto);
+        // v64 : date d'embauche, d'entrée et de sortie jamais un dimanche (saisie de l'écran Employés).
+        RefuserDimanche(DateOnly.FromDateTime(dto.HireDate.Date), null, "La date d'embauche");
+        RefuserDimanche(dto.HrProfile?.DateEntree, null, "La date d'entrée");
+        RefuserDimanche(dto.HrProfile?.DateSortie, null, "La date de sortie");
         await _fieldService.ValidateCustomFieldsForCreateAsync(dto.CustomFields);
 
         if (IsDirectoryWriteMaster())
@@ -1233,6 +1241,13 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         return defaut;
     }
 
+    /// <summary>v64 : refuse une date (nouvelle ou modifiée) tombant un dimanche.</summary>
+    internal static void RefuserDimanche(DateOnly? valeur, DateOnly? actuelle, string libelle)
+    {
+        if (valeur is DateOnly d && d.DayOfWeek == DayOfWeek.Sunday && d != actuelle)
+            throw new InvalidOperationException($"{libelle} ne peut pas être un dimanche ({d:dd/MM/yyyy}).");
+    }
+
     private static void ValidateCreateUserHrDates(CreateUserDto dto)
     {
         var hr = dto.HrProfile;
@@ -1605,6 +1620,16 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         if (dto.NiveauExpertiseMetier.HasValue && !IsHrOrAdminRole(callerRole))
             throw new UnauthorizedAccessException("Seuls RH et Admin peuvent modifier l'expertise métier.");
 
+        // v64 : une date d'entrée, de sortie ou d'embauche modifiée ne peut pas tomber un dimanche
+        // (une date déjà enregistrée, issue d'un ancien import, reste acceptée telle quelle).
+        RefuserDimanche(DateOnly.FromDateTime(dto.HireDate.Date), DateOnly.FromDateTime(user.HireDate.Date), "La date d'embauche");
+        if (dto.HrProfile is not null)
+        {
+            var profilActuel = await _context.UserHrProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == id);
+            RefuserDimanche(dto.HrProfile.DateEntree, profilActuel?.DateEntree, "La date d'entrée");
+            RefuserDimanche(dto.HrProfile.DateSortie, profilActuel?.DateSortie, "La date de sortie");
+        }
+
         var ancienSubServiceId = user.SubServiceId;
         var ancienRoleId = user.RoleId;
         user.RoleId = dto.RoleId;
@@ -1697,7 +1722,10 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
                 _context.UserHrProfiles.Add(profile);
             }
             profile.ChangerEnFormation(false, DateOnly.FromDateTime(DateTime.UtcNow));
-            profile.DateSortie = dateSortie ?? profile.DateSortie ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            // v64 : sortie par défaut aujourd'hui, ramenée au samedi si l'on est dimanche.
+            var sortieParDefaut = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (sortieParDefaut.DayOfWeek == DayOfWeek.Sunday) sortieParDefaut = sortieParDefaut.AddDays(-1);
+            profile.DateSortie = dateSortie ?? profile.DateSortie ?? sortieParDefaut;
         }
         else if (profile is not null)
         {
@@ -1706,6 +1734,33 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         }
 
         await _context.SaveChangesAsync(ct);
+
+        // v61 — Agent sorti : retiré des plannings à venir après sa date de sortie (journées non
+        // déclarées seulement). Les journées passées et déclarées restent : historique conservé.
+        if (!isActive && profile?.DateSortie is DateOnly sortieAgent)
+        {
+            try
+            {
+                var lendemain = sortieAgent.AddDays(1);
+                var aujourdhui = DateOnly.FromDateTime(DateTime.Today);
+                var depuis = lendemain > aujourdhui ? lendemain : aujourdhui.AddDays(1);
+                var futures = await _context.ShiftAssignments
+                    .Where(a => a.UserId == id && a.AssignedDate >= depuis && !a.Declarations.Any())
+                    .ToListAsync(ct);
+                if (futures.Count > 0)
+                {
+                    _context.ShiftAssignments.RemoveRange(futures);
+                    await _context.SaveChangesAsync(ct);
+                    _logger.LogInformation(
+                        "Sortie : {Nombre} journée(s) à venir retirée(s) des plannings pour l'agent {UserId}.",
+                        futures.Count, id);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Plannings à venir non nettoyés après la sortie de l'agent {UserId}.", id);
+            }
+        }
 
         // Connexion bloquée (ou rétablie) côté Auth ; le compte n'est jamais supprimé.
         await SyncAuthActiveAsync(user, ct);
@@ -2415,6 +2470,12 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
         TypeFormation = p.TypeFormation,
         DateDebutFormation = p.DateDebutFormation,
         DateFinFormationPrevue = p.DateFinFormationPrevue,
+        Poste = p.Poste,
+        TypeContrat = p.TypeContrat,
+        NumeroBox = p.NumeroBox,
+        TypeEmploye = TypesEmploye.Code(p),
+        CarteImmatriculation = p.CarteImmatriculation,
+        NumeroPasseport = p.NumeroPasseport,
     };
 
     private async Task<Dictionary<int, UserHrProfile>> LoadHrProfilesAsync(IReadOnlyList<int> userIds)
@@ -2538,9 +2599,24 @@ public partial class UserService : IUserService, Planning.Application.Abstractio
             profile.TypeFormation = dto.EnFormation ? Planning.Application.Presence.TypesFormation.Normaliser(dto.TypeFormation) : null;
             profile.DateDebutFormation = dto.DateDebutFormation;
             profile.DateFinFormationPrevue = dto.DateFinFormationPrevue;
+            // v63 : champs du fichier RH — null = non transmis (anciens écrans, imports) : inchangés.
+            if (dto.Poste is not null) profile.Poste = Nettoye(dto.Poste, 160);
+            if (dto.TypeContrat is not null) profile.TypeContrat = Nettoye(dto.TypeContrat, 60);
+            if (dto.NumeroBox is not null) profile.NumeroBox = Nettoye(dto.NumeroBox, 40);
+            // v64 : type d'employé explicite ; une valeur non reconnue ne remplace pas la valeur connue.
+            if (dto.TypeEmploye is not null)
+                profile.TypeEmploye = TypesEmploye.Normaliser(dto.TypeEmploye) ?? profile.TypeEmploye ?? TypesEmploye.Code(profile);
+            if (dto.CarteImmatriculation is not null) profile.CarteImmatriculation = Nettoye(dto.CarteImmatriculation, 32);
+            if (dto.NumeroPasseport is not null) profile.NumeroPasseport = Nettoye(dto.NumeroPasseport, 32);
         }
 
         profile.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static string? Nettoye(string valeur, int max)
+    {
+        var t = valeur.Trim();
+        return t.Length == 0 ? null : t.Length <= max ? t : t[..max];
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException ex)

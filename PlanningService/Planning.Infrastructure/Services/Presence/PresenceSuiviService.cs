@@ -114,10 +114,13 @@ public sealed class PresenceSuiviService(
             })
             .ToListAsync(ct);
         var userIds = lignes.Select(l => l.Id).ToList();
+        // v64 : type de la fiche employé (déduit de la carte d'auto-entrepreneur pour une fiche ancienne).
         var sousTraitants = (await db.UserHrProfiles.AsNoTracking()
-                .Where(p => userIds.Contains(p.UserId) && p.NumeroCarteAutoentrepreneur != null && p.NumeroCarteAutoentrepreneur != "")
-                .Select(p => p.UserId)
+                .Where(p => userIds.Contains(p.UserId))
+                .Select(p => new { p.UserId, p.TypeEmploye, p.NumeroCarteAutoentrepreneur })
                 .ToListAsync(ct))
+            .Where(p => TypesEmploye.Code(p.TypeEmploye, p.NumeroCarteAutoentrepreneur) == TypesEmploye.SousTraitant)
+            .Select(p => p.UserId)
             .ToHashSet();
         return lignes
             .Select(l => new PresenceAgentRefDto(
@@ -263,7 +266,7 @@ public sealed class PresenceSuiviService(
             user.Email,
             user.Role,
             user.Cellule,
-            string.IsNullOrWhiteSpace(p?.NumeroCarteAutoentrepreneur) ? "Salarié" : "Sous-traitant",
+            TypesEmploye.Libelle(p),
             p?.ImmatriculationInterne,
             p?.Cin,
             p?.ImmatriculationCnss,

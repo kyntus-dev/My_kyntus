@@ -55,7 +55,7 @@
         <option value="non-contractuel">Formation non contractuelle ({{ nbFormationNonContractuel() }})</option>
         <option value="non">Hors formation</option>
       </select>
-      @if (estChefDeProjet()) {
+      @if (filtreEncadrement()) {
         <select class="ku-input" [ngModel]="filtres().superviseurs" (ngModelChange)="filtrer({ superviseurs: $event })" aria-label="Superviseurs">
           <option value="">Superviseurs : —</option>
           <option value="*">Tableau des superviseurs ({{ options().superviseurs.length }})</option>
@@ -69,13 +69,14 @@
       }
       <label class="ku-check pz-atraiter"><input type="checkbox" [ngModel]="filtres().aTraiter" (ngModelChange)="filtrer({ aTraiter: $event })" /> À traiter seulement</label>
       <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="reinitialiser()">Réinitialiser</button>
-      <span class="pz-compte">{{ agents().length }} / {{ data()?.agents?.length ?? 0 }} agents</span>
+      <span class="pz-compte">{{ agents().length }} / {{ totalAgents() }} agents</span>
     </div>
 
-    @if (estChefDeProjet() && (filtres().superviseurs || filtres().referents)) {
+    @if (filtreEncadrement() && (filtres().superviseurs || filtres().referents)) {
       <div class="pz-vue-encadrement">
         <b>{{ filtres().superviseurs ? 'Tableau des superviseurs' : 'Tableau des référents techniques' }}</b>
-        — seules les personnes choisies sont affichées (les filtres activité, pôle, cellule, contrat et formation ne s’appliquent pas ici).
+        — seules les personnes choisies sont affichées, dans l’activité, le pôle et la cellule choisis (les filtres contrat et formation ne s’appliquent pas ici).
+        @if (!encadrementModifiable()) { <span class="ku-muted">Consultation seule.</span> }
         <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="filtrer({ superviseurs: '', referents: '' })">Revenir aux agents</button>
       </div>
     }
@@ -90,6 +91,7 @@
       <span class="pz-code pz-f-present"><i class="pz-dot"></i>P</span> Commentaire
       <span class="pz-code pz-f-present pz-partiel">P</span> Absence partielle
       <span class="pz-code pz-f-present pz-manuel">P</span> Saisi par un responsable
+      <span class="pz-code pz-leg-hors-contrat"></span> Hors contrat (avant l’entrée / après la sortie)
       <span class="pz-leg-formation">Ligne bleue : en formation</span>
     </div>
 
@@ -119,6 +121,9 @@
               <tr [class.pz-row-formation]="a.enFormation" [class.pz-row-encadrement]="estSuperviseur(a.role) || estReferentTechnique(a.role)">
                 <th class="pz-agent" scope="row">
                   <b>{{ a.nom }}</b>
+                  @if (a.pointeuseReliee === false) {
+                    <span class="pz-badge pz-badge--alerte" title="Aucun identifiant de pointeuse relié : aucun pointage ne remonte pour cet agent. Liaison dans Utilisateurs › Liaisons HTEL.">Pointeuse non reliée</span>
+                  }
                   @if (a.enFormation) { <span class="pz-badge pz-badge--formation">{{ badgeFormation(a.typeFormation) }}</span> }
                   @if (estSuperviseur(a.role)) { <span class="pz-badge pz-badge--encadrement">Superviseur</span> }
                   @if (estReferentTechnique(a.role)) { <span class="pz-badge pz-badge--encadrement">Référent technique</span> }
@@ -129,7 +134,7 @@
                 </th>
                 @for (c of l.cases; track c.jour) {
                   @let j = c.j;
-                  <td class="pz-cell" [class.pz-dim]="c.dim" [class.pz-today]="c.today">
+                  <td class="pz-cell" [class.pz-dim]="c.dim" [class.pz-today]="c.today" [class.pz-hors-contrat]="c.horsContrat">
                     @if (j) {
                       <button type="button" class="pz-code"
                               [ngClass]="c.classe"
@@ -137,10 +142,10 @@
                               [class.pz-manuel]="!j.auto"
                               [class.pz-manque]="j.manquePointage"
                               [class.pz-partiel]="j.absencePartielle"
-                              [disabled]="!data()?.peutModifier || (a.enFormation && !saisieFormation())"
-                              [title]="a.enFormation && !saisieFormation() ? 'En formation : saisie réservée à l’équipe formation. ' + c.titre : c.titre"
+                              [disabled]="verrouillee(a) || c.horsContrat"
+                              [title]="a.enFormation && !saisieFormation() ? 'En formation : saisie réservée à l’équipe formation. ' + c.titre : (verrouillee(a) && data()?.peutModifier && !a.enFormation ? 'Consultation seule (droit « Présences des superviseurs et référents › Modifier »). ' + c.titre : c.titre)"
                               (click)="ouvrir(a, j)">
-                        @if (j.commentaire) { <i class="pz-dot"></i> }{{ j.code ?? '' }}
+                        @if (j.commentaire) { <i class="pz-dot"></i> }@if (j.code) { {{ j.code }} } @else { <span class="pz-vide">{{ c.marque }}</span> }
                       </button>
                     }
                   </td>
@@ -156,7 +161,17 @@
       <p class="ku-card-sub pz-note">
         Les jours planifiés sans pointage sont comptés « ABS N » jusqu’à ce qu’un motif soit choisi. Un retard autorisé ne compte plus
         dans le cumul des retards. Tolérance : {{ data()?.toleranceMinutes }} minutes.
+        Les jours fériés ne sont pas comptés dans « Abs. ».
+        Une case <b>–</b> est un jour de repos : ni planning publié, ni pointage ; une case <b>?</b> signale un agent sans pointeuse reliée ;
+        une case vide est un jour à venir ; une case grisée est hors contrat (avant la date d’entrée ou après la date de sortie).
+        Cliquez sur une case pour saisir un motif.
       </p>
+      @if (nbSansPointeuse(); as n) {
+        <p class="ku-card-sub pz-note pz-note--alerte">
+          {{ n }} agent(s) affiché(s) ne sont reliés à aucune pointeuse : leurs journées restent vides tant qu'aucun motif n'est saisi.
+          La liaison se fait dans Utilisateurs › Liaisons HTEL.
+        </p>
+      }
     }
   </section>
 

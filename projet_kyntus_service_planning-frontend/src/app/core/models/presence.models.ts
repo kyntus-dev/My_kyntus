@@ -30,6 +30,12 @@ export interface PresenceJourDto {
   modifieLe: string | null;
   /** Absence partielle sur la journée (colonne « Abs. partielle » de l'export paie). */
   absencePartielle?: boolean;
+  /** v61 : fin prévue du planning (début + production prévue + pause), « HH:mm ». */
+  finPrevue?: string | null;
+  /** v61 : heures supplémentaires détectées au pointage, en minutes (blocs de 30 min). */
+  hsAvant21Minutes?: number;
+  hsApres21Minutes?: number;
+  hsDimancheFerieMinutes?: number;
 }
 
 export interface PresenceTotauxDto {
@@ -66,6 +72,15 @@ export interface PresenceAgentDto {
   role?: string | null;
   /** v48 : « contractuel » ou « non-contractuel » (agent en formation). */
   typeFormation?: string | null;
+  /**
+   * v63.3 : false = aucun identifiant de pointeuse relié au compte. Aucun pointage ne remonte,
+   * les journées restent vides (ou « ABS N » les jours planifiés) tant qu'aucun motif n'est saisi.
+   */
+  pointeuseReliee?: boolean;
+  /** v61 : superviseur / référent : pôles (ids, noms) et cellules de son placement et des agents qui le désignent. */
+  poleIdsEncadres?: string[] | null;
+  polesEncadres?: string[] | null;
+  cellulesEncadrees?: string[] | null;
 }
 
 export interface PresenceGrilleDto {
@@ -79,6 +94,14 @@ export interface PresenceGrilleDto {
   agents: PresenceAgentDto[];
   /** v46 : false pour un superviseur ou un référent technique (pas d'autorisation de retard). */
   peutAutoriserRetard?: boolean;
+  /** v61 : rubrique « Présences des superviseurs et référents » : listes dédiées (Consulter). */
+  encadrementDedie?: boolean;
+  /** v61 : saisie des présences des superviseurs et référents (Modifier). */
+  encadrementModifiable?: boolean;
+  /** v61 : true = toute l'entreprise ; false = filtres limités aux contrats, pôles et cellules du périmètre. */
+  toutesActivites?: boolean;
+  /** v62 : listes « Superviseurs » / « Référents techniques » proposées (RH, Admin et portée globale compris). */
+  filtreEncadrement?: boolean;
 }
 
 export interface PresenceSaisieRequest {

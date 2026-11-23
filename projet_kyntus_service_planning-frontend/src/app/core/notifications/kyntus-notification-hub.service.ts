@@ -29,6 +29,16 @@ import type { ParrainageView } from '../../features/parrainage/state/parrainage-
 import type { AdminSection } from '../../features/prime/state/prime-section.service';
 import { isNotificationVisibleForRole, prefKeyForSource } from './kyntus-notification-role-filter';
 import { Router } from '@angular/router';
+import { KyntusToastService } from '../../shared/components/ui/kyntus-toast.service';
+import {
+  ecrireIdsLus,
+  estNotificationApplication,
+  libelleCategorie,
+  lienInterne,
+  lireIdsLus,
+  severiteNotification,
+  sourceDeCategorie,
+} from './app-notification.util';
 
 export type KyntusNotificationSource =
   | 'planning'
@@ -61,6 +71,8 @@ export interface KyntusNotification {
   severity?: 'info' | 'success' | 'warning';
   audience?: 'manager' | 'user';
   action?: KyntusNotificationAction;
+  /** v62 : rubrique précise (Présences, Affectation, Documents…) pour les notifications d'application. */
+  sourceLabel?: string;
 }
 
 const PRIME_LABELS: Record<string, string> = {
@@ -88,6 +100,8 @@ interface DesktopInboxEntry {
 }
 
 const CONTRACT_DISMISSED_KEY = 'kyntus_contract_notif_dismissed';
+/** v62 : demandes de congé en attente déjà lues (elles ne reviennent plus « non lues » à chaque rafraîchissement). */
+const CONGE_LUS_KEY = 'kyntus_conge_notif_lues';
 
 function contractDismissKey(n: ContractNotification): string {
   return `${n.contractId}:${n.type}:${n.createdAt}`;
@@ -129,6 +143,8 @@ export class KyntusNotificationHubService {
   private readonly userService = inject(UserService);
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
+  private readonly toast = inject(KyntusToastService);
+  private readonly congeLus = signal<Set<string>>(lireIdsLus(CONGE_LUS_KEY));
 
   private readonly contractItems = signal<ContractNotification[]>([]);
   private readonly planningItems = signal<PlanningNotification[]>([]);
@@ -214,6 +230,25 @@ export class KyntusNotificationHubService {
     }
 
     for (const n of this.planningItems()) {
+      // v62 : notification d'application (présence, congé, document, affectation…) : titre, rubrique
+      // et page concernée fournis par le serveur.
+      if (estNotificationApplication(n.weekCode)) {
+        const srcAppli = sourceDeCategorie(n.categorie);
+        if (srcAppli !== 'planning' && !prefs[prefKeyForSource(srcAppli)]) continue;
+        items.push({
+          id: planningNotificationId(n),
+          source: srcAppli,
+          sourceLabel: libelleCategorie(n.categorie) ?? undefined,
+          title: n.subServiceName || 'Notification',
+          body: n.message,
+          read: n.read,
+          createdAt: n.receivedAt instanceof Date ? n.receivedAt : new Date(n.receivedAt),
+          severity: severiteNotification(n.subServiceName),
+          audience: 'user',
+          action: { route: lienInterne(n.deepLink) },
+        });
+        continue;
+      }
       const src: KyntusNotificationSource =
         n.type === 'proposition'
           ? 'proposition'
@@ -298,6 +333,14 @@ export class KyntusNotificationHubService {
     this.planningNotif.newsletter$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((list) => this.newsletterItems.set(list));
+
+    // v62 : bandeau discret à l'arrivée d'une notification en direct.
+    this.planningNotif.recue$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((n) => {
+        const titre = estNotificationApplication(n.weekCode) ? n.titre || 'Notification' : 'Planning';
+        this.toast.info(`${titre} — ${n.message}`, 6000);
+      });
 
     this.docNotif.updated$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -505,15 +548,11 @@ export class KyntusNotificationHubService {
         for (const d of demandes.filter((x) => x.statut === StatutDemande.EnAttente).slice(0, 8)) {
           notifs.push(this.mapCongeDemande(d, 'manager'));
         }
-      } else {
-        const demandes = await firstValueFrom(this.congeService.getDemandesByEmploye(employeGuid));
-        for (const d of demandes
-          .filter((x) => x.statut === StatutDemande.Validee || x.statut === StatutDemande.Refusee)
-          .slice(0, 8)) {
-          notifs.push(this.mapCongeDemande(d, 'employee'));
-        }
       }
-      this.congeItems.set(notifs);
+      // v62 : l'employé reçoit la décision (validée, refusée, annulée) par une notification serveur,
+      // persistée et envoyée en direct : elle n'est plus recalculée ici (elle revenait « non lue »).
+      const lus = this.congeLus();
+      this.congeItems.set(notifs.map((n) => ({ ...n, read: n.read || lus.has(n.id) })));
     } catch {
       this.congeItems.set([]);
     }
@@ -589,6 +628,7 @@ export class KyntusNotificationHubService {
     }
     if (id.startsWith('conge-')) {
       this.congeItems.update((list) => list.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      this.memoriserCongeLu([id]);
       return;
     }
     if (id.startsWith('planning-') || id.startsWith('reclamation-') || id.startsWith('proposition-') || id.startsWith('formation-')) {
@@ -609,6 +649,7 @@ export class KyntusNotificationHubService {
     this.docNotif.markAllRead();
     this.planningNotif.markAllRead();
     this.planningNotif.markAllNewslettersRead();
+    this.memoriserCongeLu(this.congeItems().map((n) => n.id));
     this.congeItems.update((list) => list.map((n) => ({ ...n, read: true })));
     for (const n of this.contractItems()) {
       this.dismissContract(n);
@@ -662,8 +703,22 @@ export class KyntusNotificationHubService {
       return;
     }
     if (action.route) {
-      await this.router.navigate([action.route], { queryParams: action.queryParams });
+      // v62 : une route peut porter ses paramètres (« /formations?tab=initial ») : navigateByUrl les lit,
+      // navigate([…]) les encodait et ouvrait une page introuvable.
+      if (action.queryParams) {
+        await this.router.navigate([action.route], { queryParams: action.queryParams });
+      } else {
+        await this.router.navigateByUrl(action.route);
+      }
     }
+  }
+
+  private memoriserCongeLu(ids: string[]): void {
+    if (!ids.length) return;
+    const next = new Set<string>(this.congeLus());
+    ids.forEach((i) => next.add(i));
+    this.congeLus.set(next);
+    ecrireIdsLus(CONGE_LUS_KEY, next);
   }
 
   async openNotificationsCenter(source?: KyntusNotificationSource): Promise<void> {

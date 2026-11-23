@@ -7,6 +7,7 @@ using Documentation.Infrastructure.Persistence;
 using Documentation.Infrastructure.Services;
 using Documentation.API.Middleware;
 using Kyntus.Identity.Jwt;
+using Kyntus.Iam;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -57,6 +58,9 @@ builder.Services.AddCors(options =>
 builder.Services.AddKyntusJwtAuthentication(builder.Configuration);
 builder.Services.AddDocumentationApplication();
 builder.Services.AddDocumentationInfrastructure(builder.Configuration, isTesting);
+
+// v60 — Restrictions des administrateurs par le Super Admin (contrôle à l'entrée de chaque API).
+builder.Services.AddKyntusAdminRestrictions(builder.Configuration);
 
 var app = builder.Build();
 
@@ -123,6 +127,7 @@ app.UseMiddleware<UnhandledExceptionMiddleware>();
 app.UseCors("devCors");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseKyntusAdminRestrictions();
 if (!isTesting)
 {
     app.UseMiddleware<DocumentationCorrelationMiddleware>();

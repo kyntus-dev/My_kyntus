@@ -194,6 +194,9 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "Conge API", Version = "v1" });
 });
 
+// v60 — Restrictions des administrateurs par le Super Admin (contrôle à l'entrée de chaque API).
+builder.Services.AddKyntusAdminRestrictions(builder.Configuration);
+
 var app = builder.Build();
 
 // ?? Migrations automatiques au d�marrage ?????????????????????????????????????
@@ -238,6 +241,7 @@ if (app.Environment.IsDevelopment())
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseKyntusAdminRestrictions();
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "conge" }));
 

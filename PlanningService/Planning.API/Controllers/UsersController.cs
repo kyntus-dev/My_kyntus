@@ -163,6 +163,70 @@ public class UsersController(
         return null;
     }
 
+    /// <summary>
+    /// v60 — Un administrateur restreint par le Super Admin ne peut ni créer un administrateur, ni donner
+    /// le rôle Admin, ni modifier, réinitialiser ou désactiver le compte d'un administrateur : il ne
+    /// pourrait sinon s'attribuer les droits qui lui ont été retirés. Sans restriction : inchangé.
+    /// </summary>
+    private async Task<ActionResult?> DenyAdminEscalationAsync(int? cibleId, int? nouveauRoleId, CancellationToken ct, bool toujours = false)
+    {
+        if (!KyntusAdminClaims.IsAdmin(User) || KyntusAdminClaims.IsSuperAdmin(User))
+            return null;
+        var subjectId = KyntusAdminClaims.SubjectId(User);
+        var restrictions = HttpContext.RequestServices.GetService<IAdminRestrictionProvider>();
+        if (subjectId is null || restrictions is null || !(await restrictions.GetAsync(subjectId.Value, ct)).Restricted)
+            return null;
+
+        var cibleAdmin = toujours;
+        if (!cibleAdmin && cibleId is int id)
+        {
+            var cible = await userService.GetUserByIdAsync(id);
+            cibleAdmin = cible is not null && EstRoleAdmin(cible.RoleName);
+        }
+        if (!cibleAdmin && nouveauRoleId is int roleId)
+        {
+            var roles = await HttpContext.RequestServices.GetRequiredService<IRoleService>().GetActiveRolesAsync(ct);
+            cibleAdmin = roles.Any(r => r.Id == roleId && EstRoleAdmin(r.Name));
+        }
+        if (!cibleAdmin)
+            return null;
+        const string message = "Les comptes administrateurs sont gérés par le Super Admin : action impossible pour un administrateur restreint.";
+        return StatusCode(StatusCodes.Status403Forbidden, new { code = "ADMIN_RESTRICTED", error = message, message });
+    }
+
+    /// <summary>
+    /// v60 — Le compte Super Admin n'est modifié, réinitialisé ou désactivé que par lui-même
+    /// (AuthService le refuse aussi). Ne concerne que ce compte : rien ne change pour les autres.
+    /// </summary>
+    private async Task<ActionResult?> DenySuperAdminTargetAsync(int cibleId, CancellationToken ct)
+    {
+        if (KyntusAdminClaims.IsSuperAdmin(User))
+            return null;
+        var cible = await userService.GetUserByIdAsync(cibleId);
+        if (cible is null || !EstRoleAdmin(cible.RoleName) || cible.AuthUserId is not int authUserId || authUserId <= 0)
+            return null;
+        try
+        {
+            var client = HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>()
+                .CreateClient("kyntus-auth-internal"); // = RoleService.AuthClient (clé interne Auth)
+            var reponse = await client.GetFromJsonAsync<EstSuperAdminReponse>($"api/auth/users/from-planning/{authUserId}/super-admin", ct);
+            if (reponse?.SuperAdmin != true)
+                return null;
+        }
+        catch
+        {
+            // AuthService indisponible : il refusera de toute façon de modifier le compte Super Admin.
+            return null;
+        }
+        const string message = "Compte Super Admin : seul le Super Admin peut le modifier, le réinitialiser ou le désactiver.";
+        return StatusCode(StatusCodes.Status403Forbidden, new { code = "SUPER_ADMIN_PROTECTED", error = message, message });
+    }
+
+    private sealed record EstSuperAdminReponse(bool SuperAdmin);
+
+    private static bool EstRoleAdmin(string? role) =>
+        string.Equals(role?.Trim(), KyntusAdminClaims.AdminRole, StringComparison.OrdinalIgnoreCase);
+
     private static bool IsHrOrAdmin(string role) =>
         string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
         || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase);
@@ -332,6 +396,7 @@ public class UsersController(
     public async Task<ActionResult<UserDto>> Create([FromBody] CreateUserDto dto)
     {
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
+        if (await DenyAdminEscalationAsync(null, dto.RoleId, HttpContext.RequestAborted) is { } escalade) return escalade;
         if (!ModelState.IsValid) return BadRequest(ModelState);
         try
         {
@@ -356,6 +421,8 @@ public class UsersController(
     {
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
         if (!await CanAccessUserAsync(id, ct)) return Forbid();
+        if (await DenyAdminEscalationAsync(id, dto.RoleId, ct) is { } escalade) return escalade;
+        if (await DenySuperAdminTargetAsync(id, ct) is { } protege) return protege;
         if (!ModelState.IsValid) return BadRequest(ModelState);
         // Changer le service depuis la fiche demande le même droit que l'écran « Réaffectations ».
         var actuel = await userService.GetUserByIdAsync(id);
@@ -413,6 +480,8 @@ public class UsersController(
     {
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
         if (!await CanAccessUserAsync(id, ct)) return Forbid();
+        if (await DenyAdminEscalationAsync(id, null, ct) is { } escalade) return escalade;
+        if (!isActive && await DenySuperAdminTargetAsync(id, ct) is { } protege) return protege;
         if (!isActive)
         {
             var target = await userService.GetUserByIdAsync(id);
@@ -421,6 +490,9 @@ public class UsersController(
             if (target.AuthUserId is int targetAuth && targetAuth == User.GetAuthUserId())
                 return BadRequest(new { message = "Vous ne pouvez pas désactiver votre propre compte." });
         }
+        // v64 : la date de sortie effective n'est jamais un dimanche.
+        if (!isActive && dateSortie is DateOnly sortieDemandee && sortieDemandee.DayOfWeek == DayOfWeek.Sunday)
+            return BadRequest(new { message = $"La date de sortie ne peut pas être un dimanche ({sortieDemandee:dd/MM/yyyy})." });
         var found = await userService.SetUserActiveAsync(id, isActive, dateSortie, ct);
         if (!found)
             return NotFound(new { message = $"Utilisateur {id} introuvable." });
@@ -434,6 +506,8 @@ public class UsersController(
         CancellationToken ct)
     {
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
+        // v60 — Un groupe peut contenir des administrateurs : réservé aux administrateurs sans restriction.
+        if (await DenyAdminEscalationAsync(null, null, ct, toujours: true) is { } escalade) return escalade;
         try
         {
             var result = await userService.ResetPasswordsByGroupAsync(request, ct);
@@ -458,6 +532,8 @@ public class UsersController(
     public async Task<ActionResult<ResetPasswordResultDto>> ResetPassword(int id, CancellationToken ct)
     {
         if (await DenyUnlessCanManageUsersAsync() is { } denied) return denied;
+        if (await DenyAdminEscalationAsync(id, null, ct) is { } escalade) return escalade;
+        if (await DenySuperAdminTargetAsync(id, ct) is { } protege) return protege;
         try
         {
             var result = await userService.ResetPasswordAsync(id, ct);

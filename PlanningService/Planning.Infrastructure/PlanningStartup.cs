@@ -81,6 +81,9 @@ public static class PlanningStartup
                 await TryPatch("presences", () => PlanningSchemaPatches.EnsurePresencesAsync(db));
                 await TryPatch("reaffectations", () => PlanningSchemaPatches.EnsureReaffectationsAsync(db));
                 await TryPatch("formation-manquements", () => PlanningSchemaPatches.EnsureFormationEtManquementsAsync(db));
+                await TryPatch("fiches-reference", () => PlanningSchemaPatches.EnsureFichesReferenceAsync(db));
+                await TryPatch("type-employe", () => PlanningSchemaPatches.EnsureTypeEmployeAsync(db));
+                await TryPatch("journal-actions", () => PlanningSchemaPatches.EnsureJournalActionsAsync(db));
                 await TryPatch("presence-types", () => PlanningSchemaPatches.EnsurePresenceTypesAsync(db));
                 await TryPatch("formation-process-bytel", () => PlanningSchemaPatches.EnsureFormationEtProcessBytelAsync(db));
                 await TryPatch("planning-generation-erreur", () => PlanningSchemaPatches.EnsurePlanningGenerationErreurAsync(db));

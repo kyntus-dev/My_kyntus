@@ -1,5 +1,6 @@
 import { PlanningExportButtonComponent } from '../../../../shared/planning-export/planning-export-button.component';
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
+import { JournalActionsService } from '../../../../core/services/journal-actions.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -52,6 +53,7 @@ import { estPlanifiable } from '../../../../core/org/postes-production.util';
   styleUrls: ['./planning-validation.component.css'],
 })
 export class PlanningValidationComponent implements OnInit {
+  private readonly journalActions = inject(JournalActionsService);
   readonly icons = {
     calendar: Calendar,
     prev: ChevronLeft,
@@ -977,6 +979,10 @@ export class PlanningValidationComponent implements OnInit {
             } else {
               await downloadHtelPlanningExcel(plannings);
               this.successMsg = `Export HTEL — ${plannings.length} planning(s).`;
+              this.journalActions.declarerExport(
+                `Export HTEL — ${plannings.length} planning(s)`,
+                plannings.map((p) => p.weekCode).filter((v, i, t) => t.indexOf(v) === i).join(', '),
+              );
               if (failures.length) {
                 this.error = `${failures.length} échec(s) : ${failures.slice(0, 4).join(' · ')}`;
               }

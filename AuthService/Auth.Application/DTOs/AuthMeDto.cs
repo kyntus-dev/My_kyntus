@@ -7,4 +7,7 @@ public class AuthMeDto
     public required string Email { get; set; }
     public required string Role { get; set; }
     public required string TenantId { get; set; }
+
+    /// <summary>v60 — Compte Super Admin (claim signée du jeton).</summary>
+    public bool IsSuperAdmin { get; set; }
 }

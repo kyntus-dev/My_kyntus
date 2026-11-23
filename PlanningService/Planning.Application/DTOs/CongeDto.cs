@@ -22,7 +22,9 @@ namespace Planning.Application.DTOs
         DateOnly EndDate,
         string Reason,
         string AbsenceType,
-        string Status);
+        string Status,
+        // v64 : « Planning » (saisie ici, modifiable) ou « Demande » (workflow Congés, lecture seule ici).
+        string Origine = "Planning");
 
     public record PlanningNewEmployeeDto(
         int Id,

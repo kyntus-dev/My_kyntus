@@ -25,6 +25,8 @@ public sealed class PresencesController(IPresenceService presences, IPolicyEvalu
 {
     private const string CapVoir = "presences.View";
     private const string CapAgir = "presences.Act";
+    private const string CapEncadrementVoir = "presences.encadrement.View";
+    private const string CapEncadrementAgir = "presences.encadrement.Act";
 
     /// <summary>Tableau du <paramref name="du"/> au <paramref name="au"/> (31 jours au plus).</summary>
     [HttpGet]
@@ -94,6 +96,10 @@ public sealed class PresencesController(IPresenceService presences, IPolicyEvalu
         var global = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
                      || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase)
                      || await PorteeGlobaleAsync(CapVoir, ct);
-        return new PresenceViewer(User.GetAuthUserId(), User.GetSubjectId(), User.GetEmail(), role, global);
+        // v61 : rubrique « Présences des superviseurs et référents » (Consulter / Modifier), réglée dans Accès par rôle.
+        // v62 : évalué aussi pour RH, Admin et portée globale (listes Superviseurs / Référents proposées).
+        return new PresenceViewer(User.GetAuthUserId(), User.GetSubjectId(), User.GetEmail(), role, global,
+            await PeutAsync(CapEncadrementVoir, ct),
+            await PeutAsync(CapEncadrementAgir, ct));
     }
 }

@@ -5,6 +5,7 @@ import { PlanningExportService, type PlanningExportDto } from '../../core/servic
 import { PlanningItService } from '../../core/services/planning-it.service';
 import type { PlanningItSemaineDto } from '../../core/models/planning-it.models';
 import { KyntusToastService } from '../components/ui/kyntus-toast.service';
+import { PlatformAccessService } from '../../core/platform-access/platform-access.service';
 import {
   type CaseExport,
   type ModePeriode,
@@ -30,10 +31,12 @@ import {
   imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    @if (exportAutorise()) {
     <button type="button" class="pex-btn" (click)="ouvrir()">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
       Exporter (Excel)
     </button>
+    }
 
     <dialog #modal class="pex-modal" [attr.aria-label]="titre()">
       <form (ngSubmit)="exporter()">
@@ -113,6 +116,11 @@ export class PlanningExportButtonComponent {
 
   /** « rh » : planning publié ; « it » : planning IT. */
   readonly type = input<'rh' | 'it'>('rh');
+
+  private readonly access = inject(PlatformAccessService);
+  /** v60 — Export retiré par le Super Admin à l'administrateur connecté : bouton masqué. */
+  readonly exportAutorise = computed(() =>
+    !this.access.adminRestreint() || this.access.canExport(this.type() === 'rh' ? 'planning.equipe' : 'planning-it'));
 
   readonly mode = signal<ModePeriode>('semaine');
   readonly decalage = signal(0);

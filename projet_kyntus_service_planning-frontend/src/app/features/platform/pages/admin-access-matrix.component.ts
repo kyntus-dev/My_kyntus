@@ -16,6 +16,7 @@ import { libelleRole } from '../../../core/org/role-libelle';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { rolesMatrice } from '../roles/roles-iam.util';
+import { PlatformSectionService } from '../platform-section.service';
 import { MICROSERVICES } from '../../../core/navigation/microservices.config';
 import { apercuMenu } from '../../../core/navigation/menu-apercu.util';
 import {
@@ -56,7 +57,8 @@ type Filtre = 'toutes' | 'ouvertes' | 'modifiees' | 'ecarts';
 })
 export class AdminAccessMatrixComponent implements OnInit {
   private readonly api = inject(PlatformIamApiService);
-  private readonly access = inject(PlatformAccessService);
+  readonly access = inject(PlatformAccessService);
+  private readonly platform = inject(PlatformSectionService);
   private readonly session = inject(KyntusSessionService);
   private readonly rolesAdmin = inject(RolesAdminService);
   private readonly toast = inject(KyntusToastService);
@@ -135,6 +137,7 @@ export class AdminAccessMatrixComponent implements OnInit {
     this.loading.set(true);
     this.error.set('');
     try {
+      await this.access.ensureLoaded();
       this.permissions.set(await firstValueFrom(this.api.listPermissions()));
       this.construire();
     } catch {
@@ -279,9 +282,22 @@ export class AdminAccessMatrixComponent implements OnInit {
     this.lignes.set(this.lignes().map((x) => (x.capability === l.capability ? l : x)));
   }
 
+  /** v60 — Ouvre le réglage des droits des administrateurs (Super Admin). */
+  ouvrirDroitsAdmins(): void {
+    void this.platform.goAdmin('admins');
+  }
+
+  /**
+   * v60 — Rubriques affichées : un administrateur restreint par le Super Admin ne voit (et ne peut
+   * accorder) que les rubriques dont il dispose lui-même.
+   */
+  private rubriquesVisibles() {
+    return this.access.adminRestreint() ? PLATFORM_SCREENS.filter((s) => this.access.canView(s.id)) : PLATFORM_SCREENS;
+  }
+
   private construire(): void {
     const role = this.role();
-    const lignes = lignesDuRole(role, this.permissions(), PLATFORM_SCREENS, (s) => defaultScopeForRole(role, s));
+    const lignes = lignesDuRole(role, this.permissions(), this.rubriquesVisibles(), (s) => defaultScopeForRole(role, s));
     this.initiales.set(lignes);
     this.lignes.set(lignes);
   }

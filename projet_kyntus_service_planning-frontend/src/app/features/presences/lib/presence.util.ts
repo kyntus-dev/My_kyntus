@@ -50,6 +50,41 @@ export function familleCode(code: string | null): 'present' | 'formation' | 'abs
   return 'absence';
 }
 
+/** v64 : statut serveur d'un jour hors contrat (PointageJourStatuts.HorsContrat). */
+export const STATUT_HORS_CONTRAT = 'HorsContrat';
+
+/** v64 : jour hors contrat sans saisie ni pointage (case grisée, aucune saisie possible). */
+export function estHorsContrat(jour: PresenceJourDto | null | undefined): boolean {
+  return !!jour && jour.statut === STATUT_HORS_CONTRAT && !jour.code;
+}
+
+/**
+ * v63.3 — Pourquoi une case est vide. Une case sans code n'est pas une anomalie en soi : le
+ * tableau n'affiche un code que si la journée est planifiée, pointée, fériée ou saisie à la main.
+ * `marque` est le repère discret affiché dans la case, `raison` l'explication de l'infobulle.
+ */
+export function raisonCaseVide(
+  jour: PresenceJourDto,
+  pointeuseReliee = true,
+): { marque: string; raison: string } | null {
+  if (jour.code) return null;
+  // v64 : avant la date d'entrée réelle ou après la date de sortie effective : case grisée, non saisissable.
+  if (jour.statut === STATUT_HORS_CONTRAT) {
+    return { marque: '', raison: "Hors contrat : avant la date d'entrée ou après la date de sortie. Aucune présence ni absence." };
+  }
+  if (jour.statut === 'AVenir') return { marque: '', raison: 'Jour à venir.' };
+  if (jour.statut === 'EnCours') return { marque: '', raison: 'Journée en cours.' };
+  if (jour.statut === 'SansPlanning') {
+    return { marque: '·', raison: 'Pointage sans planning publié ce jour : retard non calculé.' };
+  }
+  // « Repos » = ni planning publié, ni pointage, ni congé : la cause la plus fréquente d'une case vide.
+  const raison = pointeuseReliee
+    ? 'Repos : aucun planning publié ce jour et aucun pointage. Cliquez pour saisir un motif.'
+    : 'Aucun identifiant de pointeuse relié à ce compte : aucun pointage ne remonte. '
+      + 'Reliez-le dans Utilisateurs › Liaisons HTEL, ou saisissez le motif à la main.';
+  return { marque: pointeuseReliee ? '–' : '?', raison };
+}
+
 export function formatMinutes(minutes: number): string {
   const m = Math.max(0, Math.round(minutes || 0));
   return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
@@ -86,6 +121,9 @@ export const estReferentTechnique = (role?: string | null) => {
   return r === 'referenttechnique' || r === 'coach';
 };
 export const estEncadrement = (role?: string | null) => estSuperviseur(role) || estReferentTechnique(role);
+/** v62 : superviseur ou référent sans cellule (vu uniquement dans les tableaux dédiés). */
+export const estEncadrementNonPlace = (a: Pick<PresenceAgentDto, 'role' | 'cellule' | 'celluleId'>) =>
+  estEncadrement(a.role) && !a.cellule && !a.celluleId;
 
 /**
  * v48 — Le filtre « Formation » : tous, en formation (tous types), hors formation, ou l'un des
@@ -113,17 +151,27 @@ export function filtrerAgents(
    * choisies (tous les superviseurs, un superviseur, tous les référents ou un référent).
    */
   encadrementSurDemande = false,
+  /**
+   * v62 (toute l'entreprise) : superviseurs et référents sans cellule, présents seulement pour leurs
+   * tableaux dédiés : masqués du tableau principal (qui reste celui d'avant).
+   */
+  masquerEncadrementNonPlace = false,
 ): PresenceAgentDto[] {
   const q = f.recherche.trim().toLowerCase();
   const correspond = (choix: string, a: PresenceAgentDto) => choix === '*' || choix === String(a.userId);
-  if (encadrementSurDemande && (f.superviseurs || f.referents)) {
+  // v62 : un choix dans « Superviseurs » ou « Référents » ouvre leur tableau pour tous ceux qui ont ces
+  // listes (RH et Admin compris), pas seulement le chef de projet.
+  if (f.superviseurs || f.referents) {
+    // v61 : l'activité, le pôle et la cellule choisis s'appliquent aussi (périmètre de chaque personne).
     return agents.filter((a) =>
       ((f.superviseurs && estSuperviseur(a.role) && correspond(f.superviseurs, a))
         || (f.referents && estReferentTechnique(a.role) && correspond(f.referents, a)))
+      && encadrementDans(a, f, activiteDuPole)
       && (!q || a.nom.toLowerCase().includes(q)));
   }
   return agents.filter((a) =>
     (!encadrementSurDemande || !estEncadrement(a.role))
+    && (!masquerEncadrementNonPlace || !estEncadrementNonPlace(a))
     && (!q || a.nom.toLowerCase().includes(q))
     && (!f.activite || activiteDuPole(a.poleId, a) === f.activite)
     && (!f.pole || a.pole === f.pole)
@@ -131,6 +179,55 @@ export function filtrerAgents(
     && (!f.type || a.type === f.type)
     && correspondFormation(f.formation, a)
     && (!f.aTraiter || aTraiter(a)));
+}
+
+/**
+ * v61 — Superviseur ou référent rattaché à l'activité, au pôle et à la cellule choisis : par son
+ * placement, ou par les agents de ces niveaux qui le désignent sur leur fiche (calcul serveur).
+ * Évite de proposer, pour un contrat, des responsables d'un autre contrat ou d'un autre périmètre.
+ */
+export function encadrementDans(
+  a: PresenceAgentDto,
+  f: Pick<FiltresPresence, 'activite' | 'pole' | 'cellule'>,
+  activiteDuPole: (poleId: string | null, agent?: PresenceAgentDto) => string | null,
+): boolean {
+  const poleIds = [a.poleId, ...(a.poleIdsEncadres ?? [])].filter((x): x is string => !!x);
+  const poles = [a.pole, ...(a.polesEncadres ?? [])].filter((x): x is string => !!x);
+  const cellules = [a.cellule, ...(a.cellulesEncadrees ?? [])].filter((x): x is string => !!x);
+  return (!f.activite || poleIds.some((p) => activiteDuPole(p) === f.activite))
+    && (!f.pole || poles.some((p) => memeLibelle(p, f.pole)))
+    && (!f.cellule || cellules.some((c) => memeLibelle(c, f.cellule)));
+}
+
+const memeLibelle = (a: string, b: string) => cleLibelle(a) === cleLibelle(b);
+
+/**
+ * v61 — Listes des filtres selon le périmètre. Toute l'entreprise (RH, Admin, portée globale) :
+ * organisation complète (v58). Périmètre limité (RP, superviseur…) : seulement les contrats, pôles et
+ * cellules de ses agents (et des superviseurs / référents qu'il voit), sans doublon ni autre périmètre.
+ */
+export function optionsPerimetre(
+  toutesActivites: boolean,
+  structure: readonly ActiviteStructure[],
+  activite: string,
+  pole: string,
+  depuisLesAgents: {
+    activites: Iterable<string | null | undefined>;
+    poles: Iterable<string | null | undefined>;
+    cellules: Iterable<string | null | undefined>;
+  },
+): { activites: string[]; poles: string[]; cellules: string[] } {
+  if (toutesActivites) {
+    return {
+      activites: optionsActivites(structure, depuisLesAgents.activites),
+      ...optionsOrganisation(structure, activite, pole, depuisLesAgents),
+    };
+  }
+  return {
+    activites: libellesUniques(depuisLesAgents.activites),
+    poles: libellesUniques(depuisLesAgents.poles),
+    cellules: libellesUniques(depuisLesAgents.cellules),
+  };
 }
 
 export interface LigneRetard {

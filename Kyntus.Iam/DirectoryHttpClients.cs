@@ -76,12 +76,19 @@ public sealed class DirectoryHttpRebacClient(HttpClient http) : IRebacClient
 }
 
 /// <summary>Évalue les policies via POST /api/iam/evaluate (forward JWT utilisateur).</summary>
-public sealed class DirectoryHttpPolicyEvaluator(HttpClient http) : IPolicyEvaluator
+public sealed class DirectoryHttpPolicyEvaluator(HttpClient http, IServiceProvider services) : IPolicyEvaluator
 {
     public async Task<PolicyDecision> EvaluateAsync(PolicyRequest request, CancellationToken ct = default)
     {
         if (IsPrivilegedAdmin(request.Role))
+        {
+            // v60 — Tous les droits, sauf les fonctionnalités retirées par le Super Admin.
+            var restrictions = services.GetService<IAdminRestrictionProvider>();
+            if (restrictions is not null && request.SubjectId != Guid.Empty
+                && (await restrictions.GetAsync(request.SubjectId, ct)).IsDenied(request.Action.Trim()))
+                return new PolicyDecision(false, "Retiré par le Super Admin");
             return new PolicyDecision(true);
+        }
 
         var resp = await http.PostAsJsonAsync("/api/iam/evaluate", new
         {

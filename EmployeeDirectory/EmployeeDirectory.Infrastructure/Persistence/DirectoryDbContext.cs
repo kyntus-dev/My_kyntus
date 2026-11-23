@@ -16,6 +16,7 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
     public DbSet<OrgAssignmentHistory> OrgAssignmentHistories => Set<OrgAssignmentHistory>();
     public DbSet<IamPermission> IamPermissions => Set<IamPermission>();
     public DbSet<IamUserPermission> IamUserPermissions => Set<IamUserPermission>();
+    public DbSet<IamAdminRestriction> IamAdminRestrictions => Set<IamAdminRestriction>();
     public DbSet<BusinessDepartment> BusinessDepartments => Set<BusinessDepartment>();
     public DbSet<DepartmentPoleAssignment> DepartmentPoleAssignments => Set<DepartmentPoleAssignment>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
@@ -160,6 +161,15 @@ public class DirectoryDbContext(DbContextOptions<DirectoryDbContext> options) : 
         modelBuilder.Entity<IamUserPermission>(e =>
         {
             e.ToTable("iam_user_permissions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Action).HasMaxLength(128);
+            e.Property(x => x.UpdatedBy).HasMaxLength(160);
+            e.HasIndex(x => new { x.SubjectId, x.Action }).IsUnique();
+        });
+
+        modelBuilder.Entity<IamAdminRestriction>(e =>
+        {
+            e.ToTable("iam_admin_restrictions");
             e.HasKey(x => x.Id);
             e.Property(x => x.Action).HasMaxLength(128);
             e.Property(x => x.UpdatedBy).HasMaxLength(160);

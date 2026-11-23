@@ -1,7 +1,10 @@
 ﻿using Kyntus.Messaging.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Planning.Application.Abstractions;
+using Planning.Application.NotificationEmail;
 using Planning.Application.Pointage;
 using Planning.Application.Presence;
 using Planning.Domain.Entities;
@@ -21,7 +24,9 @@ public sealed class PresenceService(
     IPlanningPerimeterResolver perimeter,
     IOptionsMonitor<PointageOptions> options,
     IMemoryCache? cache = null,
-    IPaieValidationService? paie = null) : IPresenceService
+    IPaieValidationService? paie = null,
+    IAppNotifier? notifier = null,
+    ILogger<PresenceService>? logger = null) : IPresenceService
 {
     /// <summary>
     /// v58 — Période de paie validée par les RH : plus personne n'y touche, pas même celui qui a
@@ -71,12 +76,30 @@ public sealed class PresenceService(
             peutModifier,
             PresenceCodes.Tous,
             agents,
-            PeutAutoriserRetard(viewer.Role));
+            PeutAutoriserRetard(viewer.Role),
+            VoitEncadrement(viewer),
+            peutModifier && (viewer.Global ? viewer.EncadrementAgir ?? true : SaisitEncadrement(viewer)),
+            viewer.Global,
+            viewer.Global ? viewer.EncadrementVoir ?? true : VoitEncadrement(viewer));
     }
 
     /// <summary>v46 : superviseurs et référents techniques n'autorisent ni retard ni dépassement de pause.</summary>
     internal static bool PeutAutoriserRetard(string? role) =>
         !KyntusRoleNames.IsSuperviseur(role) && !KyntusRoleNames.IsReferentTechnique(role);
+
+    /// <summary>
+    /// v61 : rubrique « Présences des superviseurs et référents › Consulter » (responsable non global).
+    /// Sans réponse du catalogue (null) : règle v46, réservée au chef de projet (RP).
+    /// </summary>
+    internal static bool VoitEncadrement(PresenceViewer viewer) =>
+        !viewer.Global && (viewer.EncadrementVoir ?? KyntusRoleNames.IsChefDeProjet(viewer.Role));
+
+    /// <summary>v61 : « … › Modifier » : saisir les présences des superviseurs et référents du périmètre.</summary>
+    internal static bool SaisitEncadrement(PresenceViewer viewer) =>
+        VoitEncadrement(viewer) && (viewer.EncadrementAgir ?? KyntusRoleNames.IsChefDeProjet(viewer.Role));
+
+    private static bool EstEncadrement(string? role) =>
+        KyntusRoleNames.IsSuperviseur(role) || KyntusRoleNames.IsReferentTechnique(role);
 
     public async Task<PresenceAgentDto> SaisirAsync(
         PresenceViewer viewer, PresenceSaisieRequest request, DateOnly grilleDu, DateOnly grilleAu, CancellationToken ct = default)
@@ -98,10 +121,51 @@ public sealed class PresenceService(
             var (ids, _) = await AgentsVisiblesAsync(me, viewer, ct);
             if (!ids.Contains(request.UserId))
                 throw new PresenceRefusException("Cet agent n'est pas dans votre périmètre.", horsPerimetre: true);
+            // v61 : superviseurs et référents : saisie selon la rubrique dédiée (consultation seule sinon).
+            if (VoitEncadrement(viewer) && !SaisitEncadrement(viewer))
+            {
+                var roleCible = await db.Users.AsNoTracking()
+                    .Where(u => u.Id == request.UserId)
+                    .Select(u => u.Role != null ? u.Role.Name : null)
+                    .FirstOrDefaultAsync(ct);
+                if (EstEncadrement(roleCible))
+                    throw new PresenceRefusException(
+                        "Vous pouvez consulter les présences des superviseurs et référents, pas les modifier "
+                        + "(droit « Présences des superviseurs et référents › Modifier »).", horsPerimetre: true);
+            }
         }
         else if (!await db.Users.AnyAsync(u => u.Id == request.UserId, ct))
         {
             throw new PresenceRefusException("Agent introuvable.");
+        }
+        else if (viewer.EncadrementAgir == false)
+        {
+            // v62 : RH, Admin ou portée globale sans « Présences des superviseurs et référents › Modifier ».
+            var roleCible = await db.Users.AsNoTracking()
+                .Where(u => u.Id == request.UserId)
+                .Select(u => u.Role != null ? u.Role.Name : null)
+                .FirstOrDefaultAsync(ct);
+            if (EstEncadrement(roleCible))
+                throw new PresenceRefusException(
+                    "Vous pouvez consulter les présences des superviseurs et référents, pas les modifier "
+                    + "(droit « Présences des superviseurs et référents › Modifier »).", horsPerimetre: true);
+        }
+
+        // v64 : hors contrat (avant l'entrée réelle, après la sortie effective), aucune présence ni absence.
+        if (code is not null || request.AbsencePartielle || request.RetardAutorise || request.RetardPauseAutorise)
+        {
+            var embaucheCible = await db.Users.AsNoTracking()
+                .Where(u => u.Id == request.UserId)
+                .Select(u => (DateTime?)u.HireDate)
+                .FirstOrDefaultAsync(ct);
+            var profilCible = await db.UserHrProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == request.UserId, ct);
+            var contratCible = ContratPeriode.De(profilCible, embaucheCible);
+            for (var jourHc = request.Jour; jourHc <= fin; jourHc = jourHc.AddDays(1))
+            {
+                if (contratCible.MotifHorsContrat(jourHc) is string motifHc)
+                    throw new PresenceRefusException(
+                        $"Journée du {jourHc:dd/MM/yyyy} hors contrat ({motifHc}) : aucune présence ni absence ne peut y être saisie.");
+            }
         }
 
         var commentaire = Nettoyer(request.Commentaire, 1000);
@@ -116,13 +180,18 @@ public sealed class PresenceService(
         {
             for (var j = request.Jour; j <= fin; j = j.AddDays(1))
             {
-                existantes.TryGetValue(j, out var avant);
-                if (request.RetardAutorise != (avant?.RetardAutorise ?? false)
-                    || request.RetardPauseAutorise != (avant?.RetardPauseAutorise ?? false))
+                existantes.TryGetValue(j, out var precedente);
+                if (request.RetardAutorise != (precedente?.RetardAutorise ?? false)
+                    || request.RetardPauseAutorise != (precedente?.RetardPauseAutorise ?? false))
                     throw new PresenceRefusException(
                         "Seuls le chef de projet, les RH et l'Admin peuvent autoriser un retard ou un dépassement de pause.");
             }
         }
+
+        // v62 : état avant la saisie (planning et notification à l'agent).
+        var avant = existantes.ToDictionary(
+            e => e.Key,
+            e => new EtatPresence(e.Value.Code, e.Value.AbsencePartielle, e.Value.RetardAutorise || e.Value.RetardPauseAutorise));
 
         for (var jour = request.Jour; jour <= fin; jour = jour.AddDays(1))
         {
@@ -150,9 +219,77 @@ public sealed class PresenceService(
             ligne.UpdatedByNom = auteur;
         }
         await db.SaveChangesAsync(ct);
+        await ApresSaisieAsync(request, code, fin, avant, auteur, ct);
 
         (grilleDu, grilleAu) = Borner(grilleDu, grilleAu);
         return (await ConstruireAsync([request.UserId], grilleDu, grilleAu, ct)).Single();
+    }
+
+    private sealed record EtatPresence(string? Code, bool Partielle, bool RetardAutorise);
+
+    /// <summary>
+    /// v62 — Après une saisie : le planning suit le motif (arrêt maladie, congé… = aucun shift ; motif
+    /// retiré = shift rendu), puis l'agent est notifié. Rien ici ne fait échouer la saisie.
+    /// </summary>
+    private async Task ApresSaisieAsync(
+        PresenceSaisieRequest request, string? code, DateOnly fin,
+        IReadOnlyDictionary<DateOnly, EtatPresence> avant, string? auteur, CancellationToken ct)
+    {
+        var jours = new List<DateOnly>();
+        for (var j = request.Jour; j <= fin; j = j.AddDays(1))
+            jours.Add(j);
+        bool BloquaitAvant(DateOnly j) =>
+            avant.TryGetValue(j, out var a) && !a.Partielle && PresenceCodes.RetireDuPlanning(a.Code);
+        var bloqueApres = !request.AbsencePartielle && PresenceCodes.RetireDuPlanning(code);
+        var poses = bloqueApres ? jours.Where(j => !BloquaitAvant(j)).ToList() : new List<DateOnly>();
+        var retires = bloqueApres ? new List<DateOnly>() : jours.Where(BloquaitAvant).ToList();
+
+        try
+        {
+            var n = await PresenceAbsencesPlanning.AppliquerAuPlanningAsync(db, request.UserId, poses, retires, ct);
+            if (n > 0)
+                logger?.LogInformation("Présence → planning : {Nombre} journée(s) mise(s) à jour pour l'agent {UserId}.", n, request.UserId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            db.ChangeTracker.Clear();
+            logger?.LogWarning(ex, "Planning non mis à jour après la saisie de présence de l'agent {UserId}.", request.UserId);
+        }
+
+        if (notifier is null)
+            return;
+        var notification = NotificationSaisie(request, code, fin, avant, auteur, poses, retires);
+        if (notification is not null)
+            await notifier.NotifierAsync(new NotificationEmailRecipients(UserIds: [request.UserId]), notification, ct: ct);
+    }
+
+    /// <summary>v62 : message à l'agent après une saisie de son responsable (null : rien d'utile à dire).</summary>
+    private static AppNotification? NotificationSaisie(
+        PresenceSaisieRequest request, string? code, DateOnly fin, IReadOnlyDictionary<DateOnly, EtatPresence> avant,
+        string? auteur, IReadOnlyCollection<DateOnly> poses, IReadOnlyCollection<DateOnly> retires)
+    {
+        var par = string.IsNullOrWhiteSpace(auteur) ? string.Empty : $" par {auteur.Trim()}";
+        var periode = request.Jour == fin ? $"le {request.Jour:dd/MM/yyyy}" : $"du {request.Jour:dd/MM/yyyy} au {fin:dd/MM/yyyy}";
+        var cle = $"PRESENCE-{request.UserId}-{request.Jour:yyyyMMdd}";
+        if (poses.Count > 0)
+        {
+            var libelle = PresenceCodes.Tous.FirstOrDefault(c => c.Code == code)?.Libelle ?? code;
+            return new AppNotification("presences", $"Absence enregistrée : {libelle}",
+                $"{libelle} enregistré(e) {periode}{par}. Votre planning est mis à jour : aucun shift ne vous est attribué ces jours-là.",
+                "/mes-plannings", cle);
+        }
+        if (retires.Count > 0)
+            return new AppNotification("presences", "Absence retirée",
+                $"L'absence {periode} a été retirée{par}. Vous êtes de nouveau attendu(e) selon votre planning.",
+                "/mes-plannings", cle);
+        var nouveauRetardAutorise = (request.RetardAutorise || request.RetardPauseAutorise)
+            && !avant.Values.Any(a => a.RetardAutorise);
+        if (nouveauRetardAutorise)
+            return new AppNotification("presences", "Retard autorisé",
+                $"Votre retard {periode} a été autorisé{par}"
+                + (string.IsNullOrWhiteSpace(request.MotifAutorisation) ? "." : $" (motif : {request.MotifAutorisation.Trim()})."),
+                "/pointage/mon-suivi", cle);
+        return null;
     }
 
     public async Task<PresenceAuteur> ResoudreAsync(PresenceViewer viewer, CancellationToken ct = default)
@@ -187,6 +324,8 @@ public sealed class PresenceService(
                 Pole = u.SubService != null ? u.SubService.Service.Floor.Name : null,
                 PoleId = u.SubService != null ? u.SubService.Service.Floor.PrimePoleId : null,
                 Role = u.Role != null ? u.Role.Name : null,
+                u.Guid,
+                u.HireDate,
             })
             .ToDictionaryAsync(u => u.Id, ct);
         var profils = await db.UserHrProfiles.AsNoTracking()
@@ -202,13 +341,52 @@ public sealed class PresenceService(
 
         var congesParAgent = conges.GroupBy(c => c.UserId).ToDictionary(g => g.Key, g => g.ToList());
 
+        // v61 : périmètre de chaque superviseur / référent : son placement, plus le pôle et la cellule des
+        // agents affichés qui le désignent sur leur fiche (jamais au-delà des agents visibles).
+        var encadres = new Dictionary<int, (HashSet<string> PoleIds, HashSet<string> Poles, HashSet<string> Cellules)>();
+        var encadrantsParGuid = users.Values
+            .Where(x => EstEncadrement(x.Role) && x.Guid != Guid.Empty)
+            .GroupBy(x => x.Guid)
+            .ToDictionary(grp => grp.Key, grp => grp.First().Id);
+        void AjouterEncadre(int encadrant, string? poleId, string? pole, string? cellule)
+        {
+            if (!encadres.TryGetValue(encadrant, out var t))
+            {
+                t = (new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                     new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                     new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                encadres[encadrant] = t;
+            }
+            if (!string.IsNullOrWhiteSpace(poleId)) t.PoleIds.Add(poleId);
+            if (!string.IsNullOrWhiteSpace(pole)) t.Poles.Add(pole);
+            if (!string.IsNullOrWhiteSpace(cellule)) t.Cellules.Add(cellule);
+        }
+        foreach (var orgEncadrant in users.Values.Where(x => EstEncadrement(x.Role)))
+            AjouterEncadre(orgEncadrant.Id, orgEncadrant.PoleId, orgEncadrant.Pole, orgEncadrant.Cellule);
+        foreach (var profilAgent in profils.Values)
+        {
+            if (!users.TryGetValue(profilAgent.UserId, out var agentOrg)) continue;
+            foreach (var designe in new[] { profilAgent.SuperviseurId, profilAgent.ReferentTechniqueId })
+            {
+                if (designe is Guid guidDesigne && encadrantsParGuid.TryGetValue(guidDesigne, out var idEncadrant)
+                    && idEncadrant != profilAgent.UserId)
+                    AjouterEncadre(idEncadrant, agentOrg.PoleId, agentOrg.Pole, agentOrg.Cellule);
+            }
+        }
+
         var result = new List<PresenceAgentDto>(suivis.Count);
         foreach (var s in suivis)
         {
             var org = users.GetValueOrDefault(s.UserId);
             var profil = profils.GetValueOrDefault(s.UserId);
-            var jours = s.Jours.Select(j =>
+            // v64 : période sous contrat. Hors contrat, une journée sans pointage ni saisie n'a ni
+            // présence ni absence (case grisée) ; un pointage ou une saisie existants restent affichés.
+            var contrat = ContratPeriode.De(profil, org?.HireDate);
+            var jours = s.Jours.Select(jBrut =>
             {
+                var j = !contrat.Couvre(jBrut.Jour) && jBrut.Pointages.Count == 0
+                    ? jBrut with { Statut = PointageJourStatuts.HorsContrat }
+                    : jBrut;
                 var conge = congesParAgent.TryGetValue(s.UserId, out var siens)
                     ? siens.FirstOrDefault(c => c.StartDate <= j.Jour && c.EndDate >= j.Jour)
                     : null;
@@ -220,6 +398,8 @@ public sealed class PresenceService(
                 var code = saisie?.Code ?? codeAuto;
                 var entreeOk = saisie?.RetardAutorise ?? false;
                 var pauseOk = saisie?.RetardPauseAutorise ?? false;
+                var hs = PresenceRegles.HeuresSupplementaires(
+                    j.Jour, j.Statut, code, j.Planning, j.PauseAutoriseeMinutes, j.ProductionPrevueMinutes, j.Pointages);
                 return new PresenceJourDto(
                     j.Jour,
                     code,
@@ -241,20 +421,26 @@ public sealed class PresenceService(
                     saisie?.Commentaire,
                     saisie?.UpdatedByNom,
                     saisie?.UpdatedAt,
-                    saisie?.AbsencePartielle ?? false);
+                    saisie?.AbsencePartielle ?? false,
+                    hs.FinPrevue,
+                    hs.Avant21Minutes,
+                    hs.Apres21Minutes,
+                    hs.DimancheFerieMinutes);
             }).ToList();
 
             result.Add(new PresenceAgentDto(
                 s.UserId,
                 s.Collaborateur,
-                string.IsNullOrWhiteSpace(profil?.NumeroCarteAutoentrepreneur) ? "Salarié" : "Sous-traitant",
+                // v64 : type de la fiche employé (même règle partout : fiche, présences, paie, exports).
+                TypesEmploye.Libelle(profil),
                 org?.Pole,
                 org?.PoleId,
                 org?.Cellule,
                 org?.CelluleId,
                 org?.Service ?? s.Cellule,
-                profil?.DateEntree,
-                profil?.DateSortie,
+                // v64 : bornes du contrat (entrée réelle, sortie effective), mêmes que le planning et la paie.
+                contrat.Entree,
+                contrat.Sortie,
                 jours,
                 Totaux(jours),
                 ADejaEteEnFormation(profil) ? profil!.DateDebutFormation ?? profil.DateEntree : null,
@@ -263,7 +449,13 @@ public sealed class PresenceService(
                 profil?.EnFormation ?? false,
                 org?.Role,
                 // v48 : type de formation (contractuel / non contractuel).
-                profil?.TypeFormation));
+                profil?.TypeFormation,
+                encadres.TryGetValue(s.UserId, out var perimetreEncadrant) ? perimetreEncadrant.PoleIds.OrderBy(x => x).ToList() : null,
+                perimetreEncadrant.Poles?.OrderBy(x => x).ToList(),
+                perimetreEncadrant.Cellules?.OrderBy(x => x).ToList(),
+                // v63.3 : sans identifiant de pointeuse, aucun pointage ne remonte : les journées
+                // restent vides (ou « ABS N » les jours planifiés) tant qu'un motif n'est pas saisi.
+                s.IdsPointeuse.Count > 0));
         }
         return result
             .OrderBy(a => a.Cellule ?? "", StringComparer.CurrentCultureIgnoreCase)
@@ -273,8 +465,9 @@ public sealed class PresenceService(
 
     private static PresenceTotauxDto Totaux(IReadOnlyList<PresenceJourDto> jours)
     {
+        // v63.3 : un jour férié n'est pas une absence (il ne doit plus gonfler la colonne « Abs. »).
         var absences = jours
-            .Where(j => j.Code is not null and not PresenceCodes.Present and not PresenceCodes.Formation)
+            .Where(j => j.Code is not null and not PresenceCodes.Present and not PresenceCodes.Formation and not PresenceCodes.Ferie)
             .GroupBy(j => j.Code!)
             .ToDictionary(g => g.Key, g => g.Count());
         return new PresenceTotauxDto(
@@ -327,7 +520,20 @@ public sealed class PresenceService(
             var tous = await db.Users.AsNoTracking()
                 .Where(u => u.IsActive && u.SubServiceId != null)
                 .Select(u => u.Id).ToListAsync(ct);
-            return (tous.Union(enFormation).ToList(), "Toute l'entreprise");
+            // v62 : superviseurs et référents sans cellule (rattachés par l'organisation) : proposés dans
+            // leurs tableaux dédiés. Le tableau principal et l'export paie des RH n'en changent pas.
+            var encadrementNonPlace = new List<int>();
+            if (viewer.EncadrementVoir != false)
+            {
+                encadrementNonPlace = (await db.Users.AsNoTracking()
+                        .Where(u => u.IsActive && u.SubServiceId == null && u.Role != null)
+                        .Select(u => new { u.Id, Role = u.Role!.Name })
+                        .ToListAsync(ct))
+                    .Where(u => EstEncadrement(u.Role))
+                    .Select(u => u.Id)
+                    .ToList();
+            }
+            return (tous.Union(enFormation).Union(encadrementNonPlace).ToList(), "Toute l'entreprise");
         }
         if (EstFormateur(viewer.Role))
         {
@@ -345,10 +551,23 @@ public sealed class PresenceService(
         var horsFormation = ids.Except(enFormation).ToList();
         // v46 : un chef de projet voit aussi (et saisit) les superviseurs et référents techniques de son
         // périmètre : placés dans ses services, ou désignés sur la fiche de ses agents.
-        if (KyntusRoleNames.IsChefDeProjet(viewer.Role) && ids.Count > 0)
+        // v61 : ce droit est la rubrique « Présences des superviseurs et référents › Consulter » (RP par défaut).
+        if (VoitEncadrement(viewer) && ids.Count > 0)
         {
             var encadrement = await EncadrementAsync(me, ids, scope, ct);
             horsFormation = horsFormation.Union(encadrement).ToList();
+        }
+        else if (KyntusRoleNames.IsChefDeProjet(viewer.Role) && horsFormation.Count > 0)
+        {
+            // v61 : droit retiré au RP : ni superviseur ni référent dans son tableau (même placés dans ses services).
+            var encadrants = (await db.Users.AsNoTracking()
+                    .Where(u => horsFormation.Contains(u.Id) && u.Role != null)
+                    .Select(u => new { u.Id, Role = u.Role!.Name })
+                    .ToListAsync(ct))
+                .Where(u => EstEncadrement(u.Role))
+                .Select(u => u.Id)
+                .ToHashSet();
+            horsFormation = horsFormation.Where(id => !encadrants.Contains(id)).ToList();
         }
         if (!inclureFormation)
         {

@@ -103,6 +103,9 @@ public static class PlatformAccessCatalog
     [
         S("admin.overview", "Vue d'ensemble", "Administration", View: AdminRh),
         S("admin.access", "Accès par rôle", "Administration", View: Admin, Configure: Admin),
+        // v60.2 : « Accès par compte » devient une rubrique à part (elle suivait « Accès par rôle »).
+        // Pour les rôles autres qu'un administrateur restreint, « Accès par rôle » continue de l'ouvrir.
+        S("admin.comptes", "Accès par compte", "Administration", View: Admin, Configure: Admin),
         // v35 : gestion des rôles (création, suppression) — l'API est réservée à l'Admin.
         S("admin.roles", "Rôles (création, suppression)", "Administration", View: Admin, Act: Admin),
         S("admin.users", "Utilisateurs", "Administration", View: AdminRh, Act: AdminRh),
@@ -118,6 +121,9 @@ public static class PlatformAccessCatalog
 
         S("audit.dashboard", "Tableau de bord conformité", "Audit", View: AdminAudit),
         S("audit.journal", "Journal unifié", "Audit", View: AdminAudit),
+        // v64 : journal d'actions (employés, réaffectations, présences, congés, plannings, horaires,
+        // imports / exports, droits d'accès, validations) — avant / après, auteur, date et heure.
+        S("audit.actions", "Journal d'actions", "Audit", View: AdminAudit),
         S("audit.access-history", "Historique d'accès", "Audit", View: AdminAudit),
         S("audit.anomalies", "Anomalies", "Audit", View: AdminAudit),
         S("audit.reporting", "Reporting", "Audit", View: AdminAudit),
@@ -152,6 +158,9 @@ public static class PlatformAccessCatalog
         S("presences.avertissements", "Manquements (référentiel)", "Présences et paie", View: TeamLead, Act: TeamLead),
         S("presences.evp", "Éléments variables de paie", "Présences et paie", View: TeamLead, Act: TeamLead),
         S("presences.dossier", "Dossier administratif", "Présences et paie", View: RhChefProjet, Act: RhChefProjet),
+        // v61 : tableaux dédiés des superviseurs et référents techniques du périmètre (listes du tableau
+        // des présences). Consulter = voir leurs présences ; Agir = les saisir. RP coché par défaut.
+        S("presences.encadrement", "Présences des superviseurs et référents", "Présences et paie", View: RhChefProjet, Act: RhChefProjet),
         // v37 : superviseur aussi (ses agents, dont ceux en formation, en couleur).
         S("presences.export", "Export paie", "Présences et paie", View: [.. RhChefProjet, "Superviseur"]),
 
@@ -162,6 +171,11 @@ public static class PlatformAccessCatalog
         // v29 : chef de projet = tout son département (Congés › Quotas).
         S("conges.quotas", "Quotas cellule / service", "Congés", View: ["Superviseur", "Admin", "RP"], Configure: ["Superviseur", "Admin", "RP"]),
         S("conges.periodes", "Périodes interdites", "Congés", View: AdminRh, Configure: AdminRh),
+        // v64 : absences saisies dans le planning (écran « Absences ») — consulter, ajouter, modifier,
+        // réglables par rôle et par compte. Hors portée « Toute l'entreprise » : cellules du compte seulement.
+        S("conges.planning", "Absences du planning — consulter", "Congés", View: ["Admin", "RH", "Manager", "Superviseur", "RP"]),
+        S("conges.planning-ajout", "Absences du planning — ajouter", "Congés", View: AdminRh, Act: AdminRh),
+        S("conges.planning-modification", "Absences du planning — modifier / supprimer", "Congés", View: AdminRh, Act: AdminRh),
 
         S("documentation.module", "Module Documentation (accès au menu)", "Documentation", View: Self),
         // v48 : Process Bytel — tout le monde consulte (selon la visibilité du document) ;
@@ -277,6 +291,14 @@ public static class PlatformAccessCatalog
         normalizedAction = $"{catalogScreen.Id}.{catalogVerb}";
         return true;
     }
+
+    /// <summary>
+    /// v61 — Rubriques ajoutées après la mise en service : leurs droits par défaut sont posés une seule
+    /// fois sur une base existante (tant qu'aucune ligne n'existe pour la rubrique, quel que soit le rôle).
+    /// Une rubrique décochée ensuite garde sa ligne (refusée) : rien n'est réimposé au redémarrage.
+    /// </summary>
+    public static readonly string[] RubriquesAjoutees =
+        ["presences.encadrement", "conges.planning", "conges.planning-ajout", "conges.planning-modification", "audit.actions"];
 
     public static IEnumerable<(string Action, string Scope)> SeedRowsForRole(string role)
     {

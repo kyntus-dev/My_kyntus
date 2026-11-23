@@ -53,7 +53,13 @@
       </section>
     }
 
-    @if (joker()) {
+    @if (joker() && role() === 'Admin' && access.superAdmin()) {
+      <div class="ar-info">
+        Par défaut, les administrateurs ont accès à toutes les rubriques. En tant que Super Admin, vous pouvez
+        retirer ou rendre chaque fonctionnalité dans
+        <button type="button" class="ar-lien-admins" (click)="ouvrirDroitsAdmins()">Droits des administrateurs</button>.
+      </div>
+    } @else if (joker()) {
       <div class="ar-info">Ce rôle a l’accès complet à toutes les rubriques (Admin) : rien à régler ici.</div>
     } @else if (!canWrite()) {
       <div class="ar-info">Lecture seule : seul l’Admin modifie les droits des rôles.</div>

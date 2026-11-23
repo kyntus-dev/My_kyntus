@@ -60,6 +60,17 @@ export function readJwtRole(token: string): string {
   return readJwtRoles(token)[0] ?? '';
 }
 
+/** v60 — Claim signée posée par AuthService sur le compte Super Admin (rôle Admin). */
+export const KYNTUS_SUPER_ADMIN_CLAIM = 'kyntus_super_admin';
+
+/** Super Admin : rôle Admin + claim « kyntus_super_admin » à « true ». */
+export function readJwtIsSuperAdmin(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return false;
+  const flag = claimToStrings(payload[KYNTUS_SUPER_ADMIN_CLAIM])[0] ?? '';
+  return flag.toLowerCase() === 'true' && readJwtRole(token).toLowerCase() === 'admin';
+}
+
 export function readJwtEmail(token: string): string {
   const payload = decodeJwtPayload(token);
   if (!payload) return '';
