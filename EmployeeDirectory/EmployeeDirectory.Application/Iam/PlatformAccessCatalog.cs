@@ -176,6 +176,8 @@ public static class PlatformAccessCatalog
         S("conges.planning", "Absences du planning — consulter", "Congés", View: ["Admin", "RH", "Manager", "Superviseur", "RP"]),
         S("conges.planning-ajout", "Absences du planning — ajouter", "Congés", View: AdminRh, Act: AdminRh),
         S("conges.planning-modification", "Absences du planning — modifier / supprimer", "Congés", View: AdminRh, Act: AdminRh),
+        // v64.2 : modifier les dates d'une demande de congé (en attente ou validée) depuis l'historique.
+        S("conges.modification", "Modifier les demandes de congé", "Congés", View: AdminRh, Act: AdminRh),
 
         S("documentation.module", "Module Documentation (accès au menu)", "Documentation", View: Self),
         // v48 : Process Bytel — tout le monde consulte (selon la visibilité du document) ;
@@ -298,7 +300,7 @@ public static class PlatformAccessCatalog
     /// Une rubrique décochée ensuite garde sa ligne (refusée) : rien n'est réimposé au redémarrage.
     /// </summary>
     public static readonly string[] RubriquesAjoutees =
-        ["presences.encadrement", "conges.planning", "conges.planning-ajout", "conges.planning-modification", "audit.actions"];
+        ["presences.encadrement", "conges.planning", "conges.planning-ajout", "conges.planning-modification", "audit.actions", "conges.modification"];
 
     public static IEnumerable<(string Action, string Scope)> SeedRowsForRole(string role)
     {

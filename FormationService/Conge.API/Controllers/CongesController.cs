@@ -2,6 +2,7 @@
 using Conge.Application.Commands.AnnulerConge;
 using Conge.Application.Commands.ConfigConge;
 using Conge.Application.Commands.DemanderConge;
+using Conge.Application.Commands.ModifierConge;
 using Conge.Application.Commands.RefuserConge;
 using Conge.Application.Commands.ValiderConge;
 using Conge.Application.Queries.GetCongesCellule;
@@ -492,6 +493,58 @@ public class CongesController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// v64.2 — PUT /api/conges/{id}/modifier : modifier les dates d'une demande en attente ou validée.
+    /// Admin / RH, et droit « Modifier les demandes de congé » (réglable par rôle et par compte).
+    /// Congé validé : solde ajusté, planning mis à jour, employé notifié ; historique conservé.
+    /// </summary>
+    [HttpPut("{id:guid}/modifier")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<IActionResult> Modifier(
+        Guid id,
+        [FromBody] ModifierCongeRequest request,
+        CancellationToken ct)
+    {
+        var actorId = RequireActorId();
+        if (actorId is null)
+            return Unauthorized(new { message = "Sujet JWT manquant." });
+        if (request is null || request.DateDebut == default)
+            return BadRequest(new { message = "La date de début est obligatoire." });
+        if (request.Commentaire is { Length: > 300 })
+            return BadRequest(new { message = "Le commentaire ne doit pas dépasser 300 caractères." });
+
+        var iam = await EnsureModificationIamAsync(ct);
+        if (iam is not null)
+            return iam;
+
+        var demande = await _demandeRepo.GetByIdAsync(id, ct);
+        if (demande is null)
+            return NotFound();
+
+        var result = await _mediator.Send(new ModifierCongeCommand(
+            id,
+            request.DateDebut,
+            request.DateFin,
+            request.Commentaire,
+            actorId.Value,
+            User.GetAuthRole(),
+            User.GetEmail()), ct);
+        return Ok(result);
+    }
+
+    private async Task<IActionResult?> EnsureModificationIamAsync(CancellationToken ct)
+    {
+        var role = User.GetAuthRole() ?? "";
+        var subject = RequireActorId() ?? Guid.Empty;
+        var decision = await _policy.EvaluateAsync(
+            new PolicyRequest(subject, role, "conges.modification.Act", "platform"), ct);
+        if (decision.Allowed)
+            return null;
+        return StatusCode(
+            StatusCodes.Status403Forbidden,
+            new { message = "La modification des demandes de congé n'est pas autorisée pour ce compte." });
+    }
+
     /// <summary>PUT /api/conges/{id}/annuler — Annuler une demande (employé)</summary>
     [HttpPut("{id:guid}/annuler")]
     public async Task<IActionResult> Annuler(Guid id, [FromQuery] Guid employeId, CancellationToken ct)
@@ -677,6 +730,7 @@ public class CongesController : ControllerBase
 
 public record ValiderCongeRequest(string? Commentaire);
 public record RefuserCongeRequest(string Commentaire);
+public record ModifierCongeRequest(DateTime DateDebut, DateTime? DateFin, string? Commentaire);
 public record UpdatePeriodesInterditesRequest(
     IReadOnlyList<int>? Mois,
     Guid? UpdatedBy = null,

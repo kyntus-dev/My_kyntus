@@ -290,6 +290,7 @@ public static class AdminFeatureRouteMap
         yield return R("/api/conges/*/valider", "conges.validation", Methods.All, "Validate");
         yield return R("/api/conges/*/refuser", "conges.validation", Methods.All, "Validate");
         yield return R("/api/conges/*/annuler", "conges.self|conges.validation", Methods.All, "Act");
+        yield return R("/api/conges/*/modifier", "conges.modification", Methods.All, "Act"); // v64.2
         yield return R("/api/conges/subservice", "conges.equipe|conges.validation", Methods.Read, "View");
         yield return R("/api/conges/new-employees", "conges.equipe|conges.validation", Methods.Read, "View");
         yield return R("/api/conges/saturday-slot", "conges.validation", Methods.All, "Act");

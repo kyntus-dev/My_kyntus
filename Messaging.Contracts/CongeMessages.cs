@@ -16,6 +16,14 @@ public record CongeValideMessage
     public string? TypeExceptionnel { get; init; }
     public Guid? ValidateurId { get; init; }
     public string? ValidateurNom { get; init; }
+    /// <summary>
+    /// v64.2 — vrai quand les dates d'un congé déjà validé ont été modifiées (Admin / RH) :
+    /// Planning met à jour l'absence existante (ancienne période rendue, nouvelle posée)
+    /// et l'employé reçoit « Congé modifié » au lieu d'une nouvelle validation.
+    /// </summary>
+    public bool Modification { get; init; }
+    public DateTime? AncienneDateDebut { get; init; }
+    public DateTime? AncienneDateFin { get; init; }
 }
 
 /// <summary>
