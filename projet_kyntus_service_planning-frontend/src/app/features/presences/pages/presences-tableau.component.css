@@ -155,3 +155,31 @@ button.pz-code:disabled { cursor: default; }
   min-width: 22px;
   background: repeating-linear-gradient(135deg, var(--surface-2, #f1f5f9) 0 4px, var(--surface-3, #e2e8f0) 4px 5px);
 }
+
+/* v69 — Éléments variables de paie dans la fenêtre Journée et repère dans la grille. */
+.pz-evp-dot {
+  position: absolute; bottom: 2px; right: 2px; width: 6px; height: 6px; border-radius: 2px;
+  background: var(--ky-blue, #0d2e5b); box-shadow: 0 0 0 1px var(--bg-card);
+}
+.pz-evp-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pz-evp-liste li {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--border-color); background: color-mix(in srgb, var(--ky-blue, #0d2e5b) 4%, var(--bg-card));
+}
+.pz-evp-liste li.mq { border-left: 3px solid var(--danger, #b91c1c); }
+.pz-evp-liste small { font-size: 0.75rem; overflow-wrap: anywhere; }
+.pz-evp-ligne { display: flex; align-items: center; gap: 8px; }
+.pz-evp-ligne b { flex: 1; font-size: 0.82rem; }
+.pz-evp-montant { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 0.82rem; white-space: nowrap; }
+.pz-evp-montant.pos { color: var(--success, #15803d); }
+.pz-evp-montant.neg { color: var(--danger, #b91c1c); }
+.pz-evp-montant-saisie { display: flex; gap: 8px; align-items: center; }
+.pz-evp-montant-saisie .ku-input { flex: 1; min-width: 0; }
+.pz-evp-bareme { display: grid; grid-template-columns: 1.35fr 0.7fr 1fr; gap: 8px; }
+.pz-evp-bareme div {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px;
+  border: 1px solid var(--border-color); background: var(--bg-card);
+}
+.pz-evp-bareme span { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.pz-evp-bareme b { font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.pz-evp-bareme small { font-size: 0.7rem; color: var(--text-muted); }

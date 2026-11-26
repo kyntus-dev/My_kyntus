@@ -24,6 +24,8 @@ public interface IEmployeeDirectorySyncService
     Task<string> UpsertAsync(EmployeeDirectoryUpsertRequest request, CancellationToken ct = default);
     Task<string> EnsureFromPlanningAsync(EmployeeDirectoryUpsertRequest request, CancellationToken ct = default);
     Task<int> DedupeByEmailAsync(CancellationToken ct = default);
+    /// <summary>v73 — Départ ou désactivation signalé par l'annuaire : la fiche est conservée, marquée sortie.</summary>
+    Task<bool> MarquerSortiAsync(Guid employeeId, CancellationToken ct = default);
 }
 
 public sealed class EmployeeDirectorySyncService(
@@ -35,6 +37,24 @@ public sealed class EmployeeDirectorySyncService(
 
     public Task<string> EnsureFromPlanningAsync(EmployeeDirectoryUpsertRequest request, CancellationToken ct = default) =>
         UpsertCoreAsync(request, matchByEmail: true, forcePlanningId: true, ct);
+
+    /// <summary>
+    /// v73 — Marque l'agent comme sorti sans rien supprimer : la fiche reste pour l'historique des
+    /// primes, l'interface l'affiche grisée « Sorti » et ne le compte plus dans l'effectif planifiable.
+    /// Son rattachement est conservé tel quel, pour que l'historique reste lisible.
+    /// </summary>
+    public async Task<bool> MarquerSortiAsync(Guid employeeId, CancellationToken ct = default)
+    {
+        var id = employeeId.ToString();
+        var existing = await db.Employees.FirstOrDefaultAsync(e => e.Id == id, ct);
+        if (existing is null) return false;
+        if (!existing.IsActive) return true;
+
+        existing.IsActive = false;
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation("prime_employee sorti {Email} id={Id}", existing.Email, existing.Id);
+        return true;
+    }
 
     public static EmployeeDirectoryUpsertRequest FromEmployeMessage(EmployeCreatedMessage msg) =>
         new(
@@ -139,10 +159,13 @@ public sealed class EmployeeDirectorySyncService(
                 Email = email,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
-                Role = ShouldPreserveStructure(existing, request) ? existing.Role : role,
-                ServiceId = ShouldPreserveStructure(existing, request) ? existing.ServiceId : serviceId ?? existing.ServiceId,
-                CelluleId = ShouldPreserveStructure(existing, request) ? existing.CelluleId : celluleId ?? existing.CelluleId,
-                PoleId = ShouldPreserveStructure(existing, request) ? existing.PoleId : poleId ?? existing.PoleId,
+                // v73 — Même règle que plus bas : le rattachement suit l'annuaire, encadrement compris,
+                // et l'ancien n'est conservé que si l'annuaire n'envoie rien.
+                Role = role,
+                ServiceId = serviceId ?? existing.ServiceId,
+                CelluleId = celluleId ?? existing.CelluleId,
+                PoleId = poleId ?? existing.PoleId,
+                IsActive = true,
                 ParentId = parentId ?? existing.ParentId,
                 ChefDeProjetId = managerIds.ChefDeProjetId ?? existing.ChefDeProjetId,
                 SuperviseurId = managerIds.SuperviseurId ?? existing.SuperviseurId,
@@ -159,13 +182,19 @@ public sealed class EmployeeDirectorySyncService(
         existing.Email = email;
         existing.FirstName = request.FirstName;
         existing.LastName = request.LastName;
-        if (!ShouldPreserveStructure(existing, request))
-        {
-            existing.Role = role;
-            existing.ServiceId = serviceId ?? existing.ServiceId;
-            existing.CelluleId = celluleId ?? existing.CelluleId;
-            existing.PoleId = poleId ?? existing.PoleId;
-        }
+        // v73 — L'annuaire reçoit à nouveau cet agent : s'il était sorti, il redevient présent.
+        existing.IsActive = true;
+        // v73 — Le rattachement suit désormais l'annuaire pour tout le monde, encadrement compris.
+        // Avant, dès qu'un Superviseur / Référent technique / Chef de projet avait un pôle, une cellule
+        // ou un service, la synchro gardait l'ancien : réaffecté dans l'annuaire, il continuait
+        // d'apparaître dans son ancien périmètre tant qu'on ne le déplaçait pas aussi à la main.
+        // Le « ?? existing » ci-dessous protège toujours contre l'effacement : si l'annuaire n'envoie
+        // aucun rattachement, l'actuel est conservé. Les cellules qu'un superviseur *encadre* sont
+        // stockées à part (affectations d'organisation) et ne sont pas touchées ici.
+        existing.Role = role;
+        existing.ServiceId = serviceId ?? existing.ServiceId;
+        existing.CelluleId = celluleId ?? existing.CelluleId;
+        existing.PoleId = poleId ?? existing.PoleId;
         if (parentId is not null)
             existing.ParentId = parentId;
         ApplyManagerIds(existing, managerIds);
@@ -186,13 +215,11 @@ public sealed class EmployeeDirectorySyncService(
         return existing.Id;
     }
 
-    private static bool ShouldPreserveStructure(EmployeeEntity existing, EmployeeDirectoryUpsertRequest request)
-    {
-        if (request.SkipOrgStructureFields)
-            return HasActiveStructureAssignment(existing);
-        return HasActiveStructureAssignment(existing);
-    }
-
+    /// <summary>
+    /// Encadrement déjà rattaché à un pôle, une cellule ou un service. v73 : ne sert plus à geler le
+    /// rattachement lors d'une synchro (la réaffectation doit suivre l'annuaire), seulement à départager
+    /// deux fiches lors d'une fusion de doublons.
+    /// </summary>
     internal static bool HasActiveStructureAssignment(EmployeeEntity e) =>
         (KyntusRoleNames.IsChefDeProjet(e.Role)
          || KyntusRoleNames.IsSuperviseur(e.Role)

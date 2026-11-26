@@ -9,8 +9,13 @@ public static class PlanningItStatuts
     public const string Repos = "Repos";
     /// <summary>Congé / absence prévue (case orange du modèle Excel).</summary>
     public const string Conge = "Conge";
+    /// <summary>
+    /// v67 — Récupération : journée non travaillée prise sur les heures supplémentaires. La production
+    /// prévue du jour est déduite du solde d'heures supplémentaires (acquises − récupérées = restantes).
+    /// </summary>
+    public const string Recup = "Recup";
 
-    public static bool EstValide(string? s) => s is Travail or Repos or Conge;
+    public static bool EstValide(string? s) => s is Travail or Repos or Conge or Recup;
 }
 
 /// <summary>

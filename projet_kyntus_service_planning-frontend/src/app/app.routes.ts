@@ -4,7 +4,7 @@ import { AuthGuard } from './guard/guards/auth';
 import { NewsletterAdminComponent } from './features/Newsletter-admin/newsletter-admin.component';
 import { ShellLayoutComponent } from './features/shell/shell-layout.component';
 import { KyntusRoleNames, ROLE_SETS } from './core/org/kyntus-role-names';
-import { heureSortieGuard } from './core/services/heure-sortie-access.service';
+import { heureSortieGuard, superAdminGuard } from './core/services/heure-sortie-access.service';
 
 export const routes: Routes = [
 
@@ -140,7 +140,8 @@ export const routes: Routes = [
       {
         path: 'formations/planifier',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.formationPlanner, ouvertureIam: 'formation.planification' },
+        // v66 : page d'action — « Modifier » exigé, comme pour l'entrée de menu.
+        data: { roles: ROLE_SETS.formationPlanner, ouvertureIam: 'formation.planification', capabilityVerb: 'Act' },
         loadComponent: () =>
           import('./features/formation/rh/formation-rh-plan.component')
             .then(m => m.FormationRhPlanComponent),
@@ -393,7 +394,8 @@ export const routes: Routes = [
       {
         path: 'import',
         canActivate: [AuthGuard],
-        data: { roles: ROLE_SETS.adminRh, ouvertureIam: 'admin.users' },
+        // v66 : page d'action — « Modifier » exigé, comme pour l'entrée de menu « Import employés ».
+        data: { roles: ROLE_SETS.adminRh, ouvertureIam: 'admin.users', capabilityVerb: 'Act' },
         loadComponent: () =>
           import('./features/users/pages/employee-import-guided/employee-import-guided.component')
             .then(m => m.EmployeeImportGuidedComponent),
@@ -528,10 +530,11 @@ export const routes: Routes = [
                 .then(m => m.PointageCorrespondancesComponent),
           },
           {
-            // Heure de sortie (Excel « Combien il me reste ») : accès accordé par l'Admin via le régime horaire.
+            // Heure de sortie (Excel « Combien il me reste ») : v67 — accès accordé par le Super Admin,
+            // compte par compte. Aucune rubrique de rôle : la garde demande au serveur si le compte
+            // est autorisé (URL directe refusée sinon).
             path: 'heure-de-sortie',
             canActivate: [AuthGuard, heureSortieGuard],
-            data: { ouvertureIam: 'pointage.self', roles: ROLE_SETS.planningSelfService },
             loadComponent: () =>
               import('./features/pointage/pages/pointage-heure-sortie/pointage-heure-sortie.component')
                 .then(m => m.PointageHeureSortieComponent),
@@ -545,10 +548,10 @@ export const routes: Routes = [
                 .then(m => m.PointagePrevuRealiseComponent),
           },
           {
-            // Accès « Heure de sortie » compte par compte (Admin).
+            // Accès « Heure de sortie » compte par compte : v67 — Super Admin seulement.
             path: 'acces-heure-sortie',
-            canActivate: [AuthGuard],
-            data: { ouvertureIam: 'pointage.acces-sortie', roles: [KyntusRoleNames.Admin] },
+            canActivate: [AuthGuard, superAdminGuard],
+            data: { roles: [KyntusRoleNames.Admin] },
             loadComponent: () =>
               import('./features/pointage/pages/heure-sortie-acces/heure-sortie-acces.component')
                 .then(m => m.HeureSortieAccesComponent),

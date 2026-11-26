@@ -17,6 +17,7 @@ import {
   polesForOperationalDept,
   servicesForCellule,
 } from '../../../../core/org/operational-org-picker';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 
 type ScopeKind = 'General' | 'Department' | 'Pole' | 'Cellule' | 'Service';
 
@@ -33,12 +34,12 @@ type ScopeKind = 'General' | 'Department' | 'Pole' | 'Cellule' | 'Service';
           <button
             type="button"
             class="ky-btn-secondary"
-            *ngIf="isOverride"
+            *ngIf="isOverride && droits.autorise('conges.periodes', 'Configure')"
             [disabled]="saving || loading"
             (click)="resetToInherit()">
             Revenir à l’héritage
           </button>
-          <button type="button" class="ky-btn-primary" [disabled]="saving || loading" (click)="save()">
+          <button type="button" class="ky-btn-primary" *ngIf="droits.autorise('conges.periodes', 'Configure')" [disabled]="saving || loading" (click)="save()">
             Enregistrer
           </button>
         </div>
@@ -127,6 +128,8 @@ type ScopeKind = 'General' | 'Department' | 'Pole' | 'Cellule' | 'Service';
   `]
 })
 export class CongePeriodesInterditesComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   private readonly toast = inject(KyntusToastService);
   private readonly confirm = inject(KyntusConfirmService);
   private readonly svc = inject(CongeService);
@@ -173,6 +176,7 @@ export class CongePeriodesInterditesComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     this.userSvc.getCurrentUser().subscribe({
       next: (u) => { this.userId = u.guid; },
       error: () => {}

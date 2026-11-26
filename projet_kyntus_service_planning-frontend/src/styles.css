@@ -6,10 +6,30 @@
 
 /* ── Tokens globaux de la plateforme unifiée (style aligné Prime/Kyntus) ── */
 :root {
-  --ky-navy-950: #0c1527;
-  --ky-navy-900: #111d35;
-  --ky-blue: #1e4fd8;
-  --ky-blue-soft: #6094ff;
+  /*
+   * v68 — Couleur de marque : le bleu du logo Kyntus (#0D2E5B), décliné en nuancier (même teinte).
+   * Toute l'application passe par ces variables : boutons, liens, menu, en-têtes, indicateurs.
+   */
+  --ky-brand-50: #eef3fa;
+  --ky-brand-100: #dce6f4;
+  --ky-brand-200: #b9cde8;
+  --ky-brand-300: #9db9e2;
+  --ky-brand-400: #6f95cf;
+  --ky-brand-500: #3a68ab;
+  --ky-brand-600: #22508f;
+  --ky-brand-700: #163f76;
+  --ky-brand-800: #0d2e5b;
+  --ky-brand-900: #0a2347;
+  --ky-brand-950: #061630;
+  --ky-brand: var(--ky-brand-800);
+  --ky-navy-950: #061630;
+  --ky-navy-900: #0a2347;
+  --ky-blue: #0d2e5b;
+  --ky-blue-strong: #0a2347;
+  --ky-blue-text: #163f76;
+  --ky-blue-tint: #eef3fa;
+  --ky-blue-soft: #6f95cf;
+  --ky-accent: var(--ky-blue);
   --ky-page-bg: var(--bg-primary, #f0f4fa);
   --ky-surface: var(--bg-card, #ffffff);
   --ky-text-1: var(--text-primary, #0e1623);
@@ -21,8 +41,8 @@
   --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
 
   /* ── Design system : gradient de marque ── */
-  --ky-gradient: linear-gradient(135deg, #1e4fd8 0%, #3b82f6 55%, #60a5fa 100%);
-  --ky-gradient-soft: linear-gradient(135deg, rgb(30 79 216 / 0.14), rgb(96 165 250 / 0.06));
+  --ky-gradient: linear-gradient(135deg, #0a2347 0%, #0d2e5b 55%, #22508f 100%);
+  --ky-gradient-soft: linear-gradient(135deg, rgb(13 46 91 / 0.10), rgb(58 104 171 / 0.04));
 
   /* ── Design system : motion ── */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -38,7 +58,7 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
-  --radius-card: 0.875rem;
+  --radius-card: 1rem; /* v68 : cartes plus douces (modèle d'accueil retenu) */
   --radius-pill: 999px;
 
   /* ── Design system : élévations ── */
@@ -55,7 +75,7 @@
   --success: #16a34a;
   --warning: #d97706;
   --danger: #dc2626;
-  --info: #2563eb;
+  --info: #22508f;
 }
 
 /*
@@ -68,7 +88,7 @@ body.theme-light {
   --success-text: #166534;
   --warning-text: #92400e;
   --danger-text: #b91c1c;
-  --info-text: #1d4ed8;
+  --info-text: #163f76;
   --success-bg: color-mix(in srgb, var(--success) 12%, var(--bg-card, #ffffff));
   --warning-bg: color-mix(in srgb, var(--warning) 12%, var(--bg-card, #ffffff));
   --danger-bg: color-mix(in srgb, var(--danger) 10%, var(--bg-card, #ffffff));
@@ -107,8 +127,23 @@ body {
   --ink-3: color-mix(in srgb, var(--text-muted, #64748b) 65%, transparent);
   --border-1: var(--border-color, #e2e8f0);
   --border-2: color-mix(in srgb, var(--border-color, #e2e8f0) 55%, transparent);
-  --accent: var(--blue-600, #1e3a8a);
-  --accent-hover: var(--blue-500, #3b82f6);
+  --accent: var(--blue-600, #0d2e5b);
+  --accent-hover: var(--blue-500, #3a68ab);
+}
+
+/*
+ * v68 — Thème sombre : le bleu de marque, trop foncé sur fond nuit, est remplacé par des nuances
+ * plus claires de la même teinte (texte lisible, boutons pleins avec texte blanc contrasté).
+ */
+body.theme-dark,
+.dark {
+  --ky-blue: #3a68ab;
+  --ky-blue-strong: #22508f;
+  --ky-blue-text: #9db9e2;
+  --ky-blue-tint: color-mix(in srgb, #3a68ab 18%, var(--bg-card, #0a1526));
+  --ky-blue-soft: #9db9e2;
+  --ky-accent: #6f95cf;
+  --info: #3a68ab;
 }
 
 body.theme-light {

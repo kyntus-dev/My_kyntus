@@ -43,8 +43,8 @@ public partial class UserService
             var nom = (ligne.Nom ?? string.Empty).Trim();
             var prenom = (ligne.Prenom ?? string.Empty).Trim();
 
-            ImportEmployeResultatDto Echec(string message) =>
-                new(ligne.Numero, nom, prenom, false, null, null, message);
+            ImportEmployeResultatDto Echec(string message, string statut = ImportEmployeStatuts.Erreur) =>
+                new(ligne.Numero, nom, prenom, false, null, null, message, statut);
 
             if (nom.Length == 0 || prenom.Length == 0)
             {
@@ -55,7 +55,11 @@ public partial class UserService
             var cle = CleNom(nom, prenom);
             if (!cles.Add(cle))
             {
-                resultats.Add(Echec("Déjà présent dans l'application (même nom et prénom)."));
+                // v66 : filet de sécurité — les fiches existantes sont vérifiées et mises à jour avant
+                // la création (IFichesReferenceService.SynchroniserImportEmployesAsync) ; une ligne qui
+                // arrive ici avec un nom déjà présent est un cas douteux, jamais un doublon créé.
+                resultats.Add(Echec("Déjà présent dans l'application (même nom et prénom) : fiche non créée, à vérifier.",
+                    ImportEmployeStatuts.AVerifier));
                 continue;
             }
 

@@ -28,4 +28,13 @@ public interface IFichesReferenceService
     Task<AnnulationFichesReferenceDto> AnnulerAsync(Guid importId, string auteur, CancellationToken ct = default);
 
     Task<IReadOnlyList<FicheIncompleteDto>> FichesIncompletesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// v66 — Import du fichier RH (écran « Liaisons HTEL ») : chaque ligne est rapprochée d'une fiche
+    /// existante (CIN, puis nom). Une fiche identifiée est comparée champ par champ et mise à jour
+    /// (valeurs différentes remplacées, champs vides complétés, jamais vidés) ; une fiche douteuse est
+    /// signalée sans être modifiée ; les lignes sans fiche sont rendues pour création.
+    /// </summary>
+    Task<SynchroImportEmployesDto> SynchroniserImportEmployesAsync(
+        IReadOnlyList<LigneImportEmployeDto> lignes, string auteur, CancellationToken ct = default);
 }

@@ -106,7 +106,7 @@ import { KyntusPromptService } from './kyntus-prompt.service';
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      color: var(--info-text, #1d4ed8);
+      color: var(--info-text, var(--ky-blue-text));
       background: var(--info-bg);
       border: 1px solid var(--info-border);
     }

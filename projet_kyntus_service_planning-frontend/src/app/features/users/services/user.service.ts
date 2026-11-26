@@ -124,6 +124,14 @@ getUserByAuthId(authId: number): Observable<User> {
   }
 
   /** Réintégration d'un collaborateur désactivé. */
+  /**
+   * v67 — Suppression définitive d'un compte (Admin et RH). `confirmation` : l'adresse e-mail du compte,
+   * recopiée. 409 « DONNEES_A_CONSERVER » : rien n'est supprimé (le message dit pourquoi).
+   */
+  supprimerDefinitivement(id: number, confirmation: string): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/${id}/suppression-definitive`, { confirmation });
+  }
+
   reactivateUser(id: number): Observable<void> {
     return this.http.post<void>(`${this.apiUrl}/${id}/reactivate`, {}).pipe(
       catchError(err => throwError(() => err))

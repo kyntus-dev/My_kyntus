@@ -13,6 +13,8 @@ public static class PresenceCodes
     public const string Formation = "FOR";
     public const string AbsenceNonAutorisee = "ABS N";
     public const string Ferie = "F";
+    /// <summary>v67 : récupération (planning IT « Récup »).</summary>
+    public const string Recup = "REC";
 
     /// <summary>Liste du service paie, dans l'ordre de l'interface actuelle.</summary>
     public static readonly IReadOnlyList<PresenceCodeDto> Tous =
@@ -95,6 +97,8 @@ public static class PresenceRegles
         if (codeConge is not null) return codeConge;
         if (jour.Statut == PointageJourStatuts.Ferie) return "F";
         if (jour.Statut == PointageJourStatuts.Conge) return "CP";
+        // v67 : récupération du planning IT (non pointée) → « REC » (Récup), jamais une absence.
+        if (jour.Statut == PointageJourStatuts.Recup) return PresenceCodes.Recup;
         if (enFormation && (jour.Pointages.Count > 0 || jour.Planning is not null)) return PresenceCodes.Formation;
         if (jour.Pointages.Count > 0) return PresenceCodes.Present;
         if (jour.Statut == PointageJourStatuts.SansPointage) return PresenceCodes.AbsenceNonAutorisee;
@@ -146,8 +150,13 @@ public static class PresenceRegles
             || statut is PointageJourStatuts.PointageManquant or PointageJourStatuts.EnCours)
             return HeuresSupJour.Aucune;
 
+        // v65 : une journée travaillée hors du planning de l'agent (samedi non planifié, jour de
+        // repos travaillé) se valorise comme un dimanche ou un férié : tout le temps travaillé est
+        // en heures supplémentaires. Aucune production n'étant prévue ce jour-là, rien n'est compté
+        // deux fois. Un samedi inscrit au planning garde la règle des jours ouvrés.
         var dimancheOuFerie = jour.DayOfWeek == DayOfWeek.Sunday
                               || statut == PointageJourStatuts.Ferie
+                              || statut == PointageJourStatuts.HeuresSupplementaires
                               || JoursFeries.Nom(jour) is not null;
         if (dimancheOuFerie)
         {

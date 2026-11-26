@@ -895,7 +895,7 @@ button.ks-pill-toggle:focus-visible {
   /* Signature Kyntus : washes bleutées très subtiles pour donner de la profondeur */
   background-image:
     radial-gradient(900px 420px at 8% -10%, rgb(59 130 246 / 0.05), transparent 60%),
-    radial-gradient(700px 380px at 100% 0%, rgb(30 79 216 / 0.04), transparent 55%);
+    radial-gradient(700px 380px at 100% 0%, rgb(13 46 91 / 0.04), transparent 55%);
   background-repeat: no-repeat;
   color: var(--text-primary);
   font-family: var(--font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif);
@@ -904,7 +904,7 @@ button.ks-pill-toggle:focus-visible {
 body.theme-dark .ks-content {
   background-image:
     radial-gradient(900px 420px at 8% -10%, rgb(96 165 250 / 0.07), transparent 60%),
-    radial-gradient(700px 380px at 100% 0%, rgb(30 79 216 / 0.1), transparent 55%);
+    radial-gradient(700px 380px at 100% 0%, rgb(13 46 91 / 0.1), transparent 55%);
 }
 
 .ks-overlay {
@@ -1083,3 +1083,156 @@ body.theme-dark .ks-content {
 .ks-menu-search input,
 .ks-menu-search input:focus,
 .ks-menu-search input:focus-visible { outline: none !important; box-shadow: none !important; border: 0 !important; padding: 0 !important; background: transparent !important; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   v68 — Menu « modèle d'accueil retenu » : bleu du logo Kyntus, icône de chaque module dans une
+   tuile, modules rangés par rubriques repliables, compteurs, module courant mis en avant.
+   Seule l'apparence change : liens, droits et comportements restent ceux d'avant.
+   ══════════════════════════════════════════════════════════════════════ */
+.ks-nav { gap: 2px; padding: 6px 12px 12px; }
+.ks-home,
+.ks-group-head,
+.ks-quick-btn {
+  min-height: 42px;
+  gap: 11px;
+  padding: 5px 8px;
+  border-radius: 11px;
+  font-size: 13.5px;
+}
+.ks-ic {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--ky-brand-50, #eef3fa);
+  color: var(--ky-brand-700, #163f76);
+  opacity: 1;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.ks-ic svg { width: 17px; height: 17px; }
+body.theme-dark .ks-ic {
+  background: color-mix(in srgb, var(--ky-blue) 22%, transparent);
+  color: var(--ky-blue-text);
+}
+.ks-home:hover,
+.ks-group-head:hover,
+.ks-quick-btn:hover {
+  background: color-mix(in srgb, var(--ky-blue) 6%, transparent);
+  color: var(--text-primary);
+}
+.ks-home:hover .ks-ic,
+.ks-group-head:hover .ks-ic { background: var(--ky-brand-100, #dce6f4); }
+body.theme-dark .ks-home:hover .ks-ic,
+body.theme-dark .ks-group-head:hover .ks-ic { background: color-mix(in srgb, var(--ky-blue) 32%, transparent); }
+
+/* Page d'accueil active : bleu plein du logo. */
+.ks-home.active {
+  background: var(--ky-blue);
+  color: #ffffff;
+  font-weight: 600;
+}
+.ks-home.active .ks-ic,
+body.theme-dark .ks-home.active .ks-ic {
+  background: rgb(255 255 255 / 0.16);
+  color: #ffffff;
+}
+
+/* Module ouvert : texte affirmé ; module de la page affichée : tuile pleine. */
+.ks-group-head.open { background: transparent; color: var(--text-primary); font-weight: 600; box-shadow: none; }
+.ks-group-head.open .ks-ic { background: var(--ky-brand-100, #dce6f4); color: var(--ky-brand-800, #0d2e5b); }
+.ks-group-head.courant .ks-ic,
+body.theme-dark .ks-group-head.courant .ks-ic {
+  background: var(--ky-blue);
+  color: #ffffff;
+}
+body.theme-dark .ks-group-head.open:not(.courant) .ks-ic { background: color-mix(in srgb, var(--ky-blue) 32%, transparent); color: var(--ky-blue-text); }
+
+/* Sous-menu : fil discret, entrée active teintée du bleu de marque. */
+.ks-sub { margin: 2px 0 6px 23px; padding: 2px 0 2px 12px; border-left: 1px solid var(--border-color); }
+.ks-sub-item::before { left: -13px; background: var(--ky-blue); }
+.ks-sub-item.active {
+  background: color-mix(in srgb, var(--ky-blue) 9%, transparent);
+  color: var(--ky-blue-text);
+  font-weight: 600;
+}
+
+/* Compteurs (éléments en attente du module). */
+.ks-count,
+.ks-rubrique-cpt {
+  margin-left: auto;
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--ky-brand-100, #dce6f4);
+  color: var(--ky-brand-800, #0d2e5b);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.3;
+}
+.ks-count + .ks-chevron { margin-left: 6px; }
+body.theme-dark .ks-count,
+body.theme-dark .ks-rubrique-cpt { background: color-mix(in srgb, var(--ky-blue) 30%, transparent); color: var(--ky-blue-text); }
+.ks-menu-badge { background: var(--ky-brand-100, #dce6f4); color: var(--ky-brand-800, #0d2e5b); }
+
+/* Rubriques : titre cliquable pour replier / déplier. */
+.ks-rubrique {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  margin-top: 10px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  font: 700 10.5px var(--font-sans, 'Inter', sans-serif);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.ks-rubrique:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-muted) 7%, transparent); }
+.ks-rubrique:focus-visible,
+.ks-group-head:focus-visible,
+.ks-home:focus-visible,
+.ks-quick-btn:focus-visible { outline: 2px solid var(--ky-blue-soft, #6f95cf); outline-offset: 1px; }
+.ks-rubrique svg { margin-left: auto; transition: transform 0.2s ease; }
+.ks-rubrique-cpt + svg { margin-left: 6px; }
+.ks-rubrique.fermee svg { transform: rotate(-90deg); }
+.ks-rubrique-sep { display: block; height: 1px; margin: 8px 10px; background: var(--border-color); }
+
+/* Pied : mêmes tuiles, plus petites. */
+.ks-quick-btn .ks-ic { width: 28px; height: 28px; border-radius: 8px; }
+.ks-quick-btn { min-height: 38px; }
+
+/* Menu replié : tuiles centrées, compteur réduit à un point. */
+.kyntus-shell.sidebar-collapsed .ks-ic { width: 36px; height: 36px; margin: 0 auto; }
+.kyntus-shell.sidebar-collapsed .ks-home,
+.kyntus-shell.sidebar-collapsed .ks-group-head { position: relative; padding: 4px 0; }
+.kyntus-shell.sidebar-collapsed .ks-home.active { background: transparent; }
+.kyntus-shell.sidebar-collapsed .ks-home.active .ks-ic { background: var(--ky-blue); }
+.kyntus-shell.sidebar-collapsed .ks-count {
+  position: absolute;
+  top: 3px;
+  right: 8px;
+  min-width: 0;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  font-size: 0;
+  background: var(--danger, #dc2626);
+  border: 2px solid var(--bg-card, #ffffff);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-rubrique svg { transition: none; }
+}
+
+/* v68 : les icônes du menu suivent la couleur de leur tuile
+   (neutralise « :root nav button svg » de styles-documentation.css). */
+:root nav .ks-ic svg { color: inherit; }

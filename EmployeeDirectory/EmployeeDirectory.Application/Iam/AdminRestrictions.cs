@@ -36,6 +36,8 @@ public sealed record IamScreenCatalogEntryDto(string Id, string Label, string Mo
 public interface IIamAdminRestrictionService
 {
     Task<IReadOnlyList<string>> GetDeniedAsync(Guid subjectId, CancellationToken ct = default);
+    /// <summary>v66 — Retraits explicites d'un compte non administrateur (rôle + compte, compte prioritaire).</summary>
+    Task<IReadOnlyList<string>> GetRevocationsAsync(Guid subjectId, string role, CancellationToken ct = default);
     Task<AdminRestrictionsDto> GetDetailAsync(Guid subjectId, CancellationToken ct = default);
     Task<AdminRestrictionsDto> UpdateAsync(Guid subjectId, AdminRestrictionsUpdateRequest request, string? auteur, CancellationToken ct = default);
     Task<IReadOnlyList<AdminRestrictionSummaryDto>> SummaryAsync(CancellationToken ct = default);

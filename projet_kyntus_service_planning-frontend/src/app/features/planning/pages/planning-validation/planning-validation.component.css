@@ -232,7 +232,7 @@
   width: 1.05rem;
   height: 1.05rem;
   cursor: pointer;
-  accent-color: var(--ky-accent, #1d4ed8);
+  accent-color: var(--ky-accent, var(--ky-blue-text));
 }
 
 .pv-validation .pv-check-col input[type='checkbox']:disabled {
@@ -241,7 +241,7 @@
 }
 
 .pv-validation tr.pv-row-selected td {
-  background: color-mix(in srgb, var(--ky-accent, #1d4ed8) 8%, transparent);
+  background: color-mix(in srgb, var(--ky-accent, var(--ky-blue-text)) 8%, transparent);
 }
 
 .pv-validation .pv-bulk-bar .ky-btn-primary {
@@ -356,7 +356,7 @@
   width: 1.05rem;
   height: 1.05rem;
   cursor: pointer;
-  accent-color: var(--ky-accent, #1d4ed8);
+  accent-color: var(--ky-accent, var(--ky-blue-text));
 }
 
 .pv-validation .pv-col-org {

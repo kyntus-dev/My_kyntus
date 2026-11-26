@@ -23,7 +23,7 @@
     title="Mes demandes"
     subtitle="Suivez vos réclamations et propositions d’amélioration.">
     <div actions>
-      <button type="button" class="ky-btn-primary btn-add" (click)="openNew()" *ngIf="subView==='list'">
+      <button type="button" class="ky-btn-primary btn-add" (click)="openNew()" *ngIf="subView==='list' && droits.autorise('qualite.self', 'Act')">
         Nouvelle demande
       </button>
     </div>
@@ -51,7 +51,7 @@
       </svg>
       <h3>Aucune demande</h3>
       <p>Soumettez une réclamation ou une idée d’amélioration — elles apparaîtront ici.</p>
-      <button type="button" class="ky-btn-primary" (click)="openNew()">Nouvelle demande</button>
+      <button type="button" class="ky-btn-primary" *ngIf="droits.autorise('qualite.self', 'Act')" (click)="openNew()">Nouvelle demande</button>
     </div>
 
     <div class="rp-list" *ngIf="!loading && unifiedList.length">
@@ -225,9 +225,11 @@
         </div>
       </div>
       <p *ngIf="!comments.length" class="rp-detail-text">Aucun commentaire pour l'instant.</p>
+      <ng-container *ngIf="droits.autorise('qualite.self', 'Act')">
       <textarea class="rp-textarea" rows="3" [(ngModel)]="commentText" placeholder="Ajouter un commentaire…"></textarea>
       <app-ky-media-uploader [(items)]="commentMedia" hint="Pièces jointes du commentaire (optionnel)"></app-ky-media-uploader>
       <button type="button" class="ky-btn-primary" (click)="sendComment()" [disabled]="!commentText.trim()">Envoyer</button>
+      </ng-container>
     </div>
   </div>
 </div>

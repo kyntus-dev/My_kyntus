@@ -137,6 +137,8 @@ public class Employee
     public string? Avatar { get; set; }
     public string? BusinessDepartmentId { get; set; }
     public string? BusinessDepartmentKind { get; set; }
+    /// <summary>v73 — Faux pour un agent désactivé ou sorti : affiché grisé, hors effectif planifiable.</summary>
+    public bool IsActive { get; set; } = true;
 }
 
 public class PrimeType

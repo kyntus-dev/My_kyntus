@@ -3039,7 +3039,8 @@ public partial class PlanningService : IPlanningService
                 BreakDurationMinutes = c.BreakDurationMinutes > 0 ? c.BreakDurationMinutes : 60,
                 IsCriticalCell = c.IsCriticalCell,
                 ShiftModeProfileId = c.ShiftModeProfileId,
-                ShiftModeTitle = c.ShiftModeProfile?.Title
+                ShiftModeTitle = c.ShiftModeProfile?.Title,
+                AppliesToSaturday = c.AppliesToSaturday
             }).ToList();
         }
 

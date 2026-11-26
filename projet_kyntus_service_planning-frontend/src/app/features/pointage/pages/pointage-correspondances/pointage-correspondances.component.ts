@@ -14,6 +14,7 @@ import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kynt
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { AuthService } from '../../../../core/services/auth.service';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 
 const STATUTS: Record<PointageCorrespondanceStatut, string> = {
   AValider: 'À traiter',
@@ -35,6 +36,12 @@ const STATUTS: Record<PointageCorrespondanceStatut, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PointageCorrespondancesComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
+  /** v72 — Relier / ignorer / valider les badges : « Correspondance pointeuses › Modifier ». */
+  peutModifier(): boolean {
+    return this.droits.autorise('pointage.correspondances', 'Act');
+  }
   private readonly svc = inject(PointageService);
   private readonly users = inject(UserService);
   private readonly toast = inject(KyntusToastService);
@@ -81,6 +88,7 @@ export class PointageCorrespondancesComponent implements OnInit {
       .sort((a, b) => a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' })));
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     this.load();
   }
 

@@ -1,17 +1,9 @@
 import { Component, OnDestroy, OnInit, ViewEncapsulation, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
+import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { Subscription } from 'rxjs';
-import {
-  KyntusRoleDashboardComponent,
-  KyntusDashboardAlertsComponent,
-  KyntusDashboardRecentListComponent,
-  KyntusActionInboxComponent,
-  KyntusModuleHealthPanelComponent,
-  type KyntusDashboardAlert,
-  type KyntusKpiItem,
-  type KyntusQuickAction,
-} from '@/shared/components/ui';
+import type { KyntusDashboardAlert, KyntusKpiItem, KyntusQuickAction } from '@/shared/components/ui';
 import { AuthService } from '../../../../core/services/auth.service';
 import { GlobalDashboardService } from '../../../../core/dashboard/global-dashboard.service';
 import type { GlobalActionItem, ModuleHealthStatus } from '../../../../core/dashboard/global-dashboard.model';
@@ -19,98 +11,33 @@ import { KyntusNotificationHubService } from '../../../../core/notifications/kyn
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import { UserService } from '../../../users/services/user.service';
 import { PointageJourWidgetComponent } from '../../../pointage/components/pointage-jour-widget.component';
+import { NavigationMenuService } from '../../../../core/navigation/navigation-menu.service';
+import { NavigationActionsService } from '../../../../core/navigation/navigation-actions.service';
+import { libelleRole } from '../../../../core/org/role-libelle';
+import {
+  chercherPages,
+  dateDuJour,
+  filtresActions,
+  iconeRaccourci,
+  pagesDuMenu,
+  resumeActions,
+  suggestionsRecherche,
+  tonKpi,
+  tonSante,
+  type PageMenu,
+} from './accueil.util';
 
+/**
+ * v68 — Accueil « modèle retenu » (combinaison A + E) : bandeau d'accueil avec la recherche
+ * « Que voulez-vous faire ? » (pages du menu autorisées au compte) et les raccourcis, indicateurs
+ * cliquables, file d'actions filtrable par module, ma journée, alertes et santé des modules.
+ * Les données sont celles d'avant (GlobalDashboardService) : seule la présentation change.
+ */
 @Component({
   selector: 'app-unified-dashboard',
   standalone: true,
-  imports: [
-    CommonModule,
-    RouterModule,
-    KyntusRoleDashboardComponent,
-    KyntusDashboardAlertsComponent,
-    KyntusDashboardRecentListComponent,
-    KyntusActionInboxComponent,
-    KyntusModuleHealthPanelComponent,
-    PointageJourWidgetComponent,
-  ],
-  template: `
-    <div class="ud-root ky-page-enter">
-      <app-kyntus-role-dashboard
-        [title]="dashboardTitle()"
-        [subtitle]="dashboardSubtitle()"
-        [greeting]="greetingLine()"
-        [roleBadge]="role()"
-        [loading]="false"
-        [kpiLoading]="loadingKpis()"
-        [kpiItems]="kpiItems()"
-        [kpiColumns]="kpiColumns()"
-        [quickActions]="quickActions()"
-      >
-        <app-pointage-jour-widget dashboard-alerts />
-
-        @if (!loadingKpis() && alerts().length > 0) {
-          <app-kyntus-dashboard-alerts dashboard-alerts [alerts]="alerts()" />
-        }
-
-        @if (!loadingDetails()) {
-          <app-kyntus-action-inbox
-            recentList
-            title="File d'actions prioritaires"
-            [items]="actionItems()"
-            viewAllRoute="/notifications"
-            viewAllLabel="Centre notifications"
-          />
-        }
-
-        @if (!loadingKpis() && planningPreview(); as preview) {
-          <div charts class="ud-planning-preview">
-            <h3>Ma semaine — {{ preview.weekCode }}</h3>
-            <div class="ud-planning-days">
-              @for (day of preview.days; track day.label) {
-                <div class="ud-planning-day" [class.off]="day.off">
-                  <span class="ud-planning-day-label">{{ day.label }}</span>
-                  <span class="ud-planning-day-shift">{{ day.shift }}</span>
-                </div>
-              }
-            </div>
-          </div>
-        }
-
-        @if (!loadingDetails()) {
-          <app-kyntus-module-health-panel
-            contextPanel
-            title="Santé des modules"
-            [items]="moduleHealth()"
-          />
-        }
-
-        @if (!loadingKpis()) {
-          <app-kyntus-dashboard-recent-list
-            class="ud-recent-activity"
-            title="Activité récente"
-            [empty]="recentActivity().length === 0"
-            emptyMessage="Aucune activité récente."
-            viewAllRoute="/notifications"
-            viewAllLabel="Voir tout"
-          >
-            <div rows>
-              @for (item of recentActivity(); track item.id) {
-                <div class="kyntus-recent-row">
-                  <div class="kyntus-recent-row-main">
-                    <p class="kyntus-recent-row-title">{{ item.title }}</p>
-                    <p class="kyntus-recent-row-meta">{{ item.meta }}</p>
-                  </div>
-                  <div class="kyntus-recent-row-actions">
-                    <button type="button" class="kyntus-recent-link" (click)="openActivity(item.id)">Ouvrir</button>
-                  </div>
-                </div>
-              }
-            </div>
-          </app-kyntus-dashboard-recent-list>
-        }
-      </app-kyntus-role-dashboard>
-    </div>
-  `,
+  imports: [CommonModule, RouterModule, PointageJourWidgetComponent],
+  templateUrl: './unified-dashboard.component.html',
   styleUrls: ['./unified-dashboard.component.css'],
   encapsulation: ViewEncapsulation.None,
 })
@@ -120,14 +47,17 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
   private readonly notifHub = inject(KyntusNotificationHubService);
   private readonly session = inject(KyntusSessionService);
   private readonly users = inject(UserService);
+  private readonly router = inject(Router);
+  private readonly menu = inject(NavigationMenuService);
+  private readonly navActions = inject(NavigationActionsService);
+  private readonly sanitizer = inject(DomSanitizer);
 
   private sub = new Subscription();
   private loadStartedAt = 0;
+  private readonly iconCache = new Map<string, SafeHtml>();
 
   readonly role = signal('');
   readonly username = signal('');
-  readonly greetingLine = signal('');
-  readonly kpiColumns = signal(3);
   readonly dashboardTitle = signal('Tableau de bord');
   readonly dashboardSubtitle = signal('');
   readonly kpiItems = signal<KyntusKpiItem[]>([]);
@@ -142,6 +72,32 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
     days: { label: string; shift: string; off: boolean }[];
   } | null>(null);
 
+  /** Recherche « Que voulez-vous faire ? » : pages du menu autorisées au compte. */
+  readonly recherche = signal('');
+  readonly pages = signal<PageMenu[]>([]);
+  readonly resultats = computed(() => chercherPages(this.pages(), this.recherche()));
+  readonly enRecherche = computed(() => this.recherche().trim().length > 0);
+  readonly suggestions = computed(() => suggestionsRecherche(this.pages()));
+
+  /** File d'actions : filtre par module. */
+  readonly filtre = signal<string>('tout');
+  readonly filtres = computed(() => filtresActions(this.actionItems()));
+  readonly actionsVisibles = computed(() => {
+    const f = this.filtre();
+    return f === 'tout' ? this.actionItems() : this.actionItems().filter((a) => a.moduleId === f);
+  });
+  readonly resume = computed(() => resumeActions(this.actionItems()));
+  readonly phraseResume = computed(() => {
+    const r = this.resume();
+    const verbe = r.total > 1 ? 'vous attendent' : 'vous attend';
+    return r.urgent ? `${verbe}, dont ${r.urgent}.` : `${verbe}.`;
+  });
+
+  readonly dateDuJour = dateDuJour();
+  readonly libelleRole = computed(() => libelleRole(this.role(), true));
+  readonly tonKpi = tonKpi;
+  readonly tonSante = tonSante;
+
   readonly recentActivity = computed(() =>
     this.notifHub.notifications().slice(0, 5).map((n) => ({
       id: n.id,
@@ -155,6 +111,7 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
     const stored = this.session.getStoredUser();
     this.applyGreeting();
     this.role.set((this.auth.getRole() || stored?.role || '').trim());
+    this.chargerPages();
     this.sub.add(
       this.users.getCurrentUser().subscribe({
         next: (profile) => {
@@ -171,19 +128,87 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
     this.loadSnapshot();
   }
 
-  private applyGreeting(): void {
-    const name = this.session.getDisplayName();
-    this.username.set(name);
-    this.greetingLine.set(`Bonjour, ${name}`);
-  }
-
   ngOnDestroy(): void {
     this.sub.unsubscribe();
+  }
+
+  // ── Recherche ─────────────────────────────────────────────────────────────
+
+  /** Pages du menu (mêmes droits que le menu latéral), relues à chaque ouverture de la recherche. */
+  chargerPages(): void {
+    try {
+      this.pages.set(pagesDuMenu(this.menu.buildVisibleGroups(this.role())));
+    } catch {
+      this.pages.set([]);
+    }
+  }
+
+  saisir(valeur: string): void {
+    this.recherche.set(valeur ?? '');
+  }
+
+  effacer(): void {
+    this.recherche.set('');
+  }
+
+  toucheRecherche(e: KeyboardEvent): void {
+    if (e.key === 'Enter') {
+      const premier = this.resultats()[0];
+      if (premier) {
+        e.preventDefault();
+        void this.ouvrirPage(premier);
+      }
+    } else if (e.key === 'Escape') {
+      this.effacer();
+    }
+  }
+
+  async ouvrirPage(page: PageMenu): Promise<void> {
+    this.recherche.set('');
+    await this.navActions.applyMenuItem(page.item);
+  }
+
+  // ── Navigation des éléments du tableau de bord ─────────────────────────────
+
+  ouvrir(item: { route?: string; queryParams?: Record<string, string>; action?: () => void }): void {
+    if (item.action) {
+      item.action();
+      return;
+    }
+    if (item.route) void this.router.navigate([item.route], { queryParams: item.queryParams });
+  }
+
+  cliquable(item: { route?: string; action?: () => void }): boolean {
+    return !!(item.action || item.route);
   }
 
   openActivity(id: string): void {
     const notif = this.notifHub.notifications().find((n) => n.id === id);
     if (notif) this.notifHub.openNotification(notif);
+  }
+
+  choisirFiltre(id: string): void {
+    this.filtre.set(id);
+  }
+
+  /** Icône (SVG du menu) d'un raccourci : celle du module de sa page, sinon une flèche. */
+  iconeRaccourci(qa: KyntusQuickAction): SafeHtml {
+    return this.svg(iconeRaccourci(qa.route, this.pages()));
+  }
+
+  svg(code: string): SafeHtml {
+    let s = this.iconCache.get(code);
+    if (!s) {
+      s = this.sanitizer.bypassSecurityTrustHtml(code);
+      this.iconCache.set(code, s);
+    }
+    return s;
+  }
+
+  // ── Chargement ─────────────────────────────────────────────────────────────
+
+  private applyGreeting(): void {
+    this.username.set(this.session.getDisplayName());
   }
 
   private loadSnapshot(): void {
@@ -210,9 +235,12 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
           this.dashboardTitle.set(snapshot.title);
           this.dashboardSubtitle.set(snapshot.subtitle);
           this.kpiItems.set(snapshot.kpis);
-          this.kpiColumns.set(snapshot.kpis.length > 4 ? 3 : Math.min(snapshot.kpis.length, 4) || 3);
           this.alerts.set(snapshot.alerts);
           this.actionItems.set(snapshot.actionItems);
+          // Un filtre qui ne correspond plus à aucun module revient sur « Tout ».
+          if (this.filtre() !== 'tout' && !snapshot.actionItems.some((a) => a.moduleId === this.filtre())) {
+            this.filtre.set('tout');
+          }
           this.moduleHealth.set(snapshot.moduleHealth);
           this.quickActions.set(
             snapshot.quickActions.map((qa) => ({
@@ -225,6 +253,8 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
           if (emission === 1) {
             this.loadingDetails.set(false);
           }
+          // Les droits sont lus en même temps que le tableau de bord : la recherche les suit.
+          this.chargerPages();
         },
         error: () => {
           this.loadingKpis.set(false);

@@ -6,6 +6,7 @@
 .pit-lg--travail { background: var(--bg-card); }
 .pit-lg--repos { background: #d1d5db; }
 .pit-lg--conge { background: #f8cbad; }
+.pit-lg--recup { background: #c6e0b4; }
 .pit-lg--flash { background: color-mix(in srgb, var(--ky-blue) 25%, var(--bg-card)); border-color: var(--ky-blue); }
 
 .pit-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
@@ -24,8 +25,12 @@ tr.is-me .pit-name { background: color-mix(in srgb, var(--ky-blue) 12%, var(--bg
 .pit-cell { position: relative; min-width: 92px; height: 44px; padding: 0 !important; text-align: center; transition: background 0.4s; }
 .pit-cell.s-Repos { background: #d1d5db !important; }
 .pit-cell.s-Conge { background: #f8cbad !important; }
+.pit-cell.s-Recup { background: #c6e0b4 !important; }
 body.theme-dark .pit-cell.s-Repos { background: #374151 !important; }
 body.theme-dark .pit-cell.s-Conge { background: #7c4a2d !important; }
+body.theme-dark .pit-cell.s-Recup { background: #375b2a !important; }
+.pit-solde { display: block; margin-top: 2px; font-size: 0.66rem; font-weight: 500; color: var(--text-muted); white-space: nowrap; }
+.pit-solde.is-neg b { color: var(--danger, #b91c1c); }
 .pit-cell.is-today { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ky-blue) 45%, transparent); }
 .pit-cell.is-flash { background: color-mix(in srgb, var(--ky-blue) 25%, var(--bg-card)) !important; }
 .pit-cell.is-saving { opacity: 0.6; }
@@ -67,7 +72,7 @@ body.theme-dark .pit-cell.s-Conge { background: #7c4a2d !important; }
 .pit-table .pit-com input.pit-com-input.pit-com-input.pit-com-input.pit-com-input:focus { background: var(--bg-card) !important; border-color: var(--ky-blue) !important; }
 .pit-sem {
   display: inline-flex; align-items: center; justify-content: center; min-width: 56px; padding: 0 12px; height: 36px;
-  border-radius: 10px; background: color-mix(in srgb, var(--ky-blue) 10%, var(--bg-card)); color: var(--ky-blue);
+  border-radius: 10px; background: color-mix(in srgb, var(--ky-blue) 10%, var(--bg-card)); color: var(--ky-blue-text, var(--ky-blue)); /* v68 */
   font-weight: 800; font-size: 0.95rem; letter-spacing: 0.02em;
 }
 
@@ -76,3 +81,4 @@ body.theme-dark .pit-cell.s-Conge { background: #7c4a2d !important; }
 .pit-cell.s-Ferie { background: #dbeafe !important; }
 body.theme-dark .pit-cell.s-Ferie { background: #1e3a5f !important; }
 .pit-ferie { display: block; font-size: 10px; font-weight: 600; color: var(--ky-blue); white-space: nowrap; }
+.pit-solde b.is-neg { color: var(--danger, #b91c1c); } /* v70 */

@@ -3,7 +3,8 @@
     <div>
       <p class="ku-hero-eyebrow">Pointage · Administration</p>
       <h1 class="ku-hero-title">Accès « Heure de sortie »</h1>
-      <p class="ku-hero-sub">Cochez les comptes qui peuvent utiliser la page Heure de sortie. Les autres ne la voient pas, ni dans le menu ni sur l’accueil.</p>
+      <p class="ku-hero-sub">Réservé au Super Admin. Cochez les comptes qui peuvent utiliser la page Heure de sortie et choisissez leur horaire (08h40 ou 07h40).
+        Les autres ne la voient pas, ni dans le menu ni sur l’accueil, et n’y accèdent pas.</p>
     </div>
     <div class="ku-hero-actions">
       <button type="button" class="ku-btn" (click)="load()" [disabled]="loading()">Actualiser</button>
@@ -58,9 +59,16 @@
                       <span class="hsa-who"><b>{{ c.collaborateur }}</b><small class="ku-muted">{{ c.email }}{{ c.cellule ? ' · ' + c.cellule : '' }}</small></span>
                     </label>
                     @if (etat(c) !== c.acces) { <span class="ku-chip ku-chip--warn ku-chip--plain">{{ etat(c) ? 'à ajouter' : 'à retirer' }}</span> }
-                    @if (c.acces) {
+                    @if (c.acces && etat(c)) {
                       <select class="ku-input hsa-base" [ngModel]="c.productionBase ?? '0840'" (ngModelChange)="changerBase(c, $event)"
                               [disabled]="baseEnCours() === c.userId" aria-label="Horaire de base">
+                        <option value="0840">08h40 (+ 1 jour à 07h40 / semaine)</option>
+                        <option value="0740">07h40 tous les jours</option>
+                      </select>
+                    } @else if (!c.acces && etat(c)) {
+                      <!-- v67 : horaire choisi au moment de l'attribution, enregistré avec elle. -->
+                      <select class="ku-input hsa-base" [ngModel]="baseAjout(c)" (ngModelChange)="choisirBaseAjout(c, $event)"
+                              aria-label="Horaire attribué">
                         <option value="0840">08h40 (+ 1 jour à 07h40 / semaine)</option>
                         <option value="0740">07h40 tous les jours</option>
                       </select>
@@ -80,6 +88,14 @@
   @if (nbChangements() > 0) {
     <div class="hsa-savebar" role="region" aria-label="Enregistrer">
       <span><b>{{ nbChangements() }}</b> modification(s) non enregistrée(s)</span>
+      @if (changements().ajouter.length) {
+        <label class="hsa-base-defaut">Horaire des comptes ajoutés
+          <select class="ku-input hsa-base" [ngModel]="baseParDefaut()" (ngModelChange)="baseParDefaut.set($event)" aria-label="Horaire des comptes ajoutés">
+            <option value="0840">08h40 (+ 1 jour à 07h40 / semaine)</option>
+            <option value="0740">07h40 tous les jours</option>
+          </select>
+        </label>
+      }
       <button type="button" class="ku-btn" (click)="annuler()">Annuler</button>
       <button type="button" class="ku-btn ku-btn--primary" (click)="enregistrer()" [disabled]="saving()">{{ saving() ? 'Enregistrement…' : 'Enregistrer' }}</button>
     </div>

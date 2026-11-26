@@ -13,7 +13,7 @@ public class DemandeCongeDecision
     public Guid ActeurId { get; private set; }
     public string ActeurNom { get; private set; } = string.Empty;
     public string ActeurRole { get; private set; } = string.Empty;
-    /// <summary>ValidationSuperviseur | ValidationRh | Refus | Annulation</summary>
+    /// <summary>ValidationSuperviseur | ValidationRh | Refus | Annulation | Modification</summary>
     public string Action { get; private set; } = string.Empty;
     public StatutDemande StatutAvant { get; private set; }
     public StatutDemande StatutApres { get; private set; }
@@ -56,4 +56,6 @@ public static class DemandeCongeDecisionActions
     public const string ValidationRh = "ValidationRh";
     public const string Refus = "Refus";
     public const string Annulation = "Annulation";
+    /// <summary>v64.2 — dates modifiées par Admin / RH (statut inchangé).</summary>
+    public const string Modification = "Modification";
 }

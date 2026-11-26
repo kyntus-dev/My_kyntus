@@ -8,7 +8,9 @@ import type { PointageJourDto, PointageSuiviDto } from '../../../../core/models/
 import type { SoldeCongeDto } from '../../../../core/models/conge.models';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
 import { telechargerExcel } from '../../lib/excel-export';
-import { formatHeuresMinutes } from '../../lib/heure-sortie.util';
+import { DEBUT_SOLDE_HEURES, formatHeuresMinutes } from '../../lib/heure-sortie.util';
+import { forkJoin, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { HeureSortieAccessService } from '../../../../core/services/heure-sortie-access.service';
 import {
   STATUT_LABELS,
@@ -17,6 +19,8 @@ import {
   estAnomalie,
   filtrerJours,
   soldesCumules,
+  soldeFinal,
+  veille,
   formatEcart,
   libellePointage,
   lignesExportJours,
@@ -79,7 +83,11 @@ export class PointageSuiviComponent implements OnInit {
   private readonly joursPasses = computed(() => (this.data()?.jours ?? []).filter((j) => j.statut !== 'AVenir'));
   readonly jours = computed(() => filtrerJours(this.joursPasses(), this.filtre()));
   /** Compensation : solde cumulé depuis le 24, calculé sur toutes les journées (pas seulement celles filtrées). */
-  readonly cumuls = computed(() => soldesCumules(this.joursPasses()));
+  readonly cumuls = computed(() => soldesCumules(this.joursPasses(), this.aujourdhui, this.report()));
+  /** v71 — Solde acquis avant la période affichée (depuis le 24/10/2026) : il ne se perd jamais. */
+  readonly report = signal(0);
+  /** v71 — Solde d'heures à la fin de la période affichée (report compris). */
+  readonly soldeTotal = computed(() => soldeFinal(this.joursPasses(), this.aujourdhui, this.report()));
   readonly compte = computed(() => {
     const j = this.joursPasses();
     return {
@@ -95,7 +103,16 @@ export class PointageSuiviComponent implements OnInit {
     const t = this.data()?.totaux;
     const realisee = t?.productionMinutes ?? 0;
     const prevue = t?.productionPrevueMinutes ?? 0;
-    return { realisee, prevue, ecart: realisee - prevue, jours: t?.joursProductionCalculee ?? 0, pct: prevue ? Math.min(100, (realisee / prevue) * 100) : 0 };
+    // v70 : les Récup prises consomment le solde (comme le cumul depuis le 24).
+    const d = new Date();
+    const aujourdhui = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const recup = this.joursPasses()
+      .filter((j) => j.jour.slice(0, 10) <= aujourdhui)
+      .reduce((n, j) => n + (j.recupMinutes ?? 0), 0);
+    return {
+      realisee, prevue, recup, ecart: realisee - prevue - recup, jours: t?.joursProductionCalculee ?? 0,
+      pct: prevue ? Math.min(100, (realisee / prevue) * 100) : 0,
+    };
   });
 
   ngOnInit(): void {
@@ -129,8 +146,15 @@ export class PointageSuiviComponent implements OnInit {
     this.error.set(null);
     const id = this.userId();
     const call = id ? this.svc.suiviCollaborateur(id, this.du(), this.au()) : this.svc.monSuivi(this.du(), this.au());
-    call.subscribe({
-      next: (d) => {
+    // v71 : solde reporté — journées depuis le début du solde jusqu'à la veille de la période.
+    const du = this.du();
+    const report$ = du > DEBUT_SOLDE_HEURES
+      ? (id ? this.svc.suiviCollaborateur(id, DEBUT_SOLDE_HEURES, veille(du)) : this.svc.monSuivi(DEBUT_SOLDE_HEURES, veille(du)))
+        .pipe(map((s) => soldeFinal(s.jours, this.aujourdhui)), catchError(() => of(0)))
+      : of(0);
+    forkJoin({ d: call, report: report$ }).subscribe({
+      next: ({ d, report }) => {
+        this.report.set(report);
         this.data.set(d);
         this.loading.set(false);
       },

@@ -146,8 +146,8 @@ export class PresencesEvpComponent implements OnInit {
 
   patch(p: Partial<Formulaire>): void {
     const next = { ...this.form(), ...p };
-    // Les retenues et avances sont négatives par nature.
-    if (p.type && /retenue|avance/i.test(p.type)) next.sens = 'retenue';
+    // Les retenues, avances et sanctions (v69) sont négatives par nature.
+    if (p.type && /retenue|avance|sanction/i.test(p.type)) next.sens = 'retenue';
     this.form.set(next);
   }
 

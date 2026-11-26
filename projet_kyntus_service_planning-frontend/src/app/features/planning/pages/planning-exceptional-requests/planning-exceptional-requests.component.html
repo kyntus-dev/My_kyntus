@@ -107,10 +107,8 @@
               <button type="button" class="mdc-link mdc-ok" (click)="supervisorApprove(r.id || r.Id)">Valider</button>
               <button type="button" class="mdc-link mdc-bad" (click)="openReject(r.id || r.Id)">Refuser</button>
             </ng-container>
-            <ng-container *ngIf="canRhApprove(r)">
-              <button type="button" class="mdc-link mdc-ok" (click)="rhApprove(r.id || r.Id)">Approuver RH</button>
-              <button type="button" class="mdc-link mdc-bad" (click)="openReject(r.id || r.Id)">Refuser</button>
-            </ng-container>
+            <button type="button" class="mdc-link mdc-ok" *ngIf="canRhApprove(r)" (click)="rhApprove(r.id || r.Id)">Approuver RH</button>
+            <button type="button" class="mdc-link mdc-bad" *ngIf="canRhReject(r)" (click)="openReject(r.id || r.Id)">Refuser</button>
           </td>
         </tr>
       </tbody>

@@ -155,6 +155,7 @@ import {
   type CreateContractDto,
   type UpdateContractDto,
 } from '../../../contract/services/contract.service';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 
 interface RoleOption { id: number; name: string; }
 interface SupportDepartmentOption { id: string; code: string; name: string; kind: string; isActive?: boolean; }
@@ -169,6 +170,8 @@ type WizardStepId = 'identity' | 'position' | 'pathway' | 'finalize';
   styleUrls: ['./user-form.component.css']
 })
 export class UserFormComponent implements OnInit, OnDestroy {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   private readonly formDrafts = inject(KyntusFormDraftService);
   private draftBinder?: KyntusObjectDraftBinder<{
     form: UserFormComponent['form'];
@@ -389,6 +392,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     this.fieldService.getFields(true).subscribe({
       next: (fields) => {
         this.customEmployeeFields = fields.filter((f) => f.isSystemField === false);
@@ -1072,7 +1076,14 @@ export class UserFormComponent implements OnInit, OnDestroy {
     return orgAssignmentHint(this.ancienSelectedRoleName, this.ancienOrgAssignmentDepth);
   }
 
+  /** v72 — « Confirmer passage production » : validation RH du parcours de formation initiale. */
+  get peutConfirmerPassage(): boolean {
+    return this.droits.autorise(['formation.passage', 'formation.suivi-initiale', 'formation.admin'], 'Validate');
+  }
+
   get canShowContractFields(): boolean {
+    // v72 : partie « Contrat » seulement avec le droit « Contrats » (sinon l'employé est créé sans contrat).
+    if (!this.droits.autorise('rh.contrats', 'Act')) return false;
     if (this.hrProfile.enFormation && !this.isEditMode) return false;
     if (this.isEditMode && this.hrProfile.enFormation && !this.contractId) return false;
     return true;
@@ -1709,6 +1720,9 @@ export class UserFormComponent implements OnInit, OnDestroy {
 
   async loadLinkableReferrals(): Promise<void> {
     if (this.isEditMode) return;
+    // v72 : dossiers de parrainage lus seulement avec le droit « Parrainage ».
+    await this.droits.ensureLoaded();
+    if (!this.droits.autorise('parrainage.module', 'Act')) return;
     // Isoler les erreurs : un endpoint en échec ne doit pas vider tout le pool.
     const [linkable, all] = await Promise.all([
       this.parrainageApi.getLinkableReferrals().catch(() => [] as Referral[]),
@@ -1866,6 +1880,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
   }
 
   private loadContractForUser(userId: number): void {
+    if (!this.droits.autorise('rh.contrats', 'View')) return;
     this.contractLoading = true;
     this.contractService.getByUser(userId).subscribe({
       next: (contracts) => {
@@ -1899,6 +1914,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
   }
 
   private saveContract$(userId: number): Observable<void> {
+    if (!this.droits.autorise('rh.contrats', 'Act')) return of(undefined);
     if (this.hrProfile.enFormation && !this.contractId) {
       return of(undefined);
     }
@@ -1922,7 +1938,7 @@ export class UserFormComponent implements OnInit, OnDestroy {
   }
 
   private completeReferralOnboarding$(employeeGuid: string): Observable<Referral | null> {
-    if (!this.selectedReferralId.trim()) return of(null);
+    if (!this.selectedReferralId.trim() || !this.droits.autorise('parrainage.module', 'Act')) return of(null);
     return defer(() =>
       this.parrainageApi.completeOnboarding(this.selectedReferralId, {
         employeeId: employeeGuid,

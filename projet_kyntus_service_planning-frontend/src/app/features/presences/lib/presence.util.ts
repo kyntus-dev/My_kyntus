@@ -77,6 +77,11 @@ export function raisonCaseVide(
   if (jour.statut === 'SansPlanning') {
     return { marque: '·', raison: 'Pointage sans planning publié ce jour : retard non calculé.' };
   }
+  // v65 : journée travaillée hors du planning de l'agent (samedi non planifié, jour de repos
+  // travaillé) : le temps pointé est valorisé en heures supplémentaires, aucune heure manquante.
+  if (jour.statut === 'HeuresSupplementaires') {
+    return { marque: '+', raison: 'Travail hors planning : les heures faites comptent en heures supplémentaires.' };
+  }
   // « Repos » = ni planning publié, ni pointage, ni congé : la cause la plus fréquente d'une case vide.
   const raison = pointeuseReliee
     ? 'Repos : aucun planning publié ce jour et aucun pointage. Cliquez pour saisir un motif.'
@@ -105,11 +110,39 @@ export interface FiltresPresence {
   /** v46 (chef de projet) : superviseurs / référents techniques affichés : '' aucun, '*' tous, sinon un userId. */
   superviseurs: string;
   referents: string;
+  /** v67 — Ordre des agents : '' ordre habituel ; sinon tri par durée de retard (voir TRIS_PRESENCE). */
+  tri?: TriPresence;
 }
 
+/** v67 — Tris proposés dans la liste déroulante « Trier ». */
+export type TriPresence = '' | 'retard-desc' | 'retard-total-desc' | 'retard-asc';
+
+export const TRIS_PRESENCE: readonly { valeur: TriPresence; libelle: string }[] = [
+  { valeur: '', libelle: 'Tri : ordre habituel' },
+  { valeur: 'retard-desc', libelle: 'Retard non autorisé : du plus long au plus court' },
+  { valeur: 'retard-total-desc', libelle: 'Retard total (autorisé compris) : du plus long au plus court' },
+  { valeur: 'retard-asc', libelle: 'Retard non autorisé : du plus court au plus long' },
+];
+
 export const FILTRES_VIDES: FiltresPresence = {
-  recherche: '', activite: '', pole: '', cellule: '', type: '', aTraiter: false, formation: '', superviseurs: '', referents: '',
+  recherche: '', activite: '', pole: '', cellule: '', type: '', aTraiter: false, formation: '', superviseurs: '', referents: '', tri: '',
 };
+
+/**
+ * v67 — Tri des agents par durée de retard sur la période affichée (cumul des minutes). À durée
+ * égale : nombre de jours en retard, puis ordre alphabétique. '' : ordre reçu, inchangé.
+ */
+export function trierAgents(agents: readonly PresenceAgentDto[], tri: TriPresence | undefined): PresenceAgentDto[] {
+  if (!tri) return [...agents];
+  const retard = (a: PresenceAgentDto) => tri === 'retard-total-desc'
+    ? (a.totaux.retardRetenuMinutes ?? 0) + (a.totaux.retardAutoriseMinutes ?? 0)
+    : (a.totaux.retardRetenuMinutes ?? 0);
+  const sens = tri === 'retard-asc' ? 1 : -1;
+  return [...agents].sort((x, y) =>
+    sens * (retard(x) - retard(y))
+    || sens * ((x.totaux.joursEnRetard ?? 0) - (y.totaux.joursEnRetard ?? 0))
+    || x.nom.localeCompare(y.nom, 'fr', { sensitivity: 'base' }));
+}
 
 /** v46 : contrats proposés dans le filtre (toujours les deux, même si le périmètre n'en a qu'un). */
 export const TYPES_CONTRAT = ['Salarié', 'Sous-traitant'] as const;

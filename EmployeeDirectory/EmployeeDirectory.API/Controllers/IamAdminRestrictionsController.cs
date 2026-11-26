@@ -20,16 +20,23 @@ public class IamAdminRestrictionsController(IIamAdminRestrictionService restrict
 {
     private const string ReserveSuperAdmin = "Réservé au Super Admin : seul le Super Admin gère les droits des administrateurs.";
 
-    /// <summary>Restrictions de l'appelant (vide pour tout autre rôle que Admin et pour le Super Admin).</summary>
+    /// <summary>
+    /// Restrictions de l'appelant : vide pour le Super Admin ; v66 — pour les autres rôles, droits retirés
+    /// dans « Accès par rôle » / « Accès par compte ».
+    /// </summary>
     [HttpGet("me")]
     public async Task<ActionResult<AdminRestrictionsMeDto>> Me(CancellationToken ct)
     {
         if (KyntusAdminClaims.IsSuperAdmin(User))
             return Ok(new AdminRestrictionsMeDto(true, false, []));
         var subjectId = KyntusAdminClaims.SubjectId(User);
-        if (!KyntusAdminClaims.IsAdmin(User) || subjectId is null)
+        if (subjectId is null)
             return Ok(new AdminRestrictionsMeDto(false, false, []));
-        var denied = await restrictions.GetDeniedAsync(subjectId.Value, ct);
+        // v66 — Tout compte : retraits du Super Admin (administrateur) ou retraits explicites de son rôle
+        // et de son compte (autres rôles). Les autres services les lisent ici pour les appliquer.
+        var denied = KyntusAdminClaims.IsAdmin(User)
+            ? await restrictions.GetDeniedAsync(subjectId.Value, ct)
+            : await restrictions.GetRevocationsAsync(subjectId.Value, KyntusAdminClaims.Role(User) ?? string.Empty, ct);
         return Ok(new AdminRestrictionsMeDto(false, denied.Count > 0, denied));
     }
 

@@ -40,3 +40,19 @@ describe('platform capability catalog', () => {
     expect(verbsForScreenRole(screen!, KyntusRoleNames.Superviseur)).toContain('Act');
   });
 });
+
+/**
+ * v77 — « Périmètre superviseur » : chacun ne voit que ses cellules. Pour ouvrir à un rôle les
+ * périmètres des autres, il suffit de lui accorder cette rubrique dans « Accès par rôle ».
+ */
+describe('v77 — voir les périmètres des autres encadrants', () => {
+  it('est une rubrique à part, réservée par défaut à l’Admin et aux RH', () => {
+    const screen = PLATFORM_SCREENS.find((s) => s.id === 'perimetre.global');
+    expect(screen).toBeTruthy();
+    expect(verbsForScreenRole(screen!, KyntusRoleNames.Admin)).toContain('View');
+    expect(verbsForScreenRole(screen!, KyntusRoleNames.RH)).toContain('View');
+    // Un superviseur ne l'a pas par défaut : il reste sur ses propres cellules.
+    expect(verbsForScreenRole(screen!, KyntusRoleNames.Superviseur)).toEqual([]);
+    expect(verbsForScreenRole(screen!, KyntusRoleNames.ReferentTechnique)).toEqual([]);
+  });
+});

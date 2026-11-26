@@ -37,7 +37,7 @@
         <p class="ks-menu-empty" *ngIf="!resultatsMenu().length">Aucun menu ne correspond.</p>
       </div>
       <ng-container *ngIf="!menuRecherche()">
-      <a class="ks-home" routerLink="/home" routerLinkActive="active" (click)="sidebarOpen = false">
+      <a class="ks-home" routerLink="/home" routerLinkActive="active" (click)="sidebarOpen = false" title="Accueil">
         <span class="ks-ic" [innerHTML]="icon(homeIcon)"></span>
         <span *ngIf="!sidebarCollapsed">Accueil</span>
       </a>
@@ -48,7 +48,7 @@
         class="ks-home ks-hat-shortcut"
         (click)="goToPersonalSpace()"
         title="Mon espace">
-        <app-lucide-icon [icon]="icons.user" className="w-4 h-4" />
+        <span class="ks-ic"><app-lucide-icon [icon]="icons.user" className="w-4 h-4" /></span>
         <span *ngIf="!sidebarCollapsed">Mon espace</span>
       </button>
       <button
@@ -57,16 +57,25 @@
         class="ks-home ks-hat-shortcut"
         (click)="goToTeamSpace()"
         title="Mon équipe">
-        <app-lucide-icon [icon]="icons.briefcase" className="w-4 h-4" />
+        <span class="ks-ic"><app-lucide-icon [icon]="icons.briefcase" className="w-4 h-4" /></span>
         <span *ngIf="!sidebarCollapsed">Mon équipe</span>
       </button>
 
-      <span class="ks-nav-label" *ngIf="!sidebarCollapsed">Modules</span>
-
-      <div class="ks-group" *ngFor="let g of groups()">
-        <button type="button" class="ks-group-head" [class.open]="isOpen(g.id)" (click)="toggleGroup(g.id)">
+      <!-- v68 : modules rangés par rubriques (repliables), compteurs des éléments en attente. -->
+      <ng-container *ngFor="let r of rubriques()">
+      <button type="button" class="ks-rubrique" *ngIf="!sidebarCollapsed" [class.fermee]="!rubriqueOuverte(r)"
+              (click)="toggleRubrique(r.id)" [attr.aria-expanded]="rubriqueOuverte(r)">
+        <span>{{ r.label }}</span>
+        <span class="ks-rubrique-cpt" *ngIf="r.compteur && !rubriqueOuverte(r)">{{ r.compteur }}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <span class="ks-rubrique-sep" *ngIf="sidebarCollapsed" aria-hidden="true"></span>
+      <ng-container *ngIf="sidebarCollapsed || rubriqueOuverte(r)">
+      <div class="ks-group" *ngFor="let g of r.groupes">
+        <button type="button" class="ks-group-head" [class.open]="isOpen(g.id)" [class.courant]="groupeCourant(g)" (click)="toggleGroup(g.id)" [attr.title]="g.label" [attr.aria-expanded]="isOpen(g.id)">
           <span class="ks-ic" [innerHTML]="icon(g.icon)"></span>
           <span class="ks-group-label" *ngIf="!sidebarCollapsed">{{ g.label }}</span>
+          <span class="ks-count" *ngIf="compteurModule(g) as n" [attr.aria-label]="n + ' en attente'">{{ n }}</span>
           <span class="ks-chevron" *ngIf="!sidebarCollapsed" [class.open]="isOpen(g.id)">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </span>
@@ -90,25 +99,27 @@
         </div>
       </div>
       </ng-container>
+      </ng-container>
+      </ng-container>
     </nav>
 
     <div class="ks-quick-actions" *ngIf="!sidebarCollapsed">
       <button type="button" class="ks-quick-btn" (click)="openNotifications()">
-        <app-lucide-icon [icon]="icons.bell" className="w-4 h-4" />
+        <span class="ks-ic"><app-lucide-icon [icon]="icons.bell" className="w-4 h-4" /></span>
         Notifications
         <app-shell-notification-badge [count]="notifHub.unreadCount()" />
       </button>
       <button type="button" class="ks-quick-btn" (click)="openAssistance()">
-        <app-lucide-icon [icon]="icons.help" className="w-4 h-4" />
+        <span class="ks-ic"><app-lucide-icon [icon]="icons.assistance" className="w-4 h-4" /></span>
         Assistance
       </button>
       <button type="button" class="ks-quick-btn" (click)="openSettingsPage()">
-        <app-lucide-icon [icon]="icons.settings" className="w-4 h-4" />
+        <span class="ks-ic"><app-lucide-icon [icon]="icons.settings" className="w-4 h-4" /></span>
         Paramètres
       </button>
       <!-- v56 : chacun change son mot de passe, quel que soit son rôle. -->
       <button type="button" class="ks-quick-btn" (click)="ouvrirMonMotDePasse()">
-        <app-lucide-icon [icon]="icons.settings" className="w-4 h-4" />
+        <span class="ks-ic"><app-lucide-icon [icon]="icons.motDePasse" className="w-4 h-4" /></span>
         Mon mot de passe
       </button>
     </div>

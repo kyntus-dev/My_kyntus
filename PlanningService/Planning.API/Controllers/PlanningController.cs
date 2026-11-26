@@ -68,6 +68,18 @@ public class PlanningController(
     /// Le rôle détient-il ce droit avec la portée « Toute l'entreprise » ? (ressource fictive :
     /// seule la portée Global l'accepte, comme pour les réaffectations v28).
     /// </summary>
+    /// <summary>
+    /// v79 — Rubrique « Voir les périmètres des autres encadrants » (Accès par rôle / par compte) :
+    /// accordée, elle ouvre toute l'organisation, quel que soit le périmètre choisi dans la matrice.
+    /// </summary>
+    private async Task<bool> VoitTousLesPerimetresAsync(CancellationToken ct = default)
+    {
+        var decision = await _policyEvaluator.EvaluateAsync(
+            new PolicyRequest(User.GetSubjectId() ?? Guid.Empty, User.GetAuthRole() ?? "Employee",
+                "perimetre.global.View", "platform", null), ct);
+        return decision.Allowed;
+    }
+
     private async Task<bool> PorteeGlobaleAsync(string action, CancellationToken ct = default)
     {
         var role = User.GetAuthRole() ?? "Employee";
@@ -210,7 +222,8 @@ public class PlanningController(
         var role = User.GetAuthRole();
         var voitTout = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
             || string.Equals(role, "RH", StringComparison.OrdinalIgnoreCase)
-            || await PorteeGlobaleAsync(CapShiftConfigure, ct);
+            || await PorteeGlobaleAsync(CapShiftConfigure, ct)
+            || await VoitTousLesPerimetresAsync(ct);
         var viewerId = voitTout ? null : await ResolvePlanningUserIdAsync();
         return Ok(await _planningService.GetShiftConfigStatusAsync(viewerId));
     }

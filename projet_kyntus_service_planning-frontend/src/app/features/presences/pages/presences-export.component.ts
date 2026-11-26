@@ -15,6 +15,7 @@ import {
   CODES_NON_DEDUITS,
   COULEURS_FORMATION,
   type LignePaie,
+  joursAvantMois,
   joursOuvres,
   lignePaie,
   moisCivilDePeriode,
@@ -111,6 +112,16 @@ export class PresencesExportComponent implements OnInit {
     const m = this.mois();
     if (!g) return [];
     return m ? joursOuvres(m.du, m.au) : joursOuvres(g.du.slice(0, 10), g.au.slice(0, 10));
+  });
+
+  /**
+   * v69 — Mode paie : jours du 24 à la fin du mois précédent, affichés avant les jours du mois pour
+   * vérifier les absences déduites de la période 24 → 23 (aucun autre calcul).
+   */
+  readonly joursAvant = computed(() => {
+    const g = this.grille();
+    const m = this.mois();
+    return g && m ? joursAvantMois(g.du.slice(0, 10), m) : [];
   });
 
   private readonly activiteParPole = computed(() => {

@@ -182,9 +182,10 @@
               <div class="hs-solde">
                 <button type="button" class="hs-solde-clic" [class.on]="detailOuvert()" (click)="detailOuvert.set(!detailOuvert())"
                         [attr.aria-expanded]="detailOuvert()" title="Voir le détail jour par jour">
-                  <span>Solde depuis le 24 (jours précédents)</span>
+                  <span>Mon solde d’heures (jours précédents)</span>
                   <b [class.ku-pos]="so.soldeMinutes > 0" [class.ku-neg]="so.soldeMinutes < 0">{{ so.soldeMinutes >= 0 ? '+' : '−' }}{{ formatHms(abs(so.soldeMinutes * 60)) }}</b>
-                  <small class="ku-muted">+{{ formatHms(so.plusMinutes * 60) }} en plus · −{{ formatHms(so.moinsMinutes * 60) }} manquantes · {{ so.jours }} jour(s)</small>
+                  <small class="ku-muted">+{{ formatHms(so.plusMinutes * 60) }} en plus · −{{ formatHms(so.moinsMinutes * 60) }} manquantes · {{ so.jours }} jour(s)@if (so.heuresSupMinutes > 0) { · dont {{ formatHms(so.heuresSupMinutes * 60) }} d’heures supplémentaires ({{ so.joursHeuresSup }} jour(s) hors planning) }</small>
+                  <small class="ku-muted">Cumulé depuis le {{ dateCourte(periodeDu()) }} ; il se garde jusqu’à ce que vous le récupériez (Récup ou sortie plus tôt).</small>
                   <small class="hs-voir">{{ detailOuvert() ? 'Masquer le détail ▲' : 'Voir le détail ▼' }}</small>
                 </button>
                 <div>
@@ -197,14 +198,24 @@
                   <b [class.ku-pos]="soldeApres() > 0" [class.ku-neg]="soldeApres() < 0">{{ soldeApres() >= 0 ? '+' : '−' }}{{ formatHms(abs(soldeApres())) }}</b>
                   <small class="ku-muted">{{ soldeApres() >= 0 ? 'heures en plus' : 'à récupérer' }}</small>
                 </div>
+                @if (sortieAvecSolde(); as sa) {
+                  <!-- v71 : utiliser son solde aujourd'hui (ex. 8 h 40 − 2 h cumulées). -->
+                  <div class="hs-solde-total">
+                    <span>En utilisant mon solde</span>
+                    <b class="ku-pos">{{ sa.toute ? 'Journée couverte' : 'Sortie à ' + formatHeure(sa.sortieSecondes) }}</b>
+                    <small class="ku-muted">{{ formatHms(sa.utiliseSecondes) }} de solde utilisées@if (sa.toute) { : vous pouvez poser une Récup }</small>
+                  </div>
+                }
               </div>
               @if (detailOuvert()) {
-                <section class="hs-detail" aria-label="Détail du solde depuis le 24">
+                <section class="hs-detail" aria-label="Détail du solde d’heures">
                   <header>
                     <b>D’où vient ce solde</b>
                     <small>Du {{ dateCourte(periodeDu()) }} au {{ dateCourte(periodeVeille()) }} (veille). Aujourd’hui est compté à part, dans « Aujourd’hui ».
                       Chaque jour terminé avec une arrivée et un départ pointés : écart = production réalisée − production prévue.
-                      Production prévue = votre choix de ce jour-là (07h40 ou 08h40) ; un jour sans choix prend votre horaire de base.</small>
+                      Production prévue = votre choix de ce jour-là (07h40 ou 08h40) ; un jour sans choix prend votre horaire de base.
+                      Une journée qui n’est pas à votre planning (samedi hors planning, jour de repos travaillé) n’attend aucune production :
+                      tout ce que vous y faites compte en heures supplémentaires, et elle ne peut jamais créer d’heures manquantes.</small>
                   </header>
                   <div class="hs-detail-wrap">
                     <table>
@@ -222,10 +233,14 @@
                               <td [class.ku-pos]="(l.ecartMinutes ?? 0) > 0" [class.ku-neg]="(l.ecartMinutes ?? 0) < 0"><b>{{ signeHm(l.ecartMinutes) }}</b></td>
                               <td [class.ku-pos]="l.cumulMinutes > 0" [class.ku-neg]="l.cumulMinutes < 0">{{ signeHm(l.cumulMinutes) }}</td>
                               <td class="hs-corr">
-                                <button type="button" [class.on]="l.prevueMinutes === 460" [disabled]="correctionEnCours() === l.jour || courteBloquee(l.jour)"
-                                        (click)="corrigerJour(l.jour, '0740')" title="Prévoir 07h40 ce jour-là">07h40</button>
-                                <button type="button" [class.on]="l.prevueMinutes === 520" [disabled]="correctionEnCours() === l.jour"
-                                        (click)="corrigerJour(l.jour, '0840')" title="Prévoir 08h40 ce jour-là">08h40</button>
+                                @if (l.planifie) {
+                                  <button type="button" [class.on]="l.prevueMinutes === 460" [disabled]="correctionEnCours() === l.jour || courteBloquee(l.jour)"
+                                          (click)="corrigerJour(l.jour, '0740')" title="Prévoir 07h40 ce jour-là">07h40</button>
+                                  <button type="button" [class.on]="l.prevueMinutes === 520" [disabled]="correctionEnCours() === l.jour"
+                                          (click)="corrigerJour(l.jour, '0840')" title="Prévoir 08h40 ce jour-là">08h40</button>
+                                } @else {
+                                  <small class="ku-muted" title="Journée hors planning : les heures faites sont des heures supplémentaires">heures sup.</small>
+                                }
                               </td>
                             </tr>
                           } @else {
@@ -237,12 +252,12 @@
                             </tr>
                           }
                         } @empty {
-                          <tr class="hs-nc"><td colspan="7">Aucune journée terminée depuis le 24.</td></tr>
+                          <tr class="hs-nc"><td colspan="7">Aucune journée terminée depuis le {{ dateCourte(periodeDu()) }}.</td></tr>
                         }
                       </tbody>
                       <tfoot>
                         <tr>
-                          <td colspan="4">{{ so.jours }} jour(s) comptés : {{ signeHm(so.plusMinutes) }} en plus, −{{ hm(so.moinsMinutes) }} manquantes</td>
+                          <td colspan="4">{{ so.jours }} jour(s) comptés : {{ signeHm(so.plusMinutes) }} en plus, −{{ hm(so.moinsMinutes) }} manquantes@if (so.heuresSupMinutes > 0) {, dont {{ hm(so.heuresSupMinutes) }} d’heures supplémentaires }</td>
                           <td colspan="3" [class.ku-pos]="so.soldeMinutes > 0" [class.ku-neg]="so.soldeMinutes < 0"><b>= {{ signeHm(so.soldeMinutes) }}</b></td>
                         </tr>
                       </tfoot>
@@ -285,7 +300,7 @@
           <li><b>Saisie manuelle</b> (Excel) : pauses = pauses forfaitaires ({{ formatHeuresMinutes(pauseForfaitMinutes()) }}) + pause déjeuner saisie.</li>
           <li><b>Il me reste</b> = sortie − heure actuelle.</li>
           <li><b>Production réalisée</b> = (heure actuelle − arrivée) − pauses ; l’avancement est la production réalisée divisée par la production du jour.</li>
-          <li><b>Heures supplémentaires</b> : production réalisée au-delà de la production du jour. Le solde de la période de paie (depuis le 24) additionne les heures en plus et compense les heures manquantes des journées précédentes (production choisie ce jour-là, sinon votre horaire de base, sinon celle du planning ou du régime).</li>
+          <li><b>Heures supplémentaires</b> : production réalisée au-delà de la production du jour. Votre solde d’heures additionne les heures en plus et compense les heures manquantes des journées précédentes ; il ne repart pas de zéro le 24 et se garde jusqu’à ce que vous le récupériez (journée « Récup », ou sortie plus tôt) (production choisie ce jour-là, sinon votre horaire de base, sinon celle du planning ou du régime).</li>
           <li><b>Production du jour</b> : 07h40 ou 08h40, à choisir chaque jour. Horaire 08h40 : une journée à 07h40 par semaine, du lundi au vendredi. Horaire 07h40 : 07h40 tous les jours.</li>
         </ul>
         <p class="ku-muted">Les heures de prière de l’Excel viennent d’un autre classeur qui n’a pas été transmis : elles ne sont pas reprises.</p>

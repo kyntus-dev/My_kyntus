@@ -48,6 +48,13 @@ public sealed class CongeValideConsumer(
         var absenceType = MapAbsenceType(msg.TypeConge, msg.TypeExceptionnel);
         var reason = BuildReason(msg);
 
+        // v64.2 : congé validé dont les dates ont été modifiées dans Congés — l'ancienne période
+        // est rendue au planning avant de poser la nouvelle.
+        (DateOnly Debut, DateOnly Fin)? anciennePeriode = existing is not null
+            && (existing.StartDate != start || existing.EndDate != end)
+                ? (existing.StartDate, existing.EndDate)
+                : null;
+
         if (existing is not null)
         {
             existing.StartDate = start;
@@ -82,6 +89,9 @@ public sealed class CongeValideConsumer(
 
         try
         {
+            if (anciennePeriode is { } ap)
+                await leaveImpact.SyncAfterAbsenceChangeAsync(
+                    user.Id, ap.Debut, ap.Fin, absenceRemoved: true, context.CancellationToken);
             await leaveImpact.SyncAfterAbsenceChangeAsync(
                 user.Id, start, end, absenceRemoved: false, context.CancellationToken);
         }
@@ -121,6 +131,8 @@ public sealed class CongeValideConsumer(
         var label = string.IsNullOrWhiteSpace(msg.TypeExceptionnel)
             ? msg.TypeConge
             : $"{msg.TypeConge}/{msg.TypeExceptionnel}";
-        return $"Congé validé ({label}) — {msg.NombreJours} j.";
+        return msg.Modification
+            ? $"Congé validé ({label}), dates modifiées — {msg.NombreJours} j."
+            : $"Congé validé ({label}) — {msg.NombreJours} j.";
     }
 }

@@ -77,7 +77,10 @@ export class AuthGuard implements CanActivate {
     const ouverture = route.data?.['ouvertureIam'] as string | string[] | undefined;
     if (ouverture && this.access.hasCatalog()) {
       const ecrans = typeof ouverture === 'string' ? [ouverture] : ouverture;
-      if (ecrans.some((c) => this.access.canView(c))) return true;
+      // v66 — Page d'action (création, import, liaison…) : « Modifier » exigé, comme pour l'entrée de
+      // menu. Sans ce contrôle, l'URL ouvrait la page à un compte qui n'avait que « Consulter ».
+      const verbe = this.verbeExige(route);
+      if (ecrans.some((c) => (verbe === 'Act' ? this.access.canAct(c) : this.access.canView(c)))) return true;
       this.router.navigate(['/unauthorized']);
       return false;
     }
@@ -95,6 +98,18 @@ export class AuthGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  /**
+   * v66 — Verbe exigé par la route : le sien, sinon celui de la première route parente qui en
+   * précise un (les pages enfants d'un module héritent de sa règle).
+   */
+  private verbeExige(route: ActivatedRouteSnapshot): 'View' | 'Act' {
+    for (let r: ActivatedRouteSnapshot | null = route; r; r = r.parent) {
+      const v = r.routeConfig?.data?.['capabilityVerb'];
+      if (v === 'Act' || v === 'View') return v;
+    }
+    return 'View';
   }
 
   isAdminRole(token: string): boolean {

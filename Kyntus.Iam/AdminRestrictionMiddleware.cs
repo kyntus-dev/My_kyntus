@@ -93,9 +93,15 @@ public sealed class ActingSuperAdminHeaderHandler(IHttpContextAccessor httpConte
 }
 
 /// <summary>
-/// Applique, à l'entrée de chaque service, les fonctionnalités retirées à un administrateur par le
-/// Super Admin (403). Sans effet pour tout autre rôle, pour le Super Admin et pour un administrateur
-/// sans restriction : le comportement historique est strictement conservé.
+/// Applique, à l'entrée de chaque service, les fonctionnalités retirées (403) :
+/// <list type="bullet">
+/// <item>v60 — à un administrateur, par le Super Admin ;</item>
+/// <item>v66 — à tout autre compte, dans « Accès par rôle » ou « Accès par compte » (retraits explicites,
+///   compte &gt; rôle). Avant, un droit retiré à un rôle disparaissait du menu mais son API restait
+///   ouverte : un appel direct (URL, outil, ancien onglet) passait encore.</item>
+/// </list>
+/// Sans effet pour le Super Admin, et pour tout compte sans retrait : le comportement historique est
+/// strictement conservé.
 /// </summary>
 public sealed class AdminRestrictionMiddleware(RequestDelegate next, ILogger<AdminRestrictionMiddleware> logger)
 {
@@ -104,7 +110,6 @@ public sealed class AdminRestrictionMiddleware(RequestDelegate next, ILogger<Adm
         var user = context.User;
         if (user?.Identity?.IsAuthenticated != true
             || HttpMethods.IsOptions(context.Request.Method)
-            || !KyntusAdminClaims.IsAdmin(user)
             || KyntusAdminClaims.IsSuperAdmin(user)
             || KyntusInternalHop.IsInternal(context.Request))
         {
@@ -128,23 +133,35 @@ public sealed class AdminRestrictionMiddleware(RequestDelegate next, ILogger<Adm
         }
 
         var snapshot = await provider.GetAsync(subjectId.Value, context.RequestAborted);
-        if (!snapshot.Restricted || feature.Screens.Any(s => !snapshot.IsDenied(s, feature.Verb)))
+        var admin = KyntusAdminClaims.IsAdmin(user);
+        // v66 : les rôles n'ont pas de verbes Supprimer / Exporter — ils suivent Modifier / Consulter.
+        var verbe = admin ? feature.Verb : AdminRestrictionRules.VerbePourRole(feature.Verb);
+        if (!snapshot.Restricted || feature.Screens.Any(s => !snapshot.IsDenied(s, verbe)))
         {
             await next(context);
             return;
         }
 
+        var action = $"{feature.Screens[0]}.{verbe}";
         logger.LogInformation(
-            "Accès refusé (restriction Super Admin) : admin {SubjectId} {Method} {Path} → {Action}",
-            subjectId, context.Request.Method, context.Request.Path.Value, feature.Action);
+            "Accès refusé (droit retiré) : {Profil} {SubjectId} {Method} {Path} → {Action}",
+            admin ? "admin" : KyntusAdminClaims.Role(user), subjectId, context.Request.Method, context.Request.Path.Value, action);
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        await context.Response.WriteAsJsonAsync(new
-        {
-            code = "ADMIN_RESTRICTED",
-            action = feature.Action,
-            error = "Fonctionnalité retirée par le Super Admin.",
-            message = "Cette fonctionnalité vous a été retirée par le Super Admin.",
-        }, context.RequestAborted);
+        await context.Response.WriteAsJsonAsync(admin
+            ? new
+            {
+                code = "ADMIN_RESTRICTED",
+                action,
+                error = "Fonctionnalité retirée par le Super Admin.",
+                message = "Cette fonctionnalité vous a été retirée par le Super Admin.",
+            }
+            : new
+            {
+                code = "ACCESS_REVOKED",
+                action,
+                error = "Droit retiré dans « Accès par rôle » ou « Accès par compte ».",
+                message = "Cette fonctionnalité vous a été retirée (Accès par rôle / Accès par compte).",
+            }, context.RequestAborted);
     }
 }
 
@@ -159,7 +176,10 @@ public sealed class DirectoryHttpAdminRestrictionProvider(
     IHttpContextAccessor httpContextAccessor,
     ILogger<DirectoryHttpAdminRestrictionProvider> logger) : IAdminRestrictionProvider
 {
-    private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(15);
+    // v66 : 10 s (au lieu de 15) — un droit retiré s'applique en quelques secondes dans tous les
+    // services, sans reconnexion, tout en gardant un appel à l'annuaire au plus toutes les 10 s par compte
+    // (le contrôle couvre désormais tous les rôles, pas seulement les administrateurs).
+    private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan FailureTtl = TimeSpan.FromSeconds(5);
 
     public async Task<AdminRestrictionSnapshot> GetAsync(Guid subjectId, CancellationToken ct = default)

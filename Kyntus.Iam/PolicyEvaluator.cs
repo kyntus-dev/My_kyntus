@@ -34,6 +34,14 @@ public sealed class PolicyEvaluator(
             var exception = await overrides.GetOverrideAsync(request.SubjectId, action, ct);
             if (exception == false)
                 return new PolicyDecision(false, "Retiré pour ce compte");
+            // v66 — « Consulter » retiré au compte = écran entier retiré : Modifier / Valider / Configurer
+            // ne peuvent plus passer par le rôle.
+            var parts = AdminRestrictionRules.Split(action);
+            if (exception is null
+                && parts.HasValue
+                && parts.Value.Verb != "View"
+                && await overrides.GetOverrideAsync(request.SubjectId, parts.Value.Screen + ".View", ct) == false)
+                return new PolicyDecision(false, "Écran retiré pour ce compte");
             if (exception == true
                 && (string.IsNullOrWhiteSpace(request.ResourceId)
                     || (Guid.TryParse(request.ResourceId, out var own) && own == request.SubjectId)))

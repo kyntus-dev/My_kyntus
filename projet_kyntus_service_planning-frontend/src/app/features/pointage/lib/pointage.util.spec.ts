@@ -19,6 +19,7 @@ import {
   segmentsJour,
   libellePointage,
   filtrerJours,
+  STATUT_LABELS,
 } from './pointage.util';
 
 const suivi: PointageSuiviDto = {
@@ -73,7 +74,7 @@ describe('Pointage', () => {
   it('rédige la synthèse du suivi', () => {
     const m = messagesSuivi(suivi);
     expect(m.map((x) => x.titre)).toEqual([
-      'Il manque un pointage sur 2 journée(s)',
+      'Manque de pointage sur 2 journée(s)',
       'Retard sur 3 journée(s) sur 16',
       '13 journée(s) à l’heure',
     ]);
@@ -137,19 +138,21 @@ describe('Pointage', () => {
 });
 
 describe('compensation sur la période de paie', () => {
-  it('cumule les écarts depuis le 24 et repart de zéro au 24 suivant', () => {
+  it('v71 : le solde se garde au-delà du 24 (aucune remise à zéro) et part du report', () => {
     const c = soldesCumules([
       { jour: '2026-11-03', ecartProductionMinutes: 5 },
       { jour: '2026-10-22', ecartProductionMinutes: -20 },
       { jour: '2026-10-24', ecartProductionMinutes: -1 },
       { jour: '2026-10-26', ecartProductionMinutes: 1 },
       { jour: '2026-10-27', ecartProductionMinutes: null },
-    ]);
-    expect(c.get('2026-10-22')).toBe(-20);
-    expect(c.get('2026-10-24')).toBe(-1);
-    expect(c.get('2026-10-26')).toBe(0);
-    expect(c.get('2026-10-27')).toBe(0);
-    expect(c.get('2026-11-03')).toBe(5);
+      { jour: '2026-11-24', ecartProductionMinutes: 10 },
+    ], '2026-11-30', 120);
+    expect(c.get('2026-10-22')).toBe(100);
+    expect(c.get('2026-10-24')).toBe(99);
+    expect(c.get('2026-10-26')).toBe(100);
+    expect(c.get('2026-10-27')).toBe(100);
+    expect(c.get('2026-11-03')).toBe(105);
+    expect(c.get('2026-11-24')).toBe(115);
   });
 
   it('période de paie en cours et précédente', () => {
@@ -157,5 +160,26 @@ describe('compensation sur la période de paie', () => {
     expect(periode('paie', now)).toEqual({ du: '2026-10-24', au: '2026-11-04' });
     expect(periode('paie-precedente', now)).toEqual({ du: '2026-09-24', au: '2026-10-23' });
     expect(periode('paie', new Date(2026, 10, 25))).toEqual({ du: '2026-11-24', au: '2026-11-25' });
+  });
+});
+
+describe('v70 — cumul depuis le 24 : Récup consommée, manque de pointage hors cumul', () => {
+  it('une Récup prise consomme le solde ; une Récup à venir non ; un manque de pointage n’y entre pas', () => {
+    const c = soldesCumules([
+      { jour: '2026-11-24', ecartProductionMinutes: 30 },
+      { jour: '2026-11-25', ecartProductionMinutes: null }, // manque de pointage : pas d'écart
+      { jour: '2026-11-26', ecartProductionMinutes: 480 },   // samedi travaillé : heures sup.
+      { jour: '2026-11-27', ecartProductionMinutes: null, recupMinutes: 520 },
+      { jour: '2026-12-02', ecartProductionMinutes: null, recupMinutes: 520 }, // planifiée
+    ], '2026-11-28');
+    expect(c.get('2026-11-24')).toBe(30);
+    expect(c.get('2026-11-25')).toBe(30);
+    expect(c.get('2026-11-26')).toBe(510);
+    expect(c.get('2026-11-27')).toBe(-10);
+    expect(c.get('2026-12-02')).toBe(-10); // Récup du 02/12 à venir : pas encore déduite
+  });
+
+  it('libellé « Manque de pointage »', () => {
+    expect(STATUT_LABELS.PointageManquant).toBe('Manque de pointage');
   });
 });

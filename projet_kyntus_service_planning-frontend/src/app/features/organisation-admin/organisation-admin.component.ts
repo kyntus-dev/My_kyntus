@@ -27,6 +27,10 @@ import {
   isMovableAgent,
   membresDeCellule,
   resolveServiceCible,
+  SANS_SERVICE,
+  agentsADeplacer,
+  effectifsParService,
+  filtrerParService,
   type OrgAgent,
 } from '../../core/org/org-admin.util';
 import {
@@ -69,6 +73,7 @@ export class OrganisationAdminComponent implements OnInit {
   private readonly access = inject(PlatformAccessService);
 
   readonly SANS_CELLULE = SANS_CELLULE;
+  readonly SANS_SERVICE = SANS_SERVICE;
   readonly celluleLabel = celluleLabel;
   readonly isMovableAgent = isMovableAgent;
 
@@ -90,6 +95,8 @@ export class OrganisationAdminComponent implements OnInit {
   readonly filtreActivite = signal('');
   readonly filtrePole = signal('');
   readonly celluleSel = signal('');
+  /** v79 — Service affiché dans la cellule choisie ('' = tous ses services). */
+  readonly serviceSel = signal('');
   readonly recherche = signal('');
   readonly selection = signal<Set<string>>(new Set());
   readonly cibleActivite = signal('');
@@ -119,7 +126,22 @@ export class OrganisationAdminComponent implements OnInit {
   readonly cellulesFiltre = computed(() =>
     cellulesDe(this.depts(), this.unassigned(), this.filtreActivite(), this.filtrePole()));
   readonly membres = computed(() =>
-    this.celluleSel() ? membresDeCellule(this.agents(), this.celluleSel(), this.recherche()) : []);
+    this.celluleSel()
+      ? filtrerParService(
+          membresDeCellule(this.agents(), this.celluleSel(), this.recherche()),
+          this.serviceSel(),
+          this.index().get(this.celluleSel()))
+      : []);
+  /** v79 — Services de la cellule choisie, avec leurs effectifs (liste de gauche). */
+  readonly servicesSel = computed(() => this.index().get(this.celluleSel())?.services ?? []);
+  readonly effectifsServices = computed(() =>
+    effectifsParService(this.agents(), this.index().get(this.celluleSel())));
+  /** v79 — Nom du service de chaque agent (colonne « Service »). */
+  readonly nomsServices = computed(() => {
+    const noms = new Map<string, string>();
+    for (const loc of this.index().values()) for (const s of loc.services) noms.set(s.id, s.name);
+    return noms;
+  });
   readonly membresDeplacables = computed(() => this.membres().filter((m) => isMovableAgent(m)));
 
   readonly polesCible = computed(() => {
@@ -606,7 +628,18 @@ export class OrganisationAdminComponent implements OnInit {
 
   choisirCellule(id: string): void {
     this.celluleSel.set(id);
+    this.serviceSel.set('');
     this.selection.set(new Set());
+  }
+
+  /** v79 — Affiche un seul service de la cellule (re-cliquer revient à toute la cellule). */
+  choisirService(id: string): void {
+    this.serviceSel.set(this.serviceSel() === id ? '' : id);
+    this.selection.set(new Set());
+  }
+
+  nomService(id: string | null | undefined): string {
+    return (id && this.nomsServices().get(id)) || '—';
   }
 
   choisirCibleActivite(id: string): void {
@@ -624,11 +657,16 @@ export class OrganisationAdminComponent implements OnInit {
 
   choisirCibleCellule(id: string): void {
     this.cibleCellule.set(id);
-    this.cibleService.set('');
+    // v79 — Une cellule à un seul service : il est choisi d'office (et visible dans la liste).
+    const services = this.index().get(id)?.services ?? [];
+    this.cibleService.set(services.length === 1 ? services[0].id : '');
   }
 
   libelleCelluleSel(): string {
-    return this.celluleSel() === SANS_CELLULE ? 'Agents sans cellule' : celluleLabel(this.index().get(this.celluleSel()));
+    const base = this.celluleSel() === SANS_CELLULE ? 'Agents sans cellule' : celluleLabel(this.index().get(this.celluleSel()));
+    const s = this.serviceSel();
+    if (!s) return base;
+    return `${base} > ${s === SANS_SERVICE ? 'Sans service' : this.nomService(s)}`;
   }
 
   estSelectionne(id: string): boolean {
@@ -649,23 +687,29 @@ export class OrganisationAdminComponent implements OnInit {
   }
 
   async deplacer(): Promise<void> {
-    const ids = [...this.selection()];
+    const selection = [...this.selection()];
     const loc = this.index().get(this.cibleCellule());
     const service = this.serviceCible();
-    if (!ids.length || !loc) return;
+    if (!selection.length || !loc) return;
     if (!service) {
       this.toast.error(loc.services.length
         ? 'Choisissez le service d’arrivée dans la cellule.'
         : 'Cette cellule n’a pas encore de service : ajoutez-en un dans l’onglet Structure.');
       return;
     }
-    if (loc.celluleId === this.celluleSel()) {
-      this.toast.error('La cellule d’arrivée est la cellule actuelle.');
+    // v79 — On peut répartir les membres d'une cellule entre ses services : seuls ceux déjà dans
+    // le service d'arrivée sont écartés (avant, tout déplacement vers la même cellule était refusé).
+    const ids = agentsADeplacer(this.agents(), selection, service.id);
+    if (!ids.length) {
+      this.toast.error(`Les agents sélectionnés sont déjà dans le service « ${service.name} ».`);
       return;
     }
+    const dejaLa = selection.length - ids.length;
     const ok = await this.confirm.confirm({
       title: 'Déplacer les agents',
-      message: `${ids.length} agent(s) vers ${celluleLabel(loc)}. Leur affectation actuelle est clôturée (historique conservé).`,
+      message: `${ids.length} agent(s) vers ${celluleLabel(loc)} > ${service.name}.`
+        + (dejaLa ? ` ${dejaLa} agent(s) déjà dans ce service ne bougent pas.` : '')
+        + ' Leur affectation actuelle est clôturée (historique conservé).',
       confirmLabel: 'Déplacer',
     });
     if (!ok) return;
@@ -707,7 +751,7 @@ export class OrganisationAdminComponent implements OnInit {
     }
 
     this.busy.set(false);
-    if (deplaces) this.toast.success(`${deplaces} agent(s) déplacé(s) vers ${loc.celluleNom}.`);
+    if (deplaces) this.toast.success(`${deplaces} agent(s) déplacé(s) vers ${loc.celluleNom} > ${service.name}.`);
     if (bloques.length) {
       this.toast.error(`${bloques.length} agent(s) non déplacé(s) : durée minimale de rotation non atteinte`
         + (this.isAdmin() ? '.' : ' (un Admin peut forcer).'));

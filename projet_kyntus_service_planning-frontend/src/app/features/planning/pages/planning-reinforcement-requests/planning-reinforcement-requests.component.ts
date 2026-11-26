@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -14,6 +14,7 @@ import {
   toIsoWeekCode,
   getIsoWeekMonday,
 } from '../../utils/week-code.util';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 
 function apiMessage(err: unknown): string {
   const e = err as { error?: { message?: string } | string; message?: string };
@@ -51,6 +52,8 @@ function nextSaturdays(count = 8): { value: string; label: string }[] {
   styleUrls: ['./planning-reinforcement-requests.component.css'],
 })
 export class PlanningReinforcementRequestsComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   requests: any[] = [];
   loading = false;
   error = '';
@@ -96,6 +99,7 @@ export class PlanningReinforcementRequestsComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     const role = this.session.getRole() ?? '';
     const allowed =
       role === KyntusRoleNames.Admin ||

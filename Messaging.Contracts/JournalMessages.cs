@@ -20,4 +20,10 @@ public record JournalActionMessage
     public Dictionary<string, string?>? NouvellesValeurs { get; init; }
     public string? Details { get; init; }
     public string? Source { get; init; }
+
+    /// <summary>
+    /// v67 — Action faite par le Super Admin : jamais inscrite au journal d'actions (le Planning
+    /// l'ignore). Les services émetteurs ne publient d'ailleurs plus ces actions.
+    /// </summary>
+    public bool ActeurSuperAdmin { get; init; }
 }

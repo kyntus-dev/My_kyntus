@@ -97,6 +97,56 @@ public class PointageTests
         Assert.Equal(PointageJourStatuts.AHeure, r.Statut);
     }
 
+    /// <summary>
+    /// v65 — Une pause d'environ une minute est une vraie pause : son pointage de retour est gardé,
+    /// la journée reste calculée et la pause est comptée. Avant, le délai de double badgeage (120 s)
+    /// supprimait ce retour : la journée tombait à trois pointages et passait en « pointage manquant ».
+    /// </summary>
+    [Fact]
+    public void Retour_de_pause_courte_n_est_pas_pris_pour_un_double_badgeage_v65()
+    {
+        var r = PointageCalculator.CalculerJour(
+            Jour,
+            [T("09:58:00"), T("14:00:00"), T("14:01:00"), T("18:30:00")],
+            Planning("10:00"),
+            Lendemain);
+
+        Assert.Equal(4, r.Pointages.Count);
+        Assert.Equal(PointageJourStatuts.AHeure, r.Statut);
+        Assert.Equal(1, r.PauseMinutes);
+        Assert.Equal(new TimeOnly(9, 58), r.Arrivee);
+        Assert.Equal(new TimeOnly(18, 30), r.Depart);
+        // 09:58 → 18:30 moins 1 minute de pause.
+        Assert.Equal(511, r.ProductionMinutes ?? -1);
+    }
+
+    /// <summary>
+    /// v65 — Garde-fou de parité : même avec un délai de double badgeage très large (ancien réglage
+    /// 120 s, ou une pause de 20 s), la fusion ne supprime jamais un pointage si cela rendait la
+    /// journée incalculable. Aucun pointage valide n'est perdu.
+    /// </summary>
+    [Fact]
+    public void La_fusion_ne_rend_jamais_la_journee_impaire_v65()
+    {
+        var pointages = new[] { T("09:58:00"), T("14:00:00"), T("14:00:20"), T("18:30:00") };
+
+        var gardes = PointageCalculator.FusionnerDoublesBadgeages(pointages, 120);
+        Assert.Equal(4, gardes.Count);
+
+        var r = PointageCalculator.CalculerJour(Jour, pointages, Planning("10:00"), Lendemain, doubleBadgeSecondes: 120);
+        Assert.Equal(PointageJourStatuts.AHeure, r.Statut);
+        Assert.Equal(4, r.Pointages.Count);
+
+        // Un vrai double badgeage reste fusionné : le nombre de pointages reste pair.
+        var avecDouble = new[] { T("09:58:00"), T("09:58:20"), T("14:00:00"), T("14:01:00"), T("18:30:00") };
+        var fusionne = PointageCalculator.FusionnerDoublesBadgeages(avecDouble, 120);
+        Assert.Equal(4, fusionne.Count);
+        Assert.Equal(T("09:58:00"), fusionne[0]);
+        Assert.Equal(T("14:00:00"), fusionne[1]);
+        Assert.Equal(T("14:01:00"), fusionne[2]);
+        Assert.Equal(T("18:30:00"), fusionne[3]);
+    }
+
     [Fact]
     public void Journees_sans_planning_sans_pointage_conge_et_ferie()
     {

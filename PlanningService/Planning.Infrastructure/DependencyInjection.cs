@@ -124,6 +124,9 @@ public static class DependencyInjection
         }).AddHttpMessageHandler<ActingSuperAdminHeaderHandler>();
         // Réaffectations (v21) : implémentées par UserService (mêmes synchronisations que la fiche).
         services.AddScoped<IAgentReaffectation>(sp => (IAgentReaffectation)sp.GetRequiredService<IUserService>());
+        // v67 : suppression définitive d'un compte (Admin et RH), implémentée par UserService.
+        services.AddScoped<Planning.Application.Users.IUtilisateurSuppressionDefinitive>(
+            sp => (Planning.Application.Users.IUtilisateurSuppressionDefinitive)sp.GetRequiredService<IUserService>());
         services.AddHttpClient<IUserService, UserService>((sp, client) =>
         {
             var configuration = sp.GetRequiredService<IConfiguration>();

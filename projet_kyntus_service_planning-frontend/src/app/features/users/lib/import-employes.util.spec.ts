@@ -173,3 +173,30 @@ describe('valeurs du fichier RH (v49)', () => {
     expect(cleNom('ARBAOUI', 'Hanane')).not.toBe(cleNom('ARBAOUI', 'Kaouthar'));
   });
 });
+
+describe('valeurs non reconnues (v66)', () => {
+  it('une cellule remplie mais illisible est signalée, jamais appliquée', async () => {
+    const { anomaliesLigne, emailValide } = await import('./import-employes.util');
+    expect(anomaliesLigne({ naissance: '31/31/1990', situation: 'Pacsé', enfants: 'deux', email: 'jean.dupont' })).toEqual([
+      'Date de naissance « 31/31/1990 » illisible',
+      'Situation familiale « Pacsé » non reconnue',
+      "Nombre d'enfants « deux » illisible",
+      'E-mail « jean.dupont » invalide',
+    ]);
+    expect(anomaliesLigne({ naissance: '03/11/1990', situation: 'Marié', enfants: 2, email: 'a@b.ma' })).toEqual([]);
+    expect(anomaliesLigne({ naissance: 'Non renseigné', situation: '', enfants: null, email: '-' })).toEqual([]);
+    expect(emailValide('jean.dupont@gmail.com')).toBe(true);
+    expect(emailValide('jean dupont@gmail')).toBe(false);
+  });
+
+  it('la ligne porte ses anomalies et n’envoie pas un e-mail invalide', async () => {
+    const { lireMatriceEmployes } = await import('./import-employes.util');
+    const lecture = lireMatriceEmployes([
+      ['Nom', 'Prénom', 'Date de naissance', 'Email'],
+      ['ALAOUI', 'Sara', 'bientôt', 'sara@'],
+    ]);
+    const [l] = lecture.lignes;
+    expect(l.emailPersonnel).toBe('');
+    expect(l.anomalies).toEqual(['Date de naissance « bientôt » illisible', 'E-mail « sara@ » invalide']);
+  });
+});

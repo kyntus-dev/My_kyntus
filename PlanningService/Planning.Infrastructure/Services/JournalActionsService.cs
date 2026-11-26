@@ -1,6 +1,9 @@
 using System.Globalization;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Kyntus.Iam;
+using Kyntus.Identity.Jwt;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,15 +18,21 @@ namespace Planning.Infrastructure.Services;
 /// <summary>
 /// v64 — Journal d'actions : écriture des événements explicites (dans un contexte séparé, après
 /// l'opération) et consultation filtrée, paginée, exportable. Le rôle Super Admin n'y apparaît jamais.
+/// v67 : les actions du Super Admin n'y apparaissent pas non plus (ni inscrites, ni affichées).
 /// </summary>
 public sealed class JournalActionsService(
     AppDbContext db,
     IServiceScopeFactory scopes,
     IHttpContextAccessor http,
-    ILogger<JournalActionsService> logger) : IJournalActionsService
+    ILogger<JournalActionsService> logger,
+    IHttpClientFactory? httpClients = null) : IJournalActionsService
 {
     private const int ExportMax = 20_000;
     private static readonly TimeZoneInfo Fuseau = TrouverFuseau();
+
+    /// <summary>v67 — Comptes Super Admin (identifiants Planning et sujets), relus toutes les 5 minutes.</summary>
+    private static (HashSet<int> Ids, HashSet<Guid> Guids, DateTime Expire) _superAdmins = (new HashSet<int>(), new HashSet<Guid>(), DateTime.MinValue);
+    private static readonly SemaphoreSlim VerrouSuperAdmins = new(1, 1);
 
     public async Task EnregistrerAsync(JournalEvenement evenement, JournalAuteurExterne? auteur = null, CancellationToken ct = default)
     {
@@ -33,7 +42,7 @@ public sealed class JournalActionsService(
             var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var acteur = auteur is null
                 ? JournalActeur.Depuis(http.HttpContext)
-                : new JournalActeur(auteur.Guid, auteur.Email, JournalActeur.NormaliserRole(auteur.Role), auteur.Email);
+                : new JournalActeur(auteur.Guid, auteur.Email, JournalActeur.NormaliserRole(auteur.Role), auteur.Email, auteur.SuperAdmin);
             var brouillon = new JournalCapture.Brouillon
             {
                 Module = evenement.Module,
@@ -59,9 +68,102 @@ public sealed class JournalActionsService(
         }
     }
 
-    private IQueryable<JournalAction> Filtrer(JournalFiltre f)
+    /// <summary>
+    /// v67 — Les actions du Super Admin n'apparaissent pas au journal : elles ne sont plus inscrites, et
+    /// les lignes inscrites avant la v67 sont écartées de la consultation, des filtres et de l'export
+    /// (elles restent en base, rien n'est effacé).
+    /// </summary>
+    private async Task<IQueryable<JournalAction>> LignesVisiblesAsync(CancellationToken ct)
     {
+        var (ids, guids) = await SuperAdminsAsync(ct);
         var q = db.JournalActions.AsNoTracking();
+        if (ids.Count > 0)
+        {
+            var listeIds = ids.ToList();
+            q = q.Where(j => !(j.ActeurId.HasValue && listeIds.Contains(j.ActeurId.Value)));
+        }
+        if (guids.Count > 0)
+        {
+            var listeGuids = guids.ToList();
+            q = q.Where(j => !(j.ActeurGuid.HasValue && listeGuids.Contains(j.ActeurGuid.Value)));
+        }
+        return q;
+    }
+
+    /// <summary>
+    /// v67 — Comptes Super Admin : le compte connecté s'il l'est (jeton), et les comptes Admin que
+    /// l'authentification désigne comme Super Admin. AuthService indisponible : dernière liste connue.
+    /// </summary>
+    private async Task<(IReadOnlySet<int> Ids, IReadOnlySet<Guid> Guids)> SuperAdminsAsync(CancellationToken ct)
+    {
+        var ids = new HashSet<int>();
+        var guids = new HashSet<Guid>();
+        var cache = _superAdmins;
+        if (cache.Expire > DateTime.UtcNow)
+        {
+            ids.UnionWith(cache.Ids);
+            guids.UnionWith(cache.Guids);
+        }
+        else if (httpClients is not null)
+        {
+            await VerrouSuperAdmins.WaitAsync(ct);
+            try
+            {
+                cache = _superAdmins;
+                if (cache.Expire <= DateTime.UtcNow)
+                {
+                    var admins = await db.Users.AsNoTracking()
+                        .Where(u => u.Role != null && u.Role.Name == KyntusAdminClaims.AdminRole && u.AuthUserId != null)
+                        .Select(u => new { u.Id, u.Guid, u.AuthUserId })
+                        .ToListAsync(ct);
+                    var nouveauxIds = new HashSet<int>();
+                    var nouveauxGuids = new HashSet<Guid>();
+                    var complet = true;
+                    var client = httpClients.CreateClient(RoleService.AuthClient);
+                    foreach (var a in admins)
+                    {
+                        try
+                        {
+                            var r = await client.GetFromJsonAsync<EstSuperAdminReponse>(
+                                $"api/auth/users/from-planning/{a.AuthUserId}/super-admin", ct);
+                            if (r?.SuperAdmin != true) continue;
+                            nouveauxIds.Add(a.Id);
+                            if (a.Guid != Guid.Empty) nouveauxGuids.Add(a.Guid);
+                        }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            complet = false;
+                            logger.LogDebug(ex, "Journal d'actions : statut Super Admin du compte {Id} non lu.", a.AuthUserId);
+                        }
+                    }
+                    // Lecture incomplète : la liste précédente est gardée en plus, et relue plus tôt.
+                    if (!complet)
+                    {
+                        nouveauxIds.UnionWith(cache.Ids);
+                        nouveauxGuids.UnionWith(cache.Guids);
+                    }
+                    cache = (nouveauxIds, nouveauxGuids, DateTime.UtcNow.AddMinutes(complet ? 5 : 1));
+                    _superAdmins = cache;
+                }
+            }
+            finally
+            {
+                VerrouSuperAdmins.Release();
+            }
+            ids.UnionWith(cache.Ids);
+            guids.UnionWith(cache.Guids);
+        }
+
+        var moi = http.HttpContext?.User;
+        if (KyntusAdminClaims.IsSuperAdmin(moi) && moi!.GetSubjectId() is Guid g && g != Guid.Empty)
+            guids.Add(g);
+        return (ids, guids);
+    }
+
+    private sealed record EstSuperAdminReponse(bool SuperAdmin);
+
+    private static IQueryable<JournalAction> Filtrer(IQueryable<JournalAction> q, JournalFiltre f)
+    {
         if (f.Du is DateOnly du)
         {
             var debut = VersUtc(du.ToDateTime(TimeOnly.MinValue));
@@ -100,7 +202,7 @@ public sealed class JournalActionsService(
     {
         var page = Math.Max(1, filtre.Page);
         var taille = Math.Clamp(filtre.Taille, 10, 200);
-        var q = Filtrer(filtre);
+        var q = Filtrer(await LignesVisiblesAsync(ct), filtre);
         var total = await q.CountAsync(ct);
         var lignes = await q
             .OrderByDescending(j => j.Horodatage).ThenByDescending(j => j.Id)
@@ -111,10 +213,11 @@ public sealed class JournalActionsService(
 
     public async Task<JournalFiltresDto> FiltresAsync(CancellationToken ct = default)
     {
-        var modules = await db.JournalActions.AsNoTracking().Select(j => j.Module).Distinct().ToListAsync(ct);
-        var operations = await db.JournalActions.AsNoTracking().Select(j => j.Operation).Distinct().ToListAsync(ct);
-        var roles = await db.JournalActions.AsNoTracking().Where(j => j.ActeurRole != null).Select(j => j.ActeurRole!).Distinct().ToListAsync(ct);
-        var acteurs = await db.JournalActions.AsNoTracking()
+        var visibles = await LignesVisiblesAsync(ct);
+        var modules = await visibles.Select(j => j.Module).Distinct().ToListAsync(ct);
+        var operations = await visibles.Select(j => j.Operation).Distinct().ToListAsync(ct);
+        var roles = await visibles.Where(j => j.ActeurRole != null).Select(j => j.ActeurRole!).Distinct().ToListAsync(ct);
+        var acteurs = await visibles
             .GroupBy(j => new { j.ActeurId, j.ActeurNom })
             .Select(g => new { g.Key.ActeurId, g.Key.ActeurNom, Role = g.Max(x => x.ActeurRole) })
             .ToListAsync(ct);
@@ -133,7 +236,7 @@ public sealed class JournalActionsService(
 
     public async Task<byte[]> ExporterCsvAsync(JournalFiltre filtre, CancellationToken ct = default)
     {
-        var lignes = await Filtrer(filtre)
+        var lignes = await Filtrer(await LignesVisiblesAsync(ct), filtre)
             .OrderByDescending(j => j.Horodatage).ThenByDescending(j => j.Id)
             .Take(ExportMax)
             .ToListAsync(ct);

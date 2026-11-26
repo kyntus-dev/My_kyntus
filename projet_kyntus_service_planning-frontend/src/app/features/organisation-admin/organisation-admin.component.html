@@ -249,11 +249,34 @@
             </li>
             @for (c of cellulesFiltre(); track c.id) {
               <li>
-                <button type="button" class="oa-cell-item" [class.is-active]="celluleSel() === c.id"
+                <button type="button" class="oa-cell-item" [class.is-active]="celluleSel() === c.id && !serviceSel()"
                   (click)="choisirCellule(c.id)" [attr.title]="celluleLabel(index().get(c.id))">
                   <span>{{ c.name }}</span>
                   <span class="oa-count">{{ effectifs().get(c.id) ?? 0 }}</span>
                 </button>
+                <!-- v79 — Les services de la cellule choisie, pour voir et répartir leurs membres. -->
+                @if (celluleSel() === c.id && servicesSel().length) {
+                  <ul class="oa-service-list" aria-label="Services de la cellule">
+                    @for (s of servicesSel(); track s.id) {
+                      <li>
+                        <button type="button" class="oa-cell-item oa-service-item" [class.is-active]="serviceSel() === s.id"
+                          (click)="choisirService(s.id)">
+                          <span>{{ s.name }}</span>
+                          <span class="oa-count">{{ effectifsServices().get(s.id) ?? 0 }}</span>
+                        </button>
+                      </li>
+                    }
+                    @if (effectifsServices().get(SANS_SERVICE)) {
+                      <li>
+                        <button type="button" class="oa-cell-item oa-service-item" [class.is-active]="serviceSel() === SANS_SERVICE"
+                          (click)="choisirService(SANS_SERVICE)">
+                          <span>Sans service</span>
+                          <span class="oa-count">{{ effectifsServices().get(SANS_SERVICE) }}</span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                }
               </li>
             }
           </ul>
@@ -280,6 +303,7 @@
                     </th>
                     <th>Collaborateur</th>
                     <th>Rôle</th>
+                    <th>Service</th>
                     <th>E-mail</th>
                   </tr>
                 </thead>
@@ -296,10 +320,11 @@
                       </td>
                       <td>{{ m.lastName }} {{ m.firstName }}</td>
                       <td>{{ m.role }}</td>
+                      <td>{{ nomService(m.serviceId) }}</td>
                       <td class="oa-muted">{{ m.email }}</td>
                     </tr>
                   } @empty {
-                    <tr><td colspan="4"><div class="empty-state">Aucun membre.</div></td></tr>
+                    <tr><td colspan="5"><div class="empty-state">Aucun membre.</div></td></tr>
                   }
                 </tbody>
               </table>
@@ -320,14 +345,14 @@
                   <option value="">Cellule…</option>
                   @for (c of cellulesCible(); track c.id) { <option [value]="c.id">{{ c.name }}</option> }
                 </select>
-                @if (servicesCible().length > 1) {
-                  <select class="ky-input" aria-label="Service d’arrivée" [ngModel]="cibleService()" (ngModelChange)="cibleService.set($event)">
-                    <option value="">Service…</option>
-                    @for (s of servicesCible(); track s.id) { <option [value]="s.id">{{ s.name }}</option> }
-                  </select>
-                }
+                <!-- v79 — Toujours visible : on choisit la cellule, puis le service d'arrivée. -->
+                <select class="ky-input" aria-label="Service d’arrivée" [ngModel]="cibleService()" (ngModelChange)="cibleService.set($event)"
+                  [disabled]="!cibleCellule() || !servicesCible().length">
+                  <option value="">{{ cibleCellule() && !servicesCible().length ? 'Aucun service' : 'Service…' }}</option>
+                  @for (s of servicesCible(); track s.id) { <option [value]="s.id">{{ s.name }}</option> }
+                </select>
                 <button type="button" class="ky-btn-primary" (click)="deplacer()"
-                  [disabled]="busy() || !peutModifier() || !selection().size || !cibleCellule()">Déplacer</button>
+                  [disabled]="busy() || !peutModifier() || !selection().size || !cibleCellule() || !serviceCible()">Déplacer</button>
                 @if (celluleSel() !== SANS_CELLULE) {
                   <button type="button" class="ky-btn-secondary" (click)="retirer()"
                     [disabled]="busy() || !peutModifier() || !selection().size">Retirer de la cellule</button>

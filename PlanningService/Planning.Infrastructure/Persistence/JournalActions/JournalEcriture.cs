@@ -18,6 +18,8 @@ public static class JournalEcriture
         CancellationToken ct)
     {
         if (brouillons.Count == 0) return [];
+        // v67 — Les actions du Super Admin ne sont jamais inscrites au journal d'actions.
+        if (acteur?.SuperAdmin == true) return [];
 
         // Auteur.
         int? acteurId = null;

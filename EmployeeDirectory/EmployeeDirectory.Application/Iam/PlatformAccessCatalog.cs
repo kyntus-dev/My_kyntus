@@ -149,7 +149,8 @@ public static class PlatformAccessCatalog
         S("pointage.equipe", "Pointages de l'équipe / prévu-réalisé", "Pointage", View: TeamLead),
         S("pointage.regimes", "Régimes horaires", "Pointage", View: AdminRh, Configure: Admin),
         S("pointage.correspondances", "Correspondance pointeuses", "Pointage", View: AdminRh, Act: AdminRh),
-        S("pointage.acces-sortie", "Accès Heure de sortie (compte par compte)", "Pointage", View: Admin, Configure: Admin),
+        // v67 — « Heure de sortie » n'est plus une rubrique (ni la page ni son accès) : seul le Super Admin
+        // l'accorde, compte par compte. Voir RubriquesRetirees.
 
         // Présences (périmètre du responsable ; RH / Admin : toute l'entreprise).
         // v30 : formateurs et équipe formation = agents « En formation » (présences, absences, commentaires).
@@ -167,7 +168,7 @@ public static class PlatformAccessCatalog
         S("conges.self", "Mes congés", "Congés", View: Self),
         S("conges.equipe", "Congés de l'équipe", "Congés", View: TeamLead),
         S("conges.validation", "Valider les congés", "Congés", View: ["Admin", "RH", "Manager", "Superviseur", "RP"], Validate: ["Admin", "RH", "Manager", "Superviseur", "RP"]),
-        S("conges.history", "Historique des congés", "Congés", View: AdminRh), // v24 : API réservée à Admin et RH
+        S("conges.history", "Historique des congés", "Congés", View: AdminRh), // v67 : accordé à un rôle ou à un compte, l'API s'ouvre (périmètre du compte)
         // v29 : chef de projet = tout son département (Congés › Quotas).
         S("conges.quotas", "Quotas cellule / service", "Congés", View: ["Superviseur", "Admin", "RP"], Configure: ["Superviseur", "Admin", "RP"]),
         S("conges.periodes", "Périodes interdites", "Congés", View: AdminRh, Configure: AdminRh),
@@ -176,6 +177,8 @@ public static class PlatformAccessCatalog
         S("conges.planning", "Absences du planning — consulter", "Congés", View: ["Admin", "RH", "Manager", "Superviseur", "RP"]),
         S("conges.planning-ajout", "Absences du planning — ajouter", "Congés", View: AdminRh, Act: AdminRh),
         S("conges.planning-modification", "Absences du planning — modifier / supprimer", "Congés", View: AdminRh, Act: AdminRh),
+        // v64.2 : modifier les dates d'une demande de congé (en attente ou validée) depuis l'historique.
+        S("conges.modification", "Modifier les demandes de congé", "Congés", View: AdminRh, Act: AdminRh),
 
         S("documentation.module", "Module Documentation (accès au menu)", "Documentation", View: Self),
         // v48 : Process Bytel — tout le monde consulte (selon la visibilité du document) ;
@@ -188,6 +191,9 @@ public static class PlatformAccessCatalog
         S("documentation.workflow", "Workflows documentaires", "Documentation", View: Admin, Configure: Admin),
 
         S("prime.module", "Module Prime (accès au menu)", "Prime", View: PrimeModule),
+        // v77 : par défaut, un encadrant ne voit que les cellules et services dont il a la charge.
+        // Accorder cette rubrique à un rôle lui ouvre les périmètres de tous les autres.
+        S("perimetre.global", "Voir les périmètres des autres encadrants", "Administration", View: AdminRh),
         S("prime.workflow", "Flux de validation Prime", "Prime", View: Admin, Configure: Admin),
         S("prime.rbac", "RBAC métier Prime", "Prime", View: Admin, Configure: Admin),
         S("prime.catalog", "Types de prime Support", "Prime", View: AdminRh, Configure: AdminRh),
@@ -297,8 +303,21 @@ public static class PlatformAccessCatalog
     /// fois sur une base existante (tant qu'aucune ligne n'existe pour la rubrique, quel que soit le rôle).
     /// Une rubrique décochée ensuite garde sa ligne (refusée) : rien n'est réimposé au redémarrage.
     /// </summary>
+    // Rubriques ajoutées au catalogue après la première installation : leurs lignes sont créées au
+    // démarrage pour les rôles concernés (les bases en service ne sont jamais réensemencées en bloc).
     public static readonly string[] RubriquesAjoutees =
-        ["presences.encadrement", "conges.planning", "conges.planning-ajout", "conges.planning-modification", "audit.actions"];
+        ["presences.encadrement", "conges.planning", "conges.planning-ajout", "conges.planning-modification", "audit.actions", "conges.modification",
+         // v77 : sans cette ligne, « Voir les périmètres des autres encadrants » n'apparaîtrait
+         // accordée à personne dans « Accès par rôle », pas même à l'Admin et aux RH.
+         "perimetre.global"];
+
+    /// <summary>
+    /// v67 — Rubriques retirées du catalogue : leurs lignes (« Accès par rôle », « Accès par compte »,
+    /// retraits du Super Admin) sont effacées au démarrage. « Heure de sortie » ne se règle plus par
+    /// rôle ni par compte : seul le Super Admin l'accorde, compte par compte, avec l'horaire 07h40 /
+    /// 08h40 (page « Accès Heure de sortie »).
+    /// </summary>
+    public static readonly string[] RubriquesRetirees = ["pointage.heure-sortie", "pointage.acces-sortie"];
 
     public static IEnumerable<(string Action, string Scope)> SeedRowsForRole(string role)
     {

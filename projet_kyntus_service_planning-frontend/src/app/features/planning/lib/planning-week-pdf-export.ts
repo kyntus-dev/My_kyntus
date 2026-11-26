@@ -52,7 +52,7 @@ function drawPlanningCanvas(planning: WeeklyPlanningResponse): HTMLCanvasElement
   ctx.font = '700 20px Segoe UI, Arial, sans-serif';
   ctx.fillText(`Planning HTEL — ${planning.subServiceName}`, pad, pad + 22);
   ctx.font = '700 15px Segoe UI, Arial, sans-serif';
-  ctx.fillStyle = '#1d4ed8';
+  ctx.fillStyle = '#0d2e5b'; // v68 : bleu du logo Kyntus
   ctx.fillText(planning.weekCode, pad, pad + 46);
 
   const tableY = pad + headerH;

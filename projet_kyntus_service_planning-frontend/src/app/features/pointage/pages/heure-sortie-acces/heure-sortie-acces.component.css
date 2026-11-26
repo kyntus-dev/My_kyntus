@@ -29,3 +29,6 @@
 
 /* v43 : horaire de base par compte */
 .hsa-base { margin-left: auto; max-width: 240px; font-size: 0.78rem; padding: 4px 8px; }
+
+/* v67 : horaire choisi à l'attribution. */
+.hsa-base-defaut { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-muted); }

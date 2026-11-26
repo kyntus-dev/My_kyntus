@@ -284,3 +284,8 @@
   .fcat-fields,
   .fcat-choice-cards { grid-template-columns: 1fr; }
 }
+
+/* v72 — boutons masqués quand le droit est absent */
+button[hidden] {
+  display: none !important;
+}

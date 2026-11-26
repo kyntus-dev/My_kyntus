@@ -220,3 +220,18 @@ export function normalizeStatutDemande(raw: StatutDemande | string | number): St
   }
   return StatutDemande.EnAttente;
 }
+
+/** v64.2 — PUT /api/conges/{id}/modifier (dateFin ignorée pour un congé exceptionnel). */
+export interface ModifierCongeRequest {
+  dateDebut: string;
+  dateFin: string | null;
+  commentaire: string | null;
+}
+
+export interface ModifierCongeResult {
+  demandeId: string;
+  dateDebut: string;
+  dateFin: string;
+  nombreJours: number;
+  ancienNombreJours: number;
+}

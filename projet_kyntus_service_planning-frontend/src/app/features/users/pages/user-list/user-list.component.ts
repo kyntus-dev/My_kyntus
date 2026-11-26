@@ -12,6 +12,10 @@ import type { OrgAssignmentsOverview } from '../../../prime/services/prime-org-a
 import { PilotRotationHistoryModalComponent } from '../../../prime/components/pilot-rotation-history-modal.component';
 import { BodyPortalDirective } from '../../../../shared/directives/body-portal.directive';
 import { EmployeeDeactivateDialogComponent } from '../../components/employee-deactivate-dialog.component';
+import { EmployeeHardDeleteDialogComponent } from '../../components/employee-hard-delete-dialog.component';
+import { peutSupprimerDefinitivement } from '../../lib/suppression-definitive.util';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
+import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import {
   enrichUserOrgPerimeter,
   orgCellLabel,
@@ -59,6 +63,7 @@ import { KyIfAdminAllowedDirective } from '../../../../shared/directives/ky-if-a
     PilotRotationHistoryModalComponent,
     BodyPortalDirective,
     EmployeeDeactivateDialogComponent,
+    EmployeeHardDeleteDialogComponent,
     KyIfAdminAllowedDirective,
   ],
   templateUrl: './user-list.component.html',
@@ -407,13 +412,48 @@ export class UserListComponent implements OnInit, OnDestroy {
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   }
-  runAction(action: 'level' | 'history' | 'reset' | 'deactivate' | 'reactivate', user: User): void {
+  runAction(action: 'level' | 'history' | 'reset' | 'deactivate' | 'reactivate' | 'hard-delete', user: User): void {
     this.closeActions();
     if (action === 'level') this.openLevelModal(user);
     else if (action === 'history') this.openPilotRotationHistory(user);
     else if (action === 'reset') void this.resetPassword(user);
     else if (action === 'deactivate') this.deactivateTarget = user;
+    else if (action === 'hard-delete') { this.hardDeleteErreur = null; this.hardDeleteTarget = user; }
     else void this.reactivateUser(user);
+  }
+
+  private readonly platformAccess = inject(PlatformAccessService);
+  private readonly session = inject(KyntusSessionService);
+
+  /** v67 — « Supprimer définitivement » : Admin et RH, droit « Utilisateurs › Supprimer ». */
+  peutSupprimerDefinitivement(): boolean {
+    return peutSupprimerDefinitivement(this.session.getRole(), this.platformAccess.canDelete('admin.users'));
+  }
+
+  /** v67 — Compte en cours de suppression définitive (boîte de confirmation ouverte). */
+  hardDeleteTarget: User | null = null;
+  hardDeleting = false;
+  hardDeleteErreur: string | null = null;
+
+  confirmHardDelete(confirmation: string): void {
+    const user = this.hardDeleteTarget;
+    if (!user || this.hardDeleting) return;
+    this.hardDeleting = true;
+    this.hardDeleteErreur = null;
+    this.userService.supprimerDefinitivement(user.id, confirmation).subscribe({
+      next: () => {
+        this.hardDeleting = false;
+        this.hardDeleteTarget = null;
+        this.toastService.success(`${user.lastName} ${user.firstName} : compte supprimé définitivement.`);
+        this.loadUsers();
+      },
+      error: (err) => {
+        this.hardDeleting = false;
+        // Le message (données à conserver, refus…) reste dans la boîte : la personne choisit ensuite.
+        this.hardDeleteErreur = err?.error?.message ?? 'Suppression impossible.';
+        this.cdr.detectChanges();
+      },
+    });
   }
 
   goimport(): void { this.router.navigate(['/import']); }

@@ -11,11 +11,13 @@ public sealed class JournalActionConsumer(IJournalActionsService journal) : ICon
     {
         var m = context.Message;
         if (string.IsNullOrWhiteSpace(m.Module) || string.IsNullOrWhiteSpace(m.Operation)) return Task.CompletedTask;
+        // v67 — Action du Super Admin : jamais inscrite au journal d'actions.
+        if (m.ActeurSuperAdmin) return Task.CompletedTask;
         return journal.EnregistrerAsync(
             new JournalEvenement(
                 m.Module, m.Operation, string.IsNullOrWhiteSpace(m.Element) ? m.Module : m.Element,
                 m.Entite, m.EntiteId, null, m.AnciennesValeurs, m.NouvellesValeurs, m.Details, m.Source),
-            new JournalAuteurExterne(m.ActeurGuid, m.ActeurEmail, m.ActeurRole),
+            new JournalAuteurExterne(m.ActeurGuid, m.ActeurEmail, m.ActeurRole, m.ActeurSuperAdmin),
             context.CancellationToken);
     }
 }

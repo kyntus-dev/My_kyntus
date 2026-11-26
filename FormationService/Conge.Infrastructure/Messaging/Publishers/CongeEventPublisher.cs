@@ -38,6 +38,41 @@ public class CongeEventPublisher : ICongeEventPublisher
         }, ct);
     }
 
+    public async Task PublishCongeModifieAsync(
+        Guid employeId,
+        Guid demandeId,
+        DateTime dateDebut,
+        DateTime dateFin,
+        double nombreJours,
+        string typeConge,
+        string? typeExceptionnel,
+        DateTime ancienneDateDebut,
+        DateTime ancienneDateFin,
+        Guid? acteurId = null,
+        string? acteurNom = null,
+        CancellationToken ct = default)
+    {
+        await _publishEndpoint.Publish(new CongeValideMessage
+        {
+            DemandeId = demandeId,
+            EmployeId = employeId,
+            DateDebut = dateDebut,
+            DateFin = dateFin,
+            NombreJours = nombreJours,
+            DateValidation = DateTime.UtcNow,
+            TypeConge = typeConge,
+            TypeExceptionnel = typeExceptionnel,
+            ValidateurId = acteurId,
+            ValidateurNom = acteurNom,
+            Modification = true,
+            AncienneDateDebut = ancienneDateDebut,
+            AncienneDateFin = ancienneDateFin,
+        }, ct);
+    }
+
+    public Task PublishJournalAsync(JournalActionMessage message, CancellationToken ct = default)
+        => _publishEndpoint.Publish(message, ct);
+
     public async Task PublishCongeRefuseAsync(
         Guid employeId,
         Guid demandeId,

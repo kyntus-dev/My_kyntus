@@ -11,7 +11,7 @@ import { EmployeeFieldService } from '../../services/employee-field.service';
 import type { EmployeeImportFieldConfig } from '../../services/employee-import.service';
 import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
 import { LucideIconComponent } from '../../../../shared/lucide-icon.component';
-import { ArrowLeft, ArrowRightLeft, History, KeyRound, Pencil, RotateCcw, ShieldCheck, UserX } from 'lucide';
+import { ArrowLeft, ArrowRightLeft, History, KeyRound, Pencil, RotateCcw, ShieldCheck, Trash2, UserX } from 'lucide';
 import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import type { Department } from '../../../prime/models';
@@ -25,6 +25,8 @@ import { resolveUserGuid } from '../../../../core/lib/user-guid.util';
 import { formatHttpErrorMessage } from '../../../../core/lib/http-error-message.util';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
+import { EmployeeHardDeleteDialogComponent } from '../../components/employee-hard-delete-dialog.component';
+import { peutSupprimerDefinitivement } from '../../lib/suppression-definitive.util';
 import {
   enrichUserOrgPerimeter,
   orgCellLabel,
@@ -52,12 +54,12 @@ import { EmployeeDeactivateDialogComponent } from '../../components/employee-dea
 @Component({
   selector: 'app-user-detail',
   standalone: true,
-  imports: [CommonModule, LucideIconComponent, KyntusPageHeaderComponent, PilotRotationHistoryModalComponent, EmployeeDeactivateDialogComponent],
+  imports: [CommonModule, LucideIconComponent, KyntusPageHeaderComponent, PilotRotationHistoryModalComponent, EmployeeDeactivateDialogComponent, EmployeeHardDeleteDialogComponent],
   templateUrl: './user-detail.component.html',
   styleUrls: ['./user-detail.component.css']
 })
 export class UserDetailComponent implements OnInit {
-  readonly icons = { back: ArrowLeft, edit: Pencil, deactivate: UserX, reactivate: RotateCcw, history: History, key: KeyRound, droits: ShieldCheck, service: ArrowRightLeft };
+  readonly icons = { back: ArrowLeft, edit: Pencil, deactivate: UserX, reactivate: RotateCcw, history: History, key: KeyRound, droits: ShieldCheck, service: ArrowRightLeft, supprimer: Trash2 };
   /** Changement de service (droit « rh.affectations »). */
   private readonly platformAccess = inject(PlatformAccessService);
   readonly peutReaffecter = () => this.platformAccess.canAct('rh.affectations') || this.peutGererDroits;
@@ -384,6 +386,39 @@ export class UserDetailComponent implements OnInit {
       error: (err) => {
         this.deactivating = false;
         this.toastService.error(err?.error?.message ?? 'Désactivation impossible.');
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  /** v67 — « Supprimer définitivement » : Admin et RH, droit « Utilisateurs › Supprimer ». */
+  readonly peutSupprimer = (): boolean =>
+    peutSupprimerDefinitivement(this.sessionRole, this.platformAccess.canDelete('admin.users'));
+  private readonly sessionRole = inject(KyntusSessionService).getRole();
+
+  hardDeleteOpen = false;
+  hardDeleting = false;
+  hardDeleteErreur: string | null = null;
+
+  ouvrirSuppression(): void {
+    this.hardDeleteErreur = null;
+    this.hardDeleteOpen = true;
+  }
+
+  confirmHardDelete(confirmation: string): void {
+    if (!this.user || this.hardDeleting) return;
+    this.hardDeleting = true;
+    this.hardDeleteErreur = null;
+    this.userService.supprimerDefinitivement(this.user.id, confirmation).subscribe({
+      next: () => {
+        this.hardDeleting = false;
+        this.hardDeleteOpen = false;
+        this.toastService.success('Compte supprimé définitivement.');
+        this.router.navigate(['/users']);
+      },
+      error: (err) => {
+        this.hardDeleting = false;
+        this.hardDeleteErreur = err?.error?.message ?? 'Suppression impossible.';
         this.cdr.detectChanges();
       },
     });

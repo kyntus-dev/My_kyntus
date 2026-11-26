@@ -77,6 +77,12 @@ export interface Employee {
   avatar?: string;
   businessDepartmentId?: string;
   businessDepartmentKind?: string;
+  /**
+   * v73 — Faux pour un agent désactivé ou sorti. Il reste affiché dans son périmètre, grisé et
+   * marqué « Sorti », mais sans action possible et hors de l'effectif planifiable.
+   * Absent d'une réponse serveur antérieure à la v73 : traité comme présent.
+   */
+  isActive?: boolean;
 
   // ---- LEGACY COMPAT (Phase 0 — à supprimer en Phase 1.6) ----
   /** @deprecated Utiliser serviceId. */

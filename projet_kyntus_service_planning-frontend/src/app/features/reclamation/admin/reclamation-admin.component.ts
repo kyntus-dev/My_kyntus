@@ -16,6 +16,7 @@ import {
   PaginatedResult, SatisfactionReport, Priority,
   UpdateStatusPayload, AssignPayload, PrioriserPayload
 } from '../../../core/models/reclamation.model';
+import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 
 type AdminMode = 'demandes' | 'stats' | 'historique';
 type KindFilter = 'all' | 'reclamations' | 'propositions';
@@ -34,6 +35,8 @@ type UnifiedItem = (Reclamation | Proposition) & { _kind: DemandKind };
   styleUrls: ['./reclamation-admin.component.css']
 })
 export class ReclamationAdminComponent implements OnInit, OnDestroy {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   private readonly toastSvc = inject(KyntusToastService);
   private readonly mediaSvc = inject(MediaService);
 
@@ -128,6 +131,7 @@ export class ReclamationAdminComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     this.loadDemandes();
     this.notifSub = this.notificationService.reclamationNotif$.subscribe((notif: ReclamationNotif) => {
       this.showToast(`${notif.titre} — ${notif.message}`, notif.type === 'warning' ? 'error' : 'success');

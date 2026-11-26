@@ -61,7 +61,8 @@ public sealed class PointageQueryService(
                 s.UserId, s.Collaborateur, s.Cellule, s.IdsPointeuse.Count > 0,
                 s.Totaux.RetardTotalMinutes, s.Totaux.JoursEnRetard, s.Totaux.JoursAHeure, s.Totaux.JoursPointes,
                 s.Totaux.JoursPointageManquant.Count, s.Totaux.JoursSansPointage.Count,
-                s.Totaux.ProductionMinutes, s.Totaux.ProductionPrevueMinutes, s.Regime))
+                s.Totaux.ProductionMinutes, s.Totaux.ProductionPrevueMinutes, s.Regime,
+                s.Totaux.HeuresSupplementairesMinutes))
             .OrderByDescending(l => l.RetardTotalMinutes)
             .ThenBy(l => l.Collaborateur, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
@@ -112,9 +113,14 @@ public sealed class PointageQueryService(
         var regime = (await regimes.ResoudreAsync([me.Id], ct)).GetValueOrDefault(me.Id);
 
         // Production et pause du jour : planning (publié ou régime) ; sinon valeurs de l'Excel.
-        var production = jour.ProductionPrevueMinutes ?? RegimeResolver.ProductionExcelMinutes(today);
+        // v65 : une journée hors planning a une production prévue de 0 — rien n'est attendu, tout ce
+        // qui est pointé est en heures supplémentaires.
+        var production = jour.Planifie
+            ? jour.ProductionPrevueMinutes ?? RegimeResolver.ProductionExcelMinutes(today)
+            : 0;
         var pause = jour.Source is null ? regime?.PauseAutoriseeMinutes ?? RegimeResolver.PauseExcelMinutes : jour.PauseAutoriseeMinutes;
-        var travaille = jour.Statut is not (PointageJourStatuts.Repos or PointageJourStatuts.Conge or PointageJourStatuts.Ferie)
+        // v67 : une journée de récupération (planning IT « Récup ») n'est pas travaillée.
+        var travaille = jour.Statut is not (PointageJourStatuts.Repos or PointageJourStatuts.Conge or PointageJourStatuts.Ferie or PointageJourStatuts.Recup)
                         || jour.Pointages.Count > 0;
 
         var acces = await db.HeureSortieAcces.AsNoTracking().FirstOrDefaultAsync(a => a.UserId == me.Id, ct);
@@ -123,8 +129,9 @@ public sealed class PointageQueryService(
             today,
             me.Id,
             suivi.Collaborateur,
-            // Accès donné par l'Admin compte par compte (l'Admin y a toujours accès).
-            string.Equals(viewer.Role, "Admin", StringComparison.OrdinalIgnoreCase) || acces is not null,
+            // v67 — Accès donné par le Super Admin compte par compte ; le Super Admin y a toujours
+            // accès. Un Admin sans autorisation n'y accède plus d'office.
+            viewer.SuperAdmin || acces is not null,
             regime?.Nom,
             regime?.Cible,
             jour.Source,
@@ -138,7 +145,8 @@ public sealed class PointageQueryService(
             // v40 : choix valable pour la journée où il a été fait ; le lendemain, la personne choisit à nouveau.
             ChoixProductionSortie.ChoixDuJour(acces?.ChoixProduction, JourLocal(acces?.ChoixModifieLe), today),
             acces?.ProductionBase,
-            ChoixProductionSortie.JourneeCourteDejaPrise(acces?.ProductionBase, today, await ChoixSemaineAsync(me.Id, today, ct)));
+            ChoixProductionSortie.JourneeCourteDejaPrise(acces?.ProductionBase, today, await ChoixSemaineAsync(me.Id, today, ct)),
+            jour.Planifie);
     }
 
     public async Task<bool> EnregistrerChoixProductionAsync(PointageViewer viewer, string? choix, CancellationToken ct = default)
@@ -151,8 +159,9 @@ public sealed class PointageQueryService(
         var acces = await db.HeureSortieAcces.FirstOrDefaultAsync(a => a.UserId == me.Id, ct);
         if (acces is null)
         {
-            // Seuls les comptes concernés (liste de l'Admin) mémorisent un choix ; l'Admin y a toujours accès.
-            if (!string.Equals(viewer.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+            // Seuls les comptes autorisés par le Super Admin mémorisent un choix ; le Super Admin y a
+            // toujours accès (v67 : plus l'Admin d'office).
+            if (!viewer.SuperAdmin)
                 return false;
             acces = new HeureSortieAcces { UserId = me.Id, GrantedBy = me.Id };
             db.HeureSortieAcces.Add(acces);
@@ -200,7 +209,7 @@ public sealed class PointageQueryService(
         if (me is null)
             return false;
         var acces = await db.HeureSortieAcces.AsNoTracking().FirstOrDefaultAsync(a => a.UserId == me.Id, ct);
-        if (acces is null && !string.Equals(viewer.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+        if (acces is null && !viewer.SuperAdmin)
             return false;
         if (choix == ChoixProductionSortie.Court
             && ChoixProductionSortie.JourneeCourteDejaPrise(acces?.ProductionBase, jour, await ChoixSemaineAsync(me.Id, jour, ct)) is DateOnly prise)
@@ -241,6 +250,9 @@ public sealed class PointageQueryService(
     {
         var me = await FindViewerAsync(viewer, ct);
         if (me is null)
+            return Array.Empty<ChoixProductionJourDto>();
+        // v67 — Données de la page « Heure de sortie » : réservées aux comptes autorisés (et au Super Admin).
+        if (!viewer.SuperAdmin && !await db.HeureSortieAcces.AsNoTracking().AnyAsync(a => a.UserId == me.Id, ct))
             return Array.Empty<ChoixProductionJourDto>();
         var lignes = await db.HeureSortieChoixJours.AsNoTracking()
             .Where(c => c.UserId == me.Id && c.Jour <= au)
@@ -370,17 +382,64 @@ public sealed class PointageQueryService(
                         membresIt.Contains(user.Id) ? PlanningSources.PlanningIt : PlanningSources.Regime);
                 else if (!planningParJour.TryGetValue((user.Id, jour), out planning) && regime is not null)
                     planning = RegimeResolver.PlanningDuJour(regime, jour);
+
+                // v65 — Le jour est-il prévu en production pour CET agent ? On s'appuie sur son
+                // propre planning, quel que soit son service ou son département : planning publié,
+                // planning IT « Travail », ou jour travaillé de son régime horaire. Le planning IT
+                // n'est plus une référence commune : il ne vaut que pour les agents qui en ont un.
+                string? statutIt = itParJour.TryGetValue((user.Id, jour), out var itDuJour) ? itDuJour.Statut : null;
+                var planifieJour = planningParJour.ContainsKey((user.Id, jour))
+                                   || (statutIt is not null && statutIt != PlanningItStatuts.Repos)
+                                   || RegimeResolver.JourTravailleDuRegime(regime, jour);
+                // Jour de repos pour cet agent : son régime horaire ou son planning IT le disent ;
+                // à défaut de l'un et de l'autre, c'est le samedi ou le dimanche. Une journée de
+                // semaine dont le planning n'est pas encore publié n'entre pas dans ce cas : son
+                // traitement reste celui d'avant (aucun effet de bord sur les autres services).
+                var jourDeRepos = !planifieJour
+                                  && (regime is not null
+                                      || statutIt == PlanningItStatuts.Repos
+                                      || jour.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday);
+
                 var productionChoisie = ChoixProductionSortie.ProductionMinutes(choixParJour.GetValueOrDefault((user.Id, jour)), jour);
-                if (productionChoisie is int choisie)
+                // v65 — Le choix du jour et l'horaire de base (« Heure de sortie ») ne fixent plus de
+                // production attendue un jour de repos. Un samedi hors planning héritait de 08h40 :
+                // la journée affichait jusqu'à 7 h 33 d'heures manquantes alors que l'agent avait
+                // travaillé en plus de son planning.
+                if (productionChoisie is int choisie && !jourDeRepos)
                     planning = (planning ?? new PlanningJour(null, regime?.PauseAutoriseeMinutes ?? O.PauseAutoriseeMinutes, false, false, null))
                         with { ProductionPrevueMinutes = choisie };
-                else if (planning is not null && ChoixProductionSortie.ProductionMinutes(baseParUser.GetValueOrDefault(user.Id), jour) is int deBase)
+                else if (planning is not null && !jourDeRepos
+                         && ChoixProductionSortie.ProductionMinutes(baseParUser.GetValueOrDefault(user.Id), jour) is int deBase)
                     planning = planning with { ProductionPrevueMinutes = deBase };
+
+                // v65 — Jour de repos travaillé (samedi hors planning, renfort…) : production
+                // attendue nulle. Avec des pointages, les heures réalisées deviennent des heures
+                // supplémentaires ; sans pointage, la journée reste un repos, jamais une absence.
+                // Un samedi déjà prévu en production garde son planning : pas de double comptage.
+                if (jourDeRepos)
+                    planning = (planning ?? new PlanningJour(null, regime?.PauseAutoriseeMinutes ?? O.PauseAutoriseeMinutes, false, false, null))
+                        with { ProductionPrevueMinutes = 0, Planifie = false };
+                // v67 — Récupération (planning IT « Récup ») : aucune production attendue ; la production
+                // qui aurait été prévue (choix du jour ou horaire de base « Heure de sortie », sinon celle
+                // du planning IT) est déduite du solde d'heures supplémentaires.
+                if (statutIt == PlanningItStatuts.Recup && planning is not null)
+                    planning = planning with
+                    {
+                        ProductionPrevueMinutes = 0,
+                        Planifie = false,
+                        RecupMinutes = productionChoisie
+                                       ?? ChoixProductionSortie.ProductionMinutes(baseParUser.GetValueOrDefault(user.Id), jour)
+                                       ?? planning.RecupMinutes,
+                    };
                 if (congesParUser.TryGetValue(user.Id, out var siens) && siens.Any(c => c.StartDate <= jour && c.EndDate >= jour))
                     planning = (planning ?? new PlanningJour(null, 0, false, false, null)) with { Conge = true };
                 pointagesParJour.TryGetValue((user.Id, jour), out var bruts);
+                // v65 : le délai de double badgeage est plafonné par la pause minimale — un retour de
+                // pause d'une minute n'est plus pris pour un double passage du doigt et supprimé.
                 var fusionnes = PointageCalculator.FusionnerDoublesBadgeages(
-                    bruts ?? new List<(DateTime Heure, string? Pointeuse)>(), O.DoubleBadgeSecondes);
+                    bruts ?? new List<(DateTime Heure, string? Pointeuse)>(),
+                    O.DoubleBadgeSecondes,
+                    O.PauseMinimaleSecondes);
                 // Doubles badgeages déjà fusionnés pointeuse par pointeuse : aucune autre fusion (0 s).
                 var r = PointageCalculator.CalculerJour(
                     jour, fusionnes, planning, today, O.ToleranceMinutes, 0,
@@ -401,7 +460,9 @@ public sealed class PointageQueryService(
                 derniereSynchro,
                 new PointageTotauxDto(totaux.RetardTotalMinutes, totaux.JoursEnRetard, totaux.JoursAHeure,
                     totaux.JoursPointes, totaux.JoursPointageManquant, totaux.JoursSansPointage,
-                    totaux.ProductionMinutes, totaux.ProductionPrevueMinutes, totaux.JoursProductionCalculee),
+                    totaux.ProductionMinutes, totaux.ProductionPrevueMinutes, totaux.JoursProductionCalculee,
+                    totaux.HeuresSupplementairesMinutes, totaux.JoursHeuresSupplementaires,
+                    totaux.RecupMinutes, totaux.JoursRecup),
                 jours,
                 regime?.Nom));
         }
@@ -442,11 +503,16 @@ public sealed class PointageQueryService(
             r.ProductionMinutes,
             r.ProductionPrevueMinutes,
             r.EcartProductionMinutes,
-            source);
+            source,
+            r.Planifie,
+            r.HeuresSupplementairesMinutes,
+            r.RecupMinutes,
+            r.ProductionPointeeMinutes);
 
     private static PointageJourResult FromDto(PointageJourDto d) =>
         new(d.Jour, d.Statut, null, d.PauseAutoriseeMinutes, null, null, [], d.PauseMinutes, d.RetardEntreeMinutes, d.RetardPauseMinutes,
-            d.ProductionMinutes, d.ProductionPrevueMinutes);
+            d.ProductionMinutes, d.ProductionPrevueMinutes, d.Planifie, d.HeuresSupplementairesMinutes, d.RecupMinutes,
+            d.ProductionPointeeMinutes);
 
     // ── Correspondances ─────────────────────────────────────────────────────────
 

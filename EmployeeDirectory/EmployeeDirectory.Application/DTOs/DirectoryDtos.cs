@@ -326,7 +326,9 @@ public record DirectoryReconcileVerifyDto(
     int? PrimeEmployeeCount,
     int? OrphansInPlanningNotDirectory,
     int? OrphansInPrimeNotDirectory,
-    bool Ok);
+    bool Ok,
+    /// <summary>v73 — Services que l'annuaire n'a pas pu interroger : la vérification est alors incomplète.</summary>
+    IReadOnlyList<string>? UnreachableServices = null);
 
 public record DirectoryReconcileReportDto(
     int MergedDuplicates,
@@ -337,7 +339,9 @@ public record DirectoryReconcileReportDto(
     int OrphansPrime,
     int OrgGapsFixed,
     DirectoryReconcileVerifyDto Verify,
-    int DuplicateNodeIncumbentsClosed = 0);
+    int DuplicateNodeIncumbentsClosed = 0,
+    /// <summary>v73 — Départs renvoyés vers Planning et Prime (agents désactivés ou sortis).</summary>
+    int DeparturesRepublished = 0);
 
 // ─── HTEL techniciens (source de vérité externe) ───
 
@@ -350,33 +354,51 @@ public record HtelLinkedEmployeeDto(
     string Email,
     int IdTechnicien,
     string? HtelCode,
-    string? HtelTechnicienName);
+    string? HtelTechnicienName,
+    // v66 — État de la fiche et du technicien : une fiche inactive reste listée (elle existe),
+    // et un identifiant absent d'HTEL ou inactif côté HTEL est signalé au lieu d'être masqué.
+    bool IsActive = true,
+    int? HtelActif = null,
+    bool HtelIntrouvable = false);
 
 public record HtelOrphanTechnicienDto(int IdTechnicien, string Technicien, int Actif, string Code);
 
+/// <summary>
+/// v66 — Technicien HTEL non lié pour lequel une ou plusieurs fiches existent déjà dans l'application
+/// (même nom ou nom approchant) : à rapprocher, jamais signalé comme « non défini ».
+/// </summary>
 public record HtelAmbiguousMatchDto(
     int IdTechnicien,
     string Technicien,
     string Code,
-    IReadOnlyList<HtelEmployeeCandidateDto> Candidates);
+    IReadOnlyList<HtelEmployeeCandidateDto> Candidates,
+    int Actif = 1);
 
 public record HtelEmployeeCandidateDto(
     string EmployeeId,
     string FirstName,
     string LastName,
-    string Email);
+    string Email,
+    // v66 — Fiche inactive, ou déjà liée à un autre identifiant HTEL (doublon côté HTEL), et score.
+    bool IsActive = true,
+    int? IdTechnicienActuel = null,
+    double Score = 0);
 
 public record HtelUnlinkedEmployeeDto(
     string EmployeeId,
     string FirstName,
     string LastName,
-    string Email);
+    string Email,
+    bool IsActive = true);
 
 public record HtelLiaisonsReportDto(
     IReadOnlyList<HtelLinkedEmployeeDto> Linked,
     IReadOnlyList<HtelOrphanTechnicienDto> OrphansHtel,
     IReadOnlyList<HtelAmbiguousMatchDto> Ambiguous,
-    IReadOnlyList<HtelUnlinkedEmployeeDto> UnlinkedEmployees);
+    IReadOnlyList<HtelUnlinkedEmployeeDto> UnlinkedEmployees,
+    // v66 — Liaisons dont l'état diverge : identifiant absent d'HTEL, ou inactif dans HTEL alors
+    // que la fiche est active (plus aucune désactivation automatique : la décision revient aux RH).
+    IReadOnlyList<HtelLinkedEmployeeDto>? Divergences = null);
 
 public record HtelSyncReportDto(
     int TechniciensFetched,
@@ -384,7 +406,8 @@ public record HtelSyncReportDto(
     int NewlyLinked,
     int OrphansHtel,
     int Ambiguous,
-    int UnlinkedEmployees);
+    int UnlinkedEmployees,
+    int Divergences = 0);
 
 public record HtelLinkRequest(Guid EmployeeId, int IdTechnicien);
 public record HtelUnlinkRequest(Guid EmployeeId);

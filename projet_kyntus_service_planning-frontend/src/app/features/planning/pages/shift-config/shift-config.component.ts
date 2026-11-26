@@ -175,15 +175,27 @@ export class ShiftConfigComponent implements OnInit, OnDestroy {
    * accordé avec la portée « Toute l'entreprise ». Sinon, l'écran se limite au périmètre que le
    * serveur a renvoyé.
    */
+  /** v72 — Enregistrer un modèle d'horaires : « Configuration des horaires › Configurer ». */
+  get peutEnregistrer(): boolean {
+    return this.access.autorise('planning.shift-config', 'Configure');
+  }
+
+  /**
+   * v79 — Qui voit toutes les cellules dans « Configuration des horaires ».
+   * Avant, le test du périmètre Global répondait oui pour tout encadrant ayant le droit de
+   * configurer, même limité à sa cellule : un référent technique ou un chef de projet voyait
+   * l'organisation entière. Désormais : Admin, RH, la rubrique « Voir les périmètres des autres
+   * encadrants », ou un droit « Configuration des horaires » accordé explicitement au niveau
+   * « Toute l'entreprise ». Les autres ne voient que leur périmètre.
+   */
   private voitToutLOrganisation(): boolean {
-    const role = (this.session.getRole() ?? '').trim().toLowerCase();
-    if (role === 'admin' || role === 'rh') return true;
-    return this.access.hasCatalog()
-      && this.access.can('planning.shift-config', 'Configure', 'Global');
+    return this.access.voitTousLesPerimetres(this.session.getRole())
+      || (this.access.hasCatalog() && this.access.accordeGlobalement('planning.shift-config', 'Configure'));
   }
 
   ngOnInit(): void {
-    this.loadStructure();
+    // v79 — Les droits doivent être connus avant de décider quelle partie de l'organisation afficher.
+    void this.access.ensureLoaded().finally(() => this.loadStructure());
     this.startOptions = this.planningService.getShiftStartOptions();
     this.breakSlotOptions = this.planningService.getBreakSlotOptions();
     this.initShifts();

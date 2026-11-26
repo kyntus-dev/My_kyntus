@@ -75,9 +75,11 @@ public sealed class FichesReferenceService(
         var agents = await ChargerAgentsAsync(ct);
         var rapprochement = FicheReferenceRapprochement.Rapprocher(
             classeur.Lignes.Select(l => new FicheReferenceRapprochement.Ligne(
-                l.Numero, l.Valeurs.Agents, l.Valeurs.NumeroOrdre, l.Valeurs.Sorti(aujourdhui), l.Valeurs.DateEmbauche ?? l.Valeurs.DateAnciennete)).ToList(),
+                l.Numero, l.Valeurs.Agents, l.Valeurs.NumeroOrdre, l.Valeurs.Sorti(aujourdhui), l.Valeurs.DateEmbauche ?? l.Valeurs.DateAnciennete,
+                l.Valeurs.Cin)).ToList(),
+            // v66 : le CIN de la fiche sert aussi à identifier la personne.
             agents.Select(a => new FicheReferenceRapprochement.Agent(
-                a.Id, a.LastName, a.FirstName, a.Profil?.ImmatriculationInterne, a.IsActive)).ToList());
+                a.Id, a.LastName, a.FirstName, a.Profil?.ImmatriculationInterne, a.IsActive, a.Profil?.Cin)).ToList());
 
         var parId = agents.ToDictionary(a => a.Id);
         var valeurs = classeur.Lignes.ToDictionary(l => l.Numero, l => l.Valeurs);
@@ -450,6 +452,7 @@ public sealed class FichesReferenceService(
                 CarteImmatriculation = v.CarteImmatriculation,
                 NumeroPasseport = v.NumeroPasseport,
                 TypeEmploye = v.TypeEmploye ?? TypesEmploye.Salarie,
+                EmailPersonnel = v.EmailPersonnel,
             },
         };
         var cree = await users.CreateUserAsync(dto);
@@ -633,6 +636,139 @@ public sealed class FichesReferenceService(
             .Where(f => f.ChampsManquants.Count > 0)
             .OrderByDescending(f => f.ChampsManquants.Count).ThenBy(f => f.Nom).ThenBy(f => f.Prenom)
             .ToList();
+    }
+
+    // ── v66 : import du fichier RH depuis l'écran « Liaisons HTEL » ─────────────────────────
+
+    private const string FichierImportLiaisons = "Import RH — Liaisons HTEL";
+
+    /// <summary>
+    /// v66 — Avant, une ligne dont le nom existait déjà était écartée (« Déjà présent ») : la fiche
+    /// n'était ni vérifiée ni mise à jour. Désormais chaque ligne est rapprochée d'une fiche (CIN, puis
+    /// nom), et toute fiche identifiée est comparée champ par champ avec le fichier : les valeurs
+    /// différentes sont remplacées, les champs vides complétés, une case vide du fichier ne vide
+    /// jamais la fiche. Les valeurs refusées (date incohérente, e-mail invalide…) sont signalées et non
+    /// appliquées. Chaque changement est journalisé dans l'historique du fichier RH (annulable) et
+    /// poussé vers l'annuaire. En cas de doute (homonymes, CIN contradictoire ou en double, nom
+    /// seulement approchant), rien n'est écrit : la ligne est signalée « à vérifier ».
+    /// </summary>
+    public async Task<SynchroImportEmployesDto> SynchroniserImportEmployesAsync(
+        IReadOnlyList<LigneImportEmployeDto> lignes, string auteur, CancellationToken ct = default)
+    {
+        auteur = Court(auteur, 160) ?? "inconnu";
+        var importId = Guid.NewGuid();
+        var importLe = DateTime.UtcNow;
+        var aujourdhui = DateOnly.FromDateTime(importLe);
+
+        var uniques = lignes.GroupBy(l => l.Numero).Select(g => g.First()).ToList();
+        var valeurs = uniques.ToDictionary(l => l.Numero, l => VersValeurs(l, aujourdhui));
+        var parLigne = uniques.ToDictionary(l => l.Numero);
+        var agents = await ChargerAgentsAsync(ct);
+        var parId = agents.ToDictionary(a => a.Id);
+        var rapprochement = FicheReferenceRapprochement.Rapprocher(
+            uniques.Select(l => new FicheReferenceRapprochement.Ligne(
+                l.Numero, valeurs[l.Numero].Agents, null, false, null, valeurs[l.Numero].Cin)).ToList(),
+            agents.Select(a => new FicheReferenceRapprochement.Agent(
+                a.Id, a.LastName, a.FirstName, a.Profil?.ImmatriculationInterne, a.IsActive, a.Profil?.Cin)).ToList());
+
+        var resultats = new List<ImportEmployeResultatDto>();
+        var aCreer = new List<int>();
+        foreach (var r in rapprochement)
+        {
+            var l = parLigne[r.Numero];
+            var v = valeurs[r.Numero];
+            var nom = (l.Nom ?? string.Empty).Trim();
+            var prenom = (l.Prenom ?? string.Empty).Trim();
+            var candidats = r.Candidats
+                .Select(c => new CandidatFicheDto(c.UserId, c.Nom, c.Prenom, c.Matricule, c.Actif, c.Raison))
+                .ToList();
+            ImportEmployeResultatDto Ligne(bool ok, int? userId, string? guid, string message, string statut,
+                IReadOnlyList<ModificationFicheDto>? modifs = null, IReadOnlyList<string>? manquants = null) =>
+                new(l.Numero, nom, prenom, ok, userId, guid, message, statut, modifs ?? Array.Empty<ModificationFicheDto>(),
+                    v.Anomalies.Concat(v.Avertissements).ToList(), manquants ?? Array.Empty<string>(), candidats);
+
+            if (r.Statut == FicheReferenceRapprochement.Nouveau)
+            {
+                aCreer.Add(r.Numero);
+                continue;
+            }
+            if (r.Statut == FicheReferenceRapprochement.Ignore)
+            {
+                resultats.Add(Ligne(false, null, null, r.Message ?? "Ligne sans employé.", ImportEmployeStatuts.Erreur));
+                continue;
+            }
+            if (r.Statut != FicheReferenceRapprochement.Identifie || r.UserId is not int id)
+            {
+                resultats.Add(Ligne(false, r.UserId, null,
+                    $"{r.Message ?? "Fiche existante probable."} Rien n'a été modifié : confirmez la fiche dans « Fiches employés › "
+                    + "Fichier RH de référence », ou corrigez le nom ou le CIN dans le fichier.",
+                    ImportEmployeStatuts.AVerifier));
+                continue;
+            }
+
+            try
+            {
+                var maj = await MettreAJourAsync(id, v, importId, importLe, FichierImportLiaisons, auteur, ct);
+                if (maj is null)
+                {
+                    resultats.Add(Ligne(false, id, null, "Fiche introuvable (supprimée entre-temps ?).", ImportEmployeStatuts.Erreur));
+                    continue;
+                }
+                var guid = await db.Users.AsNoTracking().Where(u => u.Id == id).Select(u => u.Guid).FirstOrDefaultAsync(ct);
+                var fiche = parId.TryGetValue(id, out var a) ? $"{a.LastName} {a.FirstName}".Trim() : $"n° {id}";
+                var message = maj.Modifications.Count == 0
+                    ? $"Fiche existante « {fiche} » déjà conforme au fichier."
+                    : $"Fiche existante « {fiche} » mise à jour d'après le fichier ({maj.Modifications.Count} champ(s)).";
+                if (r.Message is not null) message += " " + r.Message;
+                if (!maj.AnnuaireOk) message += " Annuaire non synchronisé : relancez l'import pour réessayer.";
+                resultats.Add(Ligne(true, id, guid.ToString(), message,
+                    maj.Modifications.Count == 0 ? ImportEmployeStatuts.AJour : ImportEmployeStatuts.MisAJour,
+                    maj.Modifications, maj.Manquants));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Import RH (Liaisons HTEL) : ligne {Numero} non appliquée", r.Numero);
+                db.ChangeTracker.Clear();
+                resultats.Add(Ligne(false, id, null,
+                    ex is InvalidOperationException ? ex.Message : "Erreur technique : fiche non mise à jour (voir les journaux).",
+                    ImportEmployeStatuts.Erreur));
+            }
+        }
+
+        logger.LogInformation(
+            "Import RH (Liaisons HTEL) par {Auteur} : {MisesAJour} fiche(s) mise(s) à jour, {AJour} déjà conforme(s), {AVerifier} à vérifier, {ACreer} à créer",
+            auteur,
+            resultats.Count(x => x.Statut == ImportEmployeStatuts.MisAJour),
+            resultats.Count(x => x.Statut == ImportEmployeStatuts.AJour),
+            resultats.Count(x => x.Statut == ImportEmployeStatuts.AVerifier),
+            aCreer.Count);
+        return new SynchroImportEmployesDto(importId, resultats, aCreer);
+    }
+
+    /// <summary>
+    /// v66 — Ligne de l'écran « Liaisons HTEL » lue avec les mêmes contrôles que le fichier RH de
+    /// référence (CIN, date de naissance plausible, situation familiale, e-mail, téléphone).
+    /// </summary>
+    private static FicheReference.Valeurs VersValeurs(LigneImportEmployeDto l, DateOnly aujourdhui)
+    {
+        var brut = new Dictionary<string, object?>
+        {
+            [FicheReference.CleAgents] = $"{l.Nom} {l.Prenom}".Trim(),
+            ["cin"] = l.Cin,
+            ["dateNaissance"] = l.DateNaissance?.ToDateTime(TimeOnly.MinValue),
+            ["situationFamiliale"] = l.SituationFamiliale,
+            ["adresse"] = l.Adresse,
+            ["telephone1"] = l.Telephone,
+            ["emailPersonnel"] = l.EmailPersonnel,
+        };
+        var v = FicheReference.Interpreter(brut, aujourdhui);
+        v.Telephone1 = TelephoneMarocain(v.Telephone1);
+        if (l.NombreEnfants is int enfants)
+        {
+            if (enfants is >= 0 and <= 30) v.NombreEnfants = enfants;
+            else v.Anomalies.Add($"Nombre d'enfants « {enfants} » incohérent : non appliqué");
+        }
+        return v;
     }
 
     // ── Outils ───────────────────────────────────────────────────────────────────────────────

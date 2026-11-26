@@ -17,9 +17,12 @@ describe('rôles acceptés par le serveur', () => {
     expect(plafondAutorise(e('pointage.regimes'), 'Ingénieur', 'View')).toBe(false);
     expect(plafondAutorise(e('pointage.regimes'), 'RH', 'View')).toBe(true);
     expect(plafondAutorise(e('pointage.regimes'), 'RH', 'Configure')).toBe(false);
-    expect(plafondAutorise(e('pointage.acces-sortie'), 'RH', 'View')).toBe(false);
+    // v67 : « Heure de sortie » n'est plus une rubrique (Super Admin, compte par compte).
+    expect(e('pointage.acces-sortie')).toBeUndefined();
+    expect(e('pointage.heure-sortie')).toBeUndefined();
     expect(plafondAutorise(e('conges.validation'), 'Pilote', 'View')).toBe(false);
-    expect(plafondAutorise(e('conges.history'), 'Superviseur', 'View')).toBe(false);
+    // v67 : l'historique des congés accordé à un superviseur s'ouvre réellement.
+    expect(plafondAutorise(e('conges.history'), 'Superviseur', 'View')).toBe(true);
     expect(plafondAutorise(e('pointage.equipe'), 'Coach', 'View')).toBe(true);
     expect(plafondAutorise(e('planning.equipe'), 'Ingénieur', 'View')).toBe(true);
   });

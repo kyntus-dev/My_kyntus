@@ -2,11 +2,31 @@ import { ChangeDetectionStrategy, Component, ElementRef, OnInit, ViewChild, comp
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { Observable, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { PresenceService } from '../../../core/services/presence.service';
+import { PresenceSuiviService } from '../../../core/services/presence-suivi.service';
+import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
+import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
+import {
+  type ChoixNature,
+  type ElementJour,
+  aValoriser,
+  bareme,
+  cataloguesJournee,
+  decoderChoix,
+  elementsDuJour,
+  indexElements,
+  montantApplicable,
+  sensParDefaut,
+} from '../lib/evp-journee.util';
+import { manquement } from '../lib/manquements.util';
 import { AuthService } from '../../../core/services/auth.service';
 import { peutSaisirFormation } from '../lib/formation.util';
 import { badgeTypeFormation, normaliserTypeFormation } from '../../../core/hr/type-formation.util';
 import type {
+  AvertissementDto,
+  EvpDto,
   PresenceAgentDto,
   PresenceCodeDto,
   PresenceGrilleDto,
@@ -27,6 +47,8 @@ import {
   enteteJour,
   familleCode,
   filtrerAgents,
+  trierAgents,
+  TRIS_PRESENCE,
   formatMinutes,
   joursDeLaPeriode,
   periodePaie,
@@ -50,7 +72,17 @@ interface Edition {
   motifAutorisation: string;
   commentaire: string;
   absencePartielle: boolean;
+  /** v69 : élément variable de paie ou manquement à ajouter ce jour (« » : aucun). */
+  nature: ChoixNature;
+  evpSens: 'gain' | 'retenue';
+  evpMontant: number | null;
+  /** Suite donnée d'un manquement (« Pénalité seule » par défaut). */
+  suiteDonnee: string;
+  justification: string;
 }
+
+/** v69 : champs de la journée elle-même (pour savoir s'ils ont changé). */
+const CHAMPS_JOURNEE = ['mode', 'motif', 'periode', 'au', 'retardAutorise', 'retardPauseAutorise', 'motifAutorisation', 'commentaire', 'absencePartielle'] as const;
 
 /**
  * Tableau des présences : une ligne par agent du périmètre, une colonne par jour de la période de
@@ -71,6 +103,42 @@ export class PresencesTableauComponent implements OnInit {
   private readonly toast = inject(KyntusToastService);
   private readonly auth = inject(AuthService);
   private readonly annuaire = inject(DirectoryFacadeService);
+  private readonly suivi = inject(PresenceSuiviService);
+  private readonly access = inject(PlatformAccessService);
+  private readonly confirm = inject(KyntusConfirmService);
+
+  // ── v69 : éléments variables de paie et manquements dans la fenêtre Journée ──
+  /** Éléments variables de la période ; null : non lus (droits ou erreur). */
+  readonly evp = signal<EvpDto[] | null>(null);
+  /** Manquements de la période et des deux précédentes (rang) ; null : non lus. */
+  readonly saisies = signal<AvertissementDto[] | null>(null);
+  readonly typesEvp = signal<string[]>([]);
+  readonly suitesDonnees = signal<string[]>([]);
+  readonly cataloguesJournee = computed(() => cataloguesJournee(this.typesEvp()));
+  /** Mêmes rubriques que les écrans « Éléments variables » et « Manquements » (Accès par rôle). */
+  readonly droitsElements = computed(() => {
+    this.access.permissionKeys();
+    return {
+      voirEvp: this.access.canView('presences.evp'),
+      agirEvp: this.access.canAct('presences.evp'),
+      voirMq: this.access.canView('presences.avertissements'),
+      agirMq: this.access.canAct('presences.avertissements'),
+    };
+  });
+  readonly sectionElements = computed(() => {
+    const d = this.droitsElements();
+    return d.voirEvp || d.voirMq || d.agirEvp || d.agirMq;
+  });
+  private readonly indexElements = computed(() => indexElements(this.evp(), this.saisies()));
+  readonly elementsJour = computed<ElementJour[]>(() => {
+    const e = this.edition();
+    return e ? elementsDuJour(e.agent.userId, e.jour.jour, this.evp(), this.saisies()) : [];
+  });
+  /** Valeur initiale des champs de la journée à l'ouverture de la fenêtre. */
+  private initialJournee: Partial<Edition> | null = null;
+  readonly bareme = bareme;
+  readonly aValoriser = aValoriser;
+  readonly manquement = manquement;
   /** v37 : agents en formation visibles, saisie réservée à l'équipe formation, aux RH et aux Admin. */
   readonly saisieFormation = computed(() => peutSaisirFormation(this.auth.getRole()));
   /**
@@ -193,8 +261,12 @@ export class PresencesTableauComponent implements OnInit {
   });
 
   readonly agents = computed(() =>
-    filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole, this.estChefDeProjet(),
-      this.data()?.toutesActivites === true));
+    // v67 : tri choisi dans la liste déroulante (durée du retard, du plus long au plus court…).
+    trierAgents(
+      filtrerAgents(this.data()?.agents ?? [], this.filtres(), this.activiteDuPole, this.estChefDeProjet(),
+        this.data()?.toutesActivites === true),
+      this.filtres().tri));
+  readonly tris = TRIS_PRESENCE;
   /** v62 : total du tableau principal (sans les superviseurs / référents ajoutés pour leurs tableaux dédiés). */
   readonly totalAgents = computed(() => {
     const d = this.data();
@@ -230,6 +302,7 @@ export class PresencesTableauComponent implements OnInit {
    */
   readonly lignes = computed(() => {
     const entetes = this.entetes();
+    const elements = this.indexElements();
     return this.agents().map((a) => {
       const parJour = new Map(a.jours.map((j) => [j.jour.slice(0, 10), j]));
       return {
@@ -247,6 +320,8 @@ export class PresencesTableauComponent implements OnInit {
             marque: vide?.marque ?? '',
             horsContrat: estHorsContrat(j),
             classe: j ? 'pz-f-' + familleCode(j.code) : '',
+            // v69 : nombre d'éléments variables / manquements saisis ce jour.
+            elements: elements.get(`${a.userId}|${e.jour}`) ?? 0,
             titre: j ? this.infobulle(a, j) : '',
           };
         }),
@@ -268,6 +343,11 @@ export class PresencesTableauComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    void this.access.ensureLoaded();
+    this.suivi.catalogues().subscribe({
+      next: (c) => { this.typesEvp.set(c.evp ?? []); this.suitesDonnees.set(c.avertissements ?? []); },
+      error: () => { this.typesEvp.set([]); this.suitesDonnees.set([]); },
+    });
     this.load();
     this.http.get<Activite[]>('/api/directory/business-departments').subscribe({
       next: (a) => this.activites.set(a ?? []),
@@ -288,10 +368,13 @@ export class PresencesTableauComponent implements OnInit {
     const { du, au } = this.periode();
     this.loading.set(true);
     this.error.set(null);
+    this.evp.set(null);
+    this.saisies.set(null);
     this.svc.grille(du, au).subscribe({
       next: (d) => {
         this.data.set(d);
         this.loading.set(false);
+        void this.chargerElements(d.du.slice(0, 10), d.au.slice(0, 10));
       },
       error: (err) => {
         this.loading.set(false);
@@ -367,7 +450,13 @@ export class PresencesTableauComponent implements OnInit {
       motifAutorisation: j.motifAutorisation ?? '',
       commentaire: j.commentaire ?? '',
       absencePartielle: !!j.absencePartielle,
+      nature: '',
+      evpSens: 'gain',
+      evpMontant: null,
+      suiteDonnee: this.suitesDonnees()[0] ?? 'Pénalité seule',
+      justification: '',
     });
+    this.initialJournee = this.champsJournee(this.edition()!);
     const d = this.panneau?.nativeElement;
     if (d && !d.open) d.showModal();
   }
@@ -385,35 +474,172 @@ export class PresencesTableauComponent implements OnInit {
 
   patch(p: Partial<Edition>): void {
     const e = this.edition();
-    if (e) this.edition.set({ ...e, ...p });
+    if (!e) return;
+    const next = { ...e, ...p };
+    // v69 : le sens suit la nature (sanctions, retenues, avances : retenue).
+    if (p.nature !== undefined) {
+      const c = decoderChoix(p.nature);
+      if (c?.genre === 'evp') next.evpSens = sensParDefaut(c.valeur);
+    }
+    this.edition.set(next);
+  }
+
+  // ── v69 : éléments variables de paie et manquements ──
+
+  /** Lecture des éléments de la période (et des manquements des deux périodes précédentes, pour le rang). */
+  private async chargerElements(du: string, au: string): Promise<void> {
+    // Droits lus avant de décider (premier affichage : la liste des droits peut arriver après la grille).
+    try { await this.access.ensureLoaded(); } catch { /* droits illisibles : section masquée */ }
+    const d = this.droitsElements();
+    const p2 = periodePaie(new Date(), this.decalage() - 2);
+    // Réponse d'une période qu'on a quittée entre-temps : ignorée.
+    const actuelle = () => this.data()?.du.slice(0, 10) === du && this.data()?.au.slice(0, 10) === au;
+    if (d.voirEvp || d.agirEvp) {
+      this.suivi.evp(du, au).pipe(catchError(() => of(null))).subscribe((l) => { if (actuelle()) this.evp.set(l); });
+    } else this.evp.set(null);
+    if (d.voirMq || d.agirMq) {
+      this.suivi.avertissements(p2.du < du ? p2.du : du, au).pipe(catchError(() => of(null)))
+        .subscribe((l) => { if (actuelle()) this.saisies.set(l); });
+    } else this.saisies.set(null);
+  }
+
+  private champsJournee(e: Edition): Partial<Edition> {
+    const r: Partial<Record<keyof Edition, unknown>> = {};
+    for (const k of CHAMPS_JOURNEE) r[k] = e[k];
+    return r as Partial<Edition>;
+  }
+
+  private journeeModifiee(e: Edition): boolean {
+    const init = this.initialJournee;
+    if (!init) return true;
+    return CHAMPS_JOURNEE.some((k) => init[k] !== e[k]);
+  }
+
+  /** Nature choisie, décodée ; null si aucune. */
+  natureChoisie(e: Edition): { genre: 'evp' | 'mq'; valeur: string } | null {
+    return decoderChoix(e.nature);
+  }
+
+  /** Montant du référentiel applicable au manquement choisi (rang selon les deux périodes précédentes). */
+  montantManquement(e: Edition): ReturnType<typeof montantApplicable> {
+    const c = decoderChoix(e.nature);
+    if (c?.genre !== 'mq') return null;
+    const p1 = periodePaie(new Date(), this.decalage() - 1);
+    const p2 = periodePaie(new Date(), this.decalage() - 2);
+    return montantApplicable(c.valeur, e.agent.userId, this.saisies(), [p1, p2]);
+  }
+
+  /** Message bloquant l'enregistrement de l'élément, ou null si tout est prêt. */
+  erreurElement(e: Edition): string | null {
+    const c = decoderChoix(e.nature);
+    if (!c) return null;
+    if (!e.justification.trim()) return 'Ajoutez une justification pour l’élément de paie.';
+    if (c.genre === 'evp' && !aValoriser(c.valeur) && (e.evpMontant === null || e.evpMontant === undefined || Number(e.evpMontant) <= 0)) {
+      return 'Indiquez un montant supérieur à 0.';
+    }
+    if (c.genre === 'evp' && e.evpMontant !== null && Number(e.evpMontant) < 0) return 'Le montant ne peut pas être négatif : choisissez « Retenue ».';
+    return null;
+  }
+
+  /** Requête d'ajout de l'élément choisi (ou rien). */
+  private ajoutElement(e: Edition): Observable<unknown> {
+    const c = decoderChoix(e.nature);
+    if (!c) return of(null);
+    const jour = e.jour.jour.slice(0, 10);
+    const justification = e.justification.trim();
+    if (c.genre === 'evp') {
+      const montantSaisi = Math.abs(Number(e.evpMontant ?? 0)) || 0;
+      return this.suivi.ajouterEvp({
+        userId: e.agent.userId, date: jour, type: c.valeur,
+        montant: (e.evpSens === 'retenue' ? -1 : 1) * montantSaisi, commentaire: justification,
+      });
+    }
+    return this.suivi.ajouterAvertissement({
+      userId: e.agent.userId, date: jour, code: c.valeur, type: e.suiteDonnee, commentaire: justification,
+    });
+  }
+
+  async supprimerElement(el: ElementJour): Promise<void> {
+    const ok = await this.confirm.confirm({
+      title: el.genre === 'evp' ? 'Supprimer l’élément variable' : 'Supprimer le manquement',
+      message: `Supprimer « ${el.titre} » de cette journée ?`,
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    const req = el.genre === 'evp' ? this.suivi.supprimerEvp(el.id) : this.suivi.supprimerAvertissement(el.id);
+    req.subscribe({
+      next: () => {
+        if (el.genre === 'evp') this.evp.set((this.evp() ?? []).filter((x) => x.id !== el.id));
+        else this.saisies.set((this.saisies() ?? []).filter((x) => x.id !== el.id));
+        this.toast.success('Élément supprimé.');
+      },
+      error: (err) => this.toast.error(err?.error?.message ?? 'Suppression impossible.'),
+    });
+  }
+
+  peutSupprimer(el: ElementJour): boolean {
+    const d = this.droitsElements();
+    return el.genre === 'evp' ? d.agirEvp : d.agirMq;
   }
 
   enregistrer(): void {
     const e = this.edition();
     const d = this.data();
     if (!e || !d || this.enregistrement()) return;
+    const erreur = this.erreurElement(e);
+    if (erreur) { this.toast.error(erreur); return; }
+    const avecElement = !!decoderChoix(e.nature);
+    // v69 : sans élément de paie, comportement inchangé (la journée est enregistrée). Avec un élément,
+    // la journée n'est enregistrée que si l'un de ses champs a changé.
+    const journee = !avecElement || this.journeeModifiee(e);
     const code = e.mode === 'auto' ? null : e.mode === 'present' ? 'P' : e.mode === 'formation' ? 'FOR' : e.motif;
     this.enregistrement.set(true);
-    this.svc.saisir(
-      {
-        userId: e.agent.userId,
-        jour: e.jour.jour.slice(0, 10),
-        au: e.periode && e.au > e.jour.jour.slice(0, 10) ? e.au : null,
-        code,
-        retardAutorise: e.retardAutorise,
-        retardPauseAutorise: e.retardPauseAutorise,
-        motifAutorisation: e.motifAutorisation.trim() || null,
-        commentaire: e.commentaire.trim() || null,
-        absencePartielle: e.absencePartielle,
-      },
-      d.du.slice(0, 10),
-      d.au.slice(0, 10),
-    ).subscribe({
+    const saisieJournee: Observable<PresenceAgentDto | null> = journee
+      ? this.svc.saisir(
+        {
+          userId: e.agent.userId,
+          jour: e.jour.jour.slice(0, 10),
+          au: e.periode && e.au > e.jour.jour.slice(0, 10) ? e.au : null,
+          code,
+          retardAutorise: e.retardAutorise,
+          retardPauseAutorise: e.retardPauseAutorise,
+          motifAutorisation: e.motifAutorisation.trim() || null,
+          commentaire: e.commentaire.trim() || null,
+          absencePartielle: e.absencePartielle,
+        },
+        d.du.slice(0, 10),
+        d.au.slice(0, 10),
+      )
+      : of(null);
+    saisieJournee.subscribe({
       next: (ligne) => {
-        this.data.set({ ...d, agents: d.agents.map((a) => (a.userId === ligne.userId ? ligne : a)) });
-        this.enregistrement.set(false);
-        this.fermer();
-        this.toast.success('Journée enregistrée.');
+        if (ligne) {
+          const courant = this.data() ?? d;
+          this.data.set({ ...courant, agents: courant.agents.map((a) => (a.userId === ligne.userId ? ligne : a)) });
+        }
+        if (!avecElement) {
+          this.enregistrement.set(false);
+          this.fermer();
+          this.toast.success('Journée enregistrée.');
+          return;
+        }
+        this.ajoutElement(e).subscribe({
+          next: (cree) => {
+            const c = decoderChoix(e.nature)!;
+            if (c.genre === 'evp') this.evp.set([cree as EvpDto, ...(this.evp() ?? [])]);
+            else this.saisies.set([cree as AvertissementDto, ...(this.saisies() ?? [])]);
+            this.enregistrement.set(false);
+            this.fermer();
+            this.toast.success(journee ? 'Journée et élément de paie enregistrés.' : 'Élément de paie enregistré.');
+          },
+          error: (err) => {
+            this.enregistrement.set(false);
+            if (journee) this.initialJournee = this.champsJournee(e);
+            this.toast.error((journee ? 'Journée enregistrée, mais élément de paie refusé : ' : '')
+              + (err?.error?.message ?? 'Enregistrement de l’élément impossible.'));
+          },
+        });
       },
       error: (err) => {
         this.enregistrement.set(false);

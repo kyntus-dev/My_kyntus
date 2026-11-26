@@ -10,7 +10,14 @@ public sealed class PrimeDirectoryProjectionConsumer(IEmployeeDirectorySyncServi
     public async Task Consume(ConsumeContext<DirectoryEmployeeChangedMessage> context)
     {
         var msg = context.Message;
-        if (msg.IsDeleted) return;
+        // v73 — Départ ou désactivation : le message était reçu puis jeté, et l'agent restait
+        // indéfiniment dans les périmètres. Il est désormais marqué « sorti » (fiche conservée
+        // pour l'historique des primes, affichée grisée, hors effectif planifiable).
+        if (msg.IsDeleted)
+        {
+            await employeeSync.MarquerSortiAsync(msg.EmployeeId, context.CancellationToken);
+            return;
+        }
 
         await employeeSync.EnsureFromPlanningAsync(
             new EmployeeDirectoryUpsertRequest(

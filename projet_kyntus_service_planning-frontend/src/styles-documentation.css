@@ -12,12 +12,13 @@
     --navy-900-rgb: 255 255 255;
     --navy-800-rgb: 226 232 240;
     --navy-700-rgb: 241 245 249;
-    --electric-blue: #1e3a8a;
-    --soft-blue: #3b82f6;
-    --electric-blue-rgb: 30 58 138;
-    --soft-blue-rgb: 59 130 246;
-    --blue-500: #3b82f6;
-    --blue-600: #1e3a8a;
+    /* v68 : bleu du logo Kyntus (#0D2E5B) et nuance plus claire de la même teinte. */
+    --electric-blue: #0d2e5b;
+    --soft-blue: #3a68ab;
+    --electric-blue-rgb: 13 46 91;
+    --soft-blue-rgb: 58 104 171;
+    --blue-500: #3a68ab;
+    --blue-600: #0d2e5b;
     --slate-50: #0f172a;
     --slate-200: #1e293b;
     --slate-300: #334155;
@@ -37,12 +38,13 @@
     --navy-800-rgb: 17 34 64;
     --navy-700-rgb: 30 58 102;
     /* Accent dark : bleu lisible (l'ancien cyan néon #00f0ff fatiguait l'œil et cassait la cohérence) */
-    --electric-blue: #60a5fa;
-    --soft-blue: #3b82f6;
-    --electric-blue-rgb: 96 165 250;
-    --soft-blue-rgb: 59 130 246;
-    --blue-500: #3b82f6;
-    --blue-600: #2563eb;
+    /* v68 : nuances claires du bleu Kyntus, lisibles sur fond sombre. */
+    --electric-blue: #9db9e2;
+    --soft-blue: #6f95cf;
+    --electric-blue-rgb: 157 185 226;
+    --soft-blue-rgb: 111 149 207;
+    --blue-500: #6f95cf;
+    --blue-600: #3a68ab;
     --slate-50: #e2e8f0;
     --slate-200: #cbd5e1;
     --slate-300: #94a3b8;
@@ -132,7 +134,7 @@ h1.ky-page-title::after {
   height: 4px;
   margin-top: 10px;
   border-radius: 999px;
-  background: var(--ky-gradient, linear-gradient(135deg, #1e4fd8, #60a5fa));
+  background: var(--ky-gradient, linear-gradient(135deg, #0a2347, #22508f));
 }
 
 /* Sélection de texte aux couleurs de la marque */
@@ -538,13 +540,14 @@ body.theme-light .ky-stat-card {
 .ky-btn-primary {
   @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   border-radius: var(--radius-md, 0.5rem);
-  background-color: var(--blue-600);
-  background-image: var(--ky-gradient, linear-gradient(135deg, #1e4fd8, #3b82f6));
+  /* v68 : bleu plein du logo Kyntus (plus de dégradé), ombre discrète. */
+  background-color: var(--ky-blue, #0d2e5b);
+  background-image: none;
   border: none;
   cursor: pointer;
   /* Off-white, jamais #fff pur */
   color: #f1f5f9;
-  box-shadow: 0 4px 14px rgb(37 99 235 / 0.28);
+  box-shadow: 0 2px 8px rgb(13 46 91 / 0.22);
   transition:
     box-shadow var(--duration-fast, 150ms) var(--ease-out, ease-out),
     filter var(--duration-fast, 150ms) var(--ease-out, ease-out),
@@ -553,9 +556,9 @@ body.theme-light .ky-stat-card {
 
 .prime-btn-primary:hover:not(:disabled),
 .ky-btn-primary:hover:not(:disabled) {
-  background-color: var(--blue-500);
-  filter: brightness(1.08);
-  box-shadow: 0 6px 20px rgb(37 99 235 / 0.38);
+  background-color: var(--ky-blue-strong, #0a2347);
+  filter: none;
+  box-shadow: 0 4px 14px rgb(13 46 91 / 0.3);
 }
 
 .ky-btn-secondary,

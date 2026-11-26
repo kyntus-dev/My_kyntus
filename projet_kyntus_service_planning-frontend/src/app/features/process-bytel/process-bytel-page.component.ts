@@ -13,6 +13,7 @@ import {
   ProcessBytelApiService,
   ProcessDocumentDto,
 } from './process-bytel-api.service';
+import { PlatformAccessService } from '../../core/platform-access/platform-access.service';
 
 /**
  * v48 — Process Bytel.
@@ -29,6 +30,8 @@ import {
   styleUrls: ['./process-bytel-page.component.css'],
 })
 export class ProcessBytelPageComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   readonly icons = {
     refresh: RefreshCw,
     warn: AlertTriangle,
@@ -68,6 +71,7 @@ export class ProcessBytelPageComponent implements OnInit {
   fActivites: Record<string, boolean> = {};
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     this.charger();
   }
 
@@ -103,7 +107,7 @@ export class ProcessBytelPageComponent implements OnInit {
   }
 
   get peutDeposer(): boolean {
-    return this.biblio?.peutDeposer === true;
+    return this.biblio?.peutDeposer === true && this.droits.autorise('process-bytel', 'Act');
   }
 
   get dossiers(): string[] {

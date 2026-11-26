@@ -24,8 +24,10 @@
       Sync : {{ syncReport.techniciensFetched }} techniciens HTEL —
       {{ syncReport.linkedUpdated }} mis à jour,
       {{ syncReport.newlyLinked }} nouveaux liens,
-      {{ syncReport.orphansHtel }} orphelins HTEL,
-      {{ syncReport.ambiguous }} ambigus.
+      {{ syncReport.orphansHtel }} non définis,
+      {{ syncReport.ambiguous }} à rapprocher,
+      {{ syncReport.divergences ?? 0 }} divergence(s).
+      Aucune fiche n'est désactivée par la synchronisation.
     </div>
   }
 
@@ -52,7 +54,11 @@
       </div>
       <div class="stat">
         <span class="stat-val">{{ ambiguous.length }}</span>
-        <span class="stat-lbl">Ambigus</span>
+        <span class="stat-lbl">À rapprocher</span>
+      </div>
+      <div class="stat" [class.stat--warn]="divergences.length > 0">
+        <span class="stat-val">{{ divergences.length }}</span>
+        <span class="stat-lbl">Divergences</span>
       </div>
       <div class="stat">
         <span class="stat-val">{{ unlinked.length }}</span>
@@ -81,7 +87,7 @@
           Résultats :
           {{ filteredLinked.length }} lié(s),
           {{ filteredOrphans.length }} non défini(s),
-          {{ filteredAmbiguous.length }} ambigu(s)
+          {{ filteredAmbiguous.length }} à rapprocher
         </p>
       }
     </div>
@@ -117,7 +123,12 @@
                 <td class="muted-cell">{{ libelleMail(row.email) }}</td>
                 <td><code class="id-chip">{{ row.idTechnicien }}</code></td>
                 <td>{{ row.htelCode || '—' }}</td>
-                <td>{{ row.htelTechnicienName || '—' }}</td>
+                <td>
+                  {{ row.htelTechnicienName || '—' }}
+                  @if (row.isActive === false) { <span class="badge badge--off">Fiche inactive</span> }
+                  @if (row.htelIntrouvable) { <span class="badge badge--off">Absent d'HTEL</span> }
+                  @else if (row.htelActif === 0) { <span class="badge badge--off">Inactif dans HTEL</span> }
+                </td>
                 <td class="col-actions">
                   <button type="button" class="ky-btn-secondary btn-sm" (click)="unlink(row)">
                     <app-lucide-icon [icon]="icons.unlink" className="w-3.5 h-3.5" />
@@ -158,7 +169,8 @@
       <div class="section-heading">
         <div>
           <h2>Non définis sur MyKyntus <span class="count-pill count-pill--warn">{{ filteredOrphans.length }}</span></h2>
-          <p>Techniciens HTEL sans employé correspondant (ni lien, ni même nom).</p>
+          <p>Techniciens HTEL qu'aucune fiche ne rapproche — ni liée, ni libre, ni inactive. Si une fiche de
+            l'application leur ressemble, elle est proposée : liez-la plutôt que d'en créer une seconde.</p>
         </div>
       </div>
       <div class="table-wrap">
@@ -184,9 +196,25 @@
                   </span>
                 </td>
                 <td class="col-actions">
-                  <button type="button" class="ky-btn-primary btn-sm" (click)="createEmployeeFromOrphan(row)">
-                    Créer employé
-                  </button>
+                  @if (fichesPour(row); as fiches) {
+                    @if (fiches.length > 0) {
+                      @for (f of fiches; track f.id) {
+                        <div class="fiche-proche">
+                          <span>Fiche existante : <a [routerLink]="['/users', f.id]">{{ f.lastName }} {{ f.firstName }}</a>
+                            @if (f.isActive === false) { <span class="badge badge--off">inactive</span> }
+                          </span>
+                          <button type="button" class="ky-btn-secondary btn-sm" (click)="lierFicheApp(f, row)">
+                            <app-lucide-icon [icon]="icons.link" className="w-3.5 h-3.5" />
+                            Lier
+                          </button>
+                        </div>
+                      }
+                    } @else {
+                      <button type="button" class="ky-btn-primary btn-sm" (click)="createEmployeeFromOrphan(row)">
+                        Créer employé
+                      </button>
+                    }
+                  }
                 </td>
               </tr>
             } @empty {
@@ -221,8 +249,9 @@
     <section class="card ky-card">
       <div class="section-heading">
         <div>
-          <h2>Ambigus <span class="count-pill">{{ filteredAmbiguous.length }}</span></h2>
-          <p>Plusieurs employés MyKyntus correspondent au même nom HTEL — résolution manuelle.</p>
+          <h2>À rapprocher <span class="count-pill">{{ filteredAmbiguous.length }}</span></h2>
+          <p>Techniciens HTEL non liés dont la fiche existe déjà dans l'application (même nom ou nom approchant,
+            fiche éventuellement inactive ou déjà liée à un autre identifiant HTEL). Choisissez la bonne fiche.</p>
         </div>
       </div>
       @for (row of pagedAmbiguous; track row.idTechnicien) {
@@ -235,7 +264,9 @@
           <ul>
             @for (c of row.candidates; track c.employeeId) {
               <li>
-                <span>{{ c.lastName }} {{ c.firstName }} <span class="muted">({{ libelleMail(c.email) }})</span></span>
+                <span>{{ c.lastName }} {{ c.firstName }} <span class="muted">({{ libelleMail(c.email) }})</span>
+                  @for (e of etatCandidat(c); track e) { <span class="badge badge--off">{{ e }}</span> }
+                </span>
                 <button type="button" class="ky-btn-secondary btn-sm" (click)="linkCandidate(c.employeeId, row.idTechnicien)">
                   <app-lucide-icon [icon]="icons.link" className="w-3.5 h-3.5" />
                   Lier
@@ -247,9 +278,9 @@
       } @empty {
         <p class="empty-inline">
           @if (hasSearch) {
-            Aucun cas ambigu pour « {{ searchTerm }} ».
+            Aucun technicien à rapprocher pour « {{ searchTerm }} ».
           } @else {
-            Aucun cas ambigu.
+            Aucun technicien à rapprocher.
           }
         </p>
       }
@@ -267,6 +298,41 @@
         </div>
       }
     </section>
+
+    @if (divergences.length > 0) {
+      <section class="card ky-card">
+        <div class="section-heading">
+          <div>
+            <h2>Divergences HTEL / application <span class="count-pill count-pill--warn">{{ divergences.length }}</span></h2>
+            <p>Liaisons dont l'identifiant n'existe plus dans HTEL, ou dont le technicien est inactif dans HTEL
+              alors que la fiche est active. Rien n'est désactivé automatiquement : décidez de la sortie depuis
+              la fiche (règles de sortie appliquées), ou corrigez la liaison.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="prime-table">
+            <thead>
+              <tr><th>Employé</th><th>ID technicien</th><th>Écart</th><th class="col-actions">Actions</th></tr>
+            </thead>
+            <tbody>
+              @for (row of divergences; track row.employeeId) {
+                <tr>
+                  <td class="name">{{ row.lastName }} {{ row.firstName }}</td>
+                  <td><code class="id-chip">{{ row.idTechnicien }}</code></td>
+                  <td>{{ row.htelIntrouvable ? 'Identifiant absent d’HTEL' : 'Inactif dans HTEL, fiche active' }}</td>
+                  <td class="col-actions">
+                    <button type="button" class="ky-btn-secondary btn-sm" (click)="unlink(row)">
+                      <app-lucide-icon [icon]="icons.unlink" className="w-3.5 h-3.5" />
+                      Délier
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
 
     <section class="card ky-card">
       <div class="section-heading">

@@ -128,9 +128,18 @@ public class SuperAdminRestrictionTests : IDisposable
     [InlineData("POST", "/api/users", "admin.users", "Act")]
     [InlineData("DELETE", "/api/users/12", "admin.users", "Delete")]
     [InlineData("POST", "/api/users/12/reset-password", "admin.users", "Act")]
+    [InlineData("POST", "/api/users/12/suppression-definitive", "admin.users", "Delete")]
     [InlineData("POST", "/api/Users/12/reaffectation", "rh.affectations", "Act")]
     [InlineData("DELETE", "/api/planning/regimes-horaires/3", "pointage.regimes", "Delete")]
     [InlineData("PUT", "/api/planning/regimes-horaires/3", "pointage.regimes", "Configure")]
+    // v67 : « Heure de sortie » n'est plus une rubrique : seul le Super Admin l'accorde, compte par
+    // compte, et le Planning vérifie cette autorisation à chaque appel.
+    [InlineData("GET", "/api/planning/pointage/aujourdhui", "pointage.self", "View")]
+    [InlineData("GET", "/api/planning/pointage/heure-sortie/choix", null, null)]
+    [InlineData("PUT", "/api/planning/pointage/heure-sortie/choix", null, null)]
+    [InlineData("GET", "/api/planning/regimes-horaires/acces-heure-sortie", null, null)]
+    [InlineData("PUT", "/api/planning/regimes-horaires/acces-heure-sortie", null, null)]
+    [InlineData("GET", "/api/planning/pointage/moi", "pointage.self", "View")]
     [InlineData("POST", "/api/planning/42/publish", "planning.validation", "Validate")]
     [InlineData("GET", "/api/planning/export/rh", "planning.equipe", "Export")]
     [InlineData("POST", "/api/planning/presences/paie/validation", "presences.export", "Validate")]
@@ -155,6 +164,14 @@ public class SuperAdminRestrictionTests : IDisposable
         Assert.NotNull(feature);
         Assert.Equal(screen, feature!.Screens[0]);
         Assert.Equal(verb, feature.Verb);
+    }
+
+    [Fact]
+    public void Heure_de_sortie_is_not_a_role_or_account_rubrique()
+    {
+        Assert.DoesNotContain(PlatformAccessCatalog.Screens, s => s.Id is "pointage.heure-sortie" or "pointage.acces-sortie");
+        Assert.Contains("pointage.heure-sortie", PlatformAccessCatalog.RubriquesRetirees);
+        Assert.Contains("pointage.acces-sortie", PlatformAccessCatalog.RubriquesRetirees);
     }
 
     [Fact]

@@ -45,3 +45,18 @@ export function diffAcces(
   }
   return { ajouter, retirer };
 }
+
+export type BaseHeureSortie = '0840' | '0740';
+
+/**
+ * v67 — Comptes à ajouter regroupés par horaire choisi à l'attribution (07h40 ou 08h40) : une requête
+ * par horaire. `baseDe(userId)` : horaire choisi pour la ligne (par défaut, celui de la barre d'envoi).
+ */
+export function ajoutsParBase(ajouter: readonly number[], baseDe: (userId: number) => BaseHeureSortie): Map<BaseHeureSortie, number[]> {
+  const out = new Map<BaseHeureSortie, number[]>();
+  for (const id of ajouter) {
+    const b = baseDe(id);
+    out.set(b, [...(out.get(b) ?? []), id]);
+  }
+  return out;
+}

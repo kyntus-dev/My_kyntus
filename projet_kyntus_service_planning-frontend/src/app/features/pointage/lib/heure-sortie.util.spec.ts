@@ -9,6 +9,7 @@ import {
   parseHeure,
   productionExcel,
   soldeHeures,
+  detailSolde,
 } from './heure-sortie.util';
 
 const lundi = (h: number, m = 0, s = 0) => new Date(2026, 9, 26, h, m, s);
@@ -16,10 +17,12 @@ const vendredi = (h: number, m = 0) => new Date(2026, 9, 30, h, m, 0);
 const samedi = new Date(2026, 9, 31, 9, 0, 0);
 
 describe('heure-sortie.util — formules de Combien_il_me_reste.xlsx', () => {
-  it('B3 : 08:40, ou 07:40 le vendredi et le samedi', () => {
+  it('B3 : 08:40, 07:40 le vendredi ; v65 : 0 le samedi (hors planning, rien n’est attendu)', () => {
     expect(productionExcel(lundi(9))).toBe(520);
     expect(productionExcel(vendredi(9))).toBe(460);
-    expect(productionExcel(samedi)).toBe(460);
+    // v65 : un samedi n'est une journée de production que s'il est au planning de l'agent ; la
+    // production vient alors du planning. Hors planning, aucune production n'est attendue.
+    expect(productionExcel(samedi)).toBe(0);
     expect(PAUSE_FORFAIT_EXCEL).toBe(80);
   });
 
@@ -135,7 +138,9 @@ describe('heure-sortie.util — heures supplémentaires', () => {
       { jour: '2026-10-28', productionMinutes: null, productionPrevueMinutes: 520 }, // non calculé
       { jour: '2026-11-02', productionMinutes: 600, productionPrevueMinutes: 520 }, // aujourd'hui : exclu
     ];
-    expect(soldeHeures(jours, '2026-11-02')).toEqual({ soldeMinutes: 20, plusMinutes: 30, moinsMinutes: 10, jours: 3 });
+    expect(soldeHeures(jours, '2026-11-02')).toEqual({
+      soldeMinutes: 20, plusMinutes: 30, moinsMinutes: 10, jours: 3, heuresSupMinutes: 0, joursHeuresSup: 0,
+    });
   });
 
   it('dépassement du jour : production réalisée au-delà de la production prévue', () => {
@@ -176,10 +181,69 @@ describe('détail du solde depuis le 24 (v41)', () => {
     expect(d.map((l) => [l.jour, l.compte, l.ecartMinutes, l.cumulMinutes, l.motif || l.originePrevue])).toEqual([
       ['2026-10-24', true, 20, 20, 'Planning publié'],
       ['2026-10-25', false, null, 20, 'Repos'],
-      ['2026-10-26', false, null, 20, 'Pointage incomplet (arrivée ou départ manquant)'],
+      ['2026-10-26', false, null, 20, 'Manque de pointage (heures pointées seules, hors solde)'],
       ['2026-10-27', true, -12, 8, 'Régime horaire'],
     ]);
-    expect(soldeHeures(jours, '2026-11-10')).toEqual({ soldeMinutes: 8, plusMinutes: 20, moinsMinutes: 12, jours: 2 });
+    expect(soldeHeures(jours, '2026-11-10')).toEqual({
+      soldeMinutes: 8, plusMinutes: 20, moinsMinutes: 12, jours: 2, heuresSupMinutes: 0, joursHeuresSup: 0,
+    });
+  });
+});
+
+describe('samedis : production ou heures supplémentaires (v65)', () => {
+  it('samedi prévu au planning : journée de production normale, aucune heure supplémentaire', async () => {
+    const { detailSolde, soldeHeures } = await import('./heure-sortie.util');
+    // Samedi 21/11/2026 inscrit au planning de l'agent : 07h40 prévues, 07h40 réalisées.
+    const jours = [{
+      jour: '2026-11-21', statut: 'AHeure', arrivee: '08:00', depart: '16:55', pauseMinutes: 75,
+      productionMinutes: 460, productionPrevueMinutes: 460, source: 'Planning', planifie: true,
+    }];
+    const [l] = detailSolde(jours, '2026-11-23');
+    expect(l.prevueMinutes).toBe(460);
+    expect(l.ecartMinutes).toBe(0);
+    expect(l.heuresSupMinutes).toBe(0);
+    expect(l.originePrevue).toBe('Planning publié');
+    // Pas de double comptage : la journée compte en production, pas en heures supplémentaires.
+    expect(soldeHeures(jours, '2026-11-23').heuresSupMinutes).toBe(0);
+  });
+
+  it('samedi hors planning travaillé : heures supplémentaires, jamais d’heures manquantes', async () => {
+    const { detailSolde, soldeHeures } = await import('./heure-sortie.util');
+    // Cas signalé : samedi 21/11, 12:43 → 13:50 (01h07 réalisées), horaire de base 08h40.
+    // Avant la v65 : prévue 08:40 « horaire de base » → −07:33 d'heures manquantes.
+    const jours = [{
+      jour: '2026-11-21', statut: 'HeuresSupplementaires', arrivee: '12:43', depart: '13:50',
+      pauseMinutes: 0, productionMinutes: 67, productionPrevueMinutes: 0, planifie: false,
+      heuresSupplementairesMinutes: 67,
+    }];
+    const prevue = (d: Date) => ({ minutes: 520, origine: 'horaire de base' });
+    const [l] = detailSolde(jours, '2026-11-23', prevue);
+    expect(l.prevueMinutes).toBe(0);
+    expect(l.ecartMinutes).toBe(67);
+    expect(l.heuresSupMinutes).toBe(67);
+    expect(l.planifie).toBe(false);
+    expect(l.originePrevue).toBe('Hors planning — heures supplémentaires');
+    const solde = soldeHeures(jours, '2026-11-23', prevue);
+    expect(solde.moinsMinutes).toBe(0);
+    expect(solde.plusMinutes).toBe(67);
+    expect(solde.heuresSupMinutes).toBe(67);
+    expect(solde.joursHeuresSup).toBe(1);
+  });
+
+  it('réponse d’un serveur antérieur : un samedi sans production prévue reste hors planning', async () => {
+    const { detailSolde } = await import('./heure-sortie.util');
+    const jours = [{ jour: '2026-11-21', statut: 'SansPlanning', productionMinutes: 67, productionPrevueMinutes: null }];
+    const [l] = detailSolde(jours, '2026-11-23');
+    expect(l.prevueMinutes).toBe(0);
+    expect(l.heuresSupMinutes).toBe(67);
+  });
+
+  it('le choix du jour et l’horaire de base ne s’appliquent pas hors planning', async () => {
+    const { prevueDuChoix } = await import('./heure-sortie.util');
+    const choix = [{ jour: '2026-11-21', choix: '0840' as const }];
+    expect(prevueDuChoix('2026-11-21', choix, '0840', true)).toEqual({ minutes: 520, origine: 'choisi ce jour' });
+    expect(prevueDuChoix('2026-11-21', choix, '0840', false))
+      .toEqual({ minutes: 0, origine: 'hors planning (heures supplémentaires)' });
   });
 });
 
@@ -227,5 +291,20 @@ describe('correction des journées passées (v45)', () => {
     expect(courteDejaPriseSemaine('2026-11-02', choix, '0840')).toBeNull(); // semaine suivante
     expect(courteDejaPriseSemaine('2026-10-27', choix, '0740')).toBeNull(); // horaire 07h40
     expect(courteDejaPriseSemaine('2026-10-31', choix, '0840')).toBeNull(); // samedi
+  });
+});
+
+describe('v70 — solde depuis le 24 : la Récup du planning IT consomme le solde', () => {
+  it('Récup non pointée : −minutes de la Récup ; manque de pointage : non compté', () => {
+    const lignes = detailSolde([
+      { jour: '2026-11-24', statut: 'AHeure', productionMinutes: 550, productionPrevueMinutes: 520, planifie: true },
+      { jour: '2026-11-25', statut: 'PointageManquant', productionMinutes: null, productionPrevueMinutes: 520, planifie: true },
+      { jour: '2026-11-26', statut: 'Recup', productionMinutes: null, productionPrevueMinutes: 0, planifie: false, recupMinutes: 520 },
+    ], '2026-11-27');
+    expect(lignes.map((l) => [l.compte, l.ecartMinutes, l.cumulMinutes])).toEqual([[true, 30, 30], [false, null, 30], [true, -520, -490]]);
+    expect(lignes[2].originePrevue).toContain('Récup');
+    expect(soldeHeures([
+      { jour: '2026-11-26', statut: 'Recup', productionMinutes: null, productionPrevueMinutes: 0, planifie: false, recupMinutes: 520 },
+    ], '2026-11-27').soldeMinutes).toBe(-520);
   });
 });

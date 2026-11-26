@@ -459,6 +459,66 @@ public class UsersController(
     public Task<IActionResult> Reactivate(int id, CancellationToken ct) =>
         SetActive(id, isActive: true, dateSortie: null, ct);
 
+    /// <summary>
+    /// v67 — Suppression définitive d'un compte, distincte de la désactivation. Réservée à l'Admin et
+    /// au RH (droit « Utilisateurs › Supprimer » ; un administrateur restreint ne supprime pas un
+    /// administrateur ; le compte Super Admin et son propre compte ne se suppriment pas).
+    /// Confirmation obligatoire : l'adresse e-mail du compte, recopiée. Règles de conservation : un
+    /// compte auquel des données à garder sont rattachées est refusé (409) — rien n'est effacé, il
+    /// reste à le désactiver. Traçabilité : l'identité du compte supprimé est inscrite au journal.
+    /// </summary>
+    [HttpPost("{id:int}/suppression-definitive")]
+    [Authorize(Roles = "Admin,RH")]
+    public async Task<IActionResult> SupprimerDefinitivement(
+        int id,
+        [FromBody] SuppressionDefinitiveRequest? body,
+        [FromServices] IUtilisateurSuppressionDefinitive suppression,
+        [FromServices] IJournalActionsService journal,
+        CancellationToken ct)
+    {
+        if (!IsHrOrAdminConnected()) return Forbid();
+        if (await DenyAdminEscalationAsync(id, null, ct) is { } escalade) return escalade;
+        if (await DenySuperAdminTargetAsync(id, ct) is { } protege) return protege;
+        var cible = await userService.GetUserByIdAsync(id);
+        if (cible is null)
+            return NotFound(new { message = $"Utilisateur {id} introuvable." });
+        if (cible.AuthUserId is int cibleAuth && cibleAuth == User.GetAuthUserId())
+            return BadRequest(new { message = "Vous ne pouvez pas supprimer votre propre compte." });
+        // Le RH ne supprime pas un compte administrateur (géré par l'Admin / le Super Admin).
+        if (!KyntusAdminClaims.IsAdmin(User) && EstRoleAdmin(cible.RoleName))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Un compte administrateur ne peut être supprimé que par un administrateur." });
+        if (!SuppressionDefinitiveRegles.ConfirmationValide(body?.Confirmation, cible.Email))
+            return BadRequest(new { message = "Confirmation incorrecte : recopiez l'adresse e-mail du compte pour le supprimer définitivement." });
+
+        var resultat = await suppression.SupprimerDefinitivementAsync(id, ct);
+        switch (resultat.Issue)
+        {
+            case SuppressionDefinitiveIssue.Introuvable:
+                return NotFound(new { message = $"Utilisateur {id} introuvable." });
+            case SuppressionDefinitiveIssue.DonneesAConserver:
+                return Conflict(new
+                {
+                    code = "DONNEES_A_CONSERVER",
+                    message = $"Suppression impossible : des données à conserver sont rattachées à ce compte ({string.Join(", ", resultat.Bloquants)}). "
+                              + "Rien n'a été supprimé ; utilisez « Désactiver » pour bloquer le compte en gardant l'historique.",
+                    bloquants = resultat.Bloquants,
+                });
+        }
+
+        // Traçabilité : identité du compte supprimé (le journal n'est pas lié au compte et reste consultable).
+        await journal.EnregistrerAsync(new JournalEvenement(
+            "Employés",
+            "Suppression définitive du compte",
+            $"Compte supprimé — {resultat.Collaborateur}",
+            "User",
+            id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            null,
+            resultat.Identite,
+            null,
+            "Compte, accès et réglages personnels supprimés définitivement (confirmation saisie)."), null, ct);
+        return NoContent();
+    }
+
     /// <summary>Annule une création incomplète (étape suivante en échec). Refusé après 30 minutes.</summary>
     [HttpPost("{id}/rollback-creation")]
     public async Task<IActionResult> RollbackCreation(int id, CancellationToken ct)

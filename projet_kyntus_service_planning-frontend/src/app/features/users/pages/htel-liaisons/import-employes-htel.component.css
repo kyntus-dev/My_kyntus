@@ -296,3 +296,8 @@
   font-size: 0.82rem;
   color: var(--text-muted, #64748b);
 }
+
+/* v66 — Détail des fiches existantes mises à jour. */
+.ie-modifs { margin: 4px 0 0; padding-left: 1.1rem; font-size: 0.8rem; color: var(--text-muted); }
+.ie-modifs li { margin: 1px 0; }
+.ie-sous--warn { color: var(--warning-600, #b45309); }

@@ -69,6 +69,9 @@ public static partial class FicheReference
             "carte autoentrepreneur", "numero carte autoentrepreneur", "n carte autoentrepreneur"], ProfilSousTraitants),
         new("typeEmploye", "Type d'employé", ["type d employe", "type employe", "type de salarie", "statut employe",
             "type d agent", "salarie ou sous traitant"], ProfilFacultatif),
+        // v66 : e-mail personnel (fichier RH de l'écran « Liaisons HTEL », et toute colonne d'e-mail).
+        new("emailPersonnel", "E-mail personnel", ["email", "e mail", "mail", "email personnel", "e mail personnel",
+            "mail personnel", "adresse mail", "adresse e mail", "adresse email", "courriel"], ProfilFacultatif),
     ];
 
     /// <summary>Champs exigés pour qu'une fiche de salarié actif soit complète (fichier des salariés).</summary>
@@ -338,6 +341,8 @@ public static partial class FicheReference
         public string? RegistreNational { get; set; }
         /// <summary>v64 : type d'employé lu dans le fichier ou déduit de ses colonnes (null = inconnu).</summary>
         public string? TypeEmploye { get; set; }
+        /// <summary>v66 : e-mail personnel.</summary>
+        public string? EmailPersonnel { get; set; }
 
         /// <summary>Valeurs refusées (non appliquées) : à corriger dans le fichier.</summary>
         public List<string> Anomalies { get; } = [];
@@ -369,6 +374,14 @@ public static partial class FicheReference
             NumeroPasseport = LireTexte(V("passeport"))?.Replace(" ", string.Empty).ToUpperInvariant(),
             RegistreNational = LireTexte(V("registreNational"))?.Replace(" ", string.Empty),
         };
+
+        // v66 : e-mail personnel — une valeur qui n'a pas la forme d'une adresse est signalée, jamais appliquée.
+        var email = LireTexte(V("emailPersonnel"))?.Replace(" ", string.Empty);
+        if (email is not null)
+        {
+            if (EmailValide(email)) r.EmailPersonnel = email.ToLowerInvariant();
+            else r.Anomalies.Add($"E-mail personnel « {email} » non reconnu (adresse attendue) : non appliqué");
+        }
 
         var nationalite = LireTexte(V("nationalite"));
         r.Nationalite = nationalite is null ? null : Capitaliser(nationalite);
@@ -480,8 +493,14 @@ public static partial class FicheReference
         r.CarteImmatriculation = Borne(r.CarteImmatriculation, 32, "Carte d'immatriculation");
         r.NumeroPasseport = Borne(r.NumeroPasseport, 32, "N° de passeport");
         r.RegistreNational = Borne(r.RegistreNational, 64, "N° d'inscription au registre national");
+        r.EmailPersonnel = Borne(r.EmailPersonnel, 256, "E-mail personnel");
         return r;
     }
+
+    /// <summary>v66 : forme d'une adresse e-mail (un « @ », un domaine avec un point, sans espace).</summary>
+    public static bool EmailValide(string? email) =>
+        !string.IsNullOrWhiteSpace(email)
+        && System.Text.RegularExpressions.Regex.IsMatch(email.Trim(), @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
 
     // ── Champs de la fiche : lecture, écriture, comparaison ─────────────────────────────────
 
@@ -522,6 +541,8 @@ public static partial class FicheReference
         new("telephoneUrgence", "TEL 2 (urgence)", p => p.TelephoneUrgence, (p, v) => p.TelephoneUrgence = Vide(v), v => v.TelephoneUrgence),
         new("relationUrgence", "Relation (TEL 2)", p => p.RelationUrgence, (p, v) => p.RelationUrgence = Vide(v), v => v.RelationUrgence),
         new("numeroBox", "N° BOX", p => p.NumeroBox, (p, v) => p.NumeroBox = Vide(v), v => v.NumeroBox),
+        // v66 : e-mail personnel (fiche RH) — vérifié et mis à jour comme les autres champs.
+        new("emailPersonnel", "E-mail personnel", p => p.EmailPersonnel, (p, v) => p.EmailPersonnel = Vide(v), v => v.EmailPersonnel),
         // v64 : fichier des entrepreneurs et type d'employé.
         new("dateEntree", "Date d'entrée", p => D(p.DateEntree), (p, v) => p.DateEntree = VersDate(v), v => D(v.DateEntree)),
         new("carteImmatriculation", "Carte d'immatriculation", p => p.CarteImmatriculation, (p, v) => p.CarteImmatriculation = Vide(v), v => v.CarteImmatriculation),

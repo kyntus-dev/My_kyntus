@@ -10,7 +10,11 @@ export type PointageJourStatut =
   | 'Conge'
   | 'Ferie'
   | 'Repos'
-  | 'AVenir';
+  | 'AVenir'
+  /** v65 — Journée travaillée et pointée sans production prévue au planning (samedi hors planning). */
+  | 'HeuresSupplementaires'
+  /** v67 — Journée de récupération (planning IT « Récup ») : déduite des heures supplémentaires. */
+  | 'Recup';
 
 export interface PointageJourDto {
   /** yyyy-MM-dd */
@@ -34,6 +38,20 @@ export interface PointageJourDto {
   ecartProductionMinutes?: number | null;
   /** Origine du planning : planning publié ou régime horaire. */
   source?: 'Planning' | 'Regime' | 'PlanningIT' | null;
+  /**
+   * v65 — Journée prévue au planning de l'agent (planning publié, planning IT « Travail » ou jour
+   * travaillé de son régime horaire). Faux : samedi ou jour de repos travaillé hors planning.
+   */
+  planifie?: boolean;
+  /** v65 — Heures réalisées une journée non planifiée : heures supplémentaires. */
+  heuresSupplementairesMinutes?: number | null;
+  /** v67 — Récupération (planning IT « Récup ») : minutes déduites des heures supplémentaires. */
+  recupMinutes?: number | null;
+  /**
+   * v70 — Manque de pointage : heures des seuls segments pointés. Affichées pour information ;
+   * elles ne comptent ni dans la production, ni dans l'écart, ni dans le cumul depuis le 24.
+   */
+  productionPointeeMinutes?: number | null;
 }
 
 export interface PointageTotauxDto {
@@ -46,6 +64,12 @@ export interface PointageTotauxDto {
   productionMinutes?: number;
   productionPrevueMinutes?: number;
   joursProductionCalculee?: number;
+  /** v65 — Heures supplémentaires de la période, comptées à part de la production prévue. */
+  heuresSupplementairesMinutes?: number;
+  joursHeuresSupplementaires?: number;
+  /** v67 — Récupérations de la période (minutes déduites des heures sup.) et journées. */
+  recupMinutes?: number;
+  joursRecup?: number;
 }
 
 export interface PointageSuiviDto {
@@ -78,6 +102,8 @@ export interface PointageEquipeLigneDto {
   productionMinutes?: number;
   productionPrevueMinutes?: number;
   regime?: string | null;
+  /** v65 — Heures supplémentaires de la période (samedis et jours de repos travaillés). */
+  heuresSupplementairesMinutes?: number;
 }
 
 export interface PointageEquipeDto {
@@ -121,6 +147,11 @@ export interface PointageAujourdhuiDto {
   productionBase?: '0840' | '0740' | null;
   /** v43 : jour de la semaine où la journée à 07h40 a déjà été prise (horaire 08h40), sinon null. */
   jour0740Semaine?: string | null;
+  /**
+   * v65 : journée prévue au planning de l'agent. Fausse (samedi hors planning, jour de repos),
+   * aucune production n'est attendue : tout ce qui est pointé part en heures supplémentaires.
+   */
+  planifie?: boolean;
 }
 
 export type PointageCorrespondanceStatut = 'AValider' | 'Auto' | 'Valide' | 'Ignore';

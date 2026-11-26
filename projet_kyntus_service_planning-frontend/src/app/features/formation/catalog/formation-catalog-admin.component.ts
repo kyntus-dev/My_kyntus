@@ -41,6 +41,7 @@ import {
   countDraftLessons,
   uploadCatalogPendingFiles,
 } from './formation-catalog-structure.util';
+import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 
 type MainTab = 'contents' | 'templates' | 'stats';
 type WizardStep = 1 | 2 | 3;
@@ -87,6 +88,12 @@ const CONTENT_DRAFT_STASH_KEY = 'fcat-content-draft-v1';
   styleUrls: ['./formation-catalog-admin.component.css'],
 })
 export class FormationCatalogAdminComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
+  /** v72 — Éditer, publier, archiver, dupliquer : « Formation continue › Modifier ». */
+  get peutModifierFormation(): boolean {
+    return this.droits.autorise('formation.planification', 'Act');
+  }
   readonly icons = { add: Plus, book: BookOpen, back: ArrowLeft };
   private readonly api = inject(FormationTrainingService);
   private readonly usersApi = inject(UserService);
@@ -152,6 +159,7 @@ export class FormationCatalogAdminComponent implements OnInit {
   templateQuestions: QuizDraftQuestion[] = [];
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     this.hydrateContentDraftStash();
     void this.reload();
     void this.loadAudienceSources();

@@ -100,6 +100,75 @@ public static class AdminRestrictionRules
     /// <summary>Refusé si l'écran entier (View) ou ce verbe précis est retiré.</summary>
     public static bool IsDenied(IReadOnlySet<string> denied, string screen, string verb) =>
         denied.Count > 0 && (denied.Contains(screen + ".View") || denied.Contains(screen + "." + verb));
+
+    /// <summary>
+    /// v66 — Droits <b>explicitement retirés</b> à un compte qui n'est pas administrateur (« écran.Verbe ») :
+    /// <list type="bullet">
+    /// <item>rôle : action décochée dans « Accès par rôle » (toutes ses lignes refusées, quel que soit le
+    ///   périmètre — une ligne accordée sur un autre périmètre la garde ouverte) ;</item>
+    /// <item>compte : la hiérarchie « Accès par compte » &gt; « Accès par rôle » s'applique — un droit
+    ///   accordé au compte lève le retrait du rôle (et, pour un verbe, le retrait de l'écran entier) ;
+    ///   un droit retiré au compte s'ajoute toujours.</item>
+    /// </list>
+    /// Seuls les retraits explicites comptent : une action jamais accordée n'est pas « retirée », le
+    /// contrôle reste alors celui du service (aucun effet de bord sur les écrans non configurés).
+    /// </summary>
+    public static IReadOnlyList<string> RevocationsExplicites(
+        IEnumerable<(string Action, bool IsAllowed)> lignesRole,
+        IEnumerable<(string Action, bool IsAllowed)> lignesCompte)
+    {
+        static bool Utile(string? action) =>
+            !string.IsNullOrWhiteSpace(action) && action.Trim() != "*" && Split(action) is not null;
+
+        var refusees = lignesRole
+            .Where(l => Utile(l.Action))
+            .GroupBy(l => l.Action.Trim(), StringComparer.Ordinal)
+            .Where(g => g.All(l => !l.IsAllowed))
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var compte = lignesCompte.Where(l => Utile(l.Action)).Select(l => (Action: l.Action.Trim(), l.IsAllowed)).ToList();
+        foreach (var (action, _) in compte.Where(c => c.IsAllowed))
+        {
+            refusees.Remove(action);
+            var p = Split(action);
+            if (p.HasValue) refusees.Remove(p.Value.Screen + ".View");
+        }
+        foreach (var (action, _) in compte.Where(c => !c.IsAllowed))
+            refusees.Add(action);
+
+        return refusees.OrderBy(x => x, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// v66 — Retire des clés « écran.Verbe:Périmètre » tout ce qui est révoqué. Un écran retiré
+    /// (« écran.View ») emporte tous ses verbes : sinon « Modifier » restait accordé et rouvrait la
+    /// consultation (Consulter est impliqué par Modifier / Valider / Configurer).
+    /// </summary>
+    public static IReadOnlyList<string> RetirerRevoquees(IReadOnlyList<string> cles, IReadOnlyCollection<string> revoquees)
+    {
+        if (revoquees.Count == 0) return cles;
+        var set = revoquees as IReadOnlySet<string> ?? new HashSet<string>(revoquees, StringComparer.Ordinal);
+        return cles
+            .Where(k =>
+            {
+                var p = Split(k.Split(':')[0]);
+                return p is null || !IsDenied(set, p.Value.Screen, p.Value.Verb);
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// v66 — Verbe contrôlé pour un compte qui n'est pas administrateur : les rôles n'ont que
+    /// Consulter / Modifier / Valider / Configurer — Supprimer suit Modifier, Exporter suit Consulter
+    /// (même règle que l'application).
+    /// </summary>
+    public static string VerbePourRole(string verb) => verb switch
+    {
+        "Delete" => "Act",
+        "Export" => "View",
+        _ => verb,
+    };
 }
 
 /// <summary>Restrictions applicables à l'utilisateur courant.</summary>

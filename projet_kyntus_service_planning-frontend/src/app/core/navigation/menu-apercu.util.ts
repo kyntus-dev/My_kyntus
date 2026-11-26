@@ -47,15 +47,14 @@ export function apercuMenu(role: string, cles: readonly string[], groupes: reado
     let lieAuxDroits = false;
     const entrees: string[] = [];
     for (const c of g.children) {
-      if (c.isSectionHeader || c.superAdminOnly) continue;
+      // v67 — « Heure de sortie » : accordée compte par compte par le Super Admin, jamais par rôle.
+      if (c.isSectionHeader || c.superAdminOnly || c.accordeParSuperAdmin) continue;
       const ecrans = role === 'Admin' && c.iamStrict ? [c.iamStrict] : ecransDe(c);
       if (ecrans.length) lieAuxDroits = true;
       const ok = ecrans.length
         ? ecrans.some((e) => droitAccorde(cles, e, c.capabilityVerb === 'Act' ? 'Act' : 'View', role))
         : roleOk(c.roles);
-      // « Heure de sortie » : en plus du droit, l'accès est donné compte par compte (Pointage).
-      const libelle = c.route === '/pointage/heure-de-sortie' ? `${c.label} (comptes autorisés)` : c.label;
-      if (ok && !entrees.includes(libelle)) entrees.push(libelle);
+      if (ok && !entrees.includes(c.label)) entrees.push(c.label);
     }
     if (entrees.length && (roleOk(g.roles) || lieAuxDroits)) out.push({ id: g.id, label: g.label, entrees });
   }

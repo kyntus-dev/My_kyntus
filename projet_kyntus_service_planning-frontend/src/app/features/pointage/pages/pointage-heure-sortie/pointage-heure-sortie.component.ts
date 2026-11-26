@@ -15,7 +15,7 @@ import {
   formatHeure,
   formatHeuresMinutes,
   formatHms,
-  debutPeriodePaie,
+  DEBUT_SOLDE_HEURES,
   detailSolde,
   prevueDuChoix,
   courteDejaPriseSemaine,
@@ -67,6 +67,11 @@ export class PointageHeureSortieComponent implements OnInit {
   readonly choix = signal<ChoixProduction | null>(null);
   readonly enregistrementChoix = signal(false);
 
+  /**
+   * v65 — Journée prévue au planning de l'agent. Fausse (samedi hors planning, jour de repos
+   * travaillé), aucune production n'est attendue : tout le temps pointé est en heures supplémentaires.
+   */
+  readonly jourPlanifie = computed(() => this.jour()?.planifie !== false);
   /** Production du planning ou du régime (en attendant le choix du jour). */
   readonly productionPlanning = computed(() => this.jour()?.productionPrevueMinutes ?? productionExcel(this.now()));
   /** B3 : production du jour. */
@@ -78,13 +83,20 @@ export class PointageHeureSortieComponent implements OnInit {
     return j && this.choix() !== '0740' ? j : null;
   });
   readonly productionMinutes = computed(() =>
-    productionDuChoix(this.choix(), this.now()) ?? productionDuChoix(this.base()) ?? this.productionPlanning());
+    // v65 : hors planning, la production attendue est nulle — ni le choix du jour ni l'horaire de
+    // base ne s'appliquent. Sans cela, un samedi non planifié affichait 08h40 à faire et un retard
+    // de plusieurs heures.
+    this.jourPlanifie()
+      ? productionDuChoix(this.choix(), this.now()) ?? productionDuChoix(this.base()) ?? this.productionPlanning()
+      : 0);
   /** I4 : pauses forfaitaires. */
   readonly pauseForfaitMinutes = computed(() => this.jour()?.pauseAutoriseeMinutes ?? PAUSE_FORFAIT_EXCEL);
   readonly premierPointage = computed(() => this.jour()?.pointages?.[0] ?? null);
   readonly sourceTexte = computed(() => {
     const j = this.jour();
     if (!j) return '';
+    // v65 : journée hors planning — le temps pointé est compté en heures supplémentaires.
+    if (j.planifie === false) return 'Journée hors planning — heures supplémentaires';
     if (j.source === 'Planning') return 'Planning publié du jour';
     if (j.source === 'PlanningIT') return 'Planning IT du jour';
     if (j.source === 'Regime' || j.regime) return `Régime « ${j.regime} »`;
@@ -124,8 +136,19 @@ export class PointageHeureSortieComponent implements OnInit {
     const r = this.resultat();
     return r ? r.productionRealiseeSecondes - r.productionSecondes : 0;
   });
-  /** Solde du mois si la personne sort maintenant. */
+  /** Solde si la personne sort maintenant. */
   readonly soldeApres = computed(() => (this.solde()?.soldeMinutes ?? 0) * 60 + this.ecartJour());
+  /**
+   * v71 — Récupérer son solde aujourd'hui : heure de sortie en utilisant les heures en plus déjà
+   * acquises (ex. 2 h de solde → 8 h 40 − 2 h). null : pas de solde positif ou journée sans production.
+   */
+  readonly sortieAvecSolde = computed(() => {
+    const r = this.resultat();
+    const solde = (this.solde()?.soldeMinutes ?? 0) * 60;
+    if (!r || solde <= 0 || r.productionSecondes <= 0) return null;
+    const utilise = Math.min(solde, r.productionSecondes);
+    return { sortieSecondes: r.sortieSecondes - utilise, utiliseSecondes: utilise, toute: utilise >= r.productionSecondes };
+  });
 
   /** Pause autorisée qu'il reste à prendre (information, non ajoutée à la sortie). */
   readonly pauseRestanteMinutes = computed(() => {
@@ -149,8 +172,9 @@ export class PointageHeureSortieComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     const now = new Date();
-    // Compensation sur la période de paie (24 → 23) : solde depuis le 24.
-    const du = debutPeriodePaie(now).toLocaleDateString('sv-SE');
+    // v71 : le solde ne repart plus de zéro le 24 — il se cumule depuis DEBUT_SOLDE_HEURES et se
+    // garde jusqu'à sa récupération (Récup, ou sortie plus tôt).
+    const du = DEBUT_SOLDE_HEURES;
     const au = now.toLocaleDateString('sv-SE');
     this.periodeDu.set(du);
     const veille = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);

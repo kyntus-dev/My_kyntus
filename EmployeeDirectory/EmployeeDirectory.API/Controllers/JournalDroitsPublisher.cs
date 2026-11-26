@@ -2,6 +2,7 @@ using System.Security.Claims;
 using EmployeeDirectory.Application.Dtos;
 using EmployeeDirectory.Application.Iam;
 using EmployeeDirectory.Infrastructure.Persistence;
+using Kyntus.Iam;
 using Kyntus.Messaging.Contracts;
 using Kyntus.Messaging.Outbox;
 using Microsoft.EntityFrameworkCore;
@@ -10,8 +11,9 @@ namespace EmployeeDirectory.API.Controllers;
 
 /// <summary>
 /// v64 — Modifications des droits d'accès (par rôle, par compte) publiées vers le journal d'actions du
-/// Planning (Audit et conformité), par la boîte d'envoi (outbox). Le rôle Super Admin n'est jamais
-/// transmis : il est présenté comme « Admin ». Une erreur ici n'annule jamais la modification des droits.
+/// Planning (Audit et conformité), par la boîte d'envoi (outbox). v67 : les actions du Super Admin ne
+/// sont pas publiées (elles n'apparaissent pas au journal). Une erreur ici n'annule jamais la
+/// modification des droits.
 /// </summary>
 public static class JournalDroitsPublisher
 {
@@ -63,6 +65,8 @@ public static class JournalDroitsPublisher
         ClaimsPrincipal user, DirectoryDbContext db, IOutboxWriter outbox,
         IReadOnlyList<(UpsertIamPermissionRequest Demande, bool? Avant)> changements, ILogger logger, CancellationToken ct)
     {
+        // v67 — Les actions du Super Admin ne sont pas inscrites au journal d'actions.
+        if (KyntusAdminClaims.IsSuperAdmin(user)) return;
         try
         {
             var reels = changements.Where(c => c.Avant != c.Demande.IsAllowed).ToList();
@@ -99,6 +103,8 @@ public static class JournalDroitsPublisher
         ClaimsPrincipal user, DirectoryDbContext db, IOutboxWriter outbox, Guid compte, UserAccessUpdateRequest demande,
         UserAccessDto? avant, ILogger logger, CancellationToken ct)
     {
+        // v67 — Les actions du Super Admin ne sont pas inscrites au journal d'actions.
+        if (KyntusAdminClaims.IsSuperAdmin(user)) return;
         try
         {
             var changements = demande.Changes ?? [];

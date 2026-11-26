@@ -201,7 +201,7 @@
         </div>
       </div>
 
-      <aside class="rpa-treat-panel ky-card">
+      <aside class="rpa-treat-panel ky-card" *ngIf="droits.autorise('qualite.admin', 'Act')">
         <h3>Traitement</h3>
         <p class="rpa-treat-sub">Mettez à jour le statut, la priorité et le responsable, puis répondez à l’auteur.</p>
 

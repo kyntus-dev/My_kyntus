@@ -155,3 +155,4 @@
     grid-template-columns: 1fr;
   }
 }
+.rpa-detail-split:has(> :only-child) { grid-template-columns: minmax(0, 1fr); } /* v72 */

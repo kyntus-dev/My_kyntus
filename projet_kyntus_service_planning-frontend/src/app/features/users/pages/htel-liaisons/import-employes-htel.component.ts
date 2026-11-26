@@ -15,6 +15,16 @@ import { lireFichierTabulaire } from '../../lib/lecture-tolerante.util';
 import { LigneImportEmploye, cleNom, lireMatriceEmployes } from '../../lib/import-employes.util';
 import { findUniqueHtelMatch, scoreEmployeeToHtel } from '../../services/htel-name-match.util';
 
+/** v66 — « cree », « mis-a-jour », « a-jour » (fiche existante conforme), « a-verifier » ou « erreur ». */
+type StatutImport = 'cree' | 'mis-a-jour' | 'a-jour' | 'a-verifier' | 'erreur';
+
+interface ModificationImport {
+  cle: string;
+  libelle: string;
+  ancienne: string | null;
+  nouvelle: string | null;
+}
+
 interface ResultatImport {
   numero: number;
   nom: string;
@@ -23,6 +33,21 @@ interface ResultatImport {
   userId: number | null;
   guid: string | null;
   message: string | null;
+  statut?: StatutImport;
+  modifications?: ModificationImport[] | null;
+  anomalies?: string[] | null;
+  champsManquants?: string[] | null;
+  candidats?: { userId: number; nom: string; prenom: string; raison: string }[] | null;
+}
+
+interface RapportImport {
+  resultats: ResultatImport[];
+  crees: number;
+  echecs: number;
+  misesAJour?: number;
+  aJour?: number;
+  aVerifier?: number;
+  importId?: string | null;
 }
 
 /**
@@ -58,6 +83,8 @@ export class ImportEmployesHtelComponent implements OnInit {
 
   ouvert = false;
   analyse = false;
+  /** v66 — Rapport complet (compteurs, identifiant de l'import pour l'historique). */
+  rapport: RapportImport | null = null;
   envoi = false;
   erreur: string | null = null;
 
@@ -118,6 +145,7 @@ export class ImportEmployesHtelComponent implements OnInit {
     this.retenue = {};
     this.technicien = {};
     this.resultats = null;
+    this.rapport = null;
     this.erreur = null;
     this.liaisonsFaites = 0;
   }
@@ -146,8 +174,9 @@ export class ImportEmployesHtelComponent implements OnInit {
         this.avertissement = lecture.avertissement;
         for (const l of this.lignes) {
           const deja = this.dejaPresent(l);
-          // v52 — Une ligne qui pourrait être l'en-tête du fichier n'est jamais cochée d'office.
-          this.retenue[l.numero] = !deja && !l.suspecteEntete;
+          // v66 — Une fiche existante n'est plus écartée : elle est vérifiée et mise à jour d'après le
+          // fichier. v52 — Une ligne qui pourrait être l'en-tête du fichier n'est jamais cochée d'office.
+          this.retenue[l.numero] = !l.suspecteEntete;
           this.technicien[l.numero] = deja ? 0 : findUniqueHtelMatch(l.prenom, l.nom, this.orphelins)?.idTechnicien ?? 0;
         }
       }
@@ -187,7 +216,7 @@ export class ImportEmployesHtelComponent implements OnInit {
 
   toutCocher(valeur: boolean): void {
     for (const l of this.lignes) {
-      this.retenue[l.numero] = valeur && !this.dejaPresent(l) && !l.suspecteEntete;
+      this.retenue[l.numero] = valeur && !l.suspecteEntete;
     }
     this.cdr.detectChanges();
   }
@@ -205,6 +234,11 @@ export class ImportEmployesHtelComponent implements OnInit {
     return !!this.roleId && !!this.dateEmbauche && this.retenues.length > 0 && !this.conflitTechnicien;
   }
 
+  /** v66 — Lignes retenues dont la fiche existe déjà (vérifiées et mises à jour, pas recréées). */
+  get retenuesExistantes(): number {
+    return this.retenues.filter((l) => this.dejaPresent(l)).length;
+  }
+
   // ── Création ────────────────────────────────────────────────────────────────
 
   importer(): void {
@@ -214,7 +248,7 @@ export class ImportEmployesHtelComponent implements OnInit {
     this.erreur = null;
     this.cdr.detectChanges();
 
-    this.http.post<{ resultats: ResultatImport[]; crees: number; echecs: number }>(
+    this.http.post<RapportImport>(
       '/api/users/import-employes',
       {
         roleId: this.roleId,
@@ -238,11 +272,17 @@ export class ImportEmployesHtelComponent implements OnInit {
     ).subscribe({
       next: async (rapport) => {
         this.resultats = rapport.resultats ?? [];
+        this.rapport = rapport;
         this.liaisonsFaites = await this.lierTechniciens(this.resultats);
         this.envoi = false;
-        this.toast.success(
-          `${rapport.crees} employé(s) créé(s)${rapport.echecs ? `, ${rapport.echecs} en échec` : ''}.`,
-        );
+        const morceaux = [
+          `${rapport.crees} créé(s)`,
+          `${rapport.misesAJour ?? 0} fiche(s) mise(s) à jour`,
+          `${rapport.aJour ?? 0} déjà conforme(s)`,
+        ];
+        if (rapport.aVerifier) morceaux.push(`${rapport.aVerifier} à vérifier`);
+        if (rapport.echecs) morceaux.push(`${rapport.echecs} en échec`);
+        this.toast.success(`${morceaux.join(', ')}.`);
         this.importe.emit();
         this.cdr.detectChanges();
       },
@@ -259,6 +299,7 @@ export class ImportEmployesHtelComponent implements OnInit {
     let faites = 0;
     for (const r of resultats) {
       const idTech = this.technicien[r.numero] ?? 0;
+      // v66 — Une fiche existante mise à jour peut aussi être liée au technicien choisi.
       if (!r.ok || !r.guid || idTech <= 0) continue;
       try {
         await new Promise<void>((resolve, reject) =>
@@ -272,10 +313,44 @@ export class ImportEmployesHtelComponent implements OnInit {
   }
 
   get crees(): ResultatImport[] {
-    return (this.resultats ?? []).filter((r) => r.ok);
+    return (this.resultats ?? []).filter((r) => this.statut(r) === 'cree');
   }
 
   get echecs(): ResultatImport[] {
-    return (this.resultats ?? []).filter((r) => !r.ok);
+    return (this.resultats ?? []).filter((r) => this.statut(r) === 'erreur');
+  }
+
+  /** v66 — Fiches existantes vérifiées (mises à jour ou déjà conformes). */
+  get verifiees(): ResultatImport[] {
+    return (this.resultats ?? []).filter((r) => this.statut(r) === 'mis-a-jour' || this.statut(r) === 'a-jour');
+  }
+
+  get aVerifier(): ResultatImport[] {
+    return (this.resultats ?? []).filter((r) => this.statut(r) === 'a-verifier');
+  }
+
+  /** v66 — Statut d'une ligne (les réponses d'une version antérieure n'en portent pas). */
+  statut(r: ResultatImport): StatutImport {
+    return r.statut ?? (r.ok ? 'cree' : 'erreur');
+  }
+
+  libelleStatut(r: ResultatImport): string {
+    switch (this.statut(r)) {
+      case 'cree': return 'Créé';
+      case 'mis-a-jour': return 'Fiche mise à jour';
+      case 'a-jour': return 'Fiche déjà conforme';
+      case 'a-verifier': return 'À vérifier';
+      default: return 'Échec';
+    }
+  }
+
+  classeStatut(r: ResultatImport): string {
+    switch (this.statut(r)) {
+      case 'cree':
+      case 'mis-a-jour':
+      case 'a-jour': return 'ie-badge--ok';
+      case 'a-verifier': return 'ie-badge--warn';
+      default: return 'ie-badge--ko';
+    }
   }
 }

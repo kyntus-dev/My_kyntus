@@ -83,7 +83,7 @@
                 <span class="fe-quiz-chip">Libre accès</span>
               }
             </div>
-            <button type="button" class="ky-btn-secondary" (click)="openEdit(item.id)">Éditer</button>
+            <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-secondary" (click)="openEdit(item.id)">Éditer</button>
           </article>
         }
       </div>
@@ -206,7 +206,7 @@
                   <option [value]="t.id">{{ t.title }}</option>
                 }
               </select>
-              <button
+              <button [hidden]="!peutModifierFormation"
                 type="button"
                 class="fcat-inline-link"
                 [disabled]="busy()"
@@ -237,11 +237,11 @@
       }
       @if (wizardStep() === 3) {
         <button type="button" class="ky-btn-secondary" (click)="goToStep(2)">Revenir au contenu</button>
-        <button type="button" class="ky-btn-primary" [disabled]="busy()" (click)="saveItem()">Enregistrer la formation</button>
+        <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-primary" [disabled]="busy()" (click)="saveItem()">Enregistrer la formation</button>
         @if (selected()) {
           <button type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="openPreview()">Prévisualiser</button>
-          <button type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="publish()">Publier</button>
-          <button type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="archive()">Archiver</button>
+          <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="publish()">Publier</button>
+          <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="archive()">Archiver</button>
         }
       }
     </div>
@@ -254,7 +254,7 @@
         <input type="checkbox" [(ngModel)]="includeArchivedTemplates" (change)="reloadTemplates()" />
         Inclure archivés
       </label>
-      <button type="button" class="ky-btn-primary" (click)="openCreateTemplate()">
+      <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-primary" (click)="openCreateTemplate()">
         <app-lucide-icon [icon]="icons.add" className="w-4 h-4" />
         Nouveau modèle
       </button>
@@ -290,10 +290,10 @@
                 <td>{{ t.questionCount }}</td>
                 <td>{{ t.sessionUsageCount }}</td>
                 <td class="fcat-inline">
-                  <button type="button" class="ky-btn-ghost" (click)="openEditTemplate(t.id)">Éditer</button>
-                  <button type="button" class="ky-btn-ghost" [disabled]="busy()" (click)="publishTemplate(t.id)">Publier</button>
-                  <button type="button" class="ky-btn-ghost" [disabled]="busy()" (click)="archiveTemplate(t.id)">Archiver</button>
-                  <button type="button" class="ky-btn-ghost" [disabled]="busy()" (click)="duplicateTemplate(t.id)">Dupliquer</button>
+                  <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-ghost" (click)="openEditTemplate(t.id)">Éditer</button>
+                  <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-ghost" [disabled]="busy()" (click)="publishTemplate(t.id)">Publier</button>
+                  <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-ghost" [disabled]="busy()" (click)="archiveTemplate(t.id)">Archiver</button>
+                  <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-ghost" [disabled]="busy()" (click)="duplicateTemplate(t.id)">Dupliquer</button>
                 </td>
               </tr>
             }
@@ -344,11 +344,11 @@
       />
 
       <div class="fcat-actions">
-        <button type="button" class="ky-btn-primary" [disabled]="busy()" (click)="saveTemplate()">Enregistrer</button>
+        <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-primary" [disabled]="busy()" (click)="saveTemplate()">Enregistrer</button>
         @if (selectedTemplate()) {
-          <button type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="publishTemplate()">Publier</button>
-          <button type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="archiveTemplate()">Archiver</button>
-          <button type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="duplicateTemplate(selectedTemplate()!.id)">Dupliquer</button>
+          <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="publishTemplate()">Publier</button>
+          <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="archiveTemplate()">Archiver</button>
+          <button [hidden]="!peutModifierFormation" type="button" class="ky-btn-secondary" [disabled]="busy()" (click)="duplicateTemplate(selectedTemplate()!.id)">Dupliquer</button>
         }
       </div>
     </section>

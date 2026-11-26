@@ -55,7 +55,10 @@ public sealed record PointageAujourdhuiDto(
     string? ChoixProduction = null,
     // v43 : horaire de base (« 0840 » ou « 0740 ») et jour de la semaine où la journée à 07h40 a déjà été prise.
     string? ProductionBase = null,
-    DateOnly? Jour0740Semaine = null);
+    DateOnly? Jour0740Semaine = null,
+    // v65 : journée prévue au planning de l'agent. Fausse (samedi hors planning, jour de repos),
+    // aucune production n'est attendue : tout ce qui est pointé est en heures supplémentaires.
+    bool Planifie = true);
 
 /// <summary>
 /// Choix de production proposés dans « Heure de sortie ». v40 : deux valeurs fixes, 07h40 ou 08h40,
@@ -145,7 +148,8 @@ public static class RegimeResolver
     /// <summary>
     /// Planning d'un jour d'après le planning IT : « Travail » = arrivée saisie, production du régime
     /// (sinon règle de l'Excel), pause du régime (sinon pause par défaut) ; « Conge » = congé ;
-    /// « Repos » = jour non travaillé (null). Le planning IT prime sur le planning publié et le régime.
+    /// « Repos » = jour non travaillé (null) ; v67 « Recup » = récupération déduite des heures sup.
+    /// Le planning IT prime sur le planning publié et le régime.
     /// </summary>
     public static PlanningJour? PlanningDuJourIt(string statut, TimeOnly? arrivee, RegimeEffectif? regime, DateOnly jour, int pauseParDefaut)
     {
@@ -153,23 +157,59 @@ public static class RegimeResolver
             return null;
         if (statut == Domain.Entities.PlanningItStatuts.Conge)
             return new PlanningJour(null, 0, true, false, "Planning IT", null, PlanningSources.PlanningIt);
+        if (statut == Domain.Entities.PlanningItStatuts.Recup)
+        {
+            // v67 — Récupération : aucune production attendue ; la production qui aurait été prévue ce
+            // jour-là (régime, sinon règle de l'Excel ; 07h40 un samedi) est déduite des heures sup.
+            var duJour = regime is null ? null : PlanningDuJour(regime, jour)?.ProductionPrevueMinutes;
+            var excel = ProductionExcelMinutes(jour);
+            return new PlanningJour(null, regime?.PauseAutoriseeMinutes ?? pauseParDefaut, false, false, "Récup",
+                0, PlanningSources.PlanningIt, Planifie: false, RecupMinutes: duJour ?? (excel == 0 ? 460 : excel));
+        }
         var production = regime is null ? null : PlanningDuJour(regime, jour)?.ProductionPrevueMinutes;
+        // v65 : « Travail » saisi un samedi est une journée prévue en production — la règle de l'Excel
+        // renvoyant désormais 0 le week-end, on retient la production d'une journée courte (07h40).
+        var parDefaut = ProductionExcelMinutes(jour);
+        if (parDefaut == 0) parDefaut = 460;
         return new PlanningJour(
             arrivee,
             regime?.PauseAutoriseeMinutes ?? pauseParDefaut,
             false,
             false,
             "Planning IT",
-            production ?? ProductionExcelMinutes(jour),
+            production ?? parDefaut,
             PlanningSources.PlanningIt);
     }
 
     /// <summary>
     /// Production de l'Excel « Combien il me reste » (cellule B3) quand aucun régime ne s'applique :
-    /// 07:40 le vendredi et le samedi, 08:40 les autres jours.
+    /// 07:40 le vendredi, 08:40 du lundi au jeudi.
+    /// <para>
+    /// v65 : le samedi ne vaut plus 07:40 d'office. Un samedi n'est une journée de production que
+    /// s'il figure au planning de l'agent (planning publié, planning IT ou régime horaire) ; dans ce
+    /// cas la production vient de ce planning. Hors planning, il n'y a aucune production attendue :
+    /// la règle de l'Excel renvoie 0 et les heures pointées sont des heures supplémentaires. Avant,
+    /// un samedi travaillé hors planning créait jusqu'à 7 h 40 d'« heures manquantes ».
+    /// </para>
     /// </summary>
-    public static int ProductionExcelMinutes(DateOnly jour) =>
-        jour.DayOfWeek is DayOfWeek.Friday or DayOfWeek.Saturday ? 460 : 520;
+    public static int ProductionExcelMinutes(DateOnly jour) => jour.DayOfWeek switch
+    {
+        DayOfWeek.Saturday or DayOfWeek.Sunday => 0,
+        DayOfWeek.Friday => 460,
+        _ => 520,
+    };
+
+    /// <summary>
+    /// v65 — Le jour est-il un jour travaillé du régime horaire de l'agent ? Sert à savoir si un
+    /// samedi (ou tout autre jour) est prévu en production pour cette personne précise, quel que soit
+    /// son service ou son département — et non d'après un planning commun.
+    /// </summary>
+    public static bool JourTravailleDuRegime(RegimeEffectif? regime, DateOnly jour)
+    {
+        if (regime is null) return false;
+        var iso = jour.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)jour.DayOfWeek;
+        return regime.Jours.ContainsKey(iso);
+    }
 
     /// <summary>Pause de l'Excel (cellule I4 « Pause 10min » = 01:20).</summary>
     public const int PauseExcelMinutes = 80;
@@ -209,4 +249,9 @@ public sealed record HeureSortieAccesDto(int UserId, string Collaborateur, strin
 /// <summary>v43 : horaire de base d'un compte (« 0840 » ou « 0740 »).</summary>
 public sealed record HeureSortieBaseRequest(string Base);
 
-public sealed record HeureSortieAccesRequest(IReadOnlyList<int> UserIds, bool Acces);
+/// <summary>
+/// Accès « Heure de sortie » accordé ou retiré à une liste de comptes. v67 : à l'attribution, le Super
+/// Admin choisit l'horaire de base (« 0840 » : 08h40 avec une journée à 07h40 par semaine, ou
+/// « 0740 »). Sans choix : horaire du planning ou du régime (comportement d'origine).
+/// </summary>
+public sealed record HeureSortieAccesRequest(IReadOnlyList<int> UserIds, bool Acces, string? ProductionBase = null);

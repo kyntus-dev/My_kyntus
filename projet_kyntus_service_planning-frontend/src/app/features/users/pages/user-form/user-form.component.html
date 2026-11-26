@@ -37,6 +37,7 @@
                 tant que vous n’avez pas confirmé.
               </p>
             </div>
+            @if (peutConfirmerPassage) {
             <button
               type="button"
               class="ky-btn-primary"
@@ -45,6 +46,7 @@
             >
               {{ passageProductionBusy ? 'Confirmation…' : 'Confirmer passage production' }}
             </button>
+            }
           </div>
         }
 
