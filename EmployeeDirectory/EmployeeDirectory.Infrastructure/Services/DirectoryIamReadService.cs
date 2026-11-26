@@ -16,30 +16,60 @@ public sealed class DirectoryIamReadService(
     public async Task<EffectivePermissionsDto> GetEffectivePermissionsAsync(Guid subjectId, string role, CancellationToken ct = default)
     {
         var keys = await GetEffectivePermissionKeysAsync(role, ct);
-        if (subjectId != Guid.Empty && !string.Equals(PlatformAccessCatalog.NormalizeRole(role), "Admin", StringComparison.OrdinalIgnoreCase))
-        {
-            var exceptions = await db.IamUserPermissions.AsNoTracking()
-                .Where(p => p.SubjectId == subjectId)
+        var r = PlatformAccessCatalog.NormalizeRole(role);
+        if (string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase))
+            return new EffectivePermissionsDto(subjectId.ToString(), role, keys);
+
+        var exceptions = subjectId == Guid.Empty
+            ? new List<(string Action, bool IsAllowed)>()
+            : (await db.IamUserPermissions.AsNoTracking()
+                    .Where(p => p.SubjectId == subjectId)
+                    .Select(p => new { p.Action, p.IsAllowed })
+                    .ToListAsync(ct))
+                .Select(e => (e.Action, e.IsAllowed))
+                .ToList();
+        keys = AppliquerExceptions(keys, exceptions);
+
+        // v66 — Les retraits explicites du rôle (action décochée sur tous ses périmètres) et du compte
+        // s'appliquent avec la même règle que le contrôle serveur : un écran retiré (Consulter) emporte
+        // tous ses verbes. Sinon « Modifier », resté coché, rouvrait l'écran dans le menu.
+        var lignesRole = (await db.IamPermissions.AsNoTracking()
+                .Where(p => p.Role == r)
                 .Select(p => new { p.Action, p.IsAllowed })
-                .ToListAsync(ct);
-            keys = AppliquerExceptions(keys, exceptions.Select(e => (e.Action, e.IsAllowed)));
-        }
+                .ToListAsync(ct))
+            .Select(l => (l.Action, l.IsAllowed));
+        keys = AdminRestrictionRules.RetirerRevoquees(keys, AdminRestrictionRules.RevocationsExplicites(lignesRole, exceptions));
         return new EffectivePermissionsDto(subjectId.ToString(), role, keys);
     }
 
     /// <summary>
     /// Droits du rôle corrigés par les exceptions du compte : une action retirée disparaît (tous
     /// périmètres), une action accordée est ajoutée sur le périmètre « Self ».
+    /// <para>
+    /// v66 — Hiérarchie stricte : les ajouts sont posés d'abord, puis les retraits l'emportent ; un
+    /// retrait de « Consulter » retire l'écran entier (tous ses verbes). Aucun ancien droit ne reste actif.
+    /// </para>
     /// </summary>
     public static IReadOnlyList<string> AppliquerExceptions(IReadOnlyList<string> cles, IEnumerable<(string Action, bool Accorde)> exceptions)
     {
         var liste = cles.ToList();
-        foreach (var (action, accorde) in exceptions)
+        var toutes = exceptions.ToList();
+        foreach (var (action, _) in toutes.Where(e => e.Accorde))
         {
-            if (!accorde)
-                liste.RemoveAll(k => k.StartsWith(action + ":", StringComparison.Ordinal));
-            else if (!liste.Any(k => k.StartsWith(action + ":", StringComparison.Ordinal)))
+            if (!liste.Any(k => k.StartsWith(action + ":", StringComparison.Ordinal)))
                 liste.Add(action + ":Self");
+        }
+        foreach (var (action, _) in toutes.Where(e => !e.Accorde))
+        {
+            var parts = AdminRestrictionRules.Split(action);
+            var ecranRetire = parts.HasValue && parts.Value.Verb == "View" ? parts.Value.Screen : null;
+            liste.RemoveAll(k =>
+            {
+                if (k.StartsWith(action + ":", StringComparison.Ordinal)) return true;
+                if (ecranRetire is null) return false;
+                var cle = AdminRestrictionRules.Split(k.Split(':')[0]);
+                return cle.HasValue && cle.Value.Screen == ecranRetire;
+            });
         }
         return liste;
     }

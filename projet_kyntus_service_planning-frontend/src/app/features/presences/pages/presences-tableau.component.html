@@ -67,6 +67,9 @@
           @for (p of options().referents; track p.id) { <option [value]="p.id">{{ p.nom }}</option> }
         </select>
       }
+      <select class="ku-input" [ngModel]="filtres().tri ?? ''" (ngModelChange)="filtrer({ tri: $event })" aria-label="Trier les agents">
+        @for (t of tris; track t.valeur) { <option [value]="t.valeur">{{ t.libelle }}</option> }
+      </select>
       <label class="ku-check pz-atraiter"><input type="checkbox" [ngModel]="filtres().aTraiter" (ngModelChange)="filtrer({ aTraiter: $event })" /> À traiter seulement</label>
       <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="reinitialiser()">Réinitialiser</button>
       <span class="pz-compte">{{ agents().length }} / {{ totalAgents() }} agents</span>
@@ -89,6 +92,7 @@
       <span class="pz-code pz-f-conge">CP</span> Congés
       <span class="pz-code pz-f-present pz-retard">P</span> Retard non autorisé
       <span class="pz-code pz-f-present"><i class="pz-dot"></i>P</span> Commentaire
+      @if (sectionElements()) { <span class="pz-code pz-f-present"><i class="pz-evp-dot"></i>P</span> Élément de paie }
       <span class="pz-code pz-f-present pz-partiel">P</span> Absence partielle
       <span class="pz-code pz-f-present pz-manuel">P</span> Saisi par un responsable
       <span class="pz-code pz-leg-hors-contrat"></span> Hors contrat (avant l’entrée / après la sortie)
@@ -145,7 +149,7 @@
                               [disabled]="verrouillee(a) || c.horsContrat"
                               [title]="a.enFormation && !saisieFormation() ? 'En formation : saisie réservée à l’équipe formation. ' + c.titre : (verrouillee(a) && data()?.peutModifier && !a.enFormation ? 'Consultation seule (droit « Présences des superviseurs et référents › Modifier »). ' + c.titre : c.titre)"
                               (click)="ouvrir(a, j)">
-                        @if (j.commentaire) { <i class="pz-dot"></i> }@if (j.code) { {{ j.code }} } @else { <span class="pz-vide">{{ c.marque }}</span> }
+                        @if (j.commentaire) { <i class="pz-dot"></i> }@if (c.elements) { <i class="pz-evp-dot" [attr.title]="c.elements + ' élément(s) de paie'"></i> }@if (j.code) { {{ j.code }} } @else { <span class="pz-vide">{{ c.marque }}</span> }
                       </button>
                     }
                   </td>
@@ -201,7 +205,7 @@
           } @else {
             <p class="ku-muted pz-small">Aucun pointage ce jour.</p>
           }
-          @if (e.jour.manquePointage) { <p class="pz-alerte">Pointage manquant : nombre de pointages impair.</p> }
+          @if (e.jour.manquePointage) { <p class="pz-alerte">Manque de pointage : journée incomplète (nombre impair de pointages ou départ avant l’heure prévue). Seules les heures pointées sont comptées, hors solde.</p> }
         </section>
 
         <section class="pz-bloc">
@@ -246,6 +250,97 @@
             </label>
           }
         </section>
+
+        <!-- v69 : éléments variables de paie et manquements du référentiel, saisis sur la journée. -->
+        @if (sectionElements()) {
+          <section class="pz-bloc pz-evp">
+            <h3>Éléments variables de paie</h3>
+            @if (elementsJour().length) {
+              <ul class="pz-evp-liste">
+                @for (el of elementsJour(); track el.genre + el.id) {
+                  <li [class.mq]="el.genre === 'mq'">
+                    <div class="pz-evp-ligne">
+                      <b>{{ el.titre }}</b>
+                      @if (el.montant !== null) {
+                        <span class="pz-evp-montant" [class.neg]="el.montant < 0" [class.pos]="el.montant > 0">
+                          {{ el.montant === 0 ? 'à valoriser' : (el.montant > 0 ? '+' : '') + el.montant + ' DH' }}
+                        </span>
+                      }
+                      @if (peutSupprimer(el)) {
+                        <button type="button" class="ku-btn ku-btn--ghost ku-btn--sm" (click)="supprimerElement(el)" [attr.aria-label]="'Supprimer ' + el.titre">Supprimer</button>
+                      }
+                    </div>
+                    @if (el.genre === 'mq') { <small class="ku-muted">{{ el.detail }}</small> }
+                    <small>{{ el.commentaire }}@if (el.auteur) { <span class="ku-muted"> · {{ el.auteur }}</span> }</small>
+                  </li>
+                }
+              </ul>
+            }
+            @if (droitsElements().agirEvp || droitsElements().agirMq) {
+              <label class="ku-field"><span>Nature</span>
+                <select class="ku-input" [ngModel]="e.nature" (ngModelChange)="patch({ nature: $event })" aria-label="Nature de l’élément de paie">
+                  <option value="">— Aucun élément de paie —</option>
+                  @if (droitsElements().agirEvp) {
+                    <optgroup label="Éléments variables de paie">
+                      @for (n of cataloguesJournee().principales; track n.type) { <option [value]="'evp:' + n.type">{{ n.libelle }}</option> }
+                    </optgroup>
+                    @if (cataloguesJournee().autres.length) {
+                      <optgroup label="Autres types">
+                        @for (t of cataloguesJournee().autres; track t) { <option [value]="'evp:' + t">{{ t }}</option> }
+                      </optgroup>
+                    }
+                  }
+                  @if (droitsElements().agirMq) {
+                    @for (g of cataloguesJournee().manquements; track g.categorie) {
+                      <optgroup [label]="'Manquements (barème) · ' + g.categorie">
+                        @for (m of g.codes; track m.code) { <option [value]="'mq:' + m.code">{{ m.code }} — {{ m.libelle }}</option> }
+                      </optgroup>
+                    }
+                  }
+                </select>
+              </label>
+              @if (natureChoisie(e); as c) {
+                @if (c.genre === 'evp') {
+                  <div class="ku-field"><span>Montant</span>
+                    <div class="pz-evp-montant-saisie">
+                      <div class="ku-seg">
+                        <button type="button" [class.is-active]="e.evpSens === 'gain'" (click)="patch({ evpSens: 'gain' })">+ Gain</button>
+                        <button type="button" [class.is-active]="e.evpSens === 'retenue'" (click)="patch({ evpSens: 'retenue' })">− Retenue</button>
+                      </div>
+                      <input class="ku-input" type="number" min="0" step="0.01"
+                             [placeholder]="aValoriser(c.valeur) ? 'Vide : à valoriser par la paie' : 'Montant en DH'"
+                             [ngModel]="e.evpMontant" (ngModelChange)="patch({ evpMontant: $event })" />
+                    </div>
+                    @if (aValoriser(c.valeur)) { <small class="ku-muted">Laissez vide si le service paie fixe le montant.</small> }
+                  </div>
+                } @else {
+                  @if (manquement(c.valeur); as m) {
+                    <div class="pz-evp-bareme">
+                      <div><span>Barème</span><b>{{ bareme(m.code) }}</b></div>
+                      <div><span>Gravité</span><b>{{ m.gravite }}</b></div>
+                      @if (montantManquement(e); as mt) {
+                        <div><span>Applicable</span><b>{{ mt.montant === null ? 'Disciplinaire' : mt.montant + ' DH' }}</b><small>{{ mt.libelleRang }}</small></div>
+                      }
+                    </div>
+                    <p class="ku-muted pz-small">Le montant n’est pas saisi : l’export paie applique le référentiel selon le rang (1er mois, 2e mois consécutif, 3e mois consécutif et +).</p>
+                  }
+                  <label class="ku-field"><span>Suite donnée</span>
+                    <select class="ku-input" [ngModel]="e.suiteDonnee" (ngModelChange)="patch({ suiteDonnee: $event })">
+                      @for (t of suitesDonnees(); track t) { <option [value]="t">{{ t }}</option> }
+                    </select>
+                  </label>
+                }
+                <label class="ku-field"><span>Justification</span>
+                  <textarea class="ku-input pz-text" rows="2" maxlength="1000" placeholder="Ex. 2 h supp. validées par le RP, renfort du samedi…"
+                            [ngModel]="e.justification" (ngModelChange)="patch({ justification: $event })"></textarea>
+                </label>
+                @if (e.periode) { <p class="ku-muted pz-small">L’élément de paie est ajouté sur cette journée seulement.</p> }
+              }
+            } @else if (!elementsJour().length) {
+              <p class="ku-muted pz-small">Aucun élément de paie ce jour.</p>
+            }
+          </section>
+        }
 
         <section class="pz-bloc">
           <h3>Commentaire de présence</h3>

@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -9,6 +9,7 @@ import { KyntusRoleNames } from '../../../../core/org/kyntus-role-names';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { formatWeekLabel, toApiWeekCode, buildWeekSelectOptions, REQUEST_PERIOD_OPTIONS, type RequestFilterPeriod, type WeekSelectOption } from '../../utils/week-code.util';
 import { BodyPortalDirective } from '../../../../shared/directives/body-portal.directive';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 
 @Component({
   selector: 'app-planning-change-requests',
@@ -18,6 +19,8 @@ import { BodyPortalDirective } from '../../../../shared/directives/body-portal.d
   styleUrls: ['./planning-change-requests.component.css'],
 })
 export class PlanningChangeRequestsComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   requests: any[] = [];
   loading = false;
   error = '';
@@ -77,6 +80,7 @@ export class PlanningChangeRequestsComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     const role = this.session.getRole() ?? '';
     const allowed =
       role === KyntusRoleNames.Admin ||
@@ -140,7 +144,7 @@ export class PlanningChangeRequestsComponent implements OnInit {
   }
 
   canActOn(r: any): boolean {
-    return this.canManage && r?.status === 'PendingSupervisor';
+    return this.canManage && r?.status === 'PendingSupervisor' && this.droits.autorise('planning.change-requests', 'Validate');
   }
 
   private isPendingStatus(status: string | undefined): boolean {

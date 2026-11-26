@@ -44,7 +44,7 @@ public class FichesReferenceController(IFichesReferenceService service) : Contro
         try
         {
             var suivi = service.DemarrerApplication(demande, Auteur(), Request.Headers.Authorization.ToString(),
-                new JournalAuteurExterne(User.GetSubjectId(), User.GetEmail(), User.GetAuthRole()));
+                new JournalAuteurExterne(User.GetSubjectId(), User.GetEmail(), User.GetAuthRole(), Kyntus.Iam.KyntusAdminClaims.IsSuperAdmin(User)));
             return Accepted(suivi);
         }
         catch (InvalidOperationException ex)

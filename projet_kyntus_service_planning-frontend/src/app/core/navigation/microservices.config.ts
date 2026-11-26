@@ -69,6 +69,12 @@ export interface MenuItem {
   /** v60 — Entrée réservée au Super Admin (droits des administrateurs). */
   superAdminOnly?: boolean;
   /**
+   * v67 — Entrée ouverte compte par compte par le Super Admin (« Heure de sortie ») : aucune rubrique
+   * d'« Accès par rôle » ni d'« Accès par compte » ; seule la réponse du serveur pour le compte
+   * connecté décide (absente des aperçus de menu par rôle).
+   */
+  accordeParSuperAdmin?: boolean;
+  /**
    * v60.2 — Seul écran pris en compte pour un administrateur restreint par le Super Admin (les autres
    * écrans de capability / ouvertureIam ne valent que pour les autres comptes).
    */
@@ -115,16 +121,33 @@ const QUALITE_CQ_DASHBOARD_ROLES = [...QUALITE_CQ_ROLES, ...QUALITE_CQ_PILOT_ROL
 const REFERENT_TECHNIQUE_ROLES = ROLE_SETS.referentTechnique;
 
 const ICONS = {
+  // v68 — Une icône propre à chaque module (même style : trait fin, coins arrondis).
+  shieldCheck: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>',
+  auditEye: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  usersTeam: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14a6 6 0 0 1 3.5 6"/></svg>',
+  userCheck: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="m16 11 2 2 4-4"/></svg>',
+  network: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/></svg>',
+  idCard: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16a3 3 0 0 1 6 0M14 10h4M14 14h3"/></svg>',
+  calendarDays: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2"/></svg>',
+  folder: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8"/></svg>',
+  fileText: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>',
+  medal: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="m8.5 14-1.5 7 5-3 5 3-1.5-7"/></svg>',
+  clock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  wallet: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h12v4"/><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 13.5h2"/></svg>',
+  plane: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>',
+  userPlus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"/></svg>',
+  graduation: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9.5 12 5l10 4.5L12 14z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5M22 9.5V15"/></svg>',
+  megaphone: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l6 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M17 8a5 5 0 0 1 0 8"/></svg>',
+  messageCheck: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="m9 10 2 2 4-4"/></svg>',
+  headphones: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>',
+  lifeBuoy: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="m5.6 5.6 3.6 3.6M14.8 14.8l3.6 3.6M18.4 5.6l-3.6 3.6M9.2 14.8l-3.6 3.6"/></svg>',
   grid: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
   building: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
   users: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>',
   calendar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
-  clock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   leave: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 117-7v1"/><path d="M17 9l4-4-4-4M21 5H9"/></svg>',
-  graduation: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
   mail: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
   chat: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
-  headphones: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0118 0v6"/><path d="M21 19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3zM3 19a2 2 0 002 2h1a2 2 0 002-2v-3a2 2 0 00-2-2H3z"/></svg>',
   doc: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
   award: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>',
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
@@ -139,7 +162,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'administration',
     label: 'Administration',
-    icon: ICONS.shield,
+    icon: ICONS.shieldCheck,
     roles: ADMIN_RH,
     children: [
       { label: 'Vue d’ensemble', route: '/admin?section=overview', platformAdminSection: 'overview', roles: ADMIN_RH, hat: 'both', capability: 'admin.overview' },
@@ -160,7 +183,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'audit-conformite',
     label: 'Audit et conformité',
-    icon: ICONS.eye,
+    icon: ICONS.auditEye,
     roles: ADMIN_AUDIT,
     children: [
       { label: 'Tableau de bord', route: '/audit?section=dashboard', platformAuditSection: 'dashboard', roles: ADMIN_AUDIT, hat: 'both', capability: 'audit.dashboard' },
@@ -174,7 +197,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'perimetre-superviseur',
     label: 'Périmètre superviseur',
-    icon: ICONS.users,
+    icon: ICONS.usersTeam,
     ouvertureIam: 'prime.module',
     // v54 — Le RP (chef de projet) encadre les mêmes cellules que ses superviseurs : il doit
     // pouvoir enregistrer les modes de la semaine sans dépendre d'eux. Admin et RH y accèdent
@@ -193,7 +216,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'perimetre-referent-technique',
     label: 'Périmètre référent technique',
-    icon: ICONS.users,
+    icon: ICONS.userCheck,
     ouvertureIam: 'prime.module',
     roles: REFERENT_TECHNIQUE_ROLES,
     children: [
@@ -209,7 +232,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'organisation-rh',
     label: 'Organisation RH',
-    icon: ICONS.building,
+    icon: ICONS.network,
     roles: ADMIN_RH,
     children: [
       { label: 'Contrats, pôles et cellules', route: '/organisation/administrative', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.organisation' },
@@ -222,7 +245,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'rh',
     label: 'Ressources humaines',
-    icon: ICONS.users,
+    icon: ICONS.idCard,
     children: [
       { label: 'Employés', route: '/users', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.users' },
       { label: 'Nouvel employé', route: '/users/create', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'admin.users', capabilityVerb: 'Act' },
@@ -239,7 +262,7 @@ export const MICROSERVICES: Microservice[] = [
     label: 'Planification',
     // Le groupe est ouvert à tous les rôles employés ; la restriction réelle
     // se fait par enfant (les pages de gestion restent réservées aux managers).
-    icon: ICONS.calendar,
+    icon: ICONS.calendarDays,
     roles: ALL_ROLES,
     children: [
       { label: 'Mes plannings', route: '/mes-plannings', roles: PLANNING_SELF_SERVICE_ROLES, hat: 'self', ouvertureIam: 'planning.self' },
@@ -260,7 +283,7 @@ export const MICROSERVICES: Microservice[] = [
     // v48 : Process Bytel — procédures déposées par l'encadrement, visibles selon l'activité.
     id: 'process-bytel',
     label: 'Process Bytel',
-    icon: ICONS.doc,
+    icon: ICONS.folder,
     children: [
       { label: 'Documents (ITs…)', route: '/process-bytel', roles: EMPLOYEE_ROLES, hat: 'self', ouvertureIam: 'process-bytel' },
     ],
@@ -268,7 +291,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'documentation',
     label: 'Documentation',
-    icon: ICONS.doc,
+    icon: ICONS.fileText,
     ouvertureIam: 'documentation.module',
     dynamicChildren: true,
     children: [],
@@ -276,7 +299,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'prime',
     label: 'Prime',
-    icon: ICONS.award,
+    icon: ICONS.medal,
     roles: ROLE_SETS.prime,
     ouvertureIam: 'prime.module',
     dynamicChildren: true,
@@ -289,11 +312,14 @@ export const MICROSERVICES: Microservice[] = [
     icon: ICONS.clock,
     children: [
       { label: 'Mon suivi', route: '/pointage/mon-suivi', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'pointage.self' },
-      { label: 'Heure de sortie', route: '/pointage/heure-de-sortie', roles: EMPLOYEE_ROLES, hat: 'self', ouvertureIam: 'pointage.self' },
+      // v67 : plus de rubrique « Accès par rôle » / « Accès par compte » — l'entrée n'apparaît qu'aux
+      // comptes que le Super Admin a autorisés (et au Super Admin), d'après la réponse du serveur.
+      { label: 'Heure de sortie', route: '/pointage/heure-de-sortie', hat: 'self', accordeParSuperAdmin: true },
       { label: 'Pointages de l’équipe', route: '/pointage/equipe', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'pointage.equipe' },
       { label: 'Planning prévu / réalisé', route: '/pointage/prevu-realise', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'pointage.equipe' },
       { label: 'Régimes horaires', route: '/pointage/regimes', roles: ADMIN_RH, hat: 'team', capability: 'pointage.regimes' },
-      { label: 'Accès Heure de sortie', route: '/pointage/acces-heure-sortie', roles: [KyntusRoleNames.Admin], hat: 'team', capability: 'pointage.acces-sortie' },
+      // v67 : réservé au Super Admin (il accorde le droit compte par compte, avec l'horaire 07h40 / 08h40).
+      { label: 'Accès Heure de sortie', route: '/pointage/acces-heure-sortie', roles: [KyntusRoleNames.Admin], hat: 'team', superAdminOnly: true },
       { label: 'Correspondance pointeuses', route: '/pointage/correspondances', roles: ADMIN_RH, hat: 'team', capability: 'pointage.correspondances' },
     ],
   },
@@ -301,7 +327,7 @@ export const MICROSERVICES: Microservice[] = [
     // Présences et paie (lot A) : responsables de leur périmètre, RH et Admin.
     id: 'presences',
     label: 'Présences et paie',
-    icon: ICONS.calendar,
+    icon: ICONS.wallet,
     children: [
       { label: 'Tableau des présences', route: '/presences', roles: [...ROLE_SETS.congesEquipe, KyntusRoleNames.Formateur, KyntusRoleNames.EquipeFormation], hat: 'team', capability: 'presences' },
       { label: 'Retards et autorisations', route: '/presences/retards', roles: ROLE_SETS.congesEquipe, hat: 'team', capability: 'presences.retards' },
@@ -314,7 +340,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'conges',
     label: 'Congés et absences',
-    icon: ICONS.leave,
+    icon: ICONS.plane,
     children: [
       { label: 'Mes congés', route: '/mes-conges', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'conges.self' },
       { label: 'Congés de ma cellule', route: '/conges/ma-cellule', roles: EMPLOYEE_ROLES, hat: 'self', capability: 'conges.self' },
@@ -329,7 +355,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'parrainage',
     label: 'Parrainage',
-    icon: ICONS.share,
+    icon: ICONS.userPlus,
     roles: ['Admin', 'RH', 'Manager', 'Pilote', 'Audit', 'Coach', 'RP', 'Employee', 'Superviseur'],
     ouvertureIam: 'parrainage.module',
     dynamicChildren: true,
@@ -366,7 +392,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'communication',
     label: 'Communication',
-    icon: ICONS.mail,
+    icon: ICONS.megaphone,
     children: [
       { label: 'Fil d\'actualités', route: '/mes-newsletters', roles: ALL_ROLES, hat: 'both', ouvertureIam: 'communication.fil' },
       { label: 'Nouvelle publication', route: '/newsletter', roles: ADMIN_RH, hat: 'team', ouvertureIam: 'communication.newsletter' },
@@ -375,7 +401,7 @@ export const MICROSERVICES: Microservice[] = [
   {
     id: 'qualite',
     label: 'Qualité et amélioration',
-    icon: ICONS.chat,
+    icon: ICONS.messageCheck,
     children: [
       {
         label: 'Mes demandes',
@@ -414,7 +440,7 @@ export const MICROSERVICES: Microservice[] = [
     // Espace Aide : visible par tous les utilisateurs connectés, dans les deux casquettes.
     id: 'aide',
     label: 'Aide',
-    icon: ICONS.help,
+    icon: ICONS.lifeBuoy,
     children: [
       { label: 'Guide de l\'application', route: APP_GUIDE_ROUTE, hat: 'both' },
       { label: 'Assistance', route: '/assistance', hat: 'both' },

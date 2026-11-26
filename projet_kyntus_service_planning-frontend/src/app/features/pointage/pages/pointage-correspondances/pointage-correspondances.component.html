@@ -3,7 +3,7 @@
     title="Correspondance pointeuses"
     subtitle="Reliez chaque ID de pointeuse ZKBio Time à un collaborateur My-Kyntus.">
     <div actions>
-      @if (isAdmin()) {
+      @if (isAdmin() && peutModifier()) {
         <button type="button" class="ky-btn-secondary" (click)="synchroniser()" [disabled]="busy()">Synchroniser maintenant</button>
       }
       <button type="button" class="ky-btn-secondary" (click)="load()" [disabled]="loading()">Actualiser</button>
@@ -41,7 +41,7 @@
     </div>
     <input class="ky-input pc-search" type="search" placeholder="ID, nom, département…" aria-label="Rechercher"
       [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
-    @if (compte()['Auto']) {
+    @if (compte()['Auto'] && peutModifier()) {
       <button type="button" class="ky-btn-primary" (click)="validerTout()" [disabled]="busy()">Valider les {{ compte()['Auto'] }} propositions</button>
     }
   </div>
@@ -79,6 +79,7 @@
                 </td>
                 <td><span class="pc-statut" [attr.data-statut]="r.statut">{{ statutsLabels[r.statut] }}</span></td>
                 <td class="pt-nowrap">
+                  @if (peutModifier()) {
                   <button type="button" class="pc-link" (click)="enregistrer(r)" [disabled]="busy()">
                     {{ r.statut === 'Auto' && valeur(r) === (r.userId?.toString() ?? '') ? 'Valider' : 'Enregistrer' }}
                   </button>
@@ -86,6 +87,7 @@
                     <button type="button" class="pc-link pc-link--muted" (click)="ignorer(r)" [disabled]="busy()"
                       title="Badge de test, prestataire hors My-Kyntus…">Ignorer</button>
                   }
+                  } @else { <span class="ku-muted">—</span> }
                 </td>
               </tr>
             } @empty {

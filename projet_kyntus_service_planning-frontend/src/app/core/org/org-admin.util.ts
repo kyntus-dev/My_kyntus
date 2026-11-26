@@ -128,3 +128,51 @@ export function contenuDuPole(pole: OrgPoleNode): { cellules: number; services: 
   const cellules = pole.cellules ?? [];
   return { cellules: cellules.length, services: cellules.reduce((n, c) => n + (c.services?.length ?? 0), 0) };
 }
+
+/** v79 — Filtre « sans service » à l'intérieur d'une cellule. */
+export const SANS_SERVICE = '__sans-service__';
+
+/**
+ * v79 — Membres d'une cellule répartis par service. Un agent dont le service n'existe plus (ou n'est
+ * pas renseigné) est compté dans « Sans service », pour qu'aucun membre ne disparaisse de la liste.
+ */
+export function effectifsParService(
+  agents: readonly OrgAgent[],
+  cellule: CelluleLocation | undefined,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  if (!cellule) return counts;
+  const connus = new Set(cellule.services.map((s) => s.id));
+  for (const a of agents) {
+    if (a.celluleId !== cellule.celluleId) continue;
+    const cle = a.serviceId && connus.has(a.serviceId) ? a.serviceId : SANS_SERVICE;
+    counts.set(cle, (counts.get(cle) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** v79 — Garde les membres du service choisi ('' = tous les services de la cellule). */
+export function filtrerParService(
+  membres: readonly OrgAgent[],
+  serviceId: string,
+  cellule: CelluleLocation | undefined,
+): OrgAgent[] {
+  if (!serviceId) return [...membres];
+  const connus = new Set((cellule?.services ?? []).map((s) => s.id));
+  return membres.filter((m) =>
+    serviceId === SANS_SERVICE ? !m.serviceId || !connus.has(m.serviceId) : m.serviceId === serviceId);
+}
+
+/**
+ * v79 — Agents réellement à déplacer : ceux qui sont déjà dans le service d'arrivée sont écartés.
+ * Avant, un déplacement vers la même cellule était refusé en bloc : impossible donc de répartir les
+ * membres d'une cellule entre ses services (ex. BtB → Back office / Pré-appel / Support technicien).
+ */
+export function agentsADeplacer(
+  agents: readonly OrgAgent[],
+  ids: readonly string[],
+  serviceCibleId: string,
+): string[] {
+  const parId = new Map(agents.map((a) => [a.id, a]));
+  return ids.filter((id) => parId.get(id)?.serviceId !== serviceCibleId);
+}

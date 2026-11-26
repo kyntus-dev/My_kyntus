@@ -47,8 +47,12 @@ export class RegimeHoraireService {
     return this.http.get<HeureSortieAccesDto[]>(`${this.base}/acces-heure-sortie`);
   }
 
-  setAccesHeureSortie(userIds: number[], acces: boolean): Observable<{ modifies: number }> {
-    return this.http.put<{ modifies: number }>(`${this.base}/acces-heure-sortie`, { userIds, acces });
+  /**
+   * Accorde ou retire « Heure de sortie » (Super Admin). v67 : à l'attribution, l'horaire de base
+   * choisi (« 0840 » : 08h40 avec une journée à 07h40 par semaine, ou « 0740 ») est enregistré.
+   */
+  setAccesHeureSortie(userIds: number[], acces: boolean, productionBase?: '0840' | '0740'): Observable<{ modifies: number }> {
+    return this.http.put<{ modifies: number }>(`${this.base}/acces-heure-sortie`, { userIds, acces, productionBase: productionBase ?? null });
   }
 
   /** v43 : horaire de base d'un compte : 08h40 (une journée à 07h40 par semaine) ou 07h40. */

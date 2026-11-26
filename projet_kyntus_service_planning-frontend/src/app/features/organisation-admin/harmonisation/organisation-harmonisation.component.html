@@ -9,9 +9,11 @@
     <div class="ku-hero-actions">
       <button type="button" class="ku-btn" (click)="charger()" [disabled]="loading() || enCours()">Relire l’organisation</button>
       <button type="button" class="ku-btn" (click)="exporterApercu()" [disabled]="!plan()">Exporter l’aperçu (Excel)</button>
+      @if (droits.autorise('admin.organisation', 'Act')) {
       <button type="button" class="ku-btn ku-btn--primary" (click)="appliquer()" [disabled]="!synthese().etapes || enCours()">
         {{ enCours() ? 'Application en cours…' : 'Appliquer ' + synthese().etapes + ' changement(s)' }}
       </button>
+      }
     </div>
   </header>
 

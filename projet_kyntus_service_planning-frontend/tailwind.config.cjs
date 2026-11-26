@@ -5,6 +5,37 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        /*
+         * v68 — Les classes Tailwind « blue-* » suivent le bleu du logo Kyntus (#0D2E5B = blue-800),
+         * décliné en nuancier de la même teinte : toute l'interface reste dans la couleur de marque.
+         */
+        blue: {
+          50: '#eef3fa',
+          100: '#dce6f4',
+          200: '#b9cde8',
+          300: '#9db9e2',
+          400: '#6f95cf',
+          500: '#3a68ab',
+          600: '#22508f',
+          700: '#163f76',
+          800: '#0d2e5b',
+          900: '#0a2347',
+          950: '#061630',
+        },
+        brand: {
+          DEFAULT: '#0d2e5b',
+          50: '#eef3fa',
+          100: '#dce6f4',
+          200: '#b9cde8',
+          300: '#9db9e2',
+          400: '#6f95cf',
+          500: '#3a68ab',
+          600: '#22508f',
+          700: '#163f76',
+          800: '#0d2e5b',
+          900: '#0a2347',
+          950: '#061630',
+        },
         navy: {
           950: 'rgb(var(--navy-950-rgb) / <alpha-value>)',
           900: 'rgb(var(--navy-900-rgb) / <alpha-value>)',

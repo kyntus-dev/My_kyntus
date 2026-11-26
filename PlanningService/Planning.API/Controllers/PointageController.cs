@@ -1,3 +1,4 @@
+using Kyntus.Iam;
 using Kyntus.Identity.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -168,7 +169,7 @@ public sealed class PointageController(
     }
 
     private PointageViewer Viewer() =>
-        new(User.GetAuthUserId(), User.GetSubjectId(), User.GetEmail(), User.GetAuthRole());
+        new(User.GetAuthUserId(), User.GetSubjectId(), User.GetEmail(), User.GetAuthRole(), KyntusAdminClaims.IsSuperAdmin(User));
 
     /// <summary>Par défaut : du 1er du mois au jour même.</summary>
     private static (DateOnly Du, DateOnly Au) Periode(DateOnly? du, DateOnly? au)

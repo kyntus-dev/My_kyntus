@@ -50,7 +50,7 @@
 .pze-legende { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: 0.74rem; }
 .pze-legende small { color: var(--text-muted); }
 .pze-leg { padding: 3px 10px; border-radius: 6px; font-weight: 600; border: 1px solid transparent; }
-.pze-leg--en-formation { background: #bfdbfe; color: #1e3a8a; border-color: #93c5fd; }
+.pze-leg--en-formation { background: #bfdbfe; color: var(--ky-blue); border-color: #93c5fd; }
 .pze-leg--integre { background: #ccfbf1; color: #115e59; border-color: #5eead4; }
 .pze-leg--for { background: #60a5fa; color: #fff; }
 .pze-table tbody tr.pze-formation > th,
@@ -81,3 +81,8 @@
 .pze-validation-texte strong { display: block; font-size: 0.95rem; }
 .pze-validation-texte p { margin: 4px 0 0; font-size: 0.84rem; color: var(--text-muted); max-width: 70ch; }
 .pze-validation-actions { display: flex; gap: 8px; }
+
+/* v69 — Jours du 24 à la fin du mois précédent : grisés et séparés, pour vérifier les absences seulement. */
+.pze-table th.pze-g-avant { background: color-mix(in srgb, var(--text-muted) 22%, var(--bg-card)); color: var(--text-primary); }
+.pze-table td.pze-avant { background: color-mix(in srgb, var(--text-muted) 13%, var(--bg-card)); }
+.pze-table .pze-avant-fin { border-right: 2px solid color-mix(in srgb, var(--text-muted) 55%, transparent); }

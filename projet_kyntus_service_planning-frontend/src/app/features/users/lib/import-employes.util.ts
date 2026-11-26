@@ -31,6 +31,11 @@ export interface LigneImportEmploye {
   telephone: string;
   /** v52 — Ligne reprise alors qu'elle pourrait être l'en-tête du fichier : non cochée d'office. */
   suspecteEntete?: boolean;
+  /**
+   * v66 — Valeurs présentes dans le fichier mais non reconnues (date illisible, situation familiale
+   * inconnue, e-mail invalide…) : signalées, jamais appliquées.
+   */
+  anomalies?: string[];
 }
 
 export interface LectureFichierEmployes {
@@ -45,7 +50,7 @@ export interface LectureFichierEmployes {
 
 const VIDES = ['', '-', '—', 'non renseigne', 'non renseignee', 'n/a', 'na', 'néant', 'neant', 'null'];
 
-const ENTETES: Record<keyof Omit<LigneImportEmploye, 'numero' | 'suspecteEntete'>, string[]> = {
+const ENTETES: Record<keyof Omit<LigneImportEmploye, 'numero' | 'suspecteEntete' | 'anomalies'>, string[]> = {
   nom: ['nom', 'last name', 'lastname', 'nom de famille'],
   prenom: ['prenom', 'prenom(s)', 'prenoms', 'first name', 'firstname'],
   cin: ['cin', 'cin / piece', 'cin/piece', 'piece', 'cni', 'carte identite', 'cin / pièce'],
@@ -85,15 +90,26 @@ function isoDate(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/**
+ * v66 — Date AAAA-MM-JJ seulement si elle existe : « 31/31/1990 » ou « 30/02/1990 » étaient
+ * transmis tels quels (« 1990-31-31 ») et faisaient échouer tout l'import côté serveur.
+ */
+function dateExistante(annee: number, mois: number, jour: number): string {
+  const d = new Date(Date.UTC(annee, mois - 1, jour));
+  if (d.getUTCFullYear() !== annee || d.getUTCMonth() !== mois - 1 || d.getUTCDate() !== jour) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${annee}-${pad(mois)}-${pad(jour)}`;
+}
+
 /** Date au format AAAA-MM-JJ depuis une date Excel, « 03/11/2004 » ou « 2004-11-03 00:00:00 ». */
 export function dateIso(value: unknown): string {
   if (value instanceof Date) return isoDate(value);
   const texte = cellule(value);
   if (!texte) return '';
   const iso = texte.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  if (iso) return dateExistante(+iso[1], +iso[2], +iso[3]);
   const fr = texte.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})/);
-  if (fr) return `${fr[3]}-${fr[2].padStart(2, '0')}-${fr[1].padStart(2, '0')}`;
+  if (fr) return dateExistante(+fr[3], +fr[2], +fr[1]);
   // Numéro de série Excel (jours depuis le 30/12/1899).
   const serie = Number(texte);
   if (Number.isFinite(serie) && serie > 20000 && serie < 60000) {
@@ -121,6 +137,33 @@ export function situationFamiliale(value: unknown): string {
   if (k.startsWith('divorce')) return 'DIVORCE';
   if (k.startsWith('veu')) return 'VEUF';
   return '';
+}
+
+/** v66 — Forme d'une adresse e-mail (même contrôle que le serveur). */
+export function emailValide(value: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.trim());
+}
+
+/**
+ * v66 — Valeurs non reconnues d'une ligne : la cellule est remplie mais sa valeur ne peut pas être
+ * lue. Elles étaient jusqu'ici ignorées sans rien dire.
+ */
+export function anomaliesLigne(brut: {
+  naissance: unknown;
+  situation: unknown;
+  enfants: unknown;
+  email: unknown;
+}): string[] {
+  const out: string[] = [];
+  const naissance = cellule(brut.naissance);
+  if (naissance && !dateIso(brut.naissance)) out.push(`Date de naissance « ${naissance} » illisible`);
+  const situation = cellule(brut.situation);
+  if (situation && !situationFamiliale(brut.situation)) out.push(`Situation familiale « ${situation} » non reconnue`);
+  const enfants = cellule(brut.enfants);
+  if (enfants && nombreEnfants(brut.enfants) === null) out.push(`Nombre d'enfants « ${enfants} » illisible`);
+  const email = cellule(brut.email);
+  if (email && !emailValide(email)) out.push(`E-mail « ${email} » invalide`);
+  return out;
 }
 
 export function nombreEnfants(value: unknown): number | null {
@@ -177,7 +220,17 @@ export function lireMatriceEmployes(matrice: unknown[][]): LectureFichierEmploye
   const entetes = entete >= 0 ? (matrice[entete] ?? []).map(cle) : [];
   const debut = entete + 1;
   const notes: string[] = [];
-  const col = (champ: keyof typeof ENTETES) => (entete >= 0 ? trouverColonne(entetes, ENTETES[champ]) : -1);
+  // v66 — Une colonne déjà attribuée (nom, prénom…) ne sert jamais à un autre champ : un intitulé court
+  // comme « Nom » était pris pour « Nombre d'enfants » quand le fichier n'avait pas cette colonne.
+  const prises = new Set<number>();
+  const col = (champ: keyof typeof ENTETES) => {
+    if (entete < 0) return -1;
+    const exact = entetes.findIndex((e, i) => !prises.has(i) && ENTETES[champ].includes(e));
+    const i = exact >= 0 ? exact : trouverColonne(entetes, ENTETES[champ]);
+    if (i < 0 || prises.has(i)) return -1;
+    prises.add(i);
+    return i;
+  };
 
   let iNom = col('nom');
   let iPrenom = col('prenom');
@@ -204,6 +257,9 @@ export function lireMatriceEmployes(matrice: unknown[][]): LectureFichierEmploye
       details: [],
     };
   }
+
+  if (iNom >= 0) prises.add(iNom);
+  if (iPrenom >= 0) prises.add(iPrenom);
 
   // Une seule colonne de nom : elle contient le nom complet, on la sépare.
   const separer = iPrenom < 0 || iPrenom === iNom;
@@ -236,6 +292,13 @@ export function lireMatriceEmployes(matrice: unknown[][]): LectureFichierEmploye
       }
       continue;
     }
+    const anomalies = anomaliesLigne({
+      naissance: vu(r, iNaissance),
+      situation: vu(r, iSituation),
+      enfants: vu(r, iEnfants),
+      email: vu(r, iEmail),
+    });
+    const email = cellule(vu(r, iEmail));
     lignes.push({
       numero: i + 1,
       nom,
@@ -246,8 +309,10 @@ export function lireMatriceEmployes(matrice: unknown[][]): LectureFichierEmploye
       situationFamiliale: situationFamiliale(vu(r, iSituation)),
       nombreEnfants: nombreEnfants(vu(r, iEnfants)),
       adresse: cellule(vu(r, iAdresse)),
-      emailPersonnel: cellule(vu(r, iEmail)),
+      // v66 : un e-mail invalide n'est pas envoyé (il est signalé dans les anomalies de la ligne).
+      emailPersonnel: email && emailValide(email) ? email : '',
       telephone: telephoneFr(vu(r, iTel)),
+      anomalies: anomalies.length ? anomalies : undefined,
     });
   }
 

@@ -118,6 +118,35 @@ public class PlatformAccessRoleFusionTests
         Assert.Equal(1, await db.IamPermissions.CountAsync(p => p.Role == "RP" && p.Action == "presences.encadrement.View"));
     }
 
+    /// <summary>
+    /// v67 : « Heure de sortie » n'est plus une rubrique — ses lignes (rôles, comptes, retraits du
+    /// Super Admin) sont effacées au démarrage ; les autres rubriques ne sont pas touchées.
+    /// </summary>
+    [Fact]
+    public async Task Rubriques_heure_de_sortie_effacees_au_demarrage()
+    {
+        var db = new DirectoryDbContext(new DbContextOptionsBuilder<DirectoryDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var compte = Guid.NewGuid();
+        db.IamPermissions.AddRange(
+            new IamPermission { Id = Guid.NewGuid(), Role = "Pilote", Action = "pointage.self.View", Scope = "Self", IsAllowed = true },
+            new IamPermission { Id = Guid.NewGuid(), Role = "Pilote", Action = "pointage.heure-sortie.View", Scope = "Self", IsAllowed = true },
+            new IamPermission { Id = Guid.NewGuid(), Role = "Admin", Action = "pointage.acces-sortie.Configure", Scope = "Global", IsAllowed = true });
+        db.IamUserPermissions.Add(new IamUserPermission { Id = Guid.NewGuid(), SubjectId = compte, Action = "pointage.heure-sortie.View", IsAllowed = true });
+        db.IamAdminRestrictions.AddRange(
+            new IamAdminRestriction { Id = Guid.NewGuid(), SubjectId = compte, Action = "pointage.heure-sortie.View", IsAllowed = false },
+            new IamAdminRestriction { Id = Guid.NewGuid(), SubjectId = compte, Action = "admin.users.Delete", IsAllowed = false });
+        await db.SaveChangesAsync();
+
+        await new DirectoryIamAdminService(db).SeedDefaultsIfEmptyAsync();
+
+        Assert.False(await db.IamPermissions.AnyAsync(p => p.Action.StartsWith("pointage.heure-sortie.") || p.Action.StartsWith("pointage.acces-sortie.")));
+        Assert.False(await db.IamUserPermissions.AnyAsync(p => p.Action.StartsWith("pointage.heure-sortie.")));
+        Assert.False(await db.IamAdminRestrictions.AnyAsync(p => p.Action.StartsWith("pointage.heure-sortie.")));
+        Assert.True(await db.IamPermissions.AnyAsync(p => p.Action == "pointage.self.View"));
+        Assert.True(await db.IamAdminRestrictions.AnyAsync(p => p.Action == "admin.users.Delete"));
+    }
+
     [Fact]
     public void Role_personnalise_accepte_nom_invalide_refuse()
     {

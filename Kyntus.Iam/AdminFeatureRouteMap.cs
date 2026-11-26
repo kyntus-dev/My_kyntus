@@ -168,6 +168,13 @@ public static class AdminFeatureRouteMap
         yield return R("/api/directory/business-departments", Core, Methods.Read);
         yield return R("/api/directory/business-departments", "admin.organisation", Methods.Write);
         yield return R("/api/directory/reconcile", "admin.sync");
+        // v72 — Fiche employé (« Utilisateurs ») : placer l'agent dans la structure, le retirer, réaligner le
+        // miroir d'organisation font partie de la création / modification d'un employé.
+        yield return R("/api/directory/employees/*/clear-org-placement", "admin.users|admin.organisation", Methods.All, "Act");
+        yield return R("/api/directory/org/assignments/pilote/*", "admin.organisation|admin.users", Methods.Write, "Act");
+        yield return R("/api/directory/org/assignments/*/*/employees/*", "admin.organisation|admin.users", Methods.Write, "Act");
+        yield return R("/api/directory/org/scope-assignments/*/employees/*", "admin.organisation|admin.users", Methods.Write, "Act");
+        yield return R("/api/admin/org-reconciliation/sync-from-directory", "admin.sync|admin.users|admin.organisation", Methods.All, "Act");
         yield return R("/api/directory/htel/techniciens", Core, Methods.Read);
         yield return R("/api/directory/htel", "admin.users");
         yield return R("/api/directory", Core, Methods.Read);
@@ -178,7 +185,13 @@ public static class AdminFeatureRouteMap
         yield return R("/api/users/by-auth", Core);
         yield return R("/api/users/check-email", Core);
         yield return R("/api/users/by-guid", Core, Methods.Read);
-        yield return R("/api/users/mails-internes", Core);
+        // v66 : la lecture des mails internes sert à tous ; leur import / modification relève des Utilisateurs.
+        yield return R("/api/users/mails-internes", Core, Methods.Read);
+        yield return R("/api/users/mails-internes", "admin.users", Methods.Write, "Act");
+        // v66 : fichier RH de référence (analyse, application, historique, annulation) et import du fichier RH
+        // depuis « Liaisons HTEL » — outils d'écriture sur les fiches, y compris en lecture (historique).
+        yield return R("/api/users/fiches-reference", "admin.users", Methods.Read, "View");
+        yield return R("/api/users/fiches-reference", "admin.users", Methods.Write, "Act");
         yield return R("/api/users/reaffectations", "rh.affectations|rh.activation", Methods.Read, "View");
         yield return R("/api/users/*/reaffectation", "rh.affectations");
         yield return R("/api/users/*/activation", "rh.activation", Methods.Write, "Act");
@@ -188,6 +201,8 @@ public static class AdminFeatureRouteMap
         yield return R("/api/users/import", "admin.users", Methods.All, "Act");
         yield return R("/api/users/reset-passwords", "admin.users", Methods.Write, "Act");
         yield return R("/api/users/*/reset-password", "admin.users", Methods.Write, "Act");
+        // v67 : suppression définitive d'un compte = « Utilisateurs › Supprimer ».
+        yield return R("/api/users/*/suppression-definitive", "admin.users", Methods.All, "Delete");
         yield return R("/api/users/*/contractual-level", "admin.users|rh.contrats", Methods.Write, "Act");
         yield return R("/api/users", Core, Methods.Read);
         yield return R("/api/users", "admin.users", Methods.Write);
@@ -209,15 +224,38 @@ public static class AdminFeatureRouteMap
         yield return R("/api/planning/app-guides", Core);
         yield return R("/api/planning/pending-requests-summary", Core);
         yield return R("/api/planning/my", "planning.self", Methods.All, "View");
-        yield return R("/api/planning/*/consult", "planning.self|planning.equipe", Methods.All, "View");
+        // v72 : la validation consulte le planning avant de le publier.
+        yield return R("/api/planning/*/consult", "planning.self|planning.equipe|planning.validation|planning.publish", Methods.All, "View");
         yield return R("/api/planning/change-requests", "planning.change-requests");
         yield return R("/api/planning/exceptional-requests", "planning.exceptional-requests");
         yield return R("/api/planning/reinforcement-requests", "planning.reinforcement|planning.renforts-self");
+        // v72 — Demandes de l'agent lui-même (« Mes plannings », « Mes changements d'horaire », « Mes demandes
+        // exceptionnelles ») : ouvertes avec « Mes plannings ». Traiter (approuver / refuser) reste réservé aux
+        // rubriques « Traiter les changements » / « Traiter les demandes exceptionnelles ».
+        yield return R("/api/planning/change-requests/my", "planning.self|planning.change-requests", Methods.Read, "View");
+        yield return R("/api/planning/change-requests/swap-candidates", "planning.self|planning.change-requests", Methods.Read, "View");
+        yield return R("/api/planning/change-requests/*/cancel", "planning.self|planning.change-requests", Methods.All, "Act");
+        yield return R("/api/planning/change-requests/*/partner-accept", "planning.self|planning.change-requests", Methods.All, "Act");
+        yield return R("/api/planning/change-requests/*/partner-reject", "planning.self|planning.change-requests", Methods.All, "Act");
+        yield return R("/api/planning/change-requests/*/approve", "planning.change-requests", Methods.All, "Validate");
+        yield return R("/api/planning/change-requests/*/reject", "planning.change-requests", Methods.All, "Validate");
+        yield return R("/api/planning/change-requests", "planning.self|planning.change-requests", Methods.Write, "Act");
+        yield return R("/api/planning/exceptional-requests/my", "planning.self|planning.exceptional-requests", Methods.Read, "View");
+        yield return R("/api/planning/exceptional-requests/quota", "planning.self|planning.exceptional-requests", Methods.Read, "View");
+        yield return R("/api/planning/exceptional-requests/available-shifts", "planning.self|planning.exceptional-requests", Methods.Read, "View");
+        yield return R("/api/planning/exceptional-requests/target-week", "planning.self|planning.exceptional-requests", Methods.Read, "View");
+        yield return R("/api/planning/exceptional-requests/*/justification", "planning.self|planning.exceptional-requests", Methods.Read, "View");
+        yield return R("/api/planning/exceptional-requests/*/cancel", "planning.self|planning.exceptional-requests", Methods.All, "Act");
+        yield return R("/api/planning/exceptional-requests/*/supervisor-approve", "planning.exceptional-requests", Methods.All, "Act");
+        yield return R("/api/planning/exceptional-requests/*/supervisor-reject", "planning.exceptional-requests", Methods.All, "Act");
+        yield return R("/api/planning/exceptional-requests/*/rh-approve", "planning.exceptional-requests", Methods.All, "Act");
+        yield return R("/api/planning/exceptional-requests/*/rh-reject", "planning.exceptional-requests", Methods.All, "Validate");
+        yield return R("/api/planning/exceptional-requests", "planning.self|planning.exceptional-requests", Methods.Write, "Act");
         yield return R("/api/planning/export", "planning.equipe", Methods.All, "Export");
         yield return R("/api/planning/notification-email", "admin.modules", Methods.Read, "View");
         yield return R("/api/planning/notification-email", "admin.modules", Methods.Write, "Configure");
         yield return R("/api/planning/planning-it", "planning-it");
-        yield return R("/api/planning/config", "planning.shift-config|planning.generate|planning.validation", Methods.Read, "View");
+        yield return R("/api/planning/config", "planning.shift-config|planning.generate|planning.validation|planning.reinforcement", Methods.Read, "View");
         yield return R("/api/planning/config", "planning.shift-config", Methods.Write, "Configure");
         yield return R("/api/planning/auto-generate-settings", "planning.generate", Methods.Read, "View");
         yield return R("/api/planning/auto-generate-settings", "planning.generate", Methods.Write, "Configure");
@@ -233,7 +271,7 @@ public static class AdminFeatureRouteMap
         yield return R("/api/planning/*/comment", "planning.equipe|planning.validation");
         yield return R("/api/planning/week", "planning.equipe|planning.generate|planning.validation", Methods.Read, "View");
         yield return R("/api/planning/subservice", "planning.equipe|planning.generate|planning.validation", Methods.Read, "View");
-        yield return R("/api/planning/equipe", "planning.equipe", Methods.Read, "View");
+        yield return R("/api/planning/equipe", "planning.equipe|planning.reinforcement", Methods.Read, "View");
         yield return R("/api/planning/agent", "planning.equipe", Methods.Read, "View");
         yield return R("/api/planning", "planning.equipe|planning.generate|planning.validation", Methods.Read, "View");
         // Écritures restantes (création, surcharges, groupes du samedi, cas particuliers…) = générer.
@@ -241,12 +279,21 @@ public static class AdminFeatureRouteMap
 
         // ───────────── Pointage ─────────────
         yield return R("/api/planning/pointage/moi", "pointage.self");
-        yield return R("/api/planning/pointage/heure-sortie", "pointage.self");
+        // v67 — « Heure de sortie » n'est plus une rubrique d'« Accès par rôle » / « Accès par compte » :
+        // seul le Super Admin l'accorde, compte par compte (page « Accès Heure de sortie »), et le
+        // Planning vérifie cette autorisation à chaque appel (Super Admin, ou compte autorisé). Les
+        // routes ne dépendent donc d'aucune rubrique : sans règle propre, elles tombaient sur
+        // « /api/planning/pointage » (pointage.equipe) et un employé autorisé était refusé.
+        // « aujourdhui » (widget d'accueil, page Heure de sortie) suit « Mon suivi de pointage ».
+        yield return R("/api/planning/pointage/heure-sortie", Core);
+        yield return R("/api/planning/pointage/aujourdhui", "pointage.self", Methods.Read, "View");
         yield return R("/api/planning/pointage/correspondances", "pointage.correspondances");
         yield return R("/api/planning/pointage/synchroniser", "pointage.correspondances", Methods.All, "Act");
+        // v72 : « Correspondance pointeuses » affiche l'état de la synchronisation.
+        yield return R("/api/planning/pointage/etat", "pointage.equipe|pointage.correspondances", Methods.Read, "View");
         yield return R("/api/planning/pointage", "pointage.equipe");
-        yield return R("/api/planning/regimes-horaires/acces-heure-sortie", "pointage.acces-sortie", Methods.Read, "View");
-        yield return R("/api/planning/regimes-horaires/acces-heure-sortie", "pointage.acces-sortie", Methods.Write, "Configure");
+        // v67 — Réservé au Super Admin (contrôlé par le Planning) : aucune rubrique à cocher.
+        yield return R("/api/planning/regimes-horaires/acces-heure-sortie", Core);
         yield return R("/api/planning/regimes-horaires", "pointage.regimes", Methods.Read, "View");
         yield return R("/api/planning/regimes-horaires", "pointage.regimes", Methods.Delete, "Delete");
         yield return R("/api/planning/regimes-horaires", "pointage.regimes", Methods.Write, "Configure");
@@ -262,6 +309,8 @@ public static class AdminFeatureRouteMap
         yield return R("/api/planning/presences/types", "presences.avertissements|presences.evp", Methods.Delete, "Delete");
         yield return R("/api/planning/presences/types", "presences.avertissements|presences.evp", Methods.Write, "Configure");
         yield return R("/api/planning/presences/agents", "presences|presences.avertissements|presences.evp|presences.dossier|presences.export", Methods.Read, "View");
+        // v72 : l'export paie lit les manquements (pénalités du barème).
+        yield return R("/api/planning/presences/avertissements", "presences.avertissements|presences.export", Methods.Read, "View");
         yield return R("/api/planning/presences/avertissements", "presences.avertissements");
         yield return R("/api/planning/presences/evp", "presences.evp|presences.export", Methods.Read, "View");
         yield return R("/api/planning/presences/evp", "presences.evp");
@@ -272,7 +321,8 @@ public static class AdminFeatureRouteMap
         yield return R("/api/planning/process-bytel", "process-bytel");
 
         // ───────────── Congés (Planning : absences ; Conge.API : demandes) ─────────────
-        yield return R("/api/conges/config/periodes-interdites", "conges.periodes", Methods.Read, "View");
+        // v72 : demander ou planifier un congé lit les périodes interdites.
+        yield return R("/api/conges/config/periodes-interdites", "conges.periodes|conges.self|conges.validation|conges.planning", Methods.Read, "View");
         yield return R("/api/conges/config/periodes-interdites", "conges.periodes", Methods.Delete, "Delete");
         yield return R("/api/conges/config/periodes-interdites", "conges.periodes", Methods.Write, "Configure");
         yield return R("/api/conges/config/quotas-service", "conges.quotas", Methods.Read, "View");
@@ -290,7 +340,8 @@ public static class AdminFeatureRouteMap
         yield return R("/api/conges/*/valider", "conges.validation", Methods.All, "Validate");
         yield return R("/api/conges/*/refuser", "conges.validation", Methods.All, "Validate");
         yield return R("/api/conges/*/annuler", "conges.self|conges.validation", Methods.All, "Act");
-        yield return R("/api/conges/subservice", "conges.equipe|conges.validation", Methods.Read, "View");
+        yield return R("/api/conges/*/modifier", "conges.modification", Methods.All, "Act"); // v64.2
+        yield return R("/api/conges/subservice", "conges.equipe|conges.validation|conges.planning", Methods.Read, "View");
         yield return R("/api/conges/new-employees", "conges.equipe|conges.validation", Methods.Read, "View");
         yield return R("/api/conges/saturday-slot", "conges.validation", Methods.All, "Act");
         yield return R("/api/conges/absence-days", "conges.validation", Methods.All, "Act");
@@ -330,6 +381,9 @@ public static class AdminFeatureRouteMap
         yield return R("/api/prime/admin/global-pool-workflow", "prime.workflow", Methods.Write, "Configure");
         yield return R("/api/prime/admin/rbac", "prime.rbac", Methods.Read, "View");
         yield return R("/api/prime/admin/rbac", "prime.rbac", Methods.Write, "Configure");
+        // v72 — Anomalies prime affichées dans « Inbox anomalies » (Administration) et dans l'Audit.
+        yield return R("/api/prime/admin/anomalies", "prime.workflow|prime.rbac|prime.catalog|admin.anomalies|audit.anomalies|audit.dashboard", Methods.Read, "View");
+        yield return R("/api/prime/admin/anomalies", "prime.workflow|admin.anomalies", Methods.Write, "Configure");
         yield return R("/api/prime/admin", "prime.workflow|prime.rbac|prime.catalog", Methods.Read, "View");
         yield return R("/api/prime/admin", "prime.workflow", Methods.Write, "Configure");
         yield return R("/api/prime/config", "prime.module", Methods.Read, "View");
@@ -348,6 +402,7 @@ public static class AdminFeatureRouteMap
         yield return R("/api/parrainage/rules", "parrainage.config|parrainage.workflow|parrainage.module", Methods.Read, "View");
         yield return R("/api/parrainage/rules", "parrainage.workflow", Methods.Delete, "Delete");
         yield return R("/api/parrainage/rules", "parrainage.workflow", Methods.Write, "Configure");
+        yield return R("/api/parrainage/anomalies", "parrainage.module|admin.anomalies|audit.anomalies|audit.dashboard", Methods.Read, "View");
         yield return R("/api/parrainage", "parrainage.module");
 
         // ───────────── Formation ─────────────
@@ -358,10 +413,15 @@ public static class AdminFeatureRouteMap
         yield return R("/api/formations/initial-paths/me", "formation.self", Methods.All, "View");
         yield return R("/api/formations/initial-paths/*/quiz-result", "formation.self|formation.suivi-initiale", Methods.All, "Act");
         yield return R("/api/formations/initial-paths/*/quiz-results", "formation.self|formation.suivi-initiale");
-        yield return R("/api/formations/initial-paths/*/rh-validate", "formation.passage|formation.suivi-initiale", Methods.All, "Validate");
-        yield return R("/api/formations/initial-paths/*/rh-reject", "formation.passage|formation.suivi-initiale", Methods.All, "Validate");
+        yield return R("/api/formations/initial-paths/*/rh-validate", "formation.passage|formation.suivi-initiale|formation.admin", Methods.All, "Validate");
+        yield return R("/api/formations/initial-paths/*/rh-reject", "formation.passage|formation.suivi-initiale|formation.admin", Methods.All, "Validate");
         yield return R("/api/formations/initial-paths/rh-pending", "formation.passage|formation.suivi-initiale", Methods.Read, "View");
-        yield return R("/api/formations/initial-paths", "formation.suivi-initiale|formation.passage|formation.checklist");
+        // v72 : la fiche employé (« Utilisateurs ») crée le parcours d'un agent en formation et coche sa checklist.
+        yield return R("/api/formations/initial-paths", "formation.suivi-initiale|formation.passage|formation.checklist|formation.admin|admin.users");
+        // v72 — Formateur (« Mes sessions ») : présence et compte rendu de SES sessions (le service vérifie
+        // que l'appelant anime la session).
+        yield return R("/api/formations/sessions/*/assignments/*/attendance", "formation.self|formation.planification|formation.admin", Methods.All, "Act");
+        yield return R("/api/formations/sessions/*/report", "formation.self|formation.planification|formation.admin", Methods.Write, "Act");
         yield return R("/api/formations/employees/me", "formation.self", Methods.All, "View");
         yield return R("/api/formations/sessions/my-assigned", "formation.self", Methods.All, "View");
         yield return R("/api/formations/sessions/my-animated", "formation.self|formation.suivi-initiale|formation.planification", Methods.All, "View");

@@ -13,8 +13,33 @@ namespace Planning.Infrastructure.Services.PlanningIt;
 /// ceux de ses collègues ; l'Admin peut corriger toutes les lignes. Les saisies restent modifiables.
 /// Ces horaires sont la référence du pointage des membres IT (voir PointageQueryService).
 /// </summary>
-public sealed class PlanningItService(AppDbContext db) : IPlanningItService
+public sealed class PlanningItService(AppDbContext db, IPointageQueryService? pointage = null) : IPlanningItService
 {
+    public async Task<PlanningItSoldesDto> GetSoldesAsync(int? viewerUserId, PlanningItDroits droits, int annee, CancellationToken ct = default)
+    {
+        if (!droits.Voir)
+            throw new UnauthorizedAccessException("Accès au planning IT non autorisé.");
+        var du = new DateOnly(annee, 1, 1);
+        var au = new DateOnly(annee, 12, 31);
+        var membres = await MembresAsync(ct);
+        // Données personnelles : chacun voit son solde ; « Modifier tout » voit ceux de toute la cellule.
+        var ids = membres.Select(m => m.Id)
+            .Where(id => droits.ModifierTout || id == viewerUserId)
+            .ToList();
+        if (ids.Count == 0 || pointage is null)
+            return new PlanningItSoldesDto(annee, du, au, []);
+
+        var aujourdhui = DateOnly.FromDateTime(DateTime.UtcNow);
+        // v71 : lecture élargie au début du solde d'heures (cumulé, jamais remis à zéro le 24) ; les
+        // compteurs de l'année restent limités à l'année.
+        var debutSolde = PlanningItRegles.DebutSoldeHeures;
+        var lireDu = debutSolde < du ? debutSolde : du;
+        var lireAu = au;
+        var suivis = await pointage.CalculerPourAsync(ids, lireDu, lireAu, ct);
+        return new PlanningItSoldesDto(annee, du, au,
+            suivis.Select(s => PlanningItRegles.Solde(s.UserId, s.Jours, aujourdhui, du, au)).ToList());
+    }
+
     public async Task<PlanningItSemaineDto> GetSemaineAsync(int? viewerUserId, PlanningItDroits droits, DateOnly jour, CancellationToken ct = default)
     {
         if (!droits.Voir)

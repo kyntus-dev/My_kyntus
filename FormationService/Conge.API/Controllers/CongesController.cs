@@ -2,6 +2,7 @@
 using Conge.Application.Commands.AnnulerConge;
 using Conge.Application.Commands.ConfigConge;
 using Conge.Application.Commands.DemanderConge;
+using Conge.Application.Commands.ModifierConge;
 using Conge.Application.Commands.RefuserConge;
 using Conge.Application.Commands.ValiderConge;
 using Conge.Application.Queries.GetCongesCellule;
@@ -153,9 +154,13 @@ public class CongesController : ControllerBase
             ct));
     }
 
-    /// <summary>GET /api/conges/historique — Historique global par année (RH)</summary>
+    /// <summary>
+    /// GET /api/conges/historique — Historique des congés par année.
+    /// v67 : n'est plus réservé à Admin / RH. Tout compte à qui « Historique des congés » est accordé
+    /// (par rôle ou par compte) l'ouvre réellement : toute l'entreprise pour Admin, RH et le périmètre
+    /// « Toute l'entreprise » ; sinon les collaborateurs de son équipe (organisation RH).
+    /// </summary>
     [HttpGet("historique")]
-    [Authorize(Roles = "Admin,RH")]
     public async Task<IActionResult> GetHistoriqueRh(
         [FromQuery] int annee,
         CancellationToken ct)
@@ -163,8 +168,61 @@ public class CongesController : ControllerBase
         if (annee < 2000 || annee > 2100)
             return BadRequest(new { message = "Année invalide." });
 
-        var result = await _mediator.Send(new GetHistoriqueRhQuery(annee), ct);
+        var perimetre = await PerimetreCongesAsync("conges.history.View", ct);
+        if (perimetre.Error is not null)
+            return perimetre.Error;
+
+        var result = await _mediator.Send(new GetHistoriqueRhQuery(annee, perimetre.EmployeIds), ct);
         return Ok(result);
+    }
+
+    /// <summary>Résultat du contrôle d'un droit Congés à périmètre (historique, modification).</summary>
+    private readonly record struct PerimetreConges(IActionResult? Error, IReadOnlyCollection<Guid>? EmployeIds);
+
+    /// <summary>
+    /// v67 — Droit « écran.Verbe » du compte et périmètre des données : null = toute l'entreprise
+    /// (Admin, RH, ou droit accordé au périmètre « Toute l'entreprise ») ; sinon l'équipe gérée.
+    /// Le droit est relu à chaque appel : un retrait s'applique aussitôt.
+    /// </summary>
+    private async Task<PerimetreConges> PerimetreCongesAsync(string action, CancellationToken ct)
+    {
+        var actorId = RequireActorId();
+        if (actorId is null)
+            return new(Unauthorized(new { message = "Sujet JWT manquant." }), null);
+        var role = User.GetAuthRole() ?? "";
+        var accorde = await _policy.EvaluateAsync(new PolicyRequest(actorId.Value, role, action, "platform"), ct);
+        if (!accorde.Allowed)
+            return new(StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = "Ce droit n'est pas ouvert à votre compte.",
+            }), null);
+
+        if (IsPrivilegedHrOrAdmin())
+            return new(null, null);
+
+        // Périmètre « Toute l'entreprise » : le droit vaut pour n'importe quel collaborateur
+        // (un identifiant quelconque n'est accordé que par ce périmètre).
+        var global = await _policy.EvaluateAsync(
+            new PolicyRequest(actorId.Value, role, action, "employee", Guid.NewGuid().ToString()), ct);
+        if (global.Allowed)
+            return new(null, null);
+
+        if (_rebac is null)
+            return new(StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Organisation RH indisponible." }), null);
+        try
+        {
+            var actorSnap = await _employeRepo.GetByEmployeIdOrEmailAsync(actorId.Value, User.GetEmail(), ct);
+            var employeeId = actorSnap?.EmployeId ?? actorId.Value;
+            var equipe = await _rebac.GetManagedEmployeeIdsAsync(employeeId, ct);
+            return new(null, equipe);
+        }
+        catch
+        {
+            return new(StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Organisation RH temporairement indisponible.",
+            }), null);
+        }
     }
 
     /// <summary>GET /api/conges/rh/pending-count — Demandes RH en attente (dashboard)</summary>
@@ -492,6 +550,53 @@ public class CongesController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// v64.2 — PUT /api/conges/{id}/modifier : modifier les dates d'une demande en attente ou validée.
+    /// Droit « Modifier les demandes de congé » (réglable par rôle et par compte ; v67 : plus réservé à
+    /// Admin / RH).
+    /// Congé validé : solde ajusté, planning mis à jour, employé notifié ; historique conservé.
+    /// </summary>
+    [HttpPut("{id:guid}/modifier")]
+    public async Task<IActionResult> Modifier(
+        Guid id,
+        [FromBody] ModifierCongeRequest request,
+        CancellationToken ct)
+    {
+        var actorId = RequireActorId();
+        if (actorId is null)
+            return Unauthorized(new { message = "Sujet JWT manquant." });
+        if (request is null || request.DateDebut == default)
+            return BadRequest(new { message = "La date de début est obligatoire." });
+        if (request.Commentaire is { Length: > 300 })
+            return BadRequest(new { message = "Le commentaire ne doit pas dépasser 300 caractères." });
+
+        // v67 — Plus réservé à Admin / RH : le droit « Modifier les demandes de congé » (par rôle ou par
+        // compte) suffit, dans le périmètre du compte (toute l'entreprise, ou son équipe).
+        var perimetre = await PerimetreCongesAsync("conges.modification.Act", ct);
+        if (perimetre.Error is not null)
+            return perimetre.Error;
+
+        var demande = await _demandeRepo.GetByIdAsync(id, ct);
+        if (demande is null)
+            return NotFound();
+        if (perimetre.EmployeIds is not null && !perimetre.EmployeIds.Contains(demande.EmployeId))
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = "Cette demande ne fait pas partie de votre périmètre.",
+            });
+
+        var result = await _mediator.Send(new ModifierCongeCommand(
+            id,
+            request.DateDebut,
+            request.DateFin,
+            request.Commentaire,
+            actorId.Value,
+            User.GetAuthRole(),
+            User.GetEmail(),
+            KyntusAdminClaims.IsSuperAdmin(User)), ct);
+        return Ok(result);
+    }
+
     /// <summary>PUT /api/conges/{id}/annuler — Annuler une demande (employé)</summary>
     [HttpPut("{id:guid}/annuler")]
     public async Task<IActionResult> Annuler(Guid id, [FromQuery] Guid employeId, CancellationToken ct)
@@ -677,6 +782,7 @@ public class CongesController : ControllerBase
 
 public record ValiderCongeRequest(string? Commentaire);
 public record RefuserCongeRequest(string Commentaire);
+public record ModifierCongeRequest(DateTime DateDebut, DateTime? DateFin, string? Commentaire);
 public record UpdatePeriodesInterditesRequest(
     IReadOnlyList<int>? Mois,
     Guid? UpdatedBy = null,

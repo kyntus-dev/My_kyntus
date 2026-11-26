@@ -155,6 +155,13 @@ public class EmployeeEntity
     public string? ReferentTechniqueId { get; set; }
     public string? ChefDeProjetId { get; set; }
     public string? SuperviseurId { get; set; }
+
+    /// <summary>
+    /// v73 — Agent encore présent. Passe à <c>false</c> quand l'annuaire signale une désactivation ou
+    /// une sortie : la personne reste visible (grisée « Sorti ») dans les périmètres et l'historique,
+    /// mais n'est plus comptée dans l'effectif planifiable.
+    /// </summary>
+    public bool IsActive { get; set; } = true;
 }
 
 public class BusinessDepartmentEntity

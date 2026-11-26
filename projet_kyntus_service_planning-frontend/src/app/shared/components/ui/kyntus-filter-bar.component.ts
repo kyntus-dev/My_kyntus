@@ -83,7 +83,7 @@ export interface KyntusFilterItem {
     .kyntus-filter-chip.active {
       border-color: color-mix(in srgb, var(--soft-blue, #3b82f6) 50%, transparent);
       background: color-mix(in srgb, var(--soft-blue, #3b82f6) 15%, transparent);
-      color: var(--info-text, #1d4ed8);
+      color: var(--info-text, var(--ky-blue-text));
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,

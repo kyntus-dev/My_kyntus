@@ -5,6 +5,9 @@ namespace Planning.Application.Employes;
 ///
 /// L'identifiant est le nom de l'employé, normalisé (casse, accents, espaces, ordre nom / prénom).
 /// Le N° d'ordre du fichier, s'il est déjà porté par une fiche, sert à départager des homonymes.
+/// v66 : le CIN est un identifiant à part entière — il retrouve une fiche dont le nom a été saisi
+/// autrement, départage les homonymes, et un CIN contradictoire (même nom, CIN différent) ou porté par
+/// plusieurs fiches (doublon) n'est jamais appliqué d'office.
 /// Règle de prudence : dès qu'un doute existe (homonymes, nom approchant, N° d'ordre contradictoire,
 /// deux lignes visant la même fiche), la ligne n'est pas appliquée d'office — elle est signalée et
 /// la personne qui importe choisit la fiche à mettre à jour.
@@ -19,9 +22,9 @@ public static class FicheReferenceRapprochement
     public const string Historique = "historique";
     public const string Ignore = "ignore";
 
-    public sealed record Ligne(int Numero, string? NomComplet, string? NumeroOrdre, bool Sorti, DateOnly? DateEmbauche);
+    public sealed record Ligne(int Numero, string? NomComplet, string? NumeroOrdre, bool Sorti, DateOnly? DateEmbauche, string? Cin = null);
 
-    public sealed record Agent(int UserId, string Nom, string Prenom, string? Matricule, bool Actif);
+    public sealed record Agent(int UserId, string Nom, string Prenom, string? Matricule, bool Actif, string? Cin = null);
 
     public sealed record Candidat(int UserId, string Nom, string Prenom, string? Matricule, bool Actif, string Raison);
 
@@ -36,6 +39,10 @@ public static class FicheReferenceRapprochement
         var parMatricule = agents
             .Where(a => !string.IsNullOrWhiteSpace(a.Matricule))
             .GroupBy(a => NormaliserMatricule(a.Matricule))
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var parCin = agents
+            .Where(a => NormaliserCin(a.Cin).Length > 0)
+            .GroupBy(a => NormaliserCin(a.Cin))
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var resultats = new Dictionary<int, Resultat>();
@@ -88,7 +95,7 @@ public static class FicheReferenceRapprochement
 
         // 3. Rapprochement de chaque ligne retenue.
         foreach (var l in principales)
-            resultats[l.Numero] = RapprocherLigne(l, parCle, parMatricule, agents, homonymesFichier.Contains(l.Numero));
+            resultats[l.Numero] = RapprocherLigne(l, parCle, parMatricule, parCin, agents, homonymesFichier.Contains(l.Numero));
 
         // 4. Deux lignes ne peuvent pas mettre à jour la même fiche.
         foreach (var conflit in resultats.Values
@@ -114,6 +121,7 @@ public static class FicheReferenceRapprochement
         Ligne l,
         Dictionary<string, List<Agent>> parCle,
         Dictionary<string, List<Agent>> parMatricule,
+        Dictionary<string, List<Agent>> parCin,
         IReadOnlyList<Agent> agents,
         bool homonymeDansLeFichier)
     {
@@ -121,6 +129,26 @@ public static class FicheReferenceRapprochement
         var matricule = NormaliserMatricule(l.NumeroOrdre);
         var memeNom = parCle.TryGetValue(cle, out var liste) ? liste : [];
         var memeMatricule = matricule.Length > 0 && parMatricule.TryGetValue(matricule, out var m) ? m : [];
+        var cin = NormaliserCin(l.Cin);
+        var memeCin = cin.Length > 0 && parCin.TryGetValue(cin, out var lc) ? lc : [];
+
+        // v66 — Le CIN identifie la personne, quel que soit le nom saisi.
+        if (memeCin.Count > 1)
+            return new Resultat(l.Numero, Ambigu, null,
+                $"Le CIN {l.Cin} est porté par {memeCin.Count} fiches de l'application (doublon) : choisissez la bonne fiche.",
+                CandidatsDe(memeCin, "même CIN"));
+        if (memeCin.Count == 1)
+        {
+            var a = memeCin[0];
+            var cleFiche = FicheReference.CleNom(a.Nom, a.Prenom);
+            if (cleFiche == cle || NomsApprochants(cle, cleFiche))
+                return new Resultat(l.Numero, Identifie, a.UserId,
+                    cleFiche == cle ? null : "Identifié par le CIN (nom saisi différemment).",
+                    CandidatsDe([a], cleFiche == cle ? "même nom et même CIN" : "même CIN, nom approchant"));
+            return new Resultat(l.Numero, AVerifier, a.UserId,
+                $"Même CIN que la fiche « {a.Nom} {a.Prenom} », mais nom différent : confirmez qu'il s'agit de la même personne.",
+                CandidatsDe([a], "même CIN, nom différent"));
+        }
 
         // a. Un seul employé porte ce nom.
         if (memeNom.Count == 1)
@@ -133,6 +161,12 @@ public static class FicheReferenceRapprochement
                     : new Resultat(l.Numero, Ambigu, null,
                         "Ce nom figure sur plusieurs lignes actives du fichier : choisissez la fiche correspondant à cette ligne (ou créez-en une).",
                         CandidatsDe(memeNom, "même nom"));
+            // v66 — Même nom mais CIN contradictoire : deux personnes différentes possibles.
+            var cinFiche = NormaliserCin(a.Cin);
+            if (cin.Length > 0 && cinFiche.Length > 0 && cinFiche != cin)
+                return new Resultat(l.Numero, AVerifier, a.UserId,
+                    $"Même nom, mais CIN différent (fiche : {a.Cin}, fichier : {l.Cin}) : confirmez qu'il s'agit bien de la même personne.",
+                    CandidatsDe([a], "même nom, CIN différent"));
             if (matricule.Length > 0 && matriculeFiche.Length > 0 && matriculeFiche != matricule)
                 return new Resultat(l.Numero, AVerifier, a.UserId,
                     $"Même nom, mais N° d'ordre différent (fiche : {a.Matricule}, fichier : {l.NumeroOrdre}) : confirmez qu'il s'agit bien de la même personne.",
@@ -182,6 +216,10 @@ public static class FicheReferenceRapprochement
 
     private static List<Candidat> CandidatsDe(IEnumerable<Agent> agents, string raison) =>
         agents.Select(a => new Candidat(a.UserId, a.Nom, a.Prenom, a.Matricule, a.Actif, raison)).ToList();
+
+    /// <summary>v66 — CIN comparé sans espaces ni casse (« ab 123456 » = « AB123456 »).</summary>
+    public static string NormaliserCin(string? cin) =>
+        FicheReference.NormaliserTexte(cin).Replace(" ", string.Empty);
 
     public static string NormaliserMatricule(string? matricule)
     {

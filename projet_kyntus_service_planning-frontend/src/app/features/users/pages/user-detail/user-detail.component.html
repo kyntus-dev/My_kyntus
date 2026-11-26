@@ -53,9 +53,25 @@
               Réactiver
             </button>
           }
+          @if (peutSupprimer()) {
+            <button type="button" class="ky-btn-danger" (click)="ouvrirSuppression()" title="Supprime le compte sans retour possible (distinct de la désactivation)">
+              <app-lucide-icon [icon]="icons.supprimer" className="w-4 h-4" />
+              Supprimer définitivement
+            </button>
+          }
         }
       </div>
     </app-kyntus-page-header>
+
+    <app-employee-hard-delete-dialog
+      [open]="hardDeleteOpen"
+      [employeeName]="user ? user.lastName + ' ' + user.firstName : ''"
+      [email]="user?.email ?? ''"
+      [busy]="hardDeleting"
+      [erreur]="hardDeleteErreur"
+      (confirmed)="confirmHardDelete($event)"
+      (cancel)="hardDeleteOpen = false"
+    />
 
     <app-employee-deactivate-dialog
       [open]="deactivateOpen"

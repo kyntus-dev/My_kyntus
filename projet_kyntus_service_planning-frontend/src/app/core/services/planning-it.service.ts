@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import type { PlanningItCaseRequest, PlanningItSemaineDto } from '../models/planning-it.models';
+import type { PlanningItCaseRequest, PlanningItSemaineDto, PlanningItSoldesDto } from '../models/planning-it.models';
 
 /** Planning IT : lecture de la semaine, saisie d'une case, commentaire de la semaine. */
 @Injectable({ providedIn: 'root' })
@@ -11,6 +11,11 @@ export class PlanningItService {
 
   semaine(jour: string): Observable<PlanningItSemaineDto> {
     return this.http.get<PlanningItSemaineDto>(`${this.base}/semaine`, { params: { jour } });
+  }
+
+  /** v67 — Heures sup. de l'année : acquises, récupérées (« Récup »), restantes. */
+  soldes(annee: number): Observable<PlanningItSoldesDto> {
+    return this.http.get<PlanningItSoldesDto>(`${this.base}/soldes`, { params: { annee } });
   }
 
   saisir(body: PlanningItCaseRequest): Observable<void> {

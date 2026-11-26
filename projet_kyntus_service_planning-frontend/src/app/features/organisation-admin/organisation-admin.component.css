@@ -128,3 +128,16 @@
 
 /* v39 : consultation seule */
 .oa-lecture { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; color: var(--text-muted); background: var(--bg-input); border: 1px solid var(--border-color); }
+
+/* v79 — Services de la cellule choisie, sous la cellule. */
+.oa-service-list {
+  list-style: none;
+  margin: 2px 0 6px;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--border-color);
+}
+.oa-service-item {
+  font-size: 0.86rem;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}

@@ -25,7 +25,8 @@ describe('aperçu du menu par rôle', () => {
   it('Ingénieur : seulement ses entrées par défaut (pas de pointage d’équipe ni d’administration)', () => {
     const menu = apercuMenu('Ingénieur', defauts('Ingénieur'), MICROSERVICES);
     const pointage = menu.find((g) => g.id === 'pointage')!;
-    expect(pointage.entrees).toEqual(['Mon suivi', 'Heure de sortie (comptes autorisés)']);
+    // v67 : « Heure de sortie » n'est accordée que compte par compte, par le Super Admin.
+    expect(pointage.entrees).toEqual(['Mon suivi']);
     expect(menu.map((g) => g.id)).not.toContain('administration');
     expect(menu.map((g) => g.id)).not.toContain('presences');
     expect(menu.find((g) => g.id === 'planning')!.entrees).toContain('Planning IT');
@@ -44,8 +45,10 @@ describe('aperçu du menu par rôle', () => {
     // à un rôle que les API refusent.
     const cles = [...defauts('Ingénieur'), 'pointage.equipe.View:Self', 'pointage.regimes.View:Self',
       'pointage.acces-sortie.View:Self', 'conges.validation.View:Self', 'conges.history.View:Self'];
-    expect(groupe('Ingénieur', cles, 'pointage')!.entrees).toEqual(['Mon suivi', 'Heure de sortie (comptes autorisés)']);
-    expect(groupe('Ingénieur', cles, 'conges')!.entrees).toEqual(['Mes congés', 'Congés de ma cellule']);
+    // v67 : « Heure de sortie » n'est jamais donnée par un rôle (Super Admin, compte par compte).
+    expect(groupe('Ingénieur', cles, 'pointage')!.entrees).toEqual(['Mon suivi']);
+    // v67 : « Historique des congés » accordé s'ouvre réellement (le serveur ne le réserve plus à Admin / RH).
+    expect(groupe('Ingénieur', cles, 'conges')!.entrees).toEqual(['Mes congés', 'Congés de ma cellule', 'Historique des congés']);
     // Admin (joker) : « Mes évaluations » CQ est réservé aux pilotes par le service Qualité.
     expect(groupe('Admin', ['*:Global'], 'controle-qualite')!.entrees).not.toContain('Mes évaluations');
   });
@@ -78,7 +81,9 @@ describe('aperçu du menu par rôle', () => {
       if (g.ouvertureIam) expect(ids.has(g.ouvertureIam), g.id).toBe(true);
       if (g.id === 'aide' || g.id.startsWith('perimetre-')) continue;
       for (const c of g.children) {
-        if (c.isSectionHeader) continue;
+        // « Droits des administrateurs » : réservé au Super Admin, sans rubrique (v60).
+        // v67 — « Heure de sortie » : accordée compte par compte par le Super Admin, sans rubrique.
+        if (c.isSectionHeader || c.superAdminOnly || c.accordeParSuperAdmin) continue;
         const e = ecransDe(c);
         expect(e.length, `${g.id} › ${c.label}`).toBeGreaterThan(0);
         for (const x of e) expect(ids.has(x), x).toBe(true);

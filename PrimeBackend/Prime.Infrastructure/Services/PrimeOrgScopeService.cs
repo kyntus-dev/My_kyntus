@@ -749,6 +749,9 @@ public sealed class PrimeOrgScopeService(PrimeDbContext? db, IRebacClient? rebac
             Avatar = e.Avatar,
             BusinessDepartmentId = e.BusinessDepartmentId,
             BusinessDepartmentKind = e.BusinessDepartmentKind,
+            // v73 — Un agent sorti reste renvoyé, marqué inactif : l'interface l'affiche grisé
+            // (« Sorti ») au lieu de le faire disparaître, et l'exclut de l'effectif planifiable.
+            IsActive = e.IsActive,
         }).ToList();
     }
 

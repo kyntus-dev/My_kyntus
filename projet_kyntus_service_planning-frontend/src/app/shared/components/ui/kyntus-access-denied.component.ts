@@ -77,8 +77,8 @@ import { LucideIconComponent } from '../../lucide-icon.component';
       transition: background 0.15s;
     }
     .kyntus-access-btn.primary {
-      background: var(--blue-600, #1e3a8a);
-      background-image: var(--ky-gradient, linear-gradient(135deg, #1e4fd8, #3b82f6));
+      background: var(--blue-600, var(--ky-blue));
+      background-image: var(--ky-gradient, linear-gradient(135deg, var(--ky-blue-strong, #0a2347), var(--ky-brand-600, #22508f)));
       color: #f1f5f9;
     }
     .kyntus-access-btn.primary:hover { filter: brightness(1.08); }

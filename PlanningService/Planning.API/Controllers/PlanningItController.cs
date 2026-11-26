@@ -30,6 +30,20 @@ public sealed class PlanningItController(
         return Ok(await service.GetSemaineAsync(await MeAsync(ct), droits, jour ?? today, ct));
     }
 
+    /// <summary>
+    /// v67 — Heures supplémentaires de l'année : acquises, récupérées (« Récup »), restantes.
+    /// Le lecteur voit son solde ; « Modifier tout » voit ceux de toute la cellule.
+    /// </summary>
+    [HttpGet("soldes")]
+    public async Task<IActionResult> Soldes([FromQuery] int? annee, CancellationToken ct)
+    {
+        var droits = await DroitsAsync(ct);
+        if (!droits.Voir)
+            return Forbid();
+        var an = annee is >= 2000 and <= 2100 ? annee.Value : DateTime.UtcNow.Year;
+        return Ok(await service.GetSoldesAsync(await MeAsync(ct), droits, an, ct));
+    }
+
     [HttpPut("case")]
     public Task<IActionResult> Saisir([FromBody] PlanningItCaseRequest body, CancellationToken ct) =>
         Run(async droits => { await service.SaisirAsync(await MeAsync(ct), droits, body, ct); return NoContent(); }, ct);

@@ -23,7 +23,7 @@
       </select>
     </label>
     <button type="button" class="mdc-btn" (click)="reload()">Filtrer</button>
-    <button type="button" class="mdc-btn" *ngIf="canManage" (click)="openCreate()">Nouvelle demande</button>
+    <button type="button" class="mdc-btn" *ngIf="canManage && droits.autorise('planning.reinforcement', 'Act')" (click)="openCreate()">Nouvelle demande</button>
   </section>
 
   <section class="mdc-card" *ngIf="showCreate && canManage">
@@ -146,7 +146,7 @@
             <button
               type="button"
               class="mdc-link mdc-bad"
-              *ngIf="canManage && r.status === 'Open'"
+              *ngIf="canManage && r.status === 'Open' && droits.autorise('planning.reinforcement', 'Act')"
               (click)="cancelRequest(r.id)">
               Annuler
             </button>

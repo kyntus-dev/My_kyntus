@@ -201,10 +201,11 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'planning-it', label: 'Planning IT', module: 'Planification', view: [KyntusRoleNames.Admin, KyntusRoleNames.Ingenieur, KyntusRoleNames.SupportIt], act: [KyntusRoleNames.Ingenieur, KyntusRoleNames.SupportIt], configure: ADMIN },
 
   { id: 'pointage.self', label: 'Mon suivi de pointage', module: 'Pointage', view: SELF, defaultScope: 'Self' },
+  // v67 : « Heure de sortie » n'est plus une rubrique (ni la page, ni « Accès Heure de sortie ») : seul le
+  // Super Admin accorde ce droit, compte par compte, avec l'horaire 07h40 / 08h40.
   { id: 'pointage.equipe', label: 'Pointages de l’équipe / prévu-réalisé', module: 'Pointage', view: TEAM_LEAD, serveur: SRV_RESPONSABLES },
   { id: 'pointage.regimes', label: 'Régimes horaires', module: 'Pointage', view: ADMIN_RH, configure: ADMIN, serveur: SRV_ADMIN_RH, serveurAgir: SRV_ADMIN },
   { id: 'pointage.correspondances', label: 'Correspondance pointeuses', module: 'Pointage', view: ADMIN_RH, act: ADMIN_RH, serveur: SRV_ADMIN_RH },
-  { id: 'pointage.acces-sortie', label: 'Accès Heure de sortie (compte par compte)', module: 'Pointage', view: ADMIN, configure: ADMIN, serveur: SRV_ADMIN },
   // v30 : formateurs et équipe formation = agents « En formation ».
   { id: 'presences', label: 'Tableau des présences', module: 'Présences et paie', view: [...TEAM_LEAD, KyntusRoleNames.Formateur, KyntusRoleNames.EquipeFormation], act: [...TEAM_LEAD, KyntusRoleNames.Formateur, KyntusRoleNames.EquipeFormation], defaultScope: 'Cellule' },
   { id: 'presences.retards', label: 'Retards et autorisations', module: 'Présences et paie', view: TEAM_LEAD, defaultScope: 'Cellule' },
@@ -219,7 +220,9 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'conges.self', label: 'Mes congés', module: 'Congés', view: SELF, defaultScope: 'Self' },
   { id: 'conges.equipe', label: 'Congés de l’équipe', module: 'Congés', view: TEAM_LEAD, serveur: SRV_RESPONSABLES },
   { id: 'conges.validation', label: 'Valider les congés', module: 'Congés', view: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur, KyntusRoleNames.Rp], validate: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur, KyntusRoleNames.Rp], serveur: SRV_VALIDATION_CONGES },
-  { id: 'conges.history', label: 'Historique des congés', module: 'Congés', view: ADMIN_RH, serveur: SRV_ADMIN_RH },
+  // v67 : n'est plus réservé à Admin / RH côté serveur — accordé à un rôle ou à un compte, l'historique
+  // s'ouvre réellement (périmètre : toute l'entreprise si « Toute l'entreprise », sinon l'équipe gérée).
+  { id: 'conges.history', label: 'Historique des congés', module: 'Congés', view: ADMIN_RH },
   // v29 : superviseur = ses cellules ; chef de projet = tout son département.
   { id: 'conges.quotas', label: 'Quotas cellule / service', module: 'Congés', view: QUOTAS_CONGES, configure: QUOTAS_CONGES, serveurAgir: SRV_QUOTAS_CONGES },
   { id: 'conges.periodes', label: 'Périodes interdites', module: 'Congés', view: ADMIN_RH, configure: ADMIN_RH, serveurAgir: SRV_ADMIN_RH },
@@ -228,6 +231,10 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'conges.planning', label: 'Absences du planning — consulter', module: 'Congés', view: [...ADMIN_RH, KyntusRoleNames.Manager, KyntusRoleNames.Superviseur, KyntusRoleNames.Rp] },
   { id: 'conges.planning-ajout', label: 'Absences du planning — ajouter', module: 'Congés', view: ADMIN_RH, act: ADMIN_RH },
   { id: 'conges.planning-modification', label: 'Absences du planning — modifier / supprimer', module: 'Congés', view: ADMIN_RH, act: ADMIN_RH },
+  // v64.2 : modifier les dates d'une demande de congé (en attente ou validée) depuis l'historique.
+  // v67 : accordé à un rôle ou à un compte, le bouton « Modifier » fonctionne réellement (même périmètre
+  // que l'historique) ; il suppose aussi l'accès à « Historique des congés ».
+  { id: 'conges.modification', label: 'Modifier les demandes de congé', module: 'Congés', view: ADMIN_RH, act: ADMIN_RH },
 
   { id: 'documentation.module', label: 'Module Documentation (accès au menu)', module: 'Documentation', view: SELF, defaultScope: 'Self' },
   // v48 : Process Bytel — lecture pour tous (selon la visibilité choisie à l'envoi), dépôt pour RH / Admin / chef de projet.
@@ -239,6 +246,9 @@ export const PLATFORM_SCREENS: readonly PlatformScreen[] = [
   { id: 'documentation.workflow', label: 'Workflows documentaires', module: 'Documentation', view: ADMIN, configure: ADMIN },
 
   { id: 'prime.module', label: 'Module Prime (accès au menu)', module: 'Prime', view: PRIME_MODULE },
+  // v77 — Par défaut, un encadrant ne voit que les cellules et services dont il a la charge.
+  // Accorder cette rubrique à un rôle lui ouvre les périmètres de tous les autres.
+  { id: 'perimetre.global', label: 'Voir les périmètres des autres encadrants', module: 'Administration', view: ADMIN_RH },
   { id: 'prime.workflow', label: 'Flux de validation Prime', module: 'Prime', view: ADMIN, configure: ADMIN },
   { id: 'prime.rbac', label: 'RBAC métier Prime', module: 'Prime', view: ADMIN, configure: ADMIN },
   { id: 'prime.catalog', label: 'Types de prime Support', module: 'Prime', view: ADMIN_RH, configure: ADMIN_RH },

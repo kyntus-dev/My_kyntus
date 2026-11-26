@@ -719,6 +719,7 @@
             Réinitialiser
           </button>
           <button
+            *ngIf="peutEnregistrer"
             type="button"
             class="ky-btn-primary btn-save"
             [disabled]="saving || !subServiceId || (!multiShiftModesEnabled && (totalEffectif === 0 || (serviceEmployeeCount > 0 && !quotasMatchEffectif)))"

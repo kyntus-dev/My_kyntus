@@ -19,6 +19,12 @@ export interface HtelLinkedEmployeeDto {
   idTechnicien: number;
   htelCode?: string | null;
   htelTechnicienName?: string | null;
+  /** v66 — Fiche active dans l'application. */
+  isActive?: boolean;
+  /** v66 — État du technicien dans HTEL (1 = actif), null s'il n'y figure plus. */
+  htelActif?: number | null;
+  /** v66 — Identifiant lié qui n'existe plus dans HTEL. */
+  htelIntrouvable?: boolean;
 }
 
 export interface HtelOrphanTechnicienDto {
@@ -33,6 +39,12 @@ export interface HtelEmployeeCandidateDto {
   firstName: string;
   lastName: string;
   email: string;
+  /** v66 — Fiche active (une fiche inactive existe quand même). */
+  isActive?: boolean;
+  /** v66 — Identifiant HTEL déjà porté par cette fiche (doublon côté HTEL). */
+  idTechnicienActuel?: number | null;
+  /** v66 — Score de ressemblance des noms (0 à 1). */
+  score?: number;
 }
 
 export interface HtelAmbiguousMatchDto {
@@ -40,6 +52,8 @@ export interface HtelAmbiguousMatchDto {
   technicien: string;
   code: string;
   candidates: HtelEmployeeCandidateDto[];
+  /** v66 — État du technicien dans HTEL. */
+  actif?: number;
 }
 
 export interface HtelUnlinkedEmployeeDto {
@@ -47,6 +61,7 @@ export interface HtelUnlinkedEmployeeDto {
   firstName: string;
   lastName: string;
   email: string;
+  isActive?: boolean;
 }
 
 export interface HtelLiaisonsReportDto {
@@ -54,6 +69,8 @@ export interface HtelLiaisonsReportDto {
   orphansHtel: HtelOrphanTechnicienDto[];
   ambiguous: HtelAmbiguousMatchDto[];
   unlinkedEmployees: HtelUnlinkedEmployeeDto[];
+  /** v66 — Liaisons divergentes : identifiant absent d'HTEL, ou technicien inactif / fiche active. */
+  divergences?: HtelLinkedEmployeeDto[] | null;
 }
 
 export interface HtelSyncReportDto {
@@ -63,6 +80,7 @@ export interface HtelSyncReportDto {
   orphansHtel: number;
   ambiguous: number;
   unlinkedEmployees: number;
+  divergences?: number;
 }
 
 @Injectable({ providedIn: 'root' })

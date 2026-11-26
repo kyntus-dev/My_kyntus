@@ -20,6 +20,7 @@ import {
 } from '../../../core/models/reclamation.model';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { formatHttpErrorMessage } from '../../../core/lib/http-error-message.util';
+import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 
 type DemandKind = 'reclamation' | 'proposition';
 type SubView = 'list' | 'new' | 'detail';
@@ -36,6 +37,8 @@ type ListFilter = 'all' | 'reclamations' | 'propositions';
   styleUrls: ['./reclamation-employee.component.css']
 })
 export class ReclamationEmployeeComponent implements OnInit, OnDestroy {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   private readonly toastSvc = inject(KyntusToastService);
   private readonly confirmService = inject(KyntusConfirmService);
   private readonly formDrafts = inject(KyntusFormDraftService);
@@ -89,6 +92,7 @@ export class ReclamationEmployeeComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     this.draftBinder = new KyntusObjectDraftBinder(
       this.formDrafts,
       'reclamation-employee-forms',

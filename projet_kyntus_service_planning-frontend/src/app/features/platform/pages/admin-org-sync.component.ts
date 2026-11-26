@@ -15,6 +15,8 @@ interface ReconcileVerify {
   orphansInPlanningNotDirectory?: number | null;
   orphansInPrimeNotDirectory?: number | null;
   ok?: boolean;
+  /** v73 — Services que l'annuaire n'a pas pu interroger : la vérification est alors incomplète. */
+  unreachableServices?: string[] | null;
 }
 
 @Component({
@@ -34,9 +36,28 @@ interface ReconcileVerify {
       } @else if (error()) {
         <p class="sync-err">{{ error() }}</p>
       } @else if (verify(); as v) {
-        <p class="sync-status" [class.ok]="v.ok !== false" [class.ko]="v.ok === false">
-          Réconciliation : {{ v.ok === false ? 'écarts détectés' : 'alignée' }}
+        <!-- v73 — Un service injoignable ne vaut plus « alignée » : on le dit, au lieu de laisser
+             croire que tout va bien alors que rien n'a pu être vérifié. -->
+        <p
+          class="sync-status"
+          [class.ok]="v.ok !== false && !injoignables(v).length"
+          [class.ko]="v.ok === false && !injoignables(v).length"
+          [class.warn]="injoignables(v).length > 0">
+          Réconciliation :
+          {{
+            injoignables(v).length
+              ? 'non vérifiée — ' + injoignables(v).join(' et ') + ' injoignable(s)'
+              : v.ok === false
+                ? 'écarts détectés'
+                : 'alignée'
+          }}
         </p>
+        @if (injoignables(v).length) {
+          <p class="sync-muted">
+            Les compteurs de ces services n'ont pas pu être lus : l'absence d'écart affichée
+            ci-dessous ne prouve rien. Vérifiez que les conteneurs tournent, puis relancez.
+          </p>
+        }
         <ul class="sync-kpis">
           <li>Employés actifs Directory : {{ v.directoryActiveEmployees }}</li>
           <li>Employés inactifs Directory : {{ v.directoryInactiveEmployees }}</li>
@@ -72,6 +93,7 @@ interface ReconcileVerify {
     .sync-status { font-size: 0.88rem; font-weight: 600; margin: 0 0 8px; }
     .sync-status.ok { color: #10b981; }
     .sync-status.ko { color: #f43f5e; }
+    .sync-status.warn { color: #d97706; }
     .sync-kpis { color: var(--text-primary); font-size: 0.9rem; padding-left: 1.1rem; }
     .sync-btn {
       margin-top: 12px; border: 1px solid var(--blue-600); background: color-mix(in srgb, var(--blue-600) 15%, var(--bg-card));
@@ -87,6 +109,18 @@ export class AdminOrgSyncComponent implements OnInit {
   readonly running = signal(false);
   readonly error = signal('');
   readonly verify = signal<ReconcileVerify | null>(null);
+
+  /**
+   * v73 — Services que l'annuaire n'a pas pu interroger. Le serveur les nomme ; pour une réponse
+   * antérieure à la v73, on les déduit des compteurs restés vides.
+   */
+  injoignables(v: ReconcileVerify): string[] {
+    if (v.unreachableServices?.length) return [...v.unreachableServices];
+    const manquants: string[] = [];
+    if (v.planningActiveUsers == null && v.orphansInPlanningNotDirectory == null) manquants.push('Planning');
+    if (v.primeEmployeeCount == null && v.orphansInPrimeNotDirectory == null) manquants.push('Prime');
+    return manquants;
+  }
   readonly report = signal('');
 
   ngOnInit(): void {

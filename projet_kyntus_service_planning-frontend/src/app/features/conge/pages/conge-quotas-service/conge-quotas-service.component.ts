@@ -10,6 +10,7 @@ import { resolveCurrentUserGuid, resolveUserGuid } from '../../../../core/lib/us
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import { PrimeOrgApiService } from '../../../prime/services/prime-org-api.service';
 import { FILTRES_VIDES, cheminsNoeuds, filtrerQuotas, optionsFiltres, positionsNoeuds, type FiltresQuota, type PositionNoeud } from './quota-chemins.util';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 
 @Component({
   selector: 'app-conge-quotas-service',
@@ -95,7 +96,7 @@ import { FILTRES_VIDES, cheminsNoeuds, filtrerQuotas, optionsFiltres, positionsN
                            [placeholder]="r.maxAbsentsSimultanes == null ? 'Non défini' : ''" />
                   </td>
                   <td>
-                    <button type="button" class="ky-btn-primary" (click)="save(r)">Enregistrer</button>
+                    <button type="button" class="ky-btn-primary" *ngIf="droits.autorise('conges.quotas', 'Configure')" (click)="save(r)">Enregistrer</button>
                   </td>
                 </tr>
               </tbody>
@@ -129,7 +130,7 @@ import { FILTRES_VIDES, cheminsNoeuds, filtrerQuotas, optionsFiltres, positionsN
                            [placeholder]="r.maxAbsentsSimultanes == null ? 'Non défini' : ''" />
                   </td>
                   <td>
-                    <button type="button" class="ky-btn-primary" (click)="save(r)">Enregistrer</button>
+                    <button type="button" class="ky-btn-primary" *ngIf="droits.autorise('conges.quotas', 'Configure')" (click)="save(r)">Enregistrer</button>
                   </td>
                 </tr>
               </tbody>
@@ -192,6 +193,8 @@ import { FILTRES_VIDES, cheminsNoeuds, filtrerQuotas, optionsFiltres, positionsN
   `]
 })
 export class CongeQuotasServiceComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   private readonly toast = inject(KyntusToastService);
   private readonly svc = inject(CongeService);
   private readonly userSvc = inject(UserService);
@@ -254,6 +257,7 @@ export class CongeQuotasServiceComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     this.org.invalidateOverviewCache();
     this.org.loadOverview().subscribe({
       next: (o) => {

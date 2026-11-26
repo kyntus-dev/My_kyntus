@@ -20,6 +20,8 @@ interface ScopeRow {
   service: string;
   cellule: string;
   pole: string;
+  /** v73 — Agent désactivé ou sorti : ligne grisée « Sorti », hors effectif planifiable. */
+  sorti: boolean;
 }
 
 interface ServiceOption {
@@ -111,8 +113,13 @@ function resolveServiceLabel(
                   </tr>
                 } @else {
                   @for (item of rows(); track item.id) {
-                    <tr>
-                      <td><span class="prime-cell-strong">{{ item.fullName }}</span></td>
+                    <tr [class.scope-row-sorti]="item.sorti">
+                      <td>
+                        <span class="prime-cell-strong">{{ item.fullName }}</span>
+                        @if (item.sorti) {
+                          <span class="scope-sorti-chip" title="Désactivé ou réaffecté : conservé pour l’historique, hors effectif planifiable">Sorti</span>
+                        }
+                      </td>
                       <td><span class="prime-cell-muted">{{ item.role }}</span></td>
                       <td><span class="prime-cell-muted">{{ item.operationalDepartment }}</span></td>
                       <td><span class="prime-cell-muted">{{ item.pole }}</span></td>
@@ -130,6 +137,22 @@ function resolveServiceLabel(
   `,
   styles: [
     `
+      /* v73 — Agent sorti : ligne grisée, conservée pour l'historique. */
+      .scope-row-sorti > td {
+        opacity: 0.55;
+      }
+      .scope-sorti-chip {
+        margin-left: 8px;
+        padding: 1px 7px;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        border: 1px solid var(--border-color);
+        color: var(--text-muted);
+        background: transparent;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
       .scope-service-picker {
         display: flex;
         flex-direction: column;
@@ -253,6 +276,8 @@ export class ReferentTechniqueScopePageComponent {
           pole: labels.pole,
           cellule: labels.cellule,
           service: labels.service,
+          // v73 — L'annuaire signale les sortants : conservés, grisés, hors effectif.
+          sorti: e.isActive === false,
         };
       });
 

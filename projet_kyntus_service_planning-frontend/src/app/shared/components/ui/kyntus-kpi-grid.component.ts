@@ -85,7 +85,7 @@ export interface KyntusKpiItem {
     .kyntus-kpi-card.accent-yellow,
     .kyntus-kpi-card.accent-orange { border-top-color: var(--warning, #d97706); }
     .kyntus-kpi-card.accent-red { border-top-color: var(--danger, #dc2626); }
-    .kyntus-kpi-card.accent-purple { border-top-color: var(--electric-blue, #1e3a8a); }
+    .kyntus-kpi-card.accent-purple { border-top-color: var(--electric-blue, var(--ky-blue)); }
     .kyntus-kpi-card.accent-cyan { border-top-color: var(--soft-blue, #3b82f6); }
     .kyntus-kpi-label {
       margin: 0 0 0.25rem;
@@ -117,7 +117,7 @@ export interface KyntusKpiItem {
     .accent-green { color: var(--success-text, #16a34a); background: color-mix(in srgb, var(--success, #16a34a) 12%, transparent); }
     .accent-yellow, .accent-orange { color: var(--warning-text, #d97706); background: color-mix(in srgb, var(--warning, #d97706) 12%, transparent); }
     .accent-red { color: var(--danger-text, #dc2626); background: color-mix(in srgb, var(--danger, #dc2626) 12%, transparent); }
-    .accent-purple { color: var(--electric-blue, #1e3a8a); background: color-mix(in srgb, var(--electric-blue, #1e3a8a) 12%, transparent); }
+    .accent-purple { color: var(--electric-blue, var(--ky-blue)); background: color-mix(in srgb, var(--electric-blue, var(--ky-blue)) 12%, transparent); }
     .accent-cyan { color: var(--soft-blue, #3b82f6); background: color-mix(in srgb, var(--soft-blue, #3b82f6) 12%, transparent); }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,

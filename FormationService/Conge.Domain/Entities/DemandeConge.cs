@@ -316,6 +316,92 @@ public class DemandeConge
         _domainEvents.Add(new CongeAnnuleEvent(Id, EmployeId, NombreJours, TypeConge));
     }
 
+    /// <summary>
+    /// v64.2 — Modification des dates d'une demande en attente ou déjà validée (Admin / RH).
+    /// Le statut ne change pas ; la durée est recalculée selon le type (jours ouvrables pour un
+    /// congé annuel, durée fixe pour un congé exceptionnel) et l'opération est inscrite dans
+    /// l'historique des décisions avec l'ancienne et la nouvelle période.
+    /// Le solde et le planning sont mis à jour par l'appelant (voir ModifierCongeHandler).
+    /// </summary>
+    /// <returns>Ancienne période et ancienne durée, pour ajuster le solde et le planning.</returns>
+    public (DateTime AncienDebut, DateTime AncienneFin, double AncienNombreJours) Modifier(
+        DateTime dateDebut,
+        DateTime? dateFin,
+        Guid acteurId,
+        string? acteurNom = null,
+        string? acteurRole = null,
+        string? commentaire = null,
+        DateTime? aujourdhui = null)
+    {
+        if (Statut is not (StatutDemande.EnAttente or StatutDemande.EnAttenteRh or StatutDemande.Validee))
+            throw new InvalidOperationException(
+                $"Impossible de modifier une demande {LibelleStatut(Statut)}.");
+
+        // Colonnes « timestamp with time zone » : dates enregistrées à minuit UTC, comme à la création.
+        var debut = DateTime.SpecifyKind(dateDebut.Date, DateTimeKind.Utc);
+        DateTime fin;
+        double jours;
+        switch (TypeConge)
+        {
+            case TypeConge.Annuel:
+                fin = DateTime.SpecifyKind(
+                    (dateFin ?? throw new ArgumentException("La date de fin est obligatoire.")).Date,
+                    DateTimeKind.Utc);
+                if (fin < debut)
+                    throw new ArgumentException("La date de fin doit être postérieure ou égale à la date de début.");
+                jours = PolitiqueConge.CompterJoursOuvrables(debut, fin);
+                if (jours <= 0)
+                    throw new ArgumentException("La période ne contient aucun jour ouvrable.");
+                break;
+            case TypeConge.Exceptionnel when TypeExceptionnel.HasValue:
+                var duree = PolitiqueConge.GetDureeExceptionnelle(TypeExceptionnel.Value);
+                fin = debut.AddDays(duree - 1);
+                jours = duree;
+                break;
+            default:
+                throw new InvalidOperationException("Ce type de congé ne peut pas être modifié ici.");
+        }
+
+        // Une période déjà commencée peut être raccourcie ou prolongée, mais on ne déplace pas
+        // son début dans le passé.
+        var jour = (aujourdhui ?? DateTime.UtcNow).Date;
+        if (debut != DateDebut.Date && debut < jour)
+            throw new ArgumentException("La nouvelle date de début ne peut pas être dans le passé.");
+
+        if (debut == DateDebut.Date && fin == DateFin.Date)
+            throw new InvalidOperationException("Les dates sont identiques : aucune modification à enregistrer.");
+
+        var ancien = (DateDebut, DateFin, NombreJours);
+        DateDebut = debut;
+        DateFin = fin;
+        NombreJours = jours;
+
+        var trace = $"Période modifiée : du {ancien.DateDebut:dd/MM/yyyy} au {ancien.DateFin:dd/MM/yyyy} ({ancien.NombreJours} j) "
+            + $"→ du {debut:dd/MM/yyyy} au {fin:dd/MM/yyyy} ({jours} j).";
+        if (!string.IsNullOrWhiteSpace(commentaire))
+            trace += " " + commentaire.Trim();
+        if (trace.Length > 500)
+            trace = trace[..500];
+
+        AppendDecision(
+            acteurId,
+            acteurNom,
+            acteurRole ?? "RH",
+            DemandeCongeDecisionActions.Modification,
+            Statut,
+            Statut,
+            trace);
+
+        return ancien;
+    }
+
+    private static string LibelleStatut(StatutDemande statut) => statut switch
+    {
+        StatutDemande.Refusee => "refusée",
+        StatutDemande.Annulee => "annulée",
+        _ => $"au statut « {statut} »",
+    };
+
     public void ClearDomainEvents() => _domainEvents.Clear();
 
     private void EnsureTransition(StatutDemande expected, string actionLabel)

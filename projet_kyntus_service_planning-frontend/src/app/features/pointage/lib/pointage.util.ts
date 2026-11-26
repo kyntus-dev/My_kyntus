@@ -44,7 +44,8 @@ export function periode(preset: PeriodePreset, now = new Date()): { du: string; 
 export const STATUT_LABELS: Record<PointageJourStatut, string> = {
   AHeure: 'À l’heure',
   Retard: 'Retard',
-  PointageManquant: 'Pointage manquant',
+  // v70 : libellé de l'écran (journée calculée sur les seuls pointages, hors solde).
+  PointageManquant: 'Manque de pointage',
   EnCours: 'En cours',
   SansPointage: 'Sans pointage',
   SansPlanning: 'Sans planning',
@@ -52,6 +53,10 @@ export const STATUT_LABELS: Record<PointageJourStatut, string> = {
   Ferie: 'Férié',
   Repos: '—',
   AVenir: 'À venir',
+  // v65 : journée travaillée et pointée hors planning (samedi non planifié, jour de repos travaillé).
+  HeuresSupplementaires: 'Heures supplémentaires',
+  // v67 : récupération du planning IT, déduite des heures supplémentaires.
+  Recup: 'Récup',
 };
 
 export function statutClass(statut: PointageJourStatut): string {
@@ -60,7 +65,10 @@ export function statutClass(statut: PointageJourStatut): string {
     case 'PointageManquant': return 'pt-s-manquant';
     case 'SansPointage': return 'pt-s-absent';
     case 'AHeure': return 'pt-s-ok';
+    // v65 : heures faites en plus du planning — mises en valeur comme une journée à l'heure.
+    case 'HeuresSupplementaires': return 'pt-s-ok';
     case 'Conge':
+    case 'Recup':
     case 'Ferie': return 'pt-s-conge';
     default: return 'pt-s-neutre';
   }
@@ -86,8 +94,9 @@ export function messagesSuivi(s: PointageSuiviDto): { niveau: 'info' | 'alerte';
   if (t.joursPointageManquant.length) {
     out.push({
       niveau: 'info',
-      titre: `Il manque un pointage sur ${t.joursPointageManquant.length} journée(s)`,
-      texte: `${t.joursPointageManquant.map(jj).join(', ')}. Ces journées ne sont pas calculées : vigilance sur les pointages à venir.`,
+      titre: `Manque de pointage sur ${t.joursPointageManquant.length} journée(s)`,
+      texte: `${t.joursPointageManquant.map(jj).join(', ')}. Seules les heures pointées sont affichées ; ces journées ne comptent pas `
+        + 'dans le solde d’heures. Vigilance sur les pointages à venir.',
     });
   }
   if (t.joursEnRetard) {
@@ -191,25 +200,46 @@ export function estAnomalie(j: PointageJourDto): boolean {
 }
 
 /**
- * Compensation des heures : solde cumulé (minutes) jour après jour, depuis le début de la période
- * de paie (le 24). Une journée courte est compensée par les journées plus longues de la même
- * période ; le cumul repart de zéro chaque 24.
+ * Compensation des heures : solde cumulé (minutes) jour après jour.
+ * v71 : le solde ne repart plus de zéro le 24 — il se garde jusqu'à ce qu'il soit récupéré.
+ * `report` = solde acquis avant le premier jour affiché (depuis DEBUT_SOLDE_HEURES).
+ * v70 : une journée « Récup » du planning IT consomme le solde (− ses minutes), à partir de son jour ;
+ * une journée en manque de pointage n'y entre pas (pas d'écart).
  */
-export function soldesCumules(jours: readonly { jour: string; ecartProductionMinutes?: number | null }[]): Map<string, number> {
+export function soldesCumules(
+  jours: readonly { jour: string; ecartProductionMinutes?: number | null; recupMinutes?: number | null }[],
+  aujourdhui: string = ymd(new Date()),
+  report = 0,
+): Map<string, number> {
   const tri = [...jours].sort((a, b) => (a.jour < b.jour ? -1 : a.jour > b.jour ? 1 : 0));
   const out = new Map<string, number>();
-  let cumul = 0;
-  let periodeCourante = '';
+  let cumul = report;
   for (const j of tri) {
     const date = j.jour.slice(0, 10);
-    const [y, m, d] = date.split('-').map(Number);
-    const debut = d >= 24 ? new Date(y, m - 1, 24) : new Date(y, m - 2, 24);
-    const cle = ymd(debut);
-    if (cle !== periodeCourante) { periodeCourante = cle; cumul = 0; }
     cumul += j.ecartProductionMinutes ?? 0;
+    // v70 : Récup prise (pas une Récup encore à venir).
+    if (date <= aujourdhui) cumul -= j.recupMinutes ?? 0;
     out.set(date, cumul);
   }
   return out;
+}
+
+/** v71 — Solde à la fin des journées données (report compris). */
+export function soldeFinal(
+  jours: readonly { jour: string; ecartProductionMinutes?: number | null; recupMinutes?: number | null }[],
+  aujourdhui: string = ymd(new Date()),
+  report = 0,
+): number {
+  let dernier = '';
+  let solde = report;
+  for (const [date, v] of soldesCumules(jours, aujourdhui, report)) if (date >= dernier) { dernier = date; solde = v; }
+  return solde;
+}
+
+/** v71 — Veille d'une date yyyy-MM-dd. */
+export function veille(date: string): string {
+  const [y, m, d] = date.slice(0, 10).split('-').map(Number);
+  return ymd(new Date(y, m - 1, d - 1));
 }
 
 /** Deux pointages seulement sur une journée planifiée : les pauses n'ont pas été badgées. */

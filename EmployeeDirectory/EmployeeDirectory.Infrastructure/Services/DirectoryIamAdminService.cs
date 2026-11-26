@@ -137,6 +137,8 @@ public sealed class DirectoryIamAdminService(DirectoryDbContext db) : IIamAdminS
         {
             await FusionnerAliasAsync(ct);
             await AjouterRubriquesAjouteesAsync(ct);
+            // v67 — Rubriques retirées (« Heure de sortie ») : plus aucune ligne par rôle ni par compte.
+            await SupprimerRubriquesRetireesAsync(ct);
             return;
         }
 
@@ -230,6 +232,28 @@ public sealed class DirectoryIamAdminService(DirectoryDbContext db) : IIamAdminS
                     });
                 }
             }
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// v67 — Efface les lignes des rubriques retirées du catalogue (« Accès par rôle », « Accès par
+    /// compte », retraits du Super Admin). Idempotent : sans effet une fois le ménage fait. Les
+    /// autorisations « Heure de sortie » données compte par compte (Planning) ne sont pas touchées.
+    /// </summary>
+    public async Task SupprimerRubriquesRetireesAsync(CancellationToken ct = default)
+    {
+        foreach (var rubrique in PlatformAccessCatalog.RubriquesRetirees)
+        {
+            var prefixe = rubrique + ".";
+            var roles = await db.IamPermissions.Where(p => p.Action.StartsWith(prefixe)).ToListAsync(ct);
+            var comptes = await db.IamUserPermissions.Where(p => p.Action.StartsWith(prefixe)).ToListAsync(ct);
+            var retraits = await db.IamAdminRestrictions.Where(p => p.Action.StartsWith(prefixe)).ToListAsync(ct);
+            if (roles.Count + comptes.Count + retraits.Count == 0)
+                continue;
+            db.IamPermissions.RemoveRange(roles);
+            db.IamUserPermissions.RemoveRange(comptes);
+            db.IamAdminRestrictions.RemoveRange(retraits);
             await db.SaveChangesAsync(ct);
         }
     }

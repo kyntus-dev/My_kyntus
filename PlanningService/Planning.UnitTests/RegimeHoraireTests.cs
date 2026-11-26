@@ -123,7 +123,10 @@ public class RegimeHoraireTests
     {
         Assert.Equal(520, RegimeResolver.ProductionExcelMinutes(Lundi));
         Assert.Equal(460, RegimeResolver.ProductionExcelMinutes(Vendredi));
-        Assert.Equal(460, RegimeResolver.ProductionExcelMinutes(Samedi));
+        // v65 : le samedi ne vaut plus 07h40 d'office. Il n'est une journée de production que s'il
+        // figure au planning de l'agent, et la production vient alors de ce planning. Hors planning,
+        // rien n'est attendu : les heures pointées sont des heures supplémentaires.
+        Assert.Equal(0, RegimeResolver.ProductionExcelMinutes(Samedi));
         Assert.Equal(80, RegimeResolver.PauseExcelMinutes);
     }
 
@@ -150,5 +153,62 @@ public class RegimeHoraireTests
         Assert.Equal(PointageJourStatuts.SansPointage, r.Statut);
         var samedi = PointageCalculator.CalculerJour(Samedi, [], RegimeResolver.PlanningDuJour(Standard(), Samedi), Samedi.AddDays(1));
         Assert.Equal(PointageJourStatuts.Repos, samedi.Statut);
+    }
+
+    /// <summary>v65 — Le samedi suit le planning de l'agent, et non un planning commun.</summary>
+    [Fact]
+    public void Samedi_du_regime_de_l_agent_est_un_jour_travaille_v65()
+    {
+        var regimeAvecSamedi = Standard() with
+        {
+            Jours = new Dictionary<int, (TimeOnly, int)>(Standard().Jours) { [6] = (new TimeOnly(8, 0), 460) },
+        };
+        Assert.True(RegimeResolver.JourTravailleDuRegime(regimeAvecSamedi, Samedi));
+        Assert.False(RegimeResolver.JourTravailleDuRegime(Standard(), Samedi));
+        Assert.True(RegimeResolver.JourTravailleDuRegime(Standard(), Lundi));
+        Assert.False(RegimeResolver.JourTravailleDuRegime(null, Lundi));
+
+        // Samedi au planning de l'agent : journée de production, comparée à sa production prévue.
+        var planifie = RegimeResolver.PlanningDuJour(regimeAvecSamedi, Samedi);
+        Assert.NotNull(planifie);
+        var travaille = PointageCalculator.CalculerJour(
+            Samedi, [At(Samedi, "08:00"), At(Samedi, "16:50")], planifie, Samedi.AddDays(1));
+        Assert.Equal(460, travaille.ProductionPrevueMinutes ?? -1);
+        Assert.True(travaille.Planifie);
+        // Pas de double comptage : rien en heures supplémentaires pour un samedi déjà prévu.
+        Assert.Null(travaille.HeuresSupplementairesMinutes);
+    }
+
+    /// <summary>
+    /// v65 — Samedi hors planning effectivement travaillé : heures supplémentaires, et jamais
+    /// d'heures manquantes (cas signalé : 12:43 → 13:50 comparé à 08h40 « horaire de base »).
+    /// </summary>
+    [Fact]
+    public void Samedi_hors_planning_travaille_donne_des_heures_supplementaires_v65()
+    {
+        // Jour de repos de l'agent : production prévue nulle (Planifie = false).
+        var horsPlanning = new PlanningJour(null, 80, false, false, null, 0, null, Planifie: false);
+        var r = PointageCalculator.CalculerJour(
+            Samedi, [At(Samedi, "12:43"), At(Samedi, "13:50")], horsPlanning, Samedi.AddDays(2));
+
+        Assert.Equal(PointageJourStatuts.HeuresSupplementaires, r.Statut);
+        Assert.False(r.Planifie);
+        Assert.Equal(67, r.ProductionMinutes ?? -1);
+        Assert.Equal(0, r.ProductionPrevueMinutes ?? -1);
+        // L'écart est positif : 1 h 07 en plus, et non 7 h 33 manquantes.
+        Assert.Equal(67, r.EcartProductionMinutes ?? -1);
+        Assert.Equal(67, r.HeuresSupplementairesMinutes ?? -1);
+        Assert.Equal(0, r.RetardTotalMinutes);
+
+        // Sans pointage, le même jour reste un repos : jamais une absence.
+        var sansPointage = PointageCalculator.CalculerJour(Samedi, [], horsPlanning, Samedi.AddDays(2));
+        Assert.Equal(PointageJourStatuts.Repos, sansPointage.Statut);
+        Assert.Null(sansPointage.HeuresSupplementairesMinutes);
+
+        // Totaux : les heures supplémentaires sont comptées à part de la production prévue.
+        var totaux = PointageCalculator.Totaliser([r, sansPointage]);
+        Assert.Equal(67, totaux.HeuresSupplementairesMinutes);
+        Assert.Equal(1, totaux.JoursHeuresSupplementaires);
+        Assert.Equal(0, totaux.ProductionPrevueMinutes);
     }
 }

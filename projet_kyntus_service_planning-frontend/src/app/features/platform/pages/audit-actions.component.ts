@@ -162,7 +162,7 @@ import { journalChangements, journalResume, operationTon } from '../lib/journal-
       border-radius: 0.5rem; padding: 7px 9px; font-size: 0.82rem; min-width: 130px; }
     .ja-q input { min-width: 220px; }
     .ja-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-size: 0.78rem;
-      background: color-mix(in srgb, var(--blue-600, #2563eb) 12%, transparent); color: var(--electric-blue, #1d4ed8); }
+      background: color-mix(in srgb, var(--blue-600, #2563eb) 12%, transparent); color: var(--electric-blue, var(--ky-blue-text)); }
     .ja-chip button { border: none; background: none; cursor: pointer; font-size: 1rem; line-height: 1; color: inherit; }
     .ja-lien { border: none; background: none; color: var(--electric-blue, #2563eb); cursor: pointer; font-size: 0.8rem; padding: 6px 0; }
     .ja-btn { border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); border-radius: 0.5rem;
@@ -184,7 +184,7 @@ import { journalChangements, journalResume, operationTon } from '../lib/journal-
       background: color-mix(in srgb, #64748b 14%, transparent); color: #475569; }
     .ja-op[data-ton="creation"] { background: color-mix(in srgb, #16a34a 14%, transparent); color: #15803d; }
     .ja-op[data-ton="suppression"] { background: color-mix(in srgb, #dc2626 12%, transparent); color: #b91c1c; }
-    .ja-op[data-ton="validation"] { background: color-mix(in srgb, #2563eb 12%, transparent); color: #1d4ed8; }
+    .ja-op[data-ton="validation"] { background: color-mix(in srgb, #2563eb 12%, transparent); color: var(--ky-blue-text); }
     .ja-op[data-ton="alerte"] { background: color-mix(in srgb, #d97706 14%, transparent); color: #b45309; }
     .ja-pages { display: flex; align-items: center; justify-content: flex-end; gap: 10px; font-size: 0.8rem; color: var(--text-muted); }
     .ja-voile { position: fixed; inset: 0; background: rgba(15, 23, 42, .25); z-index: 60; }

@@ -166,3 +166,53 @@ describe('cellules encadrées — RP et portée globale (v54)', () => {
     expect(resolveCellulesEncadrees('pilote-1', { celluleId: 'c1' }, overview, arbre)).toEqual(['c1']);
   });
 });
+
+/**
+ * v73 — Un agent désactivé ou sorti reste dans la liste de son périmètre (il s'affiche grisé
+ * « Sorti », pour l'historique), mais il porte le drapeau qui permet de l'écarter de l'effectif.
+ * Un agent réaffecté, lui, ne doit plus apparaître que dans son nouveau service.
+ */
+describe('v73 — sortis et réaffectations dans les périmètres', () => {
+  it('garde l’agent sorti dans la liste, avec isActive à faux', () => {
+    const people = [
+      emp({ id: 'present', role: 'Pilote', serviceId: 'svc-mails', celluleId: 'cell-bte' }),
+      emp({ id: 'sorti', role: 'Pilote', serviceId: 'svc-mails', celluleId: 'cell-bte', isActive: false }),
+    ];
+    const inScope = employeesInSuperviseurCellule(people, 'cell-bte', ['cell-bte', 'svc-mails']);
+    expect(inScope.map((e) => e.id).sort()).toEqual(['present', 'sorti']);
+    expect(inScope.find((e) => e.id === 'sorti')?.isActive).toBe(false);
+    // Effectif réellement planifiable : le sorti ne compte pas.
+    expect(inScope.filter((e) => e.isActive !== false)).toHaveLength(1);
+  });
+
+  it('un agent réaffecté ne sort que dans son nouveau service', () => {
+    const people = [
+      emp({ id: 'reaffecte', role: 'Pilote', serviceId: 'svc-autre', celluleId: 'cell-autre' }),
+      emp({ id: 'reste', role: 'Pilote', serviceId: 'svc-mails', celluleId: 'cell-bte' }),
+    ];
+    expect(
+      employeesInSuperviseurCellule(people, 'cell-bte', ['cell-bte', 'svc-mails']).map((e) => e.id),
+    ).toEqual(['reste']);
+    expect(
+      employeesInSuperviseurCellule(people, 'cell-autre', ['cell-autre', 'svc-autre']).map((e) => e.id),
+    ).toEqual(['reaffecte']);
+  });
+
+  it('le référent technique voit aussi ses sortis, marqués comme tels', () => {
+    const people = [
+      emp({ id: 'a', role: 'Pilote', serviceId: 'svc-a' }),
+      emp({ id: 'b', role: 'Pilote', serviceId: 'svc-a', isActive: false }),
+      emp({ id: 'c', role: 'Pilote', serviceId: 'svc-b' }),
+    ];
+    const inScope = employeesInReferentTechniqueService(people, 'svc-a');
+    expect(inScope.map((e) => e.id).sort()).toEqual(['a', 'b']);
+    expect(inScope.filter((e) => e.isActive !== false).map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('une réponse serveur antérieure à la v73 (sans isActive) reste traitée comme présente', () => {
+    const people = [emp({ id: 'ancien', role: 'Pilote', serviceId: 'svc-a' })];
+    const inScope = employeesInReferentTechniqueService(people, 'svc-a');
+    expect(inScope[0].isActive).toBeUndefined();
+    expect(inScope.filter((e) => e.isActive !== false)).toHaveLength(1);
+  });
+});

@@ -7,6 +7,7 @@ import {
   ValiderCongeRequest, RefuserCongeRequest, StatutDemande,
   PeriodesInterditesDto, PeriodesInterditesScopesDto, QuotaCongeServiceDto, CongeDisponibiliteDto,
   EquipeCongesDto, CongeDisponibiliteMoisDto, CelluleCongesDto, CongeWorkflowDto,
+  ModifierCongeRequest, ModifierCongeResult,
 } from '../models/conge.models';
 
 @Injectable({ providedIn: 'root' })
@@ -160,6 +161,11 @@ export class CongeService {
 
   validerCongeRh(demandeId: string, req: ValiderCongeRequest): Observable<void> {
     return this.http.put<void>(`${this.base}/${demandeId}/valider-rh`, req);
+  }
+
+  /** v64.2 — Modifier les dates d'une demande (en attente ou validée) : Admin / RH, droit « Modifier les demandes de congé ». */
+  modifierConge(demandeId: string, req: ModifierCongeRequest): Observable<ModifierCongeResult> {
+    return this.http.put<ModifierCongeResult>(`${this.base}/${demandeId}/modifier`, req);
   }
 
   refuserConge(demandeId: string, req: RefuserCongeRequest): Observable<void> {

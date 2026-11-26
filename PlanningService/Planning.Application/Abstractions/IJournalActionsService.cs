@@ -13,8 +13,11 @@ public sealed record JournalEvenement(
     string? Details = null,
     string? Source = null);
 
-/// <summary>v64 — Auteur fourni explicitement (événement reçu d'un autre service).</summary>
-public sealed record JournalAuteurExterne(Guid? Guid, string? Email, string? Role);
+/// <summary>
+/// v64 — Auteur fourni explicitement (événement reçu d'un autre service). v67 : <paramref name="SuperAdmin"/>
+/// — action du Super Admin, jamais inscrite.
+/// </summary>
+public sealed record JournalAuteurExterne(Guid? Guid, string? Email, string? Role, bool SuperAdmin = false);
 
 public sealed record JournalFiltre(
     DateOnly? Du,

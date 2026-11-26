@@ -9,9 +9,13 @@ import { KyntusConfirmService } from '../../../../shared/components/kyntus-confi
 import { formatHttpErrorMessage } from '../../../../core/lib/http-error-message.util';
 import { libelleMail } from '../../lib/mail-interne.util';
 import { ImportEmployesHtelComponent } from './import-employes-htel.component';
+import { UserService } from '../../services/user.service';
+import type { User } from '../../users-module';
+import { HTEL_MATCH_ALERT_THRESHOLD, scoreEmployeeToHtel } from '../../services/htel-name-match.util';
 import {
   HtelAmbiguousMatchDto,
   HtelApiService,
+  HtelEmployeeCandidateDto,
   HtelLiaisonsReportDto,
   HtelLinkedEmployeeDto,
   HtelOrphanTechnicienDto,
@@ -46,6 +50,13 @@ export class HtelLiaisonsPageComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly confirmService = inject(KyntusConfirmService);
+  private readonly users = inject(UserService);
+
+  /**
+   * v66 — Toutes les fiches de l'application (Planning), actives ou non : un technicien HTEL n'est
+   * présenté comme « non défini » que si aucune fiche ne lui correspond, même hors de l'annuaire.
+   */
+  fichesApp: User[] = [];
 
   loading = false;
   syncing = false;
@@ -82,12 +93,61 @@ export class HtelLiaisonsPageComponent implements OnInit {
     return this.report?.ambiguous ?? [];
   }
 
-  /** v49 : tous les employés connus (liés ou non) — doublons signalés à l'import. */
+  /**
+   * v49 : tous les employés connus (liés ou non) — fiches existantes repérées à l'import.
+   * v66 : toutes les fiches de l'application (actives et inactives), pas seulement celles de l'annuaire.
+   */
   get employesExistants(): { nom: string; prenom: string }[] {
+    const fiches = this.fichesApp.map((u) => ({ nom: u.lastName, prenom: u.firstName }));
     return [
+      ...fiches,
       ...this.linked.map((r) => ({ nom: r.lastName, prenom: r.firstName })),
       ...this.unlinked.map((r) => ({ nom: r.lastName, prenom: r.firstName })),
     ];
+  }
+
+  /** v66 — Liaisons divergentes (identifiant absent d'HTEL, ou technicien inactif / fiche active). */
+  get divergences(): HtelLinkedEmployeeDto[] {
+    return this.report?.divergences ?? [];
+  }
+
+  /**
+   * v66 — Fiches de l'application qui ressemblent à un technicien « non défini » (fiche absente de
+   * l'annuaire, ou nom écrit autrement) : on propose de la lier au lieu d'en créer une seconde.
+   */
+  fichesPour(orphan: HtelOrphanTechnicienDto): User[] {
+    return this.fichesApp
+      .map((u) => ({ u, s: scoreEmployeeToHtel(u.firstName ?? '', u.lastName ?? '', orphan.technicien) }))
+      .filter((x) => x.s >= HTEL_MATCH_ALERT_THRESHOLD)
+      .sort((a, b) => b.s - a.s || Number(b.u.isActive) - Number(a.u.isActive))
+      .slice(0, 3)
+      .map((x) => x.u);
+  }
+
+  /** v66 — État d'une fiche candidate (inactive, déjà liée à un autre identifiant HTEL). */
+  etatCandidat(c: HtelEmployeeCandidateDto): string[] {
+    const etats: string[] = [];
+    if (c.isActive === false) etats.push('fiche inactive');
+    if (c.idTechnicienActuel) etats.push(`déjà liée à l'ID ${c.idTechnicienActuel}`);
+    if (typeof c.score === 'number') etats.push(`ressemblance ${Math.round(c.score * 100)} %`);
+    return etats;
+  }
+
+  lierFicheApp(user: User, orphan: HtelOrphanTechnicienDto): void {
+    if (!user.guid) {
+      this.error = 'Cette fiche n’a pas d’identifiant d’annuaire : ouvrez-la et enregistrez-la, puis réessayez.';
+      return;
+    }
+    this.htelApi.link(user.guid, orphan.idTechnicien).subscribe({
+      next: () => this.reload(),
+      error: (err) => {
+        this.error = formatHttpErrorMessage(
+          err,
+          'Liaison impossible : la fiche n’est peut-être pas encore dans l’annuaire (ouvrez-la et enregistrez-la).',
+        );
+        this.cdr.detectChanges();
+      },
+    });
   }
 
   get unlinked(): HtelUnlinkedEmployeeDto[] {
@@ -191,6 +251,14 @@ export class HtelLiaisonsPageComponent implements OnInit {
   reload(): void {
     this.loading = true;
     this.error = null;
+    // v66 : fiches de l'application, pour ne jamais présenter comme « non défini » un employé existant.
+    this.users.getAllUsers().subscribe({
+      next: (u) => {
+        this.fichesApp = u ?? [];
+        this.cdr.detectChanges();
+      },
+      error: () => (this.fichesApp = []),
+    });
     this.htelApi.getLiaisons().subscribe({
       next: (report) => {
         this.report = report;

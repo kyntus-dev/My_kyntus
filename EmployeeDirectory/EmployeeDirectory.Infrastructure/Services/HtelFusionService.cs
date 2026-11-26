@@ -26,8 +26,9 @@ public sealed class HtelFusionService(
     public async Task<HtelLiaisonsReportDto> GetLiaisonsAsync(CancellationToken ct = default)
     {
         var techniciens = await htelClient.GetTechniciensAsync(ct);
+        // v66 — Toutes les fiches, actives ou non : une fiche désactivée existe bel et bien. Ne
+        // considérer que les fiches actives faisait passer leur technicien pour « non défini ».
         var employees = await db.Employees.AsNoTracking()
-            .Where(e => e.IsActive)
             .OrderBy(e => e.LastName).ThenBy(e => e.FirstName)
             .ToListAsync(ct);
 
@@ -37,8 +38,10 @@ public sealed class HtelFusionService(
     public async Task<HtelSyncReportDto> SyncAsync(CancellationToken ct = default)
     {
         var techniciens = await htelClient.GetTechniciensAsync(ct);
-        var byId = techniciens.ToDictionary(t => t.IdTechnicien);
-        var employees = await db.Employees.Where(e => e.IsActive).ToListAsync(ct);
+        // v66 — Un identifiant présent deux fois dans HTEL ne fait plus échouer la synchronisation.
+        var byId = techniciens.GroupBy(t => t.IdTechnicien).ToDictionary(g => g.Key, g => g.First());
+        // v66 — Toutes les fiches (actives et inactives) : la liaison d'une fiche ne dépend pas de son état.
+        var employees = await db.Employees.ToListAsync(ct);
 
         var linkedUpdated = 0;
         var newlyLinked = 0;
@@ -55,12 +58,18 @@ public sealed class HtelFusionService(
                 changed = true;
             }
 
-            var shouldBeActive = tech.Actif == 1;
-            if (!shouldBeActive && employee.IsActive)
+            var nomHtel = string.IsNullOrWhiteSpace(tech.Technicien) ? null : tech.Technicien.Trim();
+            if (nomHtel is not null && !string.Equals(employee.HtelTechnicienName, nomHtel, StringComparison.Ordinal))
             {
-                employee.IsActive = false;
+                employee.HtelTechnicienName = nomHtel;
                 changed = true;
             }
+
+            // v66 — Plus de désactivation automatique de la fiche quand le technicien est inactif
+            // dans HTEL : la fiche, son historique et son compte restent tels quels, et l'écart est
+            // signalé dans « Divergences » (la sortie se décide dans l'application, règles de sortie
+            // comprises). Avant, la fiche disparaissait des listes et son technicien était ensuite
+            // présenté comme « non défini sur MyKyntus ».
 
             if (changed)
             {
@@ -75,10 +84,19 @@ public sealed class HtelFusionService(
             .Select(e => e.IdTechnicien!.Value)
             .ToHashSet();
 
-        foreach (var employee in employees.Where(e => !e.IdTechnicien.HasValue))
+        // Fiches actives d'abord : en cas d'homonymie, la fiche en service est préférée.
+        foreach (var employee in employees.Where(e => !e.IdTechnicien.HasValue).OrderByDescending(e => e.IsActive))
         {
             var available = techniciens.Where(t => !takenIds.Contains(t.IdTechnicien)).ToList();
             if (!TryResolveUniqueMatch(employee, available, out var tech))
+                continue;
+
+            // Le technicien ne doit correspondre qu'à cette seule fiche (sinon : à rapprocher à la main).
+            var autres = employees.Count(e => e.Id != employee.Id
+                                              && !e.IdTechnicien.HasValue
+                                              && HtelNameNormalizer.ScoreEmployeeToTechnicien(e.FirstName, e.LastName, tech.Technicien)
+                                                 >= HtelNameNormalizer.AutoLinkThreshold);
+            if (autres > 0)
                 continue;
 
             if (employees.Any(e => e.IdTechnicien == tech.IdTechnicien && e.Id != employee.Id))
@@ -94,8 +112,8 @@ public sealed class HtelFusionService(
 
         var report = BuildReport(techniciens, employees);
         logger.LogInformation(
-            "HTEL sync: fetched={Fetched}, updated={Updated}, newlyLinked={New}, orphans={Orphans}, ambiguous={Ambiguous}",
-            techniciens.Count, linkedUpdated, newlyLinked, report.OrphansHtel.Count, report.Ambiguous.Count);
+            "HTEL sync: fetched={Fetched}, updated={Updated}, newlyLinked={New}, orphans={Orphans}, aRapprocher={Ambiguous}, divergences={Divergences}",
+            techniciens.Count, linkedUpdated, newlyLinked, report.OrphansHtel.Count, report.Ambiguous.Count, report.Divergences?.Count ?? 0);
 
         return new HtelSyncReportDto(
             techniciens.Count,
@@ -103,7 +121,8 @@ public sealed class HtelFusionService(
             newlyLinked,
             report.OrphansHtel.Count,
             report.Ambiguous.Count,
-            report.UnlinkedEmployees.Count);
+            report.UnlinkedEmployees.Count,
+            report.Divergences?.Count ?? 0);
     }
 
     public async Task<bool> LinkAsync(Guid employeeId, int idTechnicien, CancellationToken ct = default)
@@ -166,11 +185,16 @@ public sealed class HtelFusionService(
             if (employee.IdTechnicien.HasValue)
             {
                 var tech = techniciens.FirstOrDefault(t => t.IdTechnicien == employee.IdTechnicien.Value);
+                // v66 — Accolades manquantes : la seconde affectation s'exécutait même sans technicien
+                // (identifiant retiré d'HTEL) et levait une NullReferenceException qui faisait échouer
+                // l'enregistrement de la fiche. Sans technicien, la liaison existante est conservée.
                 if (tech is not null)
+                {
                     employee.HtelCode = tech.Code;
                     employee.HtelTechnicienName = string.IsNullOrWhiteSpace(tech.Technicien)
                         ? employee.HtelTechnicienName
                         : tech.Technicien.Trim();
+                }
                 return;
             }
 
@@ -236,76 +260,131 @@ public sealed class HtelFusionService(
         return false;
     }
 
-    private static HtelLiaisonsReportDto BuildReport(
+    /// <summary>
+    /// v66 — Rapport de liaison sur <b>toutes</b> les fiches de l'application.
+    /// <list type="bullet">
+    /// <item>Liés : fiches portant un identifiant HTEL (actives ou non).</item>
+    /// <item>Non définis : techniciens qu'aucune fiche ne rapproche — ni liée, ni libre, ni inactive.</item>
+    /// <item>À rapprocher : techniciens non liés pour lesquels une ou plusieurs fiches existent déjà (même
+    ///   nom ou nom approchant), avec pour chacune son état (inactive, déjà liée à un autre identifiant).</item>
+    /// <item>Divergences : liaisons dont l'identifiant a disparu d'HTEL, ou dont le technicien est inactif
+    ///   dans HTEL alors que la fiche est active.</item>
+    /// </list>
+    /// Avant, seules les fiches actives <i>et</i> non liées étaient comparées : un employé dont la fiche
+    /// était désactivée, ou déjà liée à un autre identifiant (doublon HTEL), apparaissait comme
+    /// « non défini sur MyKyntus » alors que sa fiche existait.
+    /// </summary>
+    public static HtelLiaisonsReportDto BuildReport(
         IReadOnlyList<HtelTechnicienDto> techniciens,
         IReadOnlyList<Employee> employees)
     {
-        var byId = techniciens.ToDictionary(t => t.IdTechnicien);
+        var byId = techniciens.GroupBy(t => t.IdTechnicien).ToDictionary(g => g.Key, g => g.First());
         var linkedIds = employees
             .Where(e => e.IdTechnicien.HasValue)
             .Select(e => e.IdTechnicien!.Value)
             .ToHashSet();
 
-        var linked = employees
-            .Where(e => e.IdTechnicien.HasValue)
-            .Select(e =>
-            {
-                byId.TryGetValue(e.IdTechnicien!.Value, out var tech);
-                return new HtelLinkedEmployeeDto(
-                    e.Id.ToString(),
-                    e.FirstName,
-                    e.LastName,
-                    e.Email,
-                    e.IdTechnicien.Value,
-                    e.HtelCode,
-                    tech?.Technicien);
-            })
+        HtelLinkedEmployeeDto Lie(Employee e)
+        {
+            byId.TryGetValue(e.IdTechnicien!.Value, out var tech);
+            return new HtelLinkedEmployeeDto(
+                e.Id.ToString(),
+                e.FirstName,
+                e.LastName,
+                e.Email,
+                e.IdTechnicien.Value,
+                e.HtelCode,
+                tech?.Technicien ?? e.HtelTechnicienName,
+                e.IsActive,
+                tech?.Actif,
+                tech is null);
+        }
+
+        var linked = employees.Where(e => e.IdTechnicien.HasValue).Select(Lie).ToList();
+        var divergences = linked
+            .Where(l => l.HtelIntrouvable || (l.IsActive && l.HtelActif is int actif && actif != 1))
             .ToList();
 
-        var unlinked = employees.Where(e => !e.IdTechnicien.HasValue).ToList();
-        var orphans = techniciens
-            .Where(t => !linkedIds.Contains(t.IdTechnicien))
-            .Where(t => CountNameMatches(t, unlinked) == 0)
-            .Select(t => new HtelOrphanTechnicienDto(t.IdTechnicien, t.Technicien, t.Actif, t.Code))
+        var index = new IndexNoms(employees);
+        var orphans = new List<HtelOrphanTechnicienDto>();
+        var aRapprocher = new List<HtelAmbiguousMatchDto>();
+        foreach (var t in techniciens.Where(t => !linkedIds.Contains(t.IdTechnicien)))
+        {
+            var candidates = index.Candidats(t.Technicien);
+            if (candidates.Count == 0)
+                orphans.Add(new HtelOrphanTechnicienDto(t.IdTechnicien, t.Technicien, t.Actif, t.Code));
+            else
+                aRapprocher.Add(new HtelAmbiguousMatchDto(t.IdTechnicien, t.Technicien, t.Code, candidates, t.Actif));
+        }
+
+        var unlinkedDtos = employees
+            .Where(e => !e.IdTechnicien.HasValue && e.IsActive)
+            .Select(e => new HtelUnlinkedEmployeeDto(e.Id.ToString(), e.FirstName, e.LastName, e.Email, e.IsActive))
             .ToList();
 
-        var ambiguous = techniciens
-            .Where(t => !linkedIds.Contains(t.IdTechnicien))
-            .Select(t =>
-            {
-                var candidates = FindEmployeeCandidates(t, unlinked);
-                return candidates.Count > 1
-                    ? new HtelAmbiguousMatchDto(t.IdTechnicien, t.Technicien, t.Code, candidates)
-                    : null;
-            })
-            .Where(x => x is not null)
-            .Select(x => x!)
-            .ToList();
-
-        var unlinkedDtos = unlinked
-            .Select(e => new HtelUnlinkedEmployeeDto(e.Id.ToString(), e.FirstName, e.LastName, e.Email))
-            .ToList();
-
-        return new HtelLiaisonsReportDto(linked, orphans, ambiguous, unlinkedDtos);
+        return new HtelLiaisonsReportDto(linked, orphans, aRapprocher, unlinkedDtos, divergences);
     }
 
-    private static int CountNameMatches(HtelTechnicienDto tech, IReadOnlyList<Employee> employees) =>
-        employees.Count(e =>
-            HtelNameNormalizer.IsNameMatch(e.FirstName, e.LastName, tech.Technicien));
+    /// <summary>
+    /// v66 — Index des fiches pour rapprocher un libellé HTEL : clé exacte (mots triés, sans accents)
+    /// d'abord, puis score flou limité aux fiches qui partagent au moins un début de mot (3 lettres) —
+    /// pour garder un temps de réponse court sur toutes les fiches.
+    /// </summary>
+    private sealed class IndexNoms
+    {
+        private readonly Dictionary<string, List<Employee>> _parPrefixe = new(StringComparer.Ordinal);
 
-    private static IReadOnlyList<HtelEmployeeCandidateDto> FindEmployeeCandidates(
-        HtelTechnicienDto tech,
-        IReadOnlyList<Employee> employees) =>
-        employees
-            .Select(e => (
-                Emp: e,
-                Score: HtelNameNormalizer.ScoreEmployeeToTechnicien(
-                    e.FirstName, e.LastName, tech.Technicien)))
-            .Where(x => x.Score >= HtelNameNormalizer.AlertThreshold)
-            .OrderByDescending(x => x.Score)
-            .Select(x => new HtelEmployeeCandidateDto(
-                x.Emp.Id.ToString(), x.Emp.FirstName, x.Emp.LastName, x.Emp.Email))
-            .ToList();
+        public IndexNoms(IReadOnlyList<Employee> employees)
+        {
+            foreach (var e in employees)
+                foreach (var p in Prefixes($"{e.LastName} {e.FirstName}", colle: true).Concat(Prefixes($"{e.FirstName} {e.LastName}", colle: true)))
+                {
+                    if (!_parPrefixe.TryGetValue(p, out var liste))
+                    {
+                        liste = new List<Employee>();
+                        _parPrefixe[p] = liste;
+                    }
+                    liste.Add(e);
+                }
+        }
+
+        public IReadOnlyList<HtelEmployeeCandidateDto> Candidats(string technicien)
+        {
+            var proches = Prefixes(technicien).Concat(Prefixes(technicien, colle: true))
+                .SelectMany(p => _parPrefixe.TryGetValue(p, out var l) ? (IEnumerable<Employee>)l : Array.Empty<Employee>())
+                .Distinct()
+                .ToList();
+            return proches
+                .Select(e => (Emp: e, Score: HtelNameNormalizer.ScoreEmployeeToTechnicien(e.FirstName, e.LastName, technicien)))
+                .Where(x => x.Score >= HtelNameNormalizer.AlertThreshold)
+                .OrderByDescending(x => x.Score)
+                .ThenByDescending(x => x.Emp.IsActive)
+                .Select(x => new HtelEmployeeCandidateDto(
+                    x.Emp.Id.ToString(), x.Emp.FirstName, x.Emp.LastName, x.Emp.Email,
+                    x.Emp.IsActive, x.Emp.IdTechnicien, Math.Round(x.Score, 2)))
+                .ToList();
+        }
+
+        /// <summary>
+        /// Débuts de mots (3 lettres). <paramref name="colle"/> : nom écrit d'un seul tenant
+        /// (« ELAMRANI » pour « EL AMRANI ») — le début du nom complet sans espaces est ajouté.
+        /// </summary>
+        private static IEnumerable<string> Prefixes(string? nom, bool colle = false)
+        {
+            var normalise = HtelNameNormalizer.Normalize(nom);
+            var mots = normalise.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var cles = mots
+                .Where(m => m.Length >= 2)
+                .Select(m => m.Length >= 3 ? m[..3] : m)
+                .ToList();
+            if (colle)
+            {
+                var joint = string.Concat(mots);
+                if (joint.Length >= 3) cles.Add(joint[..3]);
+            }
+            return cles.Distinct(StringComparer.Ordinal);
+        }
+    }
 
     private async Task EnqueueEmployeeChangedAsync(Employee employee, CancellationToken ct)
     {

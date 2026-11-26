@@ -107,6 +107,9 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
             e.Property(x => x.ReferentTechniqueId).HasMaxLength(128).IsRequired(false);
             e.Property(x => x.ChefDeProjetId).HasMaxLength(128).IsRequired(false);
             e.Property(x => x.SuperviseurId).HasMaxLength(128).IsRequired(false);
+            // v73 — Agents sortis : conservés, marqués inactifs (grisés dans les périmètres).
+            e.Property(x => x.IsActive).HasDefaultValue(true);
+            e.HasIndex(x => x.IsActive);
             e.HasOne<ServiceEntity>()
                 .WithMany()
                 .HasForeignKey(x => x.ServiceId)

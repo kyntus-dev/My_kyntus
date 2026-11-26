@@ -215,11 +215,26 @@ public sealed class RegimeHoraireService(AppDbContext db) : IRegimeHoraireServic
         var modifies = 0;
         if (request.Acces)
         {
+            // v67 — Horaire de base choisi à l'attribution (07h40 ou 08h40), comme avant la v65.
+            // Sans choix transmis : comportement d'origine (horaire du planning ou du régime).
+            var productionBase = string.IsNullOrWhiteSpace(request.ProductionBase) ? null : request.ProductionBase.Trim();
+            if (productionBase is not (null or ChoixProductionSortie.Standard or ChoixProductionSortie.Court))
+                throw new InvalidOperationException("Horaire inconnu : « 0840 » (08h40) ou « 0740 » (07h40).");
             var actifs = await db.Users.AsNoTracking().Where(u => ids.Contains(u.Id) && u.IsActive).Select(u => u.Id).ToListAsync(ct);
-            var deja = existants.Select(a => a.UserId).ToHashSet();
-            foreach (var id in actifs.Where(id => !deja.Contains(id)))
+            var deja = existants.ToDictionary(a => a.UserId);
+            foreach (var id in actifs)
             {
-                db.HeureSortieAcces.Add(new HeureSortieAcces { UserId = id, GrantedBy = by });
+                if (deja.TryGetValue(id, out var existant))
+                {
+                    // Compte déjà autorisé : seul l'horaire choisi est repris.
+                    if (productionBase is not null && existant.ProductionBase != productionBase)
+                    {
+                        existant.ProductionBase = productionBase;
+                        modifies++;
+                    }
+                    continue;
+                }
+                db.HeureSortieAcces.Add(new HeureSortieAcces { UserId = id, GrantedBy = by, ProductionBase = productionBase });
                 modifies++;
             }
         }

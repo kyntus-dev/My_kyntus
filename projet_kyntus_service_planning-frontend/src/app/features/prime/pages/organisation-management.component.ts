@@ -62,6 +62,7 @@ import { KyntusSessionService } from '../../../core/session/kyntus-session.servi
 import { evaluatePilotRotationEligibility } from '../../../core/directory/pilot-rotation-eligibility.util';
 import type { OperationalDepartmentNode, OrgCelluleNode, OrgPoleNode } from '../models/org-tree.types';
 import { primeHttpErrorMessage } from '../lib/primeHttpErrorMessage';
+import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 
 function matchAssignmentUserId(
   assignments: { userId: string; etageId?: string; serviceId?: string; celluleId?: string; sousServiceId?: string }[],
@@ -218,6 +219,7 @@ export type StructureLogEntry = {
                   />
                 </label>
                 <button
+  [hidden]="!peutModifierOrganisation()"
                   type="button"
                   (click)="submitNewMetierDepartment()"
                   [disabled]="saving() || !newMetierDeptName().trim() || !!newMetierDeptNameConflict()"
@@ -265,6 +267,7 @@ export type StructureLogEntry = {
                         <td class="px-4 py-2.5 text-right">
                           <div class="inline-flex flex-wrap justify-end gap-2">
                             <button
+  [hidden]="!peutModifierOrganisation()"
                               type="button"
                               (click)="saveMetierManagerRow(d.id)"
                               [disabled]="saving() || !draftMetierManager(d.id)"
@@ -273,6 +276,7 @@ export type StructureLogEntry = {
                               Enregistrer
                             </button>
                             <button
+  [hidden]="!peutModifierOrganisation()"
                               type="button"
                               (click)="clearMetierManagerRow(d.id)"
                               [disabled]="saving() || !d.managerEmployeeId"
@@ -323,6 +327,7 @@ export type StructureLogEntry = {
                   />
                 </label>
                 <button
+  [hidden]="!peutModifierOrganisation()"
                   type="button"
                   (click)="submitNewDepartment()"
                   [disabled]="saving() || !newPoleBusinessDeptId() || !newDepartmentName().trim() || !!newDepartmentNameConflict()"
@@ -374,6 +379,7 @@ export type StructureLogEntry = {
                                 <li class="flex items-center justify-between gap-2 text-sm text-primary">
                                   <span>{{ employeeLabel(uid) }}</span>
                                   <button
+  [hidden]="!peutModifierOrganisation()"
                                     type="button"
                                     (click)="removeDepartmentManagerIncumbent(row.poleId, uid)"
                                     [disabled]="saving()"
@@ -413,6 +419,7 @@ export type StructureLogEntry = {
                                   }
                                 </select>
                                 <button
+  [hidden]="!peutModifierOrganisation()"
                                   type="button"
                                   (click)="attachOrphanPole(row.poleId)"
                                   [disabled]="saving() || !draftAttachPole(row.poleId)"
@@ -424,6 +431,7 @@ export type StructureLogEntry = {
                             }
                             <div class="inline-flex flex-wrap justify-end gap-2">
                               <button
+  [hidden]="!peutModifierOrganisation()"
                                 type="button"
                                 (click)="saveDepartmentManagerRow(row.poleId)"
                                 [disabled]="saving() || !draftManagerDept(row.poleId)"
@@ -432,6 +440,7 @@ export type StructureLogEntry = {
                                 Ajouter
                               </button>
                               <button
+  [hidden]="!peutModifierOrganisation()"
                                 type="button"
                                 (click)="clearDepartmentManagerRow(row.poleId)"
                                 [disabled]="saving() || managerUserIds(row.poleId).length === 0"
@@ -495,6 +504,7 @@ export type StructureLogEntry = {
                   />
                 </label>
                 <button
+  [hidden]="!peutModifierOrganisation()"
                   type="button"
                   (click)="submitNewPole()"
                   [disabled]="saving() || !newPoleDeptId() || !newPoleName().trim() || !!newPoleNameConflict()"
@@ -540,6 +550,7 @@ export type StructureLogEntry = {
                                 <li class="flex items-center justify-between gap-2 text-sm text-primary">
                                   <span>{{ employeeLabel(uid) }}</span>
                                   <button
+  [hidden]="!peutModifierOrganisation()"
                                     type="button"
                                     (click)="removePoleSupervisorIncumbent(row.celluleId, uid)"
                                     [disabled]="saving()"
@@ -567,6 +578,7 @@ export type StructureLogEntry = {
                         <td class="px-4 py-2.5 text-right">
                           <div class="inline-flex flex-wrap justify-end gap-2">
                             <button
+  [hidden]="!peutModifierOrganisation()"
                               type="button"
                               (click)="savePoleSupervisorRow(row.celluleId)"
                               [disabled]="saving() || !draftSupervisorPole(row.celluleId)"
@@ -575,6 +587,7 @@ export type StructureLogEntry = {
                               Ajouter
                             </button>
                             <button
+  [hidden]="!peutModifierOrganisation()"
                               type="button"
                               (click)="clearPoleSupervisorRow(row.celluleId)"
                               [disabled]="saving() || supervisorUserIds(row.celluleId).length === 0"
@@ -653,6 +666,7 @@ export type StructureLogEntry = {
                   />
                 </label>
                 <button
+  [hidden]="!peutModifierOrganisation()"
                   type="button"
                   (click)="submitNewCellule()"
                   [disabled]="saving() || !newCellPoleId() || !newCellName().trim() || !!newCellNameConflict()"
@@ -717,6 +731,7 @@ export type StructureLogEntry = {
                                 <li class="flex items-center justify-between gap-2 text-sm text-primary">
                                   <span>{{ employeeLabel(uid) }}</span>
                                   <button
+  [hidden]="!peutModifierOrganisation()"
                                     type="button"
                                     (click)="removeCellCoachIncumbent(row.celluleId, uid)"
                                     [disabled]="saving()"
@@ -744,6 +759,7 @@ export type StructureLogEntry = {
                         <td class="px-4 py-2.5 text-right">
                           <div class="inline-flex flex-wrap justify-end gap-2">
                             <button
+  [hidden]="!peutModifierOrganisation()"
                               type="button"
                               (click)="saveCellCoachRow(row.celluleId)"
                               [disabled]="saving() || !draftCoachCell(row.celluleId)"
@@ -752,6 +768,7 @@ export type StructureLogEntry = {
                               Ajouter
                             </button>
                             <button
+  [hidden]="!peutModifierOrganisation()"
                               type="button"
                               (click)="clearCellCoachRow(row.celluleId)"
                               [disabled]="saving() || coachUserIds(row.celluleId).length === 0"
@@ -782,6 +799,7 @@ export type StructureLogEntry = {
                                       Historique rotation
                                     </button>
                                     <button
+  [hidden]="!peutModifierOrganisation()"
                                       type="button"
                                       (click)="removePilot(row.celluleId, p.id)"
                                       [disabled]="saving()"
@@ -818,6 +836,7 @@ export type StructureLogEntry = {
                                 </select>
                               }
                               <button
+  [hidden]="!peutModifierOrganisation()"
                                 type="button"
                                 (click)="addPilotRow(row.celluleId)"
                                 [disabled]="saving() || !draftPilotCell(row.celluleId)"
@@ -906,6 +925,7 @@ export type StructureLogEntry = {
                                     >
                                   </button>
                                   <button
+  [hidden]="!peutModifierOrganisation()"
                                     type="button"
                                     class="org-tree-rename"
                                     title="Renommer le pôle"
@@ -943,6 +963,7 @@ export type StructureLogEntry = {
                                             >
                                           </button>
                                           <button
+  [hidden]="!peutModifierOrganisation()"
                                             type="button"
                                             class="org-tree-rename"
                                             title="Renommer la cellule"
@@ -979,6 +1000,7 @@ export type StructureLogEntry = {
                                                   >
                                                 </button>
                                                 <button
+  [hidden]="!peutModifierOrganisation()"
                                                   type="button"
                                                   class="org-tree-rename"
                                                   title="Renommer le service"
@@ -1058,6 +1080,7 @@ export type StructureLogEntry = {
                                 <strong class="ml-1">{{ employeeLabel(draftEmployeeId()) }}</strong>
                               </span>
                               <button
+  [hidden]="!peutModifierOrganisation()"
                                 type="button"
                                 (click)="beginRepickDetailEmployee()"
                                 class="text-xs font-medium org-link"
@@ -1103,6 +1126,7 @@ export type StructureLogEntry = {
                           </ul>
                           <div class="flex flex-wrap gap-3 pt-2">
                             <button
+  [hidden]="!peutModifierOrganisation()"
                               type="button"
                               (click)="saveMetierManagerStructure(sel.id)"
                               [disabled]="saving() || !draftEmployeeId()"
@@ -1112,6 +1136,7 @@ export type StructureLogEntry = {
                               Enregistrer
                             </button>
                             <button
+  [hidden]="!peutModifierOrganisation()"
                               type="button"
                               (click)="clearMetierManagerStructure(sel.id)"
                               [disabled]="saving() || metierManagerLabel(sel.id) === '—'"
@@ -1130,6 +1155,7 @@ export type StructureLogEntry = {
                             <label class="text-sm font-medium text-muted block m-0">Titulaires — chef de projet</label>
                             @if (!structureRolePickerOpen()) {
                               <button
+  [hidden]="!peutModifierOrganisation()"
                                 type="button"
                                 class="ky-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
                                 (click)="openStructureRolePicker()"
@@ -1148,6 +1174,7 @@ export type StructureLogEntry = {
                                     {{ employeeLabel(uid) }}
                                   </span>
                                   <button
+  [hidden]="!peutModifierOrganisation()"
                                     type="button"
                                     (click)="removeDepartmentManagerIncumbent(sel.id, uid)"
                                     [disabled]="saving()"
@@ -1178,6 +1205,7 @@ export type StructureLogEntry = {
                                     <strong class="ml-1">{{ employeeLabel(draftEmployeeId()) }}</strong>
                                   </span>
                                   <button
+  [hidden]="!peutModifierOrganisation()"
                                     type="button"
                                     (click)="beginRepickDetailEmployee()"
                                     class="text-xs font-medium org-link"
@@ -1223,6 +1251,7 @@ export type StructureLogEntry = {
                               </ul>
                               <div class="flex flex-wrap gap-3 pt-2">
                                 <button
+  [hidden]="!peutModifierOrganisation()"
                                   type="button"
                                   (click)="saveDepartmentManager(sel.id)"
                                   [disabled]="saving() || !draftEmployeeId()"
@@ -1236,6 +1265,7 @@ export type StructureLogEntry = {
                           }
                           @if (managerUserIds(sel.id).length > 0) {
                             <button
+  [hidden]="!peutModifierOrganisation()"
                               type="button"
                               (click)="clearDepartmentManager(sel.id)"
                               [disabled]="saving()"
@@ -1253,6 +1283,7 @@ export type StructureLogEntry = {
                             <label class="text-sm font-medium text-muted block m-0">Titulaires — superviseur</label>
                             @if (!structureRolePickerOpen()) {
                               <button
+  [hidden]="!peutModifierOrganisation()"
                                 type="button"
                                 class="ky-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
                                 (click)="openStructureRolePicker()"
@@ -1271,6 +1302,7 @@ export type StructureLogEntry = {
                                     {{ employeeLabel(uid) }}
                                   </span>
                                   <button
+  [hidden]="!peutModifierOrganisation()"
                                     type="button"
                                     (click)="removePoleSupervisorIncumbent(sel.id, uid)"
                                     [disabled]="saving()"
@@ -1301,6 +1333,7 @@ export type StructureLogEntry = {
                                     <strong class="ml-1">{{ employeeLabel(draftEmployeeId()) }}</strong>
                                   </span>
                                   <button
+  [hidden]="!peutModifierOrganisation()"
                                     type="button"
                                     (click)="beginRepickDetailEmployee()"
                                     class="text-xs font-medium org-link"
@@ -1346,6 +1379,7 @@ export type StructureLogEntry = {
                               </ul>
                               <div class="flex flex-wrap gap-3">
                                 <button
+  [hidden]="!peutModifierOrganisation()"
                                   type="button"
                                   (click)="savePoleSupervisor(sel.id)"
                                   [disabled]="saving() || !draftEmployeeId()"
@@ -1359,6 +1393,7 @@ export type StructureLogEntry = {
                           }
                           @if (supervisorUserIds(sel.id).length > 0) {
                             <button
+  [hidden]="!peutModifierOrganisation()"
                               type="button"
                               (click)="clearPoleSupervisor(sel.id)"
                               [disabled]="saving()"
@@ -1380,6 +1415,7 @@ export type StructureLogEntry = {
                               </div>
                               @if (!structureRolePickerOpen()) {
                                 <button
+  [hidden]="!peutModifierOrganisation()"
                                   type="button"
                                   class="ky-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
                                   (click)="openStructureRolePicker()"
@@ -1398,6 +1434,7 @@ export type StructureLogEntry = {
                                       <span class="truncate">{{ employeeLabel(uid) }}</span>
                                     </span>
                                     <button
+  [hidden]="!peutModifierOrganisation()"
                                       type="button"
                                       (click)="removeCellCoachIncumbent(sel.id, uid)"
                                       [disabled]="saving()"
@@ -1428,6 +1465,7 @@ export type StructureLogEntry = {
                                       <strong class="ml-1">{{ employeeLabel(draftEmployeeId()) }}</strong>
                                     </span>
                                     <button
+  [hidden]="!peutModifierOrganisation()"
                                       type="button"
                                       (click)="beginRepickDetailEmployee()"
                                       class="text-xs font-medium org-link"
@@ -1470,6 +1508,7 @@ export type StructureLogEntry = {
                                   }
                                 </ul>
                                 <button
+  [hidden]="!peutModifierOrganisation()"
                                   type="button"
                                   (click)="saveCellCoach(sel.id)"
                                   [disabled]="saving() || !draftEmployeeId()"
@@ -1482,6 +1521,7 @@ export type StructureLogEntry = {
                             }
                             @if (coachUserIds(sel.id).length > 0) {
                               <button
+  [hidden]="!peutModifierOrganisation()"
                                 type="button"
                                 (click)="clearCellCoach(sel.id)"
                                 [disabled]="saving()"
@@ -1500,6 +1540,7 @@ export type StructureLogEntry = {
                               </div>
                               @if (!structurePilotPickerOpen()) {
                                 <button
+  [hidden]="!peutModifierOrganisation()"
                                   type="button"
                                   class="ky-btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
                                   (click)="openStructurePilotPicker()"
@@ -1531,6 +1572,7 @@ export type StructureLogEntry = {
                                       Historique
                                     </button>
                                     <button
+  [hidden]="!peutModifierOrganisation()"
                                       type="button"
                                       (click)="removePilot(sel.id, p.id)"
                                       [disabled]="saving()"
@@ -1562,6 +1604,7 @@ export type StructureLogEntry = {
                                       <strong class="ml-1">{{ employeeLabel(draftPilotId()) }}</strong>
                                     </span>
                                     <button
+  [hidden]="!peutModifierOrganisation()"
                                       type="button"
                                       (click)="beginRepickPilotEmployee()"
                                       class="text-xs font-medium org-link"
@@ -1615,6 +1658,7 @@ export type StructureLogEntry = {
                                   </select>
                                 }
                                 <button
+  [hidden]="!peutModifierOrganisation()"
                                   type="button"
                                   (click)="addPilot(sel.id)"
                                   [disabled]="saving() || !draftPilotId()"
@@ -1748,6 +1792,7 @@ export type StructureLogEntry = {
                             @if (selection(); as apercuSel) {
                               @if (apercuSel.kind !== 'metierDepartment') {
                                 <button
+  [hidden]="!peutModifierOrganisation()"
                                   type="button"
                                   (click)="removeMemberFromPerimeter(m)"
                                   [disabled]="saving()"
@@ -1796,6 +1841,8 @@ export type StructureLogEntry = {
   `,
   styles: [
     `
+      /* v72 : actions masquées sans le droit « Organisation › Modifier ». */
+      button[hidden] { display: none !important; }
       .org-page {
         display: grid;
         gap: 1.5rem;
@@ -2163,6 +2210,8 @@ export type StructureLogEntry = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OrganisationManagementComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   private readonly orgApi = inject(PrimeOrgApiService);
   private readonly confirmService = inject(KyntusConfirmService);
   private readonly promptService = inject(KyntusPromptService);
@@ -2202,6 +2251,8 @@ export class OrganisationManagementComponent implements OnInit {
   ];
 
   readonly mainTab = signal<OrgMainTab>('metier-departments');
+  /** v72 — Créer, renommer, affecter, retirer : « Organisation › Modifier » (contrôlé par le serveur). */
+  readonly peutModifierOrganisation = computed(() => this.droits.autorise('admin.organisation', 'Act'));
 
   readonly loading = signal(true);
   readonly saving = signal(false);
@@ -2291,6 +2342,7 @@ export class OrganisationManagementComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     this.role.preferRhForOrgScreen();
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       this.mainTab.set(parseOrganisationRhTab(params.get('tab')));
@@ -2475,6 +2527,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   submitNewMetierDepartment(): void {
+    if (!this.peutModifierOrganisation()) return;
     const name = this.newMetierDeptName().trim();
     if (!name || this.newMetierDeptNameConflict()) return;
     this.runMutation(
@@ -2485,6 +2538,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   submitNewDepartment(): void {
+    if (!this.peutModifierOrganisation()) return;
     const businessDeptId = this.newPoleBusinessDeptId().trim();
     const name = this.newDepartmentName().trim();
     if (!businessDeptId || !name || this.newDepartmentNameConflict()) return;
@@ -2496,6 +2550,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   submitNewPole(): void {
+    if (!this.peutModifierOrganisation()) return;
     const poleId = this.newPoleDeptId().trim();
     const name = this.newPoleName().trim();
     if (!poleId || !name || this.newPoleNameConflict()) return;
@@ -2511,6 +2566,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   submitNewCellule(): void {
+    if (!this.peutModifierOrganisation()) return;
     const celluleId = this.newCellPoleId().trim();
     const name = this.newCellName().trim();
     if (!celluleId || !name || this.newCellNameConflict()) return;
@@ -2526,6 +2582,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   attachOrphanPole(poleId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     const deptId = (this.draftAttachPoleDept()[poleId] ?? '').trim();
     if (!deptId) return;
     this.runMutation(
@@ -2558,6 +2615,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async saveMetierManagerRow(deptId: string): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const id = this.draftMetierManager(deptId);
     if (!id) return;
     if (!(await this.confirmCrossRoleAssignment(id, 'Manager'))) return;
@@ -2578,6 +2636,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   clearMetierManagerRow(deptId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.clearOperationalDepartmentManager(deptId),
       undefined,
@@ -3146,6 +3205,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   openStructureRolePicker(): void {
+    if (!this.peutModifierOrganisation()) return;
     this.structureRolePickerOpen.set(true);
     this.draftEmployeeId.set('');
     this.structureDetailEmpSearch.set('');
@@ -3158,6 +3218,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   openStructurePilotPicker(): void {
+    if (!this.peutModifierOrganisation()) return;
     this.structurePilotPickerOpen.set(true);
     this.draftPilotId.set('');
     this.structurePilotEmpSearch.set('');
@@ -3188,6 +3249,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   beginRepickDetailEmployee(): void {
+    if (!this.peutModifierOrganisation()) return;
     this.draftEmployeeId.set('');
     this.structureRolePickerOpen.set(true);
   }
@@ -3198,6 +3260,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   beginRepickPilotEmployee(): void {
+    if (!this.peutModifierOrganisation()) return;
     this.draftPilotId.set('');
     this.structurePilotPickerOpen.set(true);
   }
@@ -3208,6 +3271,7 @@ export class OrganisationManagementComponent implements OnInit {
     currentName: string,
     parents?: { poleId?: string; celluleId?: string },
   ): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const next = (
       await this.promptService.prompt({
         title: 'Nouveau nom',
@@ -3281,6 +3345,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async removeMemberFromPerimeter(m: Employee): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const sel = this.selection();
     if (!sel || sel.kind === 'metierDepartment') return;
 
@@ -3655,6 +3720,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   removeDepartmentManagerIncumbent(poleId: string, employeeId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.removeManagerIncumbent(poleId, employeeId),
       undefined,
@@ -3663,6 +3729,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   removePoleSupervisorIncumbent(celluleId: string, employeeId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.removeSupervisorIncumbent(celluleId, employeeId),
       undefined,
@@ -3671,6 +3738,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   removeCellCoachIncumbent(serviceId: string, employeeId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.removeCoachIncumbent(serviceId, employeeId),
       undefined,
@@ -3679,6 +3747,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async saveDepartmentManagerRow(departmentId: string): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const id = this.draftManagerByDept()[departmentId];
     if (!id) return;
     if (this.managerUserIds(departmentId).includes(id)) {
@@ -3700,6 +3769,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   clearDepartmentManagerRow(departmentId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.clearStructureManager(departmentId),
       undefined,
@@ -3708,6 +3778,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async savePoleSupervisorRow(poleId: string): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const id = this.draftSupervisorByPole()[poleId];
     if (!id) return;
     if (this.supervisorUserIds(poleId).includes(id)) {
@@ -3726,6 +3797,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   clearPoleSupervisorRow(poleId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.clearStructureSupervisor(poleId),
       undefined,
@@ -3734,6 +3806,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async saveCellCoachRow(celluleId: string): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const id = this.draftCoachByCell()[celluleId];
     if (!id) return;
     if (this.coachUserIds(celluleId).includes(id)) {
@@ -3752,6 +3825,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   clearCellCoachRow(celluleId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.clearStructureCoach(celluleId),
       undefined,
@@ -3814,6 +3888,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async addPilotRow(celluleId: string): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const emp = this.draftPilotByCell()[celluleId];
     if (!emp) return;
     if (!(await this.confirmCrossRoleAssignment(emp, 'Pilote'))) return;
@@ -3833,6 +3908,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async saveMetierManagerStructure(deptId: string): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const id = this.draftEmployeeId();
     if (!id) return;
     if (!(await this.confirmCrossRoleAssignment(id, 'Manager'))) return;
@@ -3853,6 +3929,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   clearMetierManagerStructure(deptId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.clearOperationalDepartmentManager(deptId),
       undefined,
@@ -3861,6 +3938,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async saveDepartmentManager(departmentId: string): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const id = this.draftEmployeeId();
     if (!id) return;
     if (this.managerUserIds(departmentId).includes(id)) {
@@ -3878,6 +3956,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   clearDepartmentManager(departmentId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.clearStructureManager(departmentId),
       undefined,
@@ -3886,6 +3965,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async savePoleSupervisor(poleId: string): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const id = this.draftEmployeeId();
     if (!id) return;
     if (this.supervisorUserIds(poleId).includes(id)) {
@@ -3901,6 +3981,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   clearPoleSupervisor(poleId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.clearStructureSupervisor(poleId),
       undefined,
@@ -3909,6 +3990,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async saveCellCoach(celluleId: string): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const id = this.draftEmployeeId();
     if (!id) return;
     if (this.coachUserIds(celluleId).includes(id)) {
@@ -3924,6 +4006,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   clearCellCoach(celluleId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.clearStructureCoach(celluleId),
       undefined,
@@ -3932,6 +4015,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   async addPilot(celluleId: string): Promise<void> {
+    if (!this.peutModifierOrganisation()) return;
     const emp = this.draftPilotId();
     if (!emp) return;
     if (!(await this.confirmCrossRoleAssignment(emp, 'Pilote'))) return;
@@ -3962,6 +4046,7 @@ export class OrganisationManagementComponent implements OnInit {
   }
 
   removePilot(celluleId: string, employeeId: string): void {
+    if (!this.peutModifierOrganisation()) return;
     this.runMutation(
       this.orgApi.removeStructurePilot(celluleId, employeeId),
       undefined,

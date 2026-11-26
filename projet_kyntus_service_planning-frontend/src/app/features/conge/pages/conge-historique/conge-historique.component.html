@@ -134,6 +134,9 @@
               <th>Décision</th>
               <th>Décidé par</th>
               <th>Motif</th>
+              @if (peutModifier) {
+                <th class="th-actions">Actions</th>
+              }
             </tr>
           </thead>
           <tbody>
@@ -156,11 +159,21 @@
                 <td class="td-date">{{ formatDate(d.dateDecision) }}</td>
                 <td class="td-decideur">{{ decideurLabel(d) }}</td>
                 <td class="td-motif">{{ d.motif || d.commentaireManager || '—' }}</td>
+                @if (peutModifier) {
+                  <td class="td-actions">
+                    @if (peutModifierLigne(d)) {
+                      <button type="button" class="btn-edit" (click)="ouvrirModification(d)" title="Modifier les dates de cette demande">
+                        <app-lucide-icon [icon]="icons.edit" className="w-3.5 h-3.5" />
+                        Modifier
+                      </button>
+                    }
+                  </td>
+                }
               </tr>
             }
             @if (filteredDemandes.length === 0) {
               <tr>
-                <td colspan="10">
+                <td [attr.colspan]="peutModifier ? 11 : 10">
                   <div class="empty-state">Aucune demande pour {{ filterAnnee }} avec ces filtres.</div>
                 </td>
               </tr>
@@ -171,3 +184,80 @@
     }
   </div>
 </div>
+
+@if (editDemande; as d) {
+  <div class="modal-overlay" appBodyPortal (click)="fermerModification()">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="titre-modif-conge" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3 class="modal-title" id="titre-modif-conge">Modifier la demande de congé</h3>
+        <button type="button" class="modal-close" (click)="fermerModification()" aria-label="Fermer">
+          <app-lucide-icon [icon]="icons.close" className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div class="modal-body">
+        @if (editErreur) {
+          <div class="alert-error">{{ editErreur }}</div>
+        }
+
+        <p class="form-hint">
+          <strong>{{ employeDisplayName(d) }}</strong> — {{ typeLabel(d) }} ·
+          <span class="statut-badge" [ngClass]="statutClass(d.statut)">{{ statutLabels[d.statut] }}</span><br />
+          Période actuelle : du {{ formatDate(d.dateDebut) }} au {{ formatDate(d.dateFin) }} ({{ d.nombreJours }} j).
+        </p>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="modif-debut">Date de début <span class="req">*</span></label>
+            <input id="modif-debut" class="ky-input" type="date" [(ngModel)]="editDebut" [disabled]="editSaving" />
+          </div>
+          <div class="form-group">
+            <label for="modif-fin">Date de fin <span class="req">*</span></label>
+            @if (editExceptionnel) {
+              <input id="modif-fin" class="ky-input" type="date" [value]="editApercu?.fin ?? ''" disabled />
+            } @else {
+              <input id="modif-fin" class="ky-input" type="date" [(ngModel)]="editFin" [disabled]="editSaving" />
+            }
+          </div>
+        </div>
+
+        @if (editExceptionnel) {
+          <p class="form-hint">Congé exceptionnel : la durée est fixe, la date de fin suit la date de début.</p>
+        }
+
+        @if (editApercu; as p) {
+          @if (!editControle) {
+            <div class="days-preview">
+              Nouvelle période : du {{ formatDate(p.debut) }} au {{ formatDate(p.fin) }} —
+              <strong>{{ p.jours }} jour(s)</strong>
+              @if (p.jours !== d.nombreJours) {
+                ({{ p.jours > d.nombreJours ? '+' : '' }}{{ p.jours - d.nombreJours }} j)
+              }
+            </div>
+          } @else {
+            <p class="form-hint form-error-inline">{{ editControle }}</p>
+          }
+        }
+
+        @if (d.statut === StatutDemande.Validee) {
+          <p class="form-hint">
+            Congé déjà validé : le solde de l’employé est ajusté de l’écart, son planning est mis à jour
+            et il est prévenu. Les mois interdits, le quota de la cellule et les autres demandes sont vérifiés.
+          </p>
+        }
+
+        <div class="form-group form-group--last">
+          <label for="modif-commentaire">Commentaire <span class="optional">(optionnel, conservé dans l’historique)</span></label>
+          <input id="modif-commentaire" class="ky-input" type="text" maxlength="300" [(ngModel)]="editCommentaire" [disabled]="editSaving" placeholder="Raison de la modification…" />
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="ky-btn-secondary" (click)="fermerModification()" [disabled]="editSaving">Annuler</button>
+        <button type="button" class="ky-btn-primary" (click)="enregistrerModification()" [disabled]="editSaving || !!editControle">
+          {{ editSaving ? 'Enregistrement…' : 'Enregistrer' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { EvpDto, PresenceAgentDto, PresenceJourDto } from '../../../core/models/presence.models';
 import {
   CATEGORIES_EVP, COLONNES_FIN, categorieEvp, entetesPaie, hhmmss, joursOuvres, joursPayes, lignePaie, lignesDetailPenalites,
-  moisCivilDePeriode, nomsExport, reglesExport, totauxControle, valeursPaie,
+  moisCivilDePeriode, nomsExport, reglesExport, totauxControle, valeursPaie, joursAvantMois, enteteJourAvant, classeurExportPaie,
+  COLONNES_PRESENCE, CODES_DEDUITS,
 } from './paie.util';
 import { penalitesAgent } from './manquements.util';
 import { joursDeLaPeriode } from './presence.util';
@@ -257,7 +258,8 @@ describe('export paie v61 : mois civil + décalage (absences du 24 au 23)', () =
     const totaux = new Map(totauxControle([l]));
     expect(totaux.get('Total heures supplémentaires (h)')).toBe(10.5);
     const v = valeursPaie(l);
-    const e = entetesPaie(mois.du, mois.au);
+    // v69 : les jours du 24/10 au 31/10 (absences seulement) précèdent les jours du mois.
+    const e = entetesPaie(mois.du, mois.au, joursAvantMois(du, mois));
     expect(v).toHaveLength(e.length);
     expect(v[e.indexOf('Total HS (h)')]).toBe(10.5);
     expect(v[e.indexOf('Abs. déduites avant le 1er')]).toBe(0);
@@ -267,9 +269,74 @@ describe('export paie v61 : mois civil + décalage (absences du 24 au 23)', () =
     expect(['Heures Supp. (à valoriser)', 'Samedis (à valoriser)', 'Challenges (à valoriser)', 'Prime', 'Indemnité', 'Rappel de salaire', 'Retenue', 'Avance sur salaire', 'Autre', 'Type perso']
       .map(categorieEvp)).toEqual([0, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
     expect(CATEGORIES_EVP.every((c) => (COLONNES_FIN as readonly string[]).includes(c.colonne))).toBe(true);
+    // v69 : natures de la fenêtre Journée, sans nouvelle colonne dans le fichier.
+    expect(['Sanctions', 'Renforts (à valoriser)'].map(categorieEvp)).toEqual([4, 5]);
     const n = nomsExport(du, au, mois);
     expect(n).toEqual({ feuille: 'Récap 11-2026 abs 24-10→23-11', fichier: 'recap_paie_2026-11_absences_2026-10-24_2026-11-23.xlsx' });
     expect(n.feuille.length).toBeLessThanOrEqual(31);
     expect(reglesExport(du, au, mois)[2]).toContain('Du 24/11/2026 au 30/11/2026 : présent par défaut');
+  });
+});
+
+describe('export paie v69 : jours du 24 à la fin du mois précédent (absences seulement)', () => {
+  const du = '2026-10-24';
+  const au = '2026-11-23';
+  const mois = moisCivilDePeriode(au);
+  const codes: Record<string, string> = { '2026-10-27': 'ABS N', '2026-10-29': 'CP', '2026-11-05': 'AM' };
+  const ref = agent(joursDeLaPeriode(du, au).map((d) => jour(d, codes[d] ?? 'P')));
+  const civ = agent(joursDeLaPeriode(mois.du, mois.au).map((d) => jour(d, codes[d] ?? 'P')));
+
+  it('jours du 24/10 au 31/10, du lundi au samedi ; rien en mois civil simple', () => {
+    expect(joursAvantMois(du, mois)).toEqual(['2026-10-24', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31']);
+    expect(joursAvantMois('2026-11-01', mois)).toEqual([]);
+    expect(joursAvantMois(du, null)).toEqual([]);
+    expect(enteteJourAvant('2026-10-27')).toBe('mar\n27/10\nabs.');
+  });
+
+  it('les codes affichés justifient « Abs. déduites avant le 1er » ; aucun autre calcul ne change', () => {
+    const avec = lignePaie(ref, [], du, au, undefined, { mois, agentMois: civ });
+    expect(avec.joursAvant).toEqual(['P', 'P', 'ABS N', 'P', 'CP', 'P', 'P']);
+    const deduitsAvant = avec.joursAvant.filter((c) => (CODES_DEDUITS as readonly string[]).includes(c)).length;
+    expect(deduitsAvant).toBe(avec.absencesAvantMois);
+    // Mêmes résultats qu'avant la v69 : 26 − 2 absences déduites (27/10 ABS N, 05/11 AM).
+    expect(avec.jours).toHaveLength(25);
+    expect(avec.jrsTravailles).toBe(24);
+    expect(avec.totalAbsences).toBe(2);
+    expect(avec.joursPresents + avec.presentsParDefaut).toBe(24);
+    // Hors mode paie : aucune colonne en plus.
+    expect(lignePaie(ref, [], du, au).joursAvant).toEqual([]);
+  });
+
+  it('en-têtes et valeurs alignés ; colonnes du fichier inchangées après les jours', () => {
+    const l = lignePaie(ref, [], du, au, undefined, { mois, agentMois: civ });
+    const e = entetesPaie(mois.du, mois.au, joursAvantMois(du, mois));
+    const v = valeursPaie(l);
+    expect(v).toHaveLength(e.length);
+    expect(e.slice(3, 10).every((h) => h.endsWith('abs.'))).toBe(true);
+    expect(e[10]).toContain('02/11'); // 01/11/2026 est un dimanche
+    expect(e.slice(-COLONNES_FIN.length)).toEqual([...COLONNES_FIN]);
+    expect(v[e.indexOf(COLONNES_PRESENCE[2])]).toBe(1);
+    expect(v[5]).toBe('ABS N');
+  });
+
+  it('le fichier Excel contient les colonnes « abs. » grisées et la règle', async () => {
+    const l = lignePaie(ref, [], du, au, undefined, { mois, agentMois: civ });
+    const buf = await classeurExportPaie([l], du, au, mois);
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const ws = wb.worksheets[0];
+    expect(String(ws.getRow(1).getCell(4).value)).toBe('sam\n24/10\nabs.');
+    expect(String(ws.getRow(1).getCell(11).value)).toContain('02/11');
+    expect(ws.getRow(2).getCell(6).value).toBe('ABS N');
+    const fond = (c: import('exceljs').Cell) => (c.fill as { fgColor?: { argb?: string } } | undefined)?.fgColor?.argb;
+    expect(fond(ws.getRow(1).getCell(4))).toBe('FF6B7280'); // en-tête « abs. » gris
+    expect(fond(ws.getRow(2).getCell(4))).toBe('FFF3F4F6'); // jours « abs. » sur fond gris
+    expect(fond(ws.getRow(1).getCell(11))).toBe('FF1F2937'); // jours du mois : en-tête habituel
+    expect(fond(ws.getRow(2).getCell(11))).toBeUndefined();
+    const regles = wb.getWorksheet('Règles et contrôle')!;
+    const textes: string[] = [];
+    regles.eachRow((r) => textes.push(String(r.getCell(1).value ?? '')));
+    expect(textes.some((t) => t.includes('Colonnes « abs. »'))).toBe(true);
   });
 });

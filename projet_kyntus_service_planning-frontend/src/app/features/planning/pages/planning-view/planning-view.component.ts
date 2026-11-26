@@ -37,6 +37,7 @@ import { isPiloteRole } from '../../../../core/org/org-role-assignment';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 import { planningOverrideShiftOptions } from '../../lib/planning-override-shift-options.util';
+import { quotaJourSemaine } from '../../lib/quota-jour-semaine.util';
 
 /** Normalise une clé jour (EN technique ou FR affichage). */
 function normalizeDayKey(day: string | null | undefined): string {
@@ -660,9 +661,16 @@ selectedHolidayShiftId      = 0;
 
   // ── v50 : cohérence effectif / quotas ──────────────────────────────────────
 
-  /** Somme des quotas configurés (ce que la configuration des shifts demande chaque jour). */
+  /**
+   * Postes demandés un jour de semaine (lundi → vendredi).
+   *
+   * v78 — Les shifts du samedi ne sont plus additionnés : ils concernent un autre jour. Avant, le
+   * bandeau « N poste(s) demandés par jour » cumulait la semaine et le samedi et annonçait donc plus
+   * de postes qu'aucun jour n'en demande réellement. Les modes restent additionnés : chaque agent
+   * travaille dans un seul mode, et le quota de chaque mode est calé sur ses propres agents.
+   */
   get quotaTotal(): number {
-    return (this.planning?.shiftConfigs ?? []).reduce((s, c) => s + (c.requiredCount || 0), 0);
+    return quotaJourSemaine(this.planning?.shiftConfigs ?? []);
   }
 
   /** Agents réellement présents dans la grille (une personne comptée une fois). */

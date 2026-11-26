@@ -7,8 +7,11 @@
         sont lues — <strong>Nom</strong>, <strong>Prénom</strong>, CIN, date de naissance, situation
         familiale, nombre d'enfants, adresse, e-mail personnel, téléphone —, les autres sont
         ignorées. Une colonne « Nom complet » est séparée automatiquement.
-        Les fiches sont créées sans mail interne — les adresses s'importent ensuite depuis
-        <a routerLink="/users/mails-internes">Mails internes</a>.
+        <strong>Le fichier fait référence</strong> : un employé qui a déjà sa fiche (même CIN ou même
+        nom) n'est pas recréé, sa fiche est vérifiée et mise à jour d'après le fichier — valeurs
+        différentes remplacées, champs vides complétés, jamais vidés. Les cas douteux sont signalés sans
+        rien modifier. Les nouvelles fiches sont créées sans mail interne — les adresses s'importent
+        ensuite depuis <a routerLink="/users/mails-internes">Mails internes</a>.
       </p>
     </div>
     <button type="button" class="ky-btn-primary" (click)="basculer()">
@@ -95,6 +98,10 @@
       <p class="ie-note">
         {{ lignes.length }} ligne(s) lue(s)@if (ignorees > 0) { <span>, {{ ignorees }} sans nom ou prénom ignorée(s)</span> }.
         Le technicien HTEL est proposé automatiquement d'après le nom — vérifiez-le avant de créer.
+        @if (retenuesExistantes > 0) {
+          <strong>{{ retenuesExistantes }}</strong> fiche(s) existante(s) seront vérifiées et mises à jour (le rôle,
+          la date d'embauche et le service ci-dessus ne s'appliquent qu'aux nouvelles fiches).
+        }
       </p>
 
       <div class="table-wrap">
@@ -120,7 +127,11 @@
                 <td>
                   <span class="ie-nom">{{ l.nom }} {{ l.prenom }}</span>
                   @if (dejaPresent(l)) {
-                    <span class="ie-badge ie-badge--warn">Déjà présent</span>
+                    <span class="ie-badge ie-badge--ok" title="La fiche existe : elle sera vérifiée et mise à jour d'après le fichier.">Fiche existante — vérifiée</span>
+                  }
+                  @if (l.anomalies?.length) {
+                    <span class="ie-badge ie-badge--warn" [title]="l.anomalies!.join(' · ')">{{ l.anomalies!.length }} valeur(s) non reconnue(s)</span>
+                    <small class="ie-sous">{{ l.anomalies!.join(' · ') }}</small>
                   }
                   @if (l.suspecteEntete) {
                     <span class="ie-badge ie-badge--warn">Peut-être l'en-tête du fichier</span>
@@ -158,7 +169,7 @@
         }
         <button type="button" class="ky-btn-primary" [disabled]="envoi || !pret" (click)="importer()">
           <app-lucide-icon [icon]="icons.ok" className="w-4 h-4" />
-          {{ envoi ? 'Création…' : 'Créer ' + retenues.length + ' employé(s)' }}
+          {{ envoi ? 'Import…' : 'Importer ' + retenues.length + ' ligne(s)' }}
         </button>
       </div>
     }
@@ -167,10 +178,18 @@
     @if (resultats) {
       <div class="ie-rapport">
         <p class="ie-resume">
-          <strong>{{ crees.length }}</strong> employé(s) créé(s), <strong>{{ liaisonsFaites }}</strong> lié(s) à HTEL,
+          <strong>{{ crees.length }}</strong> employé(s) créé(s),
+          <strong>{{ verifiees.length }}</strong> fiche(s) existante(s) vérifiée(s)
+          (dont <strong>{{ rapport?.misesAJour ?? 0 }}</strong> mise(s) à jour),
+          <strong>{{ aVerifier.length }}</strong> à vérifier,
+          <strong>{{ liaisonsFaites }}</strong> lié(s) à HTEL,
           <strong>{{ echecs.length }}</strong> en échec.
           Complétez le service et la formation depuis chaque fiche, puis importez les adresses depuis
           <a routerLink="/users/mails-internes">Mails internes</a>.
+          @if (rapport?.importId) {
+            Les mises à jour sont tracées (avant / après) et annulables dans
+            <a routerLink="/users/fiches-reference">Fiches employés › Historique</a>.
+          }
         </p>
         <div class="table-wrap">
           <table class="prime-table">
@@ -182,12 +201,28 @@
                 <tr>
                   <td><span class="ie-nom">{{ r.nom }} {{ r.prenom }}</span></td>
                   <td>
-                    @if (r.ok) {
-                      <span class="ie-badge ie-badge--ok">Créé</span>
-                    } @else {
-                      <span class="ie-badge ie-badge--ko">Échec</span>
-                    }
+                    <span class="ie-badge" [ngClass]="classeStatut(r)">{{ libelleStatut(r) }}</span>
                     @if (r.message) { <small class="ie-sous">{{ r.message }}</small> }
+                    @if (r.modifications?.length) {
+                      <ul class="ie-modifs">
+                        @for (m of r.modifications!; track m.cle) {
+                          <li><strong>{{ m.libelle }}</strong> : {{ m.ancienne || '(vide)' }} → {{ m.nouvelle || '(vide)' }}</li>
+                        }
+                      </ul>
+                    }
+                    @if (r.candidats?.length && statut(r) === 'a-verifier') {
+                      <small class="ie-sous">Fiche(s) possible(s) :
+                        @for (c of r.candidats!; track c.userId; let last = $last) {
+                          <a [routerLink]="['/users', c.userId]">{{ c.nom }} {{ c.prenom }}</a> ({{ c.raison }})@if (!last) {, }
+                        }
+                      </small>
+                    }
+                    @if (r.anomalies?.length) {
+                      <small class="ie-sous ie-sous--warn">Valeurs non appliquées / à vérifier : {{ r.anomalies!.join(' · ') }}</small>
+                    }
+                    @if (r.champsManquants?.length) {
+                      <small class="ie-sous">Champs encore vides sur la fiche : {{ r.champsManquants!.join(', ') }}</small>
+                    }
                   </td>
                   <td class="col-actions">
                     @if (r.ok && r.userId) {

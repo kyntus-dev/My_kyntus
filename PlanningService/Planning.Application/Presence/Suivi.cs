@@ -16,12 +16,19 @@ public static class SuiviCatalogues
         "Autre",
     ];
 
-    /// <summary>Types de l'export paie actuel ; « (à valoriser) » = montant fixé par le service paie.</summary>
+    /// <summary>
+    /// Types de l'export paie actuel ; « (à valoriser) » = montant fixé par le service paie.
+    /// v69 : « Renforts (à valoriser) » et « Sanctions » complètent les natures de la fenêtre Journée
+    /// du tableau des présences (Heures Supp., Samedis, Renforts, Challenges, Sanctions, Autres).
+    /// Les types existants ne changent pas : les saisies déjà faites restent valides.
+    /// </summary>
     public static readonly IReadOnlyList<string> TypesEvp =
     [
         "Heures Supp. (à valoriser)",
         "Samedis (à valoriser)",
+        "Renforts (à valoriser)",
         "Challenges (à valoriser)",
+        "Sanctions",
         "Prime",
         "Indemnité",
         "Rappel de salaire",

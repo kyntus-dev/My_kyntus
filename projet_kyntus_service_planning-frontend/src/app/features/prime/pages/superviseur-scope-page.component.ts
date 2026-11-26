@@ -54,6 +54,8 @@ interface ScopeRow {
   isSpecialCase: boolean;
   specialCaseDescription: string | null;
   isPlateauTraining: boolean;
+  /** v73 — Agent désactivé ou sorti : ligne grisée « Sorti », sans action, hors effectif planifiable. */
+  sorti: boolean;
 }
 
 interface CelluleOption {
@@ -283,6 +285,9 @@ function resolveCelluleLabel(
           }
           <span class="scope-search-count">
             {{ filteredRows().length }} / {{ rows().length }}
+            @if (nbSortis() > 0) {
+              <span class="scope-sortis-count">dont {{ nbSortis() }} sorti(s), hors effectif</span>
+            }
           </span>
         </div>
 
@@ -310,8 +315,13 @@ function resolveCelluleLabel(
                   </tr>
                 } @else {
                   @for (item of filteredRows(); track item.id) {
-                    <tr>
-                      <td><span class="prime-cell-strong">{{ item.fullName }}</span></td>
+                    <tr [class.scope-row-sorti]="item.sorti">
+                      <td>
+                        <span class="prime-cell-strong">{{ item.fullName }}</span>
+                        @if (item.sorti) {
+                          <span class="scope-sorti-chip" title="Désactivé ou réaffecté : conservé pour l’historique, hors effectif planifiable">Sorti</span>
+                        }
+                      </td>
                       <td><span class="prime-cell-muted">{{ item.role }}</span></td>
                       <td><span class="prime-cell-muted">{{ item.operationalDepartment }}</span></td>
                       <td><span class="prime-cell-muted">{{ item.pole }}</span></td>
@@ -349,7 +359,7 @@ function resolveCelluleLabel(
                           type="button"
                           class="scope-sat-btn"
                           title="Configurer le mode samedi"
-                          [disabled]="item.planningUserId == null"
+                          [disabled]="item.planningUserId == null || item.sorti"
                           (click)="openSaturdayModeModal(item)"
                         >
                           <app-lucide-icon [icon]="icons.saturday" className="w-3.5 h-3.5" />
@@ -359,7 +369,7 @@ function resolveCelluleLabel(
                           type="button"
                           class="scope-formation-btn"
                           title="En cours de formation plateau (pas d'ouverture/fermeture)"
-                          [disabled]="item.planningUserId == null"
+                          [disabled]="item.planningUserId == null || item.sorti"
                           (click)="openPlateauTrainingModal(item)"
                         >
                           <app-lucide-icon [icon]="icons.formation" className="w-3.5 h-3.5" />
@@ -369,7 +379,7 @@ function resolveCelluleLabel(
                           type="button"
                           class="scope-special-btn"
                           title="Cas particulier (pas de pause +3h/+5h)"
-                          [disabled]="item.planningUserId == null"
+                          [disabled]="item.planningUserId == null || item.sorti"
                           (click)="openSpecialCaseModal(item)"
                         >
                           <app-lucide-icon [icon]="icons.special" className="w-3.5 h-3.5" />
@@ -379,7 +389,7 @@ function resolveCelluleLabel(
                           type="button"
                           class="scope-hist-btn"
                           title="Historique des plannings"
-                          [disabled]="item.planningUserId == null"
+                          [disabled]="item.planningUserId == null || item.sorti"
                           (click)="openHistoryModal(item)"
                         >
                           <app-lucide-icon [icon]="icons.history" className="w-3.5 h-3.5" />
@@ -704,6 +714,14 @@ function resolveCelluleLabel(
         border: 1px solid var(--border-color);
       }
 
+      /* v73 — Agent sorti : ligne grisée, conservée pour l'historique, sans action possible. */
+      .scope-row-sorti > td { opacity: 0.55; }
+      .scope-sorti-chip {
+        margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 0.68rem; font-weight: 600;
+        border: 1px solid var(--border-color); color: var(--text-muted); background: transparent;
+        text-transform: uppercase; letter-spacing: 0.03em;
+      }
+      .scope-sortis-count { margin-left: 8px; font-style: italic; }
       .scope-sat-btn:disabled,
       .scope-special-btn:disabled,
       .scope-formation-btn:disabled,
@@ -1212,12 +1230,20 @@ export class SuperviseurScopePageComponent {
    * v54 — Portée « Toute l'entreprise » : Admin, RH, ou un droit des horaires / de validation
    * accordé avec cette portée dans Accès par rôle. Ouvre toutes les cellules de l'écran.
    */
+  /**
+   * v77 — Voir les cellules des autres encadrants, et pas seulement les siennes.
+   *
+   * Avant, le test demandait « Valider les plannings » ou « Configuration des horaires » au périmètre
+   * Global. Mais la recherche d'un droit ignore le périmètre demandé : un superviseur avec son droit
+   * normal, limité à sa cellule, passait le test et se retrouvait avec la liste de **toutes** les
+   * cellules de l'entreprise dans « Cellule active ».
+   *
+   * Désormais c'est une rubrique à part, « Voir les périmètres des autres encadrants », accordée par
+   * défaut à l'Admin et aux RH. Pour qu'un superviseur voie les périmètres des autres, il suffit de
+   * la lui accorder dans « Accès par rôle » (ou pour un seul compte dans « Accès par compte »).
+   */
   private porteeGlobale(): boolean {
-    const role = (this.session.getRole() || '').trim().toLowerCase();
-    if (role === 'admin' || role === 'rh') return true;
-    return this.access.hasCatalog()
-      && (this.access.can('planning.shift-config', 'Configure', 'Global')
-        || this.access.can('planning.validation', 'Validate', 'Global'));
+    return this.access.voitTousLesPerimetres(this.session.getRole());
   }
 
   readonly icons = { level: Award, saturday: CalendarDays, search: Search, history: History, special: Tag, formation: GraduationCap };
@@ -1285,6 +1311,9 @@ export class SuperviseurScopePageComponent {
     if (!q) return list;
     return list.filter((r) => this.rowMatchesSearch(r, q));
   });
+
+  /** v73 — Agents sortis encore affichés (grisés) : signalés à part pour ne pas fausser l'effectif. */
+  readonly nbSortis = computed(() => this.filteredRows().filter((r) => r.sorti).length);
 
   readonly saturdayHeadcountView = computed(() => {
     const scoped = this.scopedBalance();
@@ -2088,6 +2117,7 @@ export class SuperviseurScopePageComponent {
     planningUsers: User[],
     memberOrgIds: readonly string[],
     shiftStatus: ShiftConfigStatusResponse | null,
+    connusOrg: ReadonlySet<string>,
   ): Promise<void> {
     const subIds = new Set<number>();
     for (const row of mapped) {
@@ -2121,6 +2151,11 @@ export class SuperviseurScopePageComponent {
       if (seenPlanningId.has(u.id)) continue;
       const guid = resolveUserGuid(u).toLowerCase();
       if (guid && seenGuid.has(guid)) continue;
+      // v73 — Agent réaffecté : l'Organisation le connaît et le place ailleurs, mais la copie du
+      // Planning garde son ancien sous-service tant que la synchro n'est pas passée. Sans ce
+      // contrôle, il était réinjecté ici et restait affiché dans son ancien périmètre.
+      // On n'ajoute donc que les personnes que l'Organisation ne connaît pas encore.
+      if (guid && connusOrg.has(guid)) continue;
 
       const saturdayWorkMode = u.saturdayWorkMode ?? null;
       const level = u.level ?? null;
@@ -2142,6 +2177,8 @@ export class SuperviseurScopePageComponent {
         isSpecialCase: !!u.isSpecialCase,
         specialCaseDescription: u.specialCaseDescription ?? null,
         isPlateauTraining: !!u.isPlateauTraining,
+        // v73 — Cette branche ne reprend que des comptes Planning actifs (filtrés plus haut).
+        sorti: false,
       });
       if (guid) seenGuid.add(guid);
       seenPlanningId.add(u.id);
@@ -2230,10 +2267,15 @@ export class SuperviseurScopePageComponent {
           isSpecialCase: !!planningUser?.isSpecialCase,
           specialCaseDescription: planningUser?.specialCaseDescription ?? null,
           isPlateauTraining: !!planningUser?.isPlateauTraining,
+          // v73 — L'annuaire signale les sortants : ils restent listés, grisés, hors effectif.
+          sorti: e.isActive === false || planningUser?.isActive === false,
         };
       });
 
-      await this.mergePlanningTeamIntoScopeRows(mapped, planningUsers, memberOrgIds, shiftStatus);
+      const connusOrg = new Set(
+        employees.map((emp) => (emp.id ?? '').trim().toLowerCase()).filter(Boolean),
+      );
+      await this.mergePlanningTeamIntoScopeRows(mapped, planningUsers, memberOrgIds, shiftStatus, connusOrg);
       mapped.sort((a, b) => a.fullName.localeCompare(b.fullName, 'fr'));
       this.rows.set(mapped);
       this.loading.set(false);

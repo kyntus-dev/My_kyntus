@@ -12,7 +12,7 @@
         <app-lucide-icon [icon]="icons.settings" className="w-4 h-4" />
         Auto-génération
       </button>
-      <button type="button" class="ky-btn-secondary" [disabled]="generating" (click)="regenerate()">
+      <button type="button" class="ky-btn-secondary" *ngIf="peutGenerer" [disabled]="generating" (click)="regenerate()">
         <app-lucide-icon [icon]="icons.refresh" className="w-4 h-4" />
         {{ generating ? 'Génération…' : 'Générer / compléter' }}
       </button>

@@ -193,9 +193,10 @@
   cursor: pointer;
   /* Off-white, jamais #fff pur (même rendu que .ky-btn-primary) */
   color: #f1f5f9;
-  background-color: var(--blue-600);
-  background-image: var(--ky-gradient, linear-gradient(135deg, #1e4fd8, #3b82f6));
-  box-shadow: 0 4px 14px rgb(37 99 235 / 0.28);
+  /* v68 : bleu plein du logo Kyntus, comme .ky-btn-primary. */
+  background-color: var(--ky-blue, #0d2e5b);
+  background-image: none;
+  box-shadow: 0 2px 8px rgb(13 46 91 / 0.22);
   transition:
     box-shadow var(--duration-fast, 150ms) ease,
     filter var(--duration-fast, 150ms) ease,
@@ -203,9 +204,9 @@
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: var(--blue-500);
-  filter: brightness(1.08);
-  box-shadow: 0 6px 20px rgb(37 99 235 / 0.38);
+  background-color: var(--ky-blue-strong, #0a2347);
+  filter: none;
+  box-shadow: 0 4px 14px rgb(13 46 91 / 0.3);
 }
 
 .btn-primary:disabled {

@@ -151,6 +151,27 @@ public static class PrimeSchemaPatches
         await EnsureValidationQueueRepairAsync(db, ct);
         await EnsureFicheValidationHistoryTableAsync(db, ct);
         await EnsureGlobalPoolScopeSynthesisTablesAsync(db, ct);
+        await EnsureEmployeeIsActiveColumnAsync(db, ct);
+    }
+
+    /// <summary>
+    /// v73 — Colonne « encore présent » sur la fiche employé. Les bases existantes n'en avaient pas :
+    /// tous les agents déjà enregistrés restent actifs (DEFAULT TRUE), et seuls les départs signalés
+    /// ensuite par l'annuaire passeront à faux. Aucune donnée n'est supprimée.
+    /// </summary>
+    public static async Task EnsureEmployeeIsActiveColumnAsync(PrimeDbContext db, CancellationToken ct = default)
+    {
+        if (!await TableExistsAsync(db, "prime_employee", ct))
+            return;
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE prime_employee
+              ADD COLUMN IF NOT EXISTS "IsActive" boolean NOT NULL DEFAULT TRUE;
+            CREATE INDEX IF NOT EXISTS "IX_prime_employee_IsActive"
+              ON prime_employee ("IsActive");
+            """,
+            ct);
     }
 
     /// <summary>Ajoute les colonnes paiement à la table ligne de synthèse (bases déjà créées).</summary>

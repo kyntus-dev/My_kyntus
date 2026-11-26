@@ -66,3 +66,13 @@ export function completude(s: PlanningItSemaineDto, jours: readonly string[]): {
   const complets = s.membres.filter((m) => m.jours.slice(0, n).every((j) => !!j.statut || !!j.ferie)).length;
   return { complets, total: s.membres.length };
 }
+
+/** v67 — Durée en heures et minutes, signée : « 12 h 30 », « −1 h 05 », « 0 h ». */
+export function formatDuree(minutes: number | null | undefined): string {
+  const m = Math.round(minutes ?? 0);
+  const signe = m < 0 ? '−' : '';
+  const a = Math.abs(m);
+  const h = Math.floor(a / 60);
+  const r = a % 60;
+  return r ? `${signe}${h} h ${String(r).padStart(2, '0')}` : `${signe}${h} h`;
+}

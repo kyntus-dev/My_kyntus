@@ -76,10 +76,18 @@ export function secondesDuJour(now: Date): number {
   return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
 }
 
-/** B3 de l'Excel : 07:40 le vendredi et le samedi (JOURSEM(…;2) = 5 ou 6), 08:40 sinon. */
+/**
+ * B3 de l'Excel : 07:40 le vendredi, 08:40 du lundi au jeudi.
+ *
+ * v65 : le samedi ne vaut plus 07:40 d'office. Un samedi n'est une journée de production que s'il
+ * figure au planning de l'agent ; sa production vient alors de ce planning. Hors planning, aucune
+ * production n'est attendue (0) et les heures pointées sont des heures supplémentaires. Auparavant,
+ * un samedi travaillé hors planning créait jusqu'à 7 h 40 d'« heures manquantes ».
+ */
 export function productionExcel(now: Date): number {
-  const jourSem2 = ((now.getDay() + 6) % 7) + 1;
-  return jourSem2 === 5 || jourSem2 === 6 ? 460 : 520;
+  const jour = now.getDay();
+  if (jour === 0 || jour === 6) return 0;
+  return jour === 5 ? 460 : 520;
 }
 
 /** I4 de l'Excel. */
@@ -251,7 +259,17 @@ export interface PrevueJour { minutes: number; origine: string }
  * 3. sans horaire de base connu : le dernier choix fait avant ce jour, sinon le premier choix fait ensuite ;
  * 4. sinon null : production du planning ou du régime.
  */
-export function prevueDuChoix(date: string, choix: readonly ChoixJour[], base?: ChoixProduction | null): PrevueJour | null {
+export function prevueDuChoix(
+  date: string,
+  choix: readonly ChoixJour[],
+  base?: ChoixProduction | null,
+  /**
+   * v65 — Journée prévue au planning de l'agent. Fausse, aucune production n'est attendue : ni le
+   * choix du jour ni l'horaire de base ne s'appliquent, et les heures faites sont supplémentaires.
+   */
+  planifie = true,
+): PrevueJour | null {
+  if (!planifie) return { minutes: 0, origine: 'hors planning (heures supplémentaires)' };
   const tries = [...choix].sort((a, b) => a.jour.localeCompare(b.jour));
   const duJour = tries.find((c) => c.jour.slice(0, 10) === date);
   if (duJour) return { minutes: productionDuChoix(duJour.choix)!, origine: 'choisi ce jour' };
@@ -281,6 +299,13 @@ export function courteDejaPriseSemaine(date: string, choix: readonly ChoixJour[]
   return prise ? prise.jour.slice(0, 10) : null;
 }
 
+/**
+ * v71 — Début du solde d'heures : le solde ne repart plus de zéro chaque 24. Il se cumule depuis cette
+ * date et se garde tant qu'il n'est pas récupéré (journée « Récup », ou sortie plus tôt un autre jour).
+ * Même date côté serveur : PlanningItRegles.DebutSoldeHeures.
+ */
+export const DEBUT_SOLDE_HEURES = '2026-10-24';
+
 /** Début de la période de paie (le 24) contenant `date` : la compensation des heures se fait sur 24 → 23. */
 export function debutPeriodePaie(date: Date): Date {
   return date.getDate() >= 24
@@ -296,6 +321,13 @@ export interface SoldeHeures {
   plusMinutes: number;
   moinsMinutes: number;
   jours: number;
+  /**
+   * v65 — Part du solde faite hors planning (samedis et jours de repos travaillés) : ces heures sont
+   * des heures supplémentaires. Elles sont déjà comprises dans `plusMinutes` — elles ne s'y ajoutent
+   * pas, pour qu'aucune heure ne soit comptée deux fois.
+   */
+  heuresSupMinutes: number;
+  joursHeuresSup: number;
 }
 
 /**
@@ -312,7 +344,15 @@ export function soldeHeures(
   const lignes = detailSolde(jours, aujourdhui, prevueImposee).filter((l) => l.compte);
   const plus = lignes.reduce((s, l) => s + Math.max(0, l.ecartMinutes ?? 0), 0);
   const moins = lignes.reduce((s, l) => s + Math.max(0, -(l.ecartMinutes ?? 0)), 0);
-  return { soldeMinutes: plus - moins, plusMinutes: plus, moinsMinutes: moins, jours: lignes.length };
+  const supp = lignes.filter((l) => l.heuresSupMinutes > 0);
+  return {
+    soldeMinutes: plus - moins,
+    plusMinutes: plus,
+    moinsMinutes: moins,
+    jours: lignes.length,
+    heuresSupMinutes: supp.reduce((s, l) => s + l.heuresSupMinutes, 0),
+    joursHeuresSup: supp.length,
+  };
 }
 
 export interface JourSolde {
@@ -324,6 +364,18 @@ export interface JourSolde {
   productionMinutes?: number | null;
   productionPrevueMinutes?: number | null;
   source?: string | null;
+  /** v65 — Journée prévue au planning de l'agent (serveur). Absent : considérée comme planifiée. */
+  planifie?: boolean;
+  /** v65 — Heures supplémentaires calculées par le serveur pour cette journée. */
+  heuresSupplementairesMinutes?: number | null;
+  /** v70 — Récup du planning IT : minutes qui consomment le solde depuis le 24. */
+  recupMinutes?: number | null;
+}
+
+/** v70 : minutes → « 8h40 » pour le libellé d'une Récup. */
+function formatHeuresMinutesSolde(minutes: number): string {
+  const m = Math.max(0, Math.round(minutes));
+  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
 }
 
 /** v41 : une ligne du détail « Solde depuis le 24 ». */
@@ -345,18 +397,39 @@ export interface LigneSolde {
   /** Jour compté dans le solde ; sinon, raison dans `motif`. */
   compte: boolean;
   motif: string;
+  /** v65 — Journée prévue au planning de l'agent. */
+  planifie: boolean;
+  /**
+   * v65 — Heures supplémentaires de la journée : les heures réalisées un jour sans production
+   * prévue. Elles constituent tout l'écart de la ligne, donc elles ne s'y ajoutent pas.
+   */
+  heuresSupMinutes: number;
 }
 
 const MOTIFS_NON_COMPTE: Record<string, string> = {
   Repos: 'Repos',
   Conge: 'Congé',
+  // v67 : récupération du planning IT. v70 : comptée — elle consomme le solde (voir detailSolde).
+  Recup: 'Récup (heures sup. récupérées)',
   Ferie: 'Jour férié',
   SansPointage: 'Aucun pointage',
   SansPlanning: 'Aucun pointage',
-  PointageManquant: 'Pointage incomplet (arrivée ou départ manquant)',
+  PointageManquant: 'Manque de pointage (heures pointées seules, hors solde)',
   EnCours: 'Journée non terminée',
   AVenir: 'À venir',
 };
+
+/**
+ * v65 — Journée sans production prévue au planning de l'agent : samedi ou jour de repos travaillé.
+ * Le serveur le dit (`planifie`, `statut`) ; sans cette information (réponse d'une version
+ * antérieure), on retombe sur le week-end, qui n'est jamais produit sans planning.
+ */
+function horsPlanning(j: JourSolde, date: Date): boolean {
+  if (j.statut === 'HeuresSupplementaires') return true;
+  if (typeof j.planifie === 'boolean') return !j.planifie;
+  const jourSemaine = date.getDay();
+  return (jourSemaine === 0 || jourSemaine === 6) && j.productionPrevueMinutes == null;
+}
 
 /**
  * v41 : détail jour par jour du solde, de la date de début (le 24) à la veille d'`aujourdhui`.
@@ -375,17 +448,32 @@ export function detailSolde(
       const date = j.jour.slice(0, 10);
       const [y, m, d] = date.split('-').map(Number);
       const jourDate = new Date(y, m - 1, d);
-      const brute = prevueImposee?.(jourDate) ?? null;
+      // v65 — Journée hors planning : production attendue nulle, quelles que soient les règles de
+      // production (choix du jour, horaire de base, règle de l'Excel). Les heures réalisées sont
+      // alors entièrement des heures supplémentaires, et la journée ne peut pas créer d'heures
+      // manquantes.
+      const hors = horsPlanning(j, jourDate);
+      const brute = hors ? null : prevueImposee?.(jourDate) ?? null;
       const imposee = typeof brute === 'number' ? brute : brute?.minutes ?? null;
-      const prevue = imposee ?? j.productionPrevueMinutes ?? productionExcel(jourDate);
-      const originePrevue = imposee != null ? (typeof brute === 'number' ? 'Choix' : brute!.origine)
-        : j.productionPrevueMinutes != null
-          ? (j.source === 'Planning' ? 'Planning publié' : j.source === 'PlanningIT' ? 'Planning IT' : j.source === 'Regime' ? 'Régime horaire' : 'Planning')
-          : 'Règle Excel';
-      const realisee = j.productionMinutes ?? null;
+      const prevue = hors ? 0 : imposee ?? j.productionPrevueMinutes ?? productionExcel(jourDate);
+      const originePrevue = hors
+        ? 'Hors planning — heures supplémentaires'
+        : imposee != null ? (typeof brute === 'number' ? 'Choix' : brute!.origine)
+          : j.productionPrevueMinutes != null
+            ? (j.source === 'Planning' ? 'Planning publié' : j.source === 'PlanningIT' ? 'Planning IT' : j.source === 'Regime' ? 'Régime horaire' : 'Planning')
+            : 'Règle Excel';
+      // v70 : une Récup du planning IT consomme le solde depuis le 24 : écart = heures pointées
+      // ce jour-là (heures sup., souvent 0) − minutes de la Récup.
+      const recup = j.recupMinutes ?? null;
+      const realisee = j.productionMinutes ?? (recup != null ? 0 : null);
       const compte = realisee != null;
-      const ecart = compte ? realisee - prevue : null;
+      const ecart = compte ? realisee - prevue - (recup ?? 0) : null;
       if (ecart != null) cumul += ecart;
+      // Heures supplémentaires de la journée : le serveur les donne ; sinon ce sont les heures
+      // réalisées, puisque rien n'était prévu.
+      const heuresSup = hors && compte
+        ? j.heuresSupplementairesMinutes ?? Math.max(0, realisee!)
+        : 0;
       return {
         jour: date,
         statut: j.statut ?? null,
@@ -394,11 +482,13 @@ export function detailSolde(
         pauseMinutes: j.pauseMinutes ?? 0,
         realiseeMinutes: realisee,
         prevueMinutes: compte ? prevue : null,
-        originePrevue: compte ? originePrevue : '',
+        originePrevue: !compte ? '' : recup != null ? `Récup (planning IT) : −${formatHeuresMinutesSolde(recup)} sur le solde` : originePrevue,
         ecartMinutes: ecart,
         cumulMinutes: cumul,
         compte,
         motif: compte ? '' : MOTIFS_NON_COMPTE[j.statut ?? ''] ?? 'Journée non calculable',
+        planifie: !hors,
+        heuresSupMinutes: heuresSup,
       };
     });
 }

@@ -37,7 +37,8 @@ export const CATEGORIES_EVP = [
   { colonne: 'EVP Samedis', motifs: [/samedi/i] },
   { colonne: 'EVP Primes & challenges', motifs: [/prime/i, /challenge/i] },
   { colonne: 'EVP Indemnités & rappels', motifs: [/indemnit/i, /rappel/i] },
-  { colonne: 'EVP Retenues & avances', motifs: [/retenue/i, /avance/i] },
+  // v69 : « Sanctions » (fenêtre Journée) est une retenue ; « Renforts » reste dans « EVP Autres ».
+  { colonne: 'EVP Retenues & avances', motifs: [/retenue/i, /avance/i, /sanction/i] },
   { colonne: 'EVP Autres', motifs: [] as RegExp[] },
 ] as const;
 
@@ -90,6 +91,12 @@ export interface LignePaie {
   cellule: string;
   /** Codes des jours lundi-samedi, dans l'ordre des colonnes. */
   jours: string[];
+  /**
+   * v69 — Mode paie (mois civil + décalage) : codes des jours du 24 à la fin du mois précédent
+   * (lundi-samedi). Affichés pour vérifier les absences déduites de la période 24 → 23 ; ils ne
+   * servent à aucun autre calcul (jours travaillés, présences, heures supp., EVP). Vide sinon.
+   */
+  joursAvant: string[];
   formation: number;
   dateEntree: string;
   absPartielle: number;
@@ -166,6 +173,9 @@ export const STYLE_EXPORT = {
   formatMontant: '#,##0.##;[Red]-#,##0.##;;@',
   /** v61 : heures supplémentaires en heures décimales (1,5 = 1h30), zéro masqué. */
   formatHeures: '0.00;[Red]-0.00;;@',
+  /** v69 : colonnes des jours du 24 à la fin du mois précédent (absences seulement). */
+  avantEntete: 'FF6B7280',
+  avantFond: 'FFF3F4F6',
 } as const;
 
 export function etatFormation(formation: number, joursProduction: number): EtatFormation {
@@ -211,6 +221,20 @@ export function moisCivilDePeriode(au: string): { du: string; au: string } {
   const [y, m] = au.slice(0, 10).split('-').map(Number);
   const dernier = new Date(y, m, 0).getDate();
   return { du: `${y}-${pad(m)}-01`, au: `${y}-${pad(m)}-${pad(dernier)}` };
+}
+
+/**
+ * v69 — Jours lundi-samedi de la période de référence situés avant le 1er du mois civil
+ * (du 24 à la fin du mois précédent). Vide si la période commence le 1er.
+ */
+export function joursAvantMois(du: string, mois: { du: string; au: string } | null | undefined): string[] {
+  if (!mois || du.slice(0, 10) >= mois.du) return [];
+  return joursOuvres(du.slice(0, 10), addJour(mois.du, -1));
+}
+
+/** v69 — En-tête d'une colonne « absences du mois précédent » : « sam\n24/10\nabs. ». */
+export function enteteJourAvant(jour: string): string {
+  return `${enteteJourPaie(jour)}\nabs.`;
 }
 
 /** v61 : options du mode « Mois civil + décalage ». */
@@ -284,6 +308,14 @@ export function lignePaie(
   });
   const production = colonnes.map((j) => estJourProduction(agent, j, plage));
   const joursProduction = production.filter(Boolean).length;
+  // v69 : jours du 24 à la fin du mois précédent, affichés pour les absences seulement (mêmes règles
+  // que leur décompte : jour de production → code réel ; jour de formation → FOR ; sinon vide).
+  const joursAvant = civil
+    ? joursAvantMois(du, civil.mois).map((j) => {
+      if (estJourProduction(agent, j, plage)) return parJour.get(j)?.code ?? '';
+      return estJourFormation(agent, j, plage) ? 'FOR' : '';
+    })
+    : [];
   // Absences comptées sur les jours de production de la période de référence (la sortie borne les AR).
   const codesReference = civil ? reference.map((j) => parJour.get(j)?.code ?? '') : codes;
   const productionReference = civil ? reference.map((j) => estJourProduction(agent, j, plage)) : production;
@@ -377,6 +409,7 @@ export function lignePaie(
     poleId: agent.poleId,
     cellule: agent.cellule ?? '',
     jours: codes,
+    joursAvant,
     formation,
     dateEntree: afficherEntree ? ddmmyyyy(entree!) : '',
     absPartielle: agent.jours.filter((j) => {
@@ -414,8 +447,12 @@ export function lignePaie(
   };
 }
 
-export function entetesPaie(du: string, au: string): string[] {
-  return ['Type', 'Affectation', 'Pilote', ...joursOuvres(du, au).map(enteteJourPaie), ...COLONNES_FIN];
+/**
+ * En-têtes du fichier. v69 : `avant` = jours du 24 à la fin du mois précédent (mode paie), placés
+ * avant les jours du mois et marqués « abs. » (absences seulement).
+ */
+export function entetesPaie(du: string, au: string, avant: readonly string[] = []): string[] {
+  return ['Type', 'Affectation', 'Pilote', ...avant.map(enteteJourAvant), ...joursOuvres(du, au).map(enteteJourPaie), ...COLONNES_FIN];
 }
 
 /** Valeurs d'une ligne du fichier, dans l'ordre des en-têtes. */
@@ -424,6 +461,7 @@ export function valeursPaie(l: LignePaie): (string | number)[] {
     l.type,
     l.affectation,
     l.pilote,
+    ...(l.joursAvant ?? []),
     ...l.jours,
     l.formation,
     l.typeFormation,
@@ -511,6 +549,9 @@ export function reglesExport(du: string, au: string, mois?: { du: string; au: st
       `Mois civil + décalage. Colonnes de jours : du ${ddmmyyyy(mois.du)} au ${ddmmyyyy(mois.au)}, du lundi au samedi.`,
       `Absences, EVP, retards et heures supplémentaires : période de référence du ${ddmmyyyy(du)} au ${ddmmyyyy(au)} (y compris les jours avant le 1er, colonne « Abs. déduites avant le 1er »).`,
       `Du ${ddmmyyyy(addJour(au, 1))} au ${ddmmyyyy(mois.au)} : présent par défaut ; les absences de ces jours seront déduites le mois suivant (période du 24 au 23). Aucun jour n’est compté deux fois.`,
+      ...(joursAvantMois(du, mois).length
+        ? [`Colonnes « abs. » (fond gris) : jours du ${ddmmyyyy(du)} au ${ddmmyyyy(addJour(mois.du, -1))}, affichés uniquement pour vérifier les absences déduites de cette période ; ils ne comptent ni dans les jours travaillés, ni dans les présences, ni dans les autres calculs.`]
+        : []),
       'Jours de production : du 1er à la fin du mois, à partir de la date d’entrée réelle et jusqu’à la date de sortie, hors formation.',
     ]
     : [`Période : du ${ddmmyyyy(du)} au ${ddmmyyyy(au)}. Colonnes de jours : du lundi au samedi.`];
@@ -560,7 +601,9 @@ export async function classeurExportPaie(
   const wb = new ExcelJS.Workbook();
   // Excel refuse « \ / ? * [ ] : » dans un nom de feuille.
   const ws = wb.addWorksheet(feuille.replace(/[\\/?*[\]:]/g, '-').slice(0, 31));
-  const entetes = mois ? entetesPaie(mois.du, mois.au) : entetesPaie(du, au);
+  // v69 : jours du 24 à la fin du mois précédent (absences seulement), avant les jours du mois.
+  const avant = joursAvantMois(du, mois);
+  const entetes = mois ? entetesPaie(mois.du, mois.au, avant) : entetesPaie(du, au);
   const nbJours = entetes.length - 3 - COLONNES_FIN.length;
   const remplir = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
 
@@ -576,7 +619,9 @@ export async function classeurExportPaie(
   };
 
   const tete = ws.addRow(entetes);
-  styleEntete(tete);
+  styleEntete(tete, avant.length ? 46 : 34);
+  // v69 : colonnes « abs. » en gris : on les distingue des jours payés du mois.
+  for (let i = 0; i < avant.length; i++) tete.getCell(4 + i).fill = remplir(STYLE_EXPORT.avantEntete);
   const colStatut = entetes.length; // « Statut paie » : dernière colonne
   const premiereFin = 4 + nbJours; // 1re colonne après les jours
   const colonneFin = (nom: string) => premiereFin + COLONNES_FIN.indexOf(nom as (typeof COLONNES_FIN)[number]);
@@ -599,6 +644,7 @@ export async function classeurExportPaie(
       cell.border = { bottom: trait };
       cell.alignment = { vertical: 'middle', horizontal: col <= 3 || colonnesTexte.has(col) ? 'left' : 'center' };
       if (teinte) cell.fill = remplir(teinte.fond);
+      else if (col > 3 && col < 4 + avant.length) cell.fill = remplir(STYLE_EXPORT.avantFond);
       if (col > 3 && col < premiereFin) {
         // Jours : P discret, absences déduites en rouge, FOR en bleu.
         const code = String(cell.value ?? '');
@@ -679,6 +725,10 @@ export async function classeurExportPaie(
   legende('FOR (texte bleu) : jour de formation, non payé', { bold: true, color: { argb: COULEUR_JOUR_FORMATION.texte } });
   legende('ABS N, AM, AR, CSS, MAT en rouge : absences déduites', { bold: true, color: { argb: st.rouge } });
   legende('P en gris : présent', { color: { argb: st.discret } });
+  if (avant.length) {
+    legende(`Colonnes « abs. » sur fond gris : du ${ddmmyyyy(avant[0])} au ${ddmmyyyy(avant[avant.length - 1])}, pour vérifier les absences déduites seulement`,
+      { color: { argb: 'FF374151' } }, STYLE_EXPORT.avantFond);
+  }
   legende('Case vide dans une colonne de nombres : zéro (masqué pour la lisibilité)', { color: { argb: st.discret } });
   reg.addRow([]);
   reg.addRow(['Totaux de contrôle', 'Valeur']).font = { name: st.police, bold: true, size: 12 };

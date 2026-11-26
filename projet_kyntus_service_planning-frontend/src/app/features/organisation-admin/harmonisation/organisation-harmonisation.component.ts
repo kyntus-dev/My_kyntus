@@ -24,6 +24,7 @@ import {
   resumePhases,
 } from './harmonisation.util';
 import { REFERENTIEL_CONTRATS, REFERENTIEL_SUPPORT } from './referentiel-organisation';
+import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 
 interface Ligne { niveau: 'contrat' | 'pole' | 'cellule'; id: string; nom: string; parent: string; agents: number; protege: boolean }
 interface Journal { ok: boolean; texte: string }
@@ -46,6 +47,8 @@ const PASSAGES_MAX = 4;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OrganisationHarmonisationComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   private readonly prime = inject(PrimeOrgApiService);
   private readonly api = inject(OrgAdminApiService);
   private readonly toast = inject(KyntusToastService);
@@ -136,6 +139,7 @@ export class OrganisationHarmonisationComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     void this.charger();
   }
 

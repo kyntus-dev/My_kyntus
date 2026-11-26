@@ -41,6 +41,27 @@ public sealed class CongeNotificationEmailConsumer(AppDbContext db, INotificatio
         if (msg.EmployeId == Guid.Empty || msg.DemandeId == Guid.Empty)
             return;
         var by = string.IsNullOrWhiteSpace(msg.ValidateurNom) ? string.Empty : $" par {msg.ValidateurNom.Trim()}";
+        if (msg.Modification)
+        {
+            // v64.2 : dates d'un congé déjà validé modifiées par Admin / RH.
+            var avant = msg.AncienneDateDebut is { } ad && msg.AncienneDateFin is { } af ? $" (auparavant {Period(ad, af)})" : string.Empty;
+            var texte = $"Les dates de votre congé ont été modifiées{by} : {Period(msg.DateDebut, msg.DateFin)} ({Days(msg.NombreJours)}){avant}. Votre planning en tient compte.";
+            if (notifier is not null)
+                await notifier.NotifierAsync(
+                    new NotificationEmailRecipients(EmployeeIds: [msg.EmployeId]),
+                    new AppNotification("conges", "Congé modifié", texte, "/mes-conges", $"CONGE-{msg.DemandeId:N}"),
+                    ct: context.CancellationToken);
+            await queue.EnqueueNotificationAsync(
+                new NotificationEmailRecipients(EmployeeIds: [msg.EmployeId]),
+                new NotificationEmailContent(
+                    NotificationEmailSources.Conge,
+                    "Congé modifié",
+                    texte,
+                    "/mes-conges",
+                    $"conge-modifie:{msg.DemandeId:N}:{msg.DateValidation:yyyyMMddHHmmss}"),
+                context.CancellationToken);
+            return;
+        }
         if (notifier is not null)
             await notifier.NotifierAsync(
                 new NotificationEmailRecipients(EmployeeIds: [msg.EmployeId]),

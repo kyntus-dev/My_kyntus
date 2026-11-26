@@ -114,6 +114,8 @@ export interface ShiftConfig {
   isCriticalCell?: boolean;
   shiftModeProfileId?: number | null;
   shiftModeTitle?: string | null;
+  /** v78 — Shift du samedi : ses quotas ne s'ajoutent pas à ceux d'un jour de semaine. */
+  appliesToSaturday?: boolean;
 }
 
 export interface SaturdayYtd {

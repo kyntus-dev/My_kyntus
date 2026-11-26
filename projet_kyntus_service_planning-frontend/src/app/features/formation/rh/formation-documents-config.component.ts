@@ -5,6 +5,7 @@ import { FormationTrainingService } from '../../../core/services/formation-train
 import type { FormationDocumentDefinitionDto } from '../../../core/models/formation-training.models';
 import { KyntusPageHeaderComponent } from '../../../shared/components/ui/kyntus-page-header.component';
 import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
+import { PlatformAccessService } from '../../../core/platform-access/platform-access.service';
 
 @Component({
   selector: 'app-formation-documents-config',
@@ -18,7 +19,7 @@ import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/
       />
 
       <div class="ky-card p-4 space-y-4">
-        <form class="grid gap-2 md:grid-cols-4 items-end" (ngSubmit)="save()">
+        <form class="grid gap-2 md:grid-cols-4 items-end" *ngIf="droits.autorise('formation.checklist', 'Configure')" (ngSubmit)="save()">
           <div class="md:col-span-2">
             <label class="text-xs text-muted">Titre</label>
             <input class="ky-input w-full" [(ngModel)]="draft.title" name="title" required placeholder="Ex. Copie CNI" />
@@ -59,10 +60,12 @@ import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/
                 <td>{{ d.title }}</td>
                 <td>{{ d.isActive ? 'Actif' : 'Inactif' }}</td>
                 <td class="td-actions">
+                  @if (droits.autorise('formation.checklist', 'Configure')) {
                   <button type="button" class="ky-btn-secondary" (click)="edit(d)">Modifier</button>
                   <button type="button" class="ky-btn-secondary text-rose-300" (click)="remove(d)">
                     {{ d.isActive ? 'Désactiver' : 'Supprimer' }}
                   </button>
+                  }
                 </td>
               </tr>
             } @empty {
@@ -78,6 +81,8 @@ import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FormationDocumentsConfigComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   private readonly api = inject(FormationTrainingService);
   private readonly confirmService = inject(KyntusConfirmService);
   readonly rows = signal<FormationDocumentDefinitionDto[]>([]);
@@ -86,6 +91,7 @@ export class FormationDocumentsConfigComponent implements OnInit {
   draft = { title: '', sortOrder: 1, isActive: true };
 
   ngOnInit(): void {
+    void this.droits.ensureLoaded();
     void this.reload();
   }
 

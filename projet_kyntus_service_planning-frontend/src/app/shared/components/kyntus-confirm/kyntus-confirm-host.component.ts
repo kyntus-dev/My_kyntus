@@ -132,7 +132,7 @@ import { KyntusConfirmService } from './kyntus-confirm.service';
     }
 
     .ky-confirm-icon--default {
-      color: var(--info-text, #1d4ed8);
+      color: var(--info-text, var(--ky-blue-text));
       background: var(--info-bg);
       border: 1px solid var(--info-border);
     }

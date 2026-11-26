@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Kyntus.Iam;
 using Kyntus.Identity.Jwt;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -33,15 +34,18 @@ public static class JournalScope
     }
 }
 
-/// <summary>Auteur d'une action : compte connecté (jamais « Super Admin » : affiché « Admin »).</summary>
-public sealed record JournalActeur(Guid? Guid, string? Email, string? Role, string? NomJeton)
+/// <summary>
+/// Auteur d'une action : compte connecté (jamais « Super Admin » : affiché « Admin »).
+/// v67 : <paramref name="SuperAdmin"/> — action du Super Admin, jamais inscrite au journal.
+/// </summary>
+public sealed record JournalActeur(Guid? Guid, string? Email, string? Role, string? NomJeton, bool SuperAdmin = false)
 {
     public static JournalActeur? Depuis(HttpContext? http)
     {
         var u = http?.User;
         if (u?.Identity?.IsAuthenticated != true) return null;
         var nom = u.FindFirst("name")?.Value ?? u.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
-        return new JournalActeur(u.GetSubjectId(), u.GetEmail(), NormaliserRole(u.GetAuthRole()), nom);
+        return new JournalActeur(u.GetSubjectId(), u.GetEmail(), NormaliserRole(u.GetAuthRole()), nom, KyntusAdminClaims.IsSuperAdmin(u));
     }
 
     /// <summary>Le rôle Super Admin n'apparaît jamais dans le journal : il est présenté comme « Admin ».</summary>
@@ -111,6 +115,8 @@ public sealed class JournalActionsInterceptor(IHttpContextAccessor http, ILogger
     private void Capturer(DbContext? context)
     {
         if (context is not AppDbContext ctx || EnEcriture.TryGetValue(ctx, out _)) return;
+        // v67 — Les actions du Super Admin ne sont pas inscrites au journal d'actions.
+        if (KyntusAdminClaims.IsSuperAdmin(http.HttpContext?.User)) return;
         try
         {
             var brouillons = JournalCapture.Capturer(ctx.ChangeTracker.Entries(), JournalScope.Silencieux);

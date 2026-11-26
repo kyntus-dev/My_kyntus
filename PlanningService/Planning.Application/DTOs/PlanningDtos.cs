@@ -292,6 +292,11 @@ public class ShiftConfigResponseDto
     public bool IsCriticalCell { get; set; }
     public int? ShiftModeProfileId { get; set; }
     public string? ShiftModeTitle { get; set; }
+    /// <summary>
+    /// v78 — Shift du samedi. Les quotas du samedi s'ajoutaient à ceux de la semaine dans le bandeau
+    /// « N poste(s) demandés par jour », qui annonçait donc plus de postes qu'un jour n'en demande.
+    /// </summary>
+    public bool AppliesToSaturday { get; set; }
 }
 
 // -- Shift d'un jour --

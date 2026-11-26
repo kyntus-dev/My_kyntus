@@ -214,9 +214,22 @@
         } @else {
           <button *kyIfAdminAllowed="'admin.users.Act'" type="button" (click)="runAction('reactivate', selected)">Réactiver</button>
         }
+        @if (peutSupprimerDefinitivement()) {
+          <button type="button" class="danger-action" (click)="runAction('hard-delete', selected)">Supprimer définitivement</button>
+        }
       </div>
     </div>
   }
+
+  <app-employee-hard-delete-dialog
+    [open]="!!hardDeleteTarget"
+    [employeeName]="hardDeleteTarget ? hardDeleteTarget.lastName + ' ' + hardDeleteTarget.firstName : ''"
+    [email]="hardDeleteTarget?.email ?? ''"
+    [busy]="hardDeleting"
+    [erreur]="hardDeleteErreur"
+    (confirmed)="confirmHardDelete($event)"
+    (cancel)="hardDeleteTarget = null"
+  />
 
   <app-employee-deactivate-dialog
     [open]="!!deactivateTarget"

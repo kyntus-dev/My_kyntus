@@ -48,6 +48,15 @@ export class PlatformAccessService {
     }
   }
 
+  /**
+   * v65 — Force la relecture des droits au prochain `ensureLoaded()` : appelé à chaque changement de
+   * page, pour qu'une fonctionnalité retirée par le Super Admin disparaisse sans attendre la fin du
+   * cache ni une reconnexion.
+   */
+  invalider(): void {
+    this.loadedAt = 0;
+  }
+
   async refresh(): Promise<void> {
     try {
       const dto = await firstValueFrom(this.api.getEffective());
@@ -76,6 +85,10 @@ export class PlatformAccessService {
   }
 
   can(capability: string, verb: PlatformVerb, scope?: string): boolean {
+    // v65 — Une fonctionnalité retirée par le Super Admin est refusée avant tout le reste, joker
+    // « *:Global » compris : sans cela, un jeu de droits encore marqué « tous les droits » (cache de
+    // quelques secondes, ou réponse antérieure au retrait) laissait l'entrée visible et la page ouverte.
+    if (this.estRetiree(capability, verb)) return false;
     const perms = this.keys();
     const role = this.session.getRole() || '';
     const ecran = PLATFORM_SCREENS.find((s) => s.id === capability);
@@ -99,6 +112,9 @@ export class PlatformAccessService {
   }
 
   canView(capability: string): boolean {
+    // v65 — Le retrait s'applique même si le catalogue n'a pas pu être lu (réponse partielle) :
+    // sans ce contrôle, l'interface retombait sur « tout afficher ».
+    if (this.estRetiree(capability, 'View')) return false;
     if (!this.seeded()) return true;
     return this.can(capability, 'View');
   }
@@ -133,6 +149,7 @@ export class PlatformAccessService {
    * compte, la suppression suit « Modifier » (comportement historique).
    */
   canDelete(capability: string): boolean {
+    if (this.estRetiree(capability, 'Delete')) return false;
     if (!this.seeded()) return this.fallbackAdminRh();
     if (this.restreint()) return this.canView(capability) && this.hasAdminVerb(capability, 'Delete');
     return this.canAct(capability);
@@ -143,6 +160,7 @@ export class PlatformAccessService {
    * l'export suit la consultation (comportement historique).
    */
   canExport(capability: string): boolean {
+    if (this.estRetiree(capability, 'Export')) return false;
     if (!this.seeded()) return true;
     if (this.restreint()) return this.canView(capability) && this.hasAdminVerb(capability, 'Export');
     return this.canView(capability);
@@ -174,6 +192,17 @@ export class PlatformAccessService {
     }
   }
 
+  /**
+   * v65 — Fonctionnalité retirée par le Super Admin : l'écran entier (« écran.View ») ou ce verbe
+   * précis. Même règle que le serveur (AdminRestrictionRules.IsDenied), appliquée avant toute
+   * autre, pour que « retiré » veuille dire « retiré » partout dans l'interface.
+   */
+  private estRetiree(capability: string, verb: string): boolean {
+    const retires = this.retraitsSet();
+    if (retires.size === 0) return false;
+    return retires.has(`${capability}.View`) || retires.has(`${capability}.${verb}`);
+  }
+
   private hasAdminVerb(capability: string, verb: 'Delete' | 'Export'): boolean {
     const perms = this.keys();
     return perms.includes('*:Global') || perms.some((p) => p.startsWith(`${capability}.${verb}:`));
@@ -182,6 +211,56 @@ export class PlatformAccessService {
   private canDirect(capability: string, verb: PlatformVerb, scope: string): boolean {
     const perms = this.keys();
     return perms.includes(`${capability}.${verb}:${scope}`) || perms.includes(`${capability}.${verb}:Global`);
+  }
+
+  /**
+   * v72 — Le bouton d'une action n'apparaît que si le serveur l'acceptera : même règle que le contrôle
+   * serveur (AdminRestrictionMiddleware), pour qu'un droit présent ne soit jamais refusé et qu'un droit
+   * absent ne propose rien.
+   * - au moins une des rubriques citées (le serveur accepte l'une ou l'autre) ;
+   * - la rubrique doit être consultable ;
+   * - un verbe que la rubrique ne propose pas dans « Accès par rôle » (ex. « Mes congés » : Consulter
+   *   seulement) suit Consulter, comme côté serveur ; sinon il doit être accordé ;
+   * - Supprimer suit Modifier et Exporter suit Consulter, sauf administrateur restreint (verbes propres).
+   */
+  /**
+   * v79 — Droit accordé au périmètre « Toute l'entreprise » exactement. `can(…, 'Global')` répond
+   * oui dès que le droit existe, quel que soit son périmètre : un superviseur limité à sa cellule y
+   * passait pour « voit tout ». Ici seul un droit Global (ou le joker Admin) compte, comme au serveur.
+   */
+  accordeGlobalement(capability: string, verb: PlatformVerb): boolean {
+    if (this.estRetiree(capability, verb)) return false;
+    const perms = this.keys();
+    return perms.includes('*:Global') || perms.includes(`${capability}.${verb}:Global`);
+  }
+
+  /**
+   * v79 — Voir les périmètres de tous les encadrants (rubrique « Voir les périmètres des autres
+   * encadrants » d'Accès par rôle / par compte). Admin et RH : toujours.
+   */
+  voitTousLesPerimetres(role: string | null | undefined): boolean {
+    const r = (role ?? '').trim().toLowerCase();
+    if (r === 'admin' || r === 'rh') return true;
+    return this.hasCatalog() && this.canView('perimetre.global');
+  }
+
+  autorise(capabilities: string | readonly string[], verbe: PlatformVerb | 'Delete' | 'Export' = 'Act'): boolean {
+    const liste = typeof capabilities === 'string' ? [capabilities] : capabilities;
+    return liste.some((c) => this.autoriseUne(c, verbe));
+  }
+
+  private autoriseUne(capability: string, verbe: PlatformVerb | 'Delete' | 'Export'): boolean {
+    if (!this.canView(capability)) return false;
+    if (verbe === 'Delete') return this.restreint() ? this.canDelete(capability) : this.autoriseUne(capability, 'Act');
+    if (verbe === 'Export') return this.canExport(capability);
+    if (verbe === 'View') return true;
+    if (!this.seeded()) return this.fallbackAdminRh();
+    const ecran = PLATFORM_SCREENS.find((s) => s.id === capability);
+    const propose = verbe === 'Act' ? ecran?.act?.length : verbe === 'Validate' ? ecran?.validate?.length : ecran?.configure?.length;
+    if (ecran && !propose) return !this.estRetiree(capability, verbe);
+    if (this.can(capability, verbe)) return true;
+    // Niveaux cumulés dans « Accès par rôle » : Valider comprend Modifier.
+    return verbe === 'Act' && !!ecran?.validate?.length && this.can(capability, 'Validate');
   }
 
   private fallbackAdminRh(): boolean {

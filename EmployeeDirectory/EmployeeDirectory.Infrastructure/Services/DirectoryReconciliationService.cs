@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using EmployeeDirectory.Application.Abstractions;
 using EmployeeDirectory.Application.Dtos;
@@ -5,6 +6,7 @@ using EmployeeDirectory.Domain.Entities;
 using EmployeeDirectory.Infrastructure.Persistence;
 using Kyntus.Messaging.Contracts;
 using Kyntus.Messaging.Outbox;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -17,15 +19,25 @@ public sealed class DirectoryReconciliationService(
     IDirectoryWriteService write,
     IHttpClientFactory httpClientFactory,
     IConfiguration configuration,
+    IHttpContextAccessor httpContextAccessor,
     ILogger<DirectoryReconciliationService> logger) : IDirectoryReconciliationService
 {
     public async Task<DirectoryReconcileVerifyDto> VerifyAsync(CancellationToken ct = default)
     {
         var local = await BuildLocalVerifyAsync(ct);
         var (planningUsers, primeCount, orphansPlanning, orphansPrime) = await FetchExternalCountsAsync(ct);
+        // v73 — Un service injoignable ne vaut plus « aligné ». Avant, un compteur à null (Planning ou
+        // Prime hors d'atteinte) passait le test et l'écran annonçait « Réconciliation : alignée » alors
+        // que rien n'avait pu être vérifié : il ne trouvait aucun orphelin parce qu'il n'avait pas pu
+        // regarder. L'écran dit maintenant « non vérifiée » et nomme le service injoignable.
+        var servicesInjoignables = new List<string>();
+        if (planningUsers is null && orphansPlanning is null) servicesInjoignables.Add("Planning");
+        if (primeCount is null && orphansPrime is null) servicesInjoignables.Add("Prime");
+
         var ok = local.EmployeesWithUnmappedOrgRefs == 0
-                 && (orphansPlanning is null or 0)
-                 && (orphansPrime is null or 0);
+                 && servicesInjoignables.Count == 0
+                 && orphansPlanning == 0
+                 && orphansPrime == 0;
 
         return local with
         {
@@ -33,6 +45,7 @@ public sealed class DirectoryReconciliationService(
             PrimeEmployeeCount = primeCount,
             OrphansInPlanningNotDirectory = orphansPlanning,
             OrphansInPrimeNotDirectory = orphansPrime,
+            UnreachableServices = servicesInjoignables,
             Ok = ok,
         };
     }
@@ -44,14 +57,17 @@ public sealed class DirectoryReconciliationService(
         var (orgBackfilled, employeesImported) = await SyncOrgAndEmployeesFromPrimeAsync(ct);
         var orgGapsFixed = await FixUnmappedOrgReferencesAsync(ct);
         var republished = await RepublishActiveEmployeesAsync(ct);
+        // v73 — Les départs sont renvoyés eux aussi, sinon un agent sorti reste pour toujours dans
+        // les périmètres de Prime et du Planning.
+        var sortiesRepubliees = await RepublishInactiveEmployeesAsync(ct);
 
         var verify = await VerifyAsync(ct);
         var orphansPlanning = verify.OrphansInPlanningNotDirectory ?? 0;
         var orphansPrime = verify.OrphansInPrimeNotDirectory ?? 0;
 
         logger.LogInformation(
-            "Directory reconcile: nodeDupesClosed={NodeDupes}, merged={Merged}, orgBackfilled={Org}, imported={Import}, republished={Republish}",
-            nodeDupesClosed, merged, orgBackfilled, employeesImported, republished);
+            "Directory reconcile: nodeDupesClosed={NodeDupes}, merged={Merged}, orgBackfilled={Org}, imported={Import}, republished={Republish}, sorties={Sorties}",
+            nodeDupesClosed, merged, orgBackfilled, employeesImported, republished, sortiesRepubliees);
 
         return new DirectoryReconcileReportDto(
             merged,
@@ -62,7 +78,8 @@ public sealed class DirectoryReconciliationService(
             orphansPrime,
             orgGapsFixed,
             verify,
-            nodeDupesClosed);
+            nodeDupesClosed,
+            sortiesRepubliees);
     }
 
     private async Task<DirectoryReconcileVerifyDto> BuildLocalVerifyAsync(CancellationToken ct)
@@ -136,7 +153,7 @@ public sealed class DirectoryReconciliationService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Directory verify: Planning unreachable");
+            logger.LogWarning(ex, "Directory verify: Planning unreachable ({Raison})", Raison(ex));
         }
 
         int? primeCount = null;
@@ -145,14 +162,17 @@ public sealed class DirectoryReconciliationService(
         {
             var client = CreateClient("Prime");
             var employees = await client.GetFromJsonAsync<List<PrimeEmployeeJson>>("api/prime/employees", ct) ?? [];
-            primeCount = employees.Count;
-            orphansPrime = employees.Count(e =>
+            // v76 — Depuis la v73, Prime garde les agents sortis (grisés, pour l'historique). Ils ne sont
+            // ni comptés comme présents ni pris pour des orphelins : seuls les présents sont comparés.
+            var presents = employees.Where(e => e.IsActive != false).ToList();
+            primeCount = presents.Count;
+            orphansPrime = presents.Count(e =>
                 !string.IsNullOrWhiteSpace(e.Email)
                 && !directorySet.Contains(e.Email.Trim().ToLower()));
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Directory verify: Prime unreachable");
+            logger.LogWarning(ex, "Directory verify: Prime unreachable ({Raison})", Raison(ex));
         }
 
         return (planningUsers, primeCount, orphansPlanning, orphansPrime);
@@ -286,6 +306,23 @@ public sealed class DirectoryReconciliationService(
         return employees.Count;
     }
 
+    /// <summary>
+    /// v73 — Renvoie aussi les agents désactivés ou sortis. Jusqu'ici seuls les actifs étaient
+    /// republiés : Planning et Prime n'apprenaient jamais un départ, et la personne restait
+    /// indéfiniment dans les périmètres. Rien n'est supprimé : les modules la marquent « sortie ».
+    /// </summary>
+    private async Task<int> RepublishInactiveEmployeesAsync(CancellationToken ct)
+    {
+        var employees = await db.Employees.Where(e => !e.IsActive).ToListAsync(ct);
+        foreach (var e in employees)
+            await EnqueueEmployeeChangedAsync(e, isDeleted: true, ct);
+
+        if (employees.Count > 0)
+            await db.SaveChangesAsync(ct);
+
+        return employees.Count;
+    }
+
     private async Task<bool> UpsertPoleAsync(string id, string name, CancellationToken ct)
     {
         if (await db.OrgPoles.AnyAsync(p => p.Id == id, ct)) return false;
@@ -348,6 +385,13 @@ public sealed class DirectoryReconciliationService(
         var client = httpClientFactory.CreateClient("DirectoryReconcile");
         client.BaseAddress = new Uri(baseUrl);
         client.Timeout = TimeSpan.FromSeconds(30);
+        // v76 — La vérification interroge Planning et Prime au nom de l'administrateur qui l'a lancée.
+        // Avant, ces appels partaient sans jeton : les deux services répondaient 401 (accès réservé aux
+        // utilisateurs connectés), l'erreur était prise pour « injoignable », et la vérification n'a
+        // donc jamais pu aboutir. Le jeton est celui de la requête en cours, jamais stocké.
+        var auth = httpContextAccessor.HttpContext?.Request.Headers.Authorization.ToString();
+        if (!string.IsNullOrWhiteSpace(auth) && AuthenticationHeaderValue.TryParse(auth, out var entete))
+            client.DefaultRequestHeaders.Authorization = entete;
         return client;
     }
 
@@ -389,8 +433,18 @@ public sealed class DirectoryReconciliationService(
         public string Name { get; set; } = "";
     }
 
+    /// <summary>v76 — Cause lisible dans les journaux : refus d'accès, service arrêté, délai dépassé…</summary>
+    private static string Raison(Exception ex) => ex switch
+    {
+        HttpRequestException { StatusCode: not null } h => $"HTTP {(int)h.StatusCode!.Value}",
+        HttpRequestException h => $"connexion impossible : {h.Message}",
+        TaskCanceledException => "délai dépassé",
+        _ => ex.GetType().Name,
+    };
+
     private sealed class PrimeEmployeeJson
     {
+        public bool? IsActive { get; set; }
         public string Id { get; set; } = "";
         public string Email { get; set; } = "";
         public string? FirstName { get; set; }

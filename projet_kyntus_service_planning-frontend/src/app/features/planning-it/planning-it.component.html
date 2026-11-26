@@ -33,6 +33,19 @@
         <span class="ku-kpi-label">Plannings complets</span>
         <span class="ku-kpi-value">{{ synthese().complets }} / {{ synthese().total }}</span>
         <span class="ku-kpi-sub">toutes les journées renseignées</span></div>
+      @if (monSolde(); as so) {
+        @if (so.soldePeriodeMinutes != null) {
+          <!-- v71 : solde d'heures cumulé (jamais remis à zéro le 24), consommé par les Récup. -->
+          <div class="ku-kpi" [class.ku-kpi--ok]="so.soldePeriodeMinutes >= 0" [class.ku-kpi--warn]="so.soldePeriodeMinutes < 0" [attr.title]="titreSolde(so)">
+            <span class="ku-kpi-label">Mon solde d’heures</span>
+            <span class="ku-kpi-value">{{ signe(so.soldePeriodeMinutes) }}</span>
+            <span class="ku-kpi-sub">cumulé, Récup prises déduites@if (so.recupPlanifieesPeriodeMinutes) { · après Récup planifiées {{ signe(so.soldePeriodeMinutes - so.recupPlanifieesPeriodeMinutes) }}}</span></div>
+        }
+        <div class="ku-kpi" [class.ku-kpi--warn]="so.restantesMinutes < 0" [attr.title]="titreSolde(so)">
+          <span class="ku-kpi-label">Mes heures sup. {{ anneeSoldes() }}</span>
+          <span class="ku-kpi-value">{{ signe(so.restantesMinutes) }}</span>
+          <span class="ku-kpi-sub">acquises {{ formatDuree(so.acquisesMinutes) }} · récupérées {{ formatDuree(so.recupereesMinutes) }} ({{ so.joursRecup }} j)</span></div>
+      }
       <div class="ku-kpi"><span class="ku-kpi-label">Mise à jour</span>
         <span class="ku-kpi-value pit-kpi-sm">{{ actualiseLe() | date: 'HH:mm:ss' }}</span>
         <span class="ku-kpi-sub">actualisation automatique toutes les 15 s</span></div>
@@ -43,6 +56,7 @@
         <span><i class="pit-lg pit-lg--travail"></i>Heure d’arrivée</span>
         <span><i class="pit-lg pit-lg--repos"></i>Repos</span>
         <span><i class="pit-lg pit-lg--conge"></i>Congé</span>
+        <span><i class="pit-lg pit-lg--recup"></i>Récup (déduite des heures sup.)</span>
         <span><i class="pit-lg pit-lg--ferie"></i>Férié (calendrier français, d’office)</span>
         <span><i class="pit-lg pit-lg--flash"></i>Modifié à l’instant par un collègue</span>
         @if (d.peutModifierTout) { <span class="ku-chip ku-chip--info ku-chip--plain">Vous pouvez corriger toutes les lignes</span> }
@@ -75,7 +89,7 @@
                         [class.is-saving]="enCours().has(k)" [class.is-today]="j.jour.slice(0, 10) === aujourdhui" [attr.title]="titre(m, j)">
                       @if (m.modifiable) {
                         <div class="pit-edit">
-                          @if (j.statut === 'Repos' || j.statut === 'Conge' || (!j.statut && j.ferie)) {
+                          @if (j.statut === 'Repos' || j.statut === 'Conge' || j.statut === 'Recup' || (!j.statut && j.ferie)) {
                             <button type="button" class="pit-state" (click)="basculerMenu(m, j, $event)">{{ libelle(j) }}</button>
                           } @else {
                             <input type="time" class="pit-time" [value]="j.arrivee ?? ''" (focus)="focus(true)" (blur)="focus(false)"
@@ -87,6 +101,7 @@
                               <button type="button" (click)="choisir(m, j, 'Travail')">Heure d’arrivée</button>
                               <button type="button" (click)="choisir(m, j, 'Repos')">Repos</button>
                               <button type="button" (click)="choisir(m, j, 'Conge')">Congé</button>
+                              <button type="button" (click)="choisir(m, j, 'Recup')" title="Journée récupérée : déduite des heures supplémentaires">Récup</button>
                               @if (j.statut) { <button type="button" class="is-danger" (click)="choisir(m, j, null)">Effacer</button> }
                             </div>
                           }
@@ -111,7 +126,8 @@
         </div>
       }
       <p class="ku-card-sub pit-note">
-        Saisissez l’heure d’arrivée : elle est enregistrée aussitôt et reste modifiable à tout moment. Le bouton ▾ propose Repos, Congé ou Effacer.
+        Saisissez l’heure d’arrivée : elle est enregistrée aussitôt et reste modifiable à tout moment. Le bouton ▾ propose Repos, Congé, Récup ou Effacer.
+        « Récup » : journée récupérée, déduite des heures supplémentaires (heures sup. acquises − récupérées = restantes, sur l’année).
         Au pointage, cette heure sert de référence pour le retard ; la production prévue reste celle de votre régime horaire (8 h 40, 7 h 40 le vendredi).
       </p>
     </section>

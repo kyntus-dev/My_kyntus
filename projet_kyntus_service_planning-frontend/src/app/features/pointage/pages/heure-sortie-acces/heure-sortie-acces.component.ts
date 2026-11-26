@@ -5,11 +5,13 @@ import { forkJoin, of } from 'rxjs';
 import { RegimeHoraireService } from '../../../../core/services/regime-horaire.service';
 import type { HeureSortieAccesDto } from '../../../../core/models/regime-horaire.models';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
-import { diffAcces, grouperParRole, type GroupeAcces } from '../../lib/acces.util';
+import { ajoutsParBase, diffAcces, grouperParRole, type BaseHeureSortie, type GroupeAcces } from '../../lib/acces.util';
 
 /**
- * Accès à « Heure de sortie » (Admin) : l'Admin coche les comptes concernés, regroupés par rôle,
- * avec sélection d'un rôle entier ou de tous les comptes affichés. Rien n'est appliqué avant « Enregistrer ».
+ * Accès à « Heure de sortie » : v67 — réservé au Super Admin. Il coche les comptes concernés, regroupés
+ * par rôle, avec sélection d'un rôle entier ou de tous les comptes affichés, et choisit pour chaque
+ * compte ajouté l'horaire de base (08h40 avec une journée à 07h40 par semaine, ou 07h40). Rien n'est
+ * appliqué avant « Enregistrer ».
  */
 @Component({
   selector: 'app-heure-sortie-acces',
@@ -33,6 +35,11 @@ export class HeureSortieAccesComponent implements OnInit {
   readonly error = signal<string | null>(null);
   /** v43 : compte dont l'horaire de base est en cours d'enregistrement. */
   readonly baseEnCours = signal<number | null>(null);
+  /** v67 — Horaire proposé pour les comptes ajoutés (barre d'envoi), modifiable ligne par ligne. */
+  readonly baseParDefaut = signal<BaseHeureSortie>('0840');
+  /** v67 — Horaire choisi pour une ligne à ajouter (sinon celui de la barre d'envoi). */
+  readonly basesAjout = signal<ReadonlyMap<number, BaseHeureSortie>>(new Map());
+  readonly baseAjout = (c: HeureSortieAccesDto): BaseHeureSortie => this.basesAjout().get(c.userId) ?? this.baseParDefaut();
 
   readonly etat = (c: HeureSortieAccesDto): boolean => this.modifs().get(c.userId) ?? c.acces;
   readonly groupes = computed(() => grouperParRole(this.comptes(), this.recherche(), this.etat, this.seulementAvecAcces()));
@@ -86,19 +93,30 @@ export class HeureSortieAccesComponent implements OnInit {
 
   annuler(): void {
     this.modifs.set(new Map());
+    this.basesAjout.set(new Map());
+  }
+
+  /** v67 — Horaire d'un compte coché (pas encore enregistré) : envoyé avec l'attribution. */
+  choisirBaseAjout(c: HeureSortieAccesDto, base: BaseHeureSortie): void {
+    const next = new Map(this.basesAjout());
+    next.set(c.userId, base);
+    this.basesAjout.set(next);
   }
 
   enregistrer(): void {
     const { ajouter, retirer } = this.changements();
     if (!ajouter.length && !retirer.length) return;
     this.saving.set(true);
+    // v67 : une attribution par horaire choisi (07h40 ou 08h40).
+    const parBase = ajoutsParBase(ajouter, (id) => this.basesAjout().get(id) ?? this.baseParDefaut());
     forkJoin([
-      ajouter.length ? this.svc.setAccesHeureSortie(ajouter, true) : of({ modifies: 0 }),
+      ...[...parBase.entries()].map(([base, ids]) => this.svc.setAccesHeureSortie(ids, true, base)),
       retirer.length ? this.svc.setAccesHeureSortie(retirer, false) : of({ modifies: 0 }),
     ]).subscribe({
       next: () => {
         this.saving.set(false);
         this.toast.success(`Accès enregistrés : ${ajouter.length} ajouté(s), ${retirer.length} retiré(s).`);
+        this.basesAjout.set(new Map());
         this.load();
       },
       error: (err) => {

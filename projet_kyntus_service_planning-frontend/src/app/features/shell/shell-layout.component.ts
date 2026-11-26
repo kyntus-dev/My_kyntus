@@ -9,9 +9,10 @@ import { RouterModule, Router, NavigationEnd } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 import { filter } from 'rxjs/operators';
-import { Bell, Briefcase, CircleHelp, Moon, Settings, Sun, UserRound } from 'lucide';
+import { Bell, Briefcase, CircleHelp, KeyRound, LifeBuoy, Moon, Settings, Sun, UserRound } from 'lucide';
 
 import { Microservice, MenuItem } from '../../core/navigation/microservices.config';
+import { compteurModule, grouperParRubrique, type MenuRubrique } from '../../core/navigation/menu-rubriques';
 import { NavigationMenuService } from '../../core/navigation/navigation-menu.service';
 import { HeureSortieAccessService } from '../../core/services/heure-sortie-access.service';
 import { WorkspaceHatService } from '../../core/navigation/workspace-hat.service';
@@ -134,6 +135,9 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   readonly icons = {
     bell: Bell,
     help: CircleHelp,
+    // v68 : icônes propres à « Assistance » et « Mon mot de passe ».
+    assistance: LifeBuoy,
+    motDePasse: KeyRound,
     settings: Settings,
     moon: Moon,
     sun: Sun,
@@ -163,14 +167,43 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
 
   readonly homeIcon =
-
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+    // v68 : même style que les icônes des modules.
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg>';
 
 
 
   readonly groups = signal<Microservice[]>([]);
 
   readonly openGroups = signal(new Set<string>());
+
+  /** v68 — Modules rangés par rubriques (Pilotage, Collaborateurs, Temps et paie…). */
+  readonly rubriques = computed(() => grouperParRubrique(this.groups()));
+  /** v68 — Compteur d'un module (somme des compteurs de ses entrées). */
+  readonly compteurModule = compteurModule;
+  /** v68 — Rubriques repliées par la personne (mémorisées sur ce navigateur). */
+  readonly rubriquesFermees = signal<ReadonlySet<string>>(lireRubriquesFermees());
+
+  toggleRubrique(id: string): void {
+    const next = new Set(this.rubriquesFermees());
+    if (next.has(id)) next.delete(id); else next.add(id);
+    this.rubriquesFermees.set(next);
+    try {
+      localStorage.setItem(CLE_RUBRIQUES_FERMEES, JSON.stringify([...next]));
+    } catch {
+      /* stockage indisponible : le choix vaut pour la session */
+    }
+  }
+
+  /** v68 — Module de la page affichée : sa tuile d'icône est mise en avant. */
+  groupeCourant(g: Microservice): boolean {
+    return (g.children ?? []).some((c) => this.isItemActive(c));
+  }
+
+  /** Une rubrique repliée reste ouverte si elle contient la page affichée. */
+  rubriqueOuverte(r: MenuRubrique): boolean {
+    if (!this.rubriquesFermees().has(r.id)) return true;
+    return r.groupes.some((g) => (g.children ?? []).some((c) => this.isItemActive(c)));
+  }
 
   /** Recherche dans le menu (Ctrl K) : liste à plat des entrées dont le libellé correspond. */
   readonly menuRecherche = signal('');
@@ -321,6 +354,16 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
 
       .subscribe((e) => {
+        // v65 : droits et accès « Heure de sortie » relus à chaque changement de page, puis menu
+        // reconstruit — une fonctionnalité retirée par le Super Admin disparaît aussitôt, sans
+        // attendre la fin du cache ni une reconnexion.
+        this.platformAccess.invalider();
+        this.heureSortieAccess.invalider();
+        void this.platformAccess.ensureLoaded()
+          .catch(() => undefined)
+          .then(() => this.heureSortieAccess.charger())
+          .catch(() => undefined)
+          .finally(() => this.refreshGroups());
         this.refreshGroups();
         this.updateModuleClass(e.urlAfterRedirects);
         this.openGroupForUrl(e.urlAfterRedirects);
@@ -682,4 +725,14 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
 }
 
+/** v68 — Rubriques du menu repliées (mémoire locale du navigateur). */
+const CLE_RUBRIQUES_FERMEES = 'kyntus.menu.rubriques-fermees.v68';
 
+function lireRubriquesFermees(): ReadonlySet<string> {
+  try {
+    const brut = JSON.parse(localStorage.getItem(CLE_RUBRIQUES_FERMEES) ?? '[]');
+    return new Set(Array.isArray(brut) ? brut.filter((x): x is string => typeof x === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}

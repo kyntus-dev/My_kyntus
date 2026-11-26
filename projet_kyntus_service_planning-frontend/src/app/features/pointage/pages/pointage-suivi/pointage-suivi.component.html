@@ -48,11 +48,12 @@
     }
 
     <div class="ku-kpis">
-      <section class="ku-kpi" [class.ku-kpi--ok]="production().ecart >= 0" [class.ku-kpi--warn]="production().ecart < 0">
+      <section class="ku-kpi" [class.ku-kpi--ok]="soldeTotal() >= 0" [class.ku-kpi--warn]="soldeTotal() < 0">
         <span class="ku-kpi-label">Production · solde compensé</span>
         <span class="ku-kpi-value">{{ formatDuree(production().realisee) }}</span>
         <span class="ku-kpi-sub">
-          @if (production().prevue) { sur {{ formatDuree(production().prevue) }} prévues · solde {{ formatEcart(production().ecart) }} sur la période }
+          @if (production().prevue) { sur {{ formatDuree(production().prevue) }} prévues@if (production().recup) { · Récup −{{ formatDuree(production().recup) }}} · }
+          <b>solde cumulé {{ formatEcart(soldeTotal()) }}</b>@if (report()) { (dont {{ formatEcart(report()) }} reporté) }
           @else { {{ production().jours }} journée(s) calculée(s) }
         </span>
         @if (production().prevue) {
@@ -74,7 +75,7 @@
       <section class="ku-kpi ku-kpi--warn">
         <span class="ku-kpi-label">Manque de pointage</span>
         <span class="ku-kpi-value">{{ d.totaux.joursPointageManquant.length }}</span>
-        <span class="ku-kpi-sub">journée(s) incomplète(s), non calculée(s)</span>
+        <span class="ku-kpi-sub">journée(s) incomplète(s) : heures pointées seules, hors solde</span>
         <span class="ku-kpi-foot">
           @for (j of d.totaux.joursPointageManquant; track j; let last = $last) { {{ jourLabel(j) }}{{ last ? '' : ', ' }} } @empty { Aucune }
         </span>
@@ -134,7 +135,7 @@
               <th class="pt-col-frise">Journée</th>
               <th class="is-num">Pause</th>
               <th class="is-num">Retard</th>
-              <th class="is-num" title="Écart du jour et solde cumulé depuis le 24 : une journée courte est compensée par les autres journées de la période de paie">Production · solde</th>
+              <th class="is-num" title="Écart du jour et solde cumulé : une journée courte est compensée par les autres ; le solde se garde jusqu’à sa récupération (Récup ou sortie plus tôt)">Production · solde</th>
             </tr>
           </thead>
           <tbody>
@@ -191,12 +192,25 @@
                       <!-- Écart du jour neutre : les heures se compensent sur la période de paie. -->
                       <small class="pt-ecart">{{ formatEcart(j.ecartProductionMinutes) }}
                         @if (cumuls().get(j.jour.slice(0, 10)); as c) {
-                          <span class="pt-cumul" [class.ku-pos]="c >= 0" [class.ku-neg]="c < 0" title="Solde cumulé depuis le 24 (compensation)">cumul {{ formatEcart(c) }}</span>
+                          <span class="pt-cumul" [class.ku-pos]="c >= 0" [class.ku-neg]="c < 0" title="Solde cumulé (gardé jusqu’à sa récupération)">cumul {{ formatEcart(c) }}</span>
                         } @else if (cumuls().has(j.jour.slice(0, 10))) {
-                          <span class="pt-cumul" title="Solde cumulé depuis le 24 (compensation)">cumul 00:00</span>
+                          <span class="pt-cumul" title="Solde cumulé (gardé jusqu’à sa récupération)">cumul 00:00</span>
                         }
                       </small>
                     }
+                  } @else if (j.statut === 'PointageManquant') {
+                    <!-- v70 : seules les heures pointées ; la journée n’entre pas dans le cumul. -->
+                    <b class="pt-prod" title="Heures des seuls segments pointés">{{ formatDuree(j.productionPointeeMinutes ?? 0) }}</b>
+                    <small class="pt-ecart"><span class="pt-cumul ku-muted" title="Manque de pointage : journée non comptée dans le solde">hors cumul</span></small>
+                  } @else if (j.recupMinutes) {
+                    <!-- v70 : la Récup consomme le solde. -->
+                    <small class="pt-ecart">−{{ formatDuree(j.recupMinutes) }}
+                      @if (j.jour.slice(0, 10) > aujourdhui) {
+                        <span class="pt-cumul ku-muted" title="Récup planifiée : déduite du solde le jour venu">à venir</span>
+                      } @else if (cumuls().has(j.jour.slice(0, 10))) {
+                        <span class="pt-cumul" [class.ku-pos]="(cumuls().get(j.jour.slice(0, 10)) ?? 0) >= 0" [class.ku-neg]="(cumuls().get(j.jour.slice(0, 10)) ?? 0) < 0" title="Récup : déduite du solde">cumul {{ formatEcart(cumuls().get(j.jour.slice(0, 10)) ?? 0) }}</span>
+                      }
+                    </small>
                   } @else { <span class="ku-muted">—</span> }
                 </td>
 
@@ -222,7 +236,7 @@
                         <div><dt>Retard d’entrée</dt><dd [class.ku-neg]="j.retardEntreeMinutes > 0">{{ formatDuree(j.retardEntreeMinutes) }}</dd></div>
                         <div><dt>Retard pause</dt><dd [class.ku-neg]="j.retardPauseMinutes > 0">{{ formatDuree(j.retardPauseMinutes) }}</dd></div>
                         <div><dt>Pauses prises</dt><dd>{{ formatDuree(j.pauseMinutes) }}@if (j.pauseAutoriseeMinutes) { sur {{ formatDuree(j.pauseAutoriseeMinutes) }} autorisées }</dd></div>
-                        <div><dt>Production</dt><dd>{{ j.productionMinutes != null ? formatDuree(j.productionMinutes) : 'non calculée' }}@if (j.productionPrevueMinutes) { / {{ formatDuree(j.productionPrevueMinutes) }} prévues }</dd></div>
+                        <div><dt>Production</dt><dd>{{ j.productionMinutes != null ? formatDuree(j.productionMinutes) : j.productionPointeeMinutes != null ? formatDuree(j.productionPointeeMinutes) + ' pointées (hors solde)' : 'non calculée' }}@if (j.productionPrevueMinutes) { / {{ formatDuree(j.productionPrevueMinutes) }} prévues }</dd></div>
                       </dl>
                     </div>
                   </td>

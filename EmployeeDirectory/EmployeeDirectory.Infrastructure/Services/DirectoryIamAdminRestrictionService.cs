@@ -30,8 +30,45 @@ public sealed class DirectoryIamAdminRestrictionService(
         var user = httpContextAccessor.HttpContext?.User;
         if (KyntusAdminClaims.IsSuperAdmin(user) && KyntusAdminClaims.SubjectId(user) == subjectId)
             return AdminRestrictionSnapshot.SuperAdminSnapshot;
-        var denied = await GetDeniedAsync(subjectId, ct);
+        // v66 — Compte qui n'est pas administrateur : retraits explicites de son rôle et de son compte.
+        var denied = !KyntusAdminClaims.IsAdmin(user) && KyntusAdminClaims.SubjectId(user) == subjectId
+            ? await GetRevocationsAsync(subjectId, KyntusAdminClaims.Role(user) ?? string.Empty, ct)
+            : await GetDeniedAsync(subjectId, ct);
         return denied.Count == 0 ? AdminRestrictionSnapshot.None : new AdminRestrictionSnapshot(false, denied);
+    }
+
+    /// <summary>
+    /// v66 — Droits explicitement retirés à un compte non administrateur : décochés dans « Accès par
+    /// rôle » pour son rôle, ou retirés dans « Accès par compte » (le compte l'emporte sur le rôle).
+    /// Gardés 5 secondes : un changement s'applique sans reconnexion.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetRevocationsAsync(Guid subjectId, string role, CancellationToken ct = default)
+    {
+        var r = PlatformAccessCatalog.NormalizeRole(role);
+        if (string.Equals(r, KyntusAdminClaims.AdminRole, StringComparison.OrdinalIgnoreCase))
+            return await GetDeniedAsync(subjectId, ct);
+
+        var key = $"{CachePrefix}rev:{Interlocked.Read(ref _generation)}:{subjectId:N}:{r}";
+        if (cache.TryGetValue(key, out IReadOnlyList<string>? cached) && cached is not null)
+            return cached;
+
+        var lignesRole = (await db.IamPermissions.AsNoTracking()
+                .Where(p => p.Role == r)
+                .Select(p => new { p.Action, p.IsAllowed })
+                .ToListAsync(ct))
+            .Select(l => (l.Action, l.IsAllowed))
+            .ToList();
+        var lignesCompte = new List<(string Action, bool IsAllowed)>();
+        if (subjectId != Guid.Empty)
+            lignesCompte = (await db.IamUserPermissions.AsNoTracking()
+                    .Where(p => p.SubjectId == subjectId)
+                    .Select(p => new { p.Action, p.IsAllowed })
+                    .ToListAsync(ct))
+                .Select(l => (l.Action, l.IsAllowed))
+                .ToList();
+        var revoquees = AdminRestrictionRules.RevocationsExplicites(lignesRole, lignesCompte);
+        cache.Set(key, revoquees, Ttl);
+        return revoquees;
     }
 
     public async Task<IReadOnlyList<string>> GetDeniedAsync(Guid subjectId, CancellationToken ct = default)

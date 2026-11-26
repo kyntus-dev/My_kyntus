@@ -156,16 +156,18 @@ export class PlanningValidationComponent implements OnInit {
         this.planningUserId = u?.id ?? null;
         this.currentUserEmail = u?.email?.trim() ?? '';
         this.loadWeek();
-        this.loadSettings();
         this.loadPendingSummary();
       },
       error: () => {
         this.loadWeek();
-        this.loadSettings();
         this.loadPendingSummary();
       },
     });
-    void this.access.ensureLoaded().finally(() => this.cdr.detectChanges());
+    // v72 : réglages d'auto-génération lus seulement avec le droit « Générer le planning ».
+    void this.access.ensureLoaded().finally(() => {
+      if (this.canSeeAutoGenerateSettings) this.loadSettings();
+      this.cdr.detectChanges();
+    });
   }
 
   get canSeePendingBanner(): boolean {
@@ -174,7 +176,12 @@ export class PlanningValidationComponent implements OnInit {
   }
 
   get canSeeAutoGenerateSettings(): boolean {
-    return this.canSeePendingBanner;
+    return this.canSeePendingBanner && this.access.autorise('planning.generate', 'Configure');
+  }
+
+  /** v72 — « Générer / compléter » : droit « Générer le planning › Modifier » (contrôlé aussi par le serveur). */
+  get peutGenerer(): boolean {
+    return this.access.autorise('planning.generate', 'Act');
   }
 
   get isMailApiKeyMode(): boolean {
@@ -448,6 +455,7 @@ export class PlanningValidationComponent implements OnInit {
   }
 
   regenerate(): void {
+    if (!this.peutGenerer) return;
     this.generating = true;
     this.error = '';
     this.successMsg = '';

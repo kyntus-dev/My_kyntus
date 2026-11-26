@@ -8,11 +8,12 @@ import type {
   PlanningItJourDto,
   PlanningItMembreDto,
   PlanningItSemaineDto,
+  PlanningItSoldeDto,
   PlanningItStatut,
 } from '../../core/models/planning-it.models';
 import { KyntusToastService } from '../../shared/components/ui/kyntus-toast.service';
 import { libelleSemaine, semaineIso } from '../../shared/utils/semaine-iso';
-import { casesModifiees, cle, completude, copieSemaine, enteteJour, joursAffiches, lundiDe } from './planning-it.util';
+import { casesModifiees, cle, completude, copieSemaine, enteteJour, formatDuree, joursAffiches, lundiDe } from './planning-it.util';
 
 /** Rafraîchissement automatique : les saisies des collègues apparaissent sans recharger la page. */
 const RAFRAICHISSEMENT_MS = 15_000;
@@ -56,9 +57,24 @@ export class PlanningItComponent implements OnInit {
   readonly moi = computed(() => this.data()?.membres.find((m) => m.estMoi) ?? null);
   readonly synthese = computed(() => (this.data() ? completude(this.data()!, this.jours()) : { complets: 0, total: 0 }));
   readonly aujourdhui = new Date().toLocaleDateString('sv-SE');
+  readonly formatDuree = formatDuree;
+  /** v70 : solde signé « +02:10 » / « −01:30 ». */
+  readonly signe = (minutes: number | null | undefined): string => {
+    const m = Math.round(minutes ?? 0);
+    return m === 0 ? '00:00' : `${m > 0 ? '+' : '−'}${formatDuree(Math.abs(m))}`;
+  };
+
+  /** v67 — Heures sup. de l'année (acquises / récupérées / restantes), par membre. */
+  readonly soldes = signal<ReadonlyMap<number, PlanningItSoldeDto>>(new Map());
+  readonly anneeSoldes = computed(() => Number((this.data()?.du ?? lundiDe(this.decalage())).slice(0, 4)));
+  readonly monSolde = computed(() => {
+    const moi = this.moi();
+    return moi ? this.soldes().get(moi.userId) ?? null : null;
+  });
 
   ngOnInit(): void {
     this.load();
+    this.chargerSoldes();
     const timer = setInterval(() => {
       if (!this.saisieActive && document.visibilityState === 'visible') this.load(true);
     }, RAFRAICHISSEMENT_MS);
@@ -66,9 +82,38 @@ export class PlanningItComponent implements OnInit {
   }
 
   changerSemaine(delta: number): void {
+    const annee = this.anneeSoldes();
     this.decalage.set(delta === 0 ? 0 : this.decalage() + delta);
     this.data.set(null);
     this.load();
+    if (Number(lundiDe(this.decalage()).slice(0, 4)) !== annee) this.chargerSoldes();
+  }
+
+  /**
+   * v67 — Soldes d'heures sup. : lus à l'ouverture, au changement d'année et après chaque saisie
+   * (pas à chaque actualisation automatique : le calcul porte sur toute l'année).
+   */
+  chargerSoldes(): void {
+    const annee = Number(lundiDe(this.decalage()).slice(0, 4));
+    this.svc.soldes(annee).subscribe({
+      next: (r) => this.soldes.set(new Map(r.soldes.map((x) => [x.userId, x]))),
+      error: () => this.soldes.set(new Map()),
+    });
+  }
+
+  soldeDe(m: PlanningItMembreDto): PlanningItSoldeDto | null {
+    return this.soldes().get(m.userId) ?? null;
+  }
+
+  titreSolde(s: PlanningItSoldeDto): string {
+    const planifiees = s.recupPlanifieesMinutes ? ` (dont ${formatDuree(s.recupPlanifieesMinutes)} planifiées)` : '';
+    const periode = s.soldePeriodeMinutes != null
+      ? `Solde d’heures cumulé : ${this.signe(s.soldePeriodeMinutes)} (Récup prises déduites)`
+        + (s.recupPlanifieesPeriodeMinutes ? ` ; après les Récup planifiées : ${this.signe(s.soldePeriodeMinutes - s.recupPlanifieesPeriodeMinutes)}` : '')
+        + '. '
+      : '';
+    return periode + `Heures sup. ${this.anneeSoldes()} — acquises : ${formatDuree(s.acquisesMinutes)} · `
+      + `récupérées : ${formatDuree(s.recupereesMinutes)}${planifiees} · restantes : ${this.signe(s.restantesMinutes)}`;
   }
 
   load(silencieux = false): void {
@@ -99,6 +144,7 @@ export class PlanningItComponent implements OnInit {
   libelle(j: PlanningItJourDto): string {
     if (j.statut === 'Repos') return 'Repos';
     if (j.statut === 'Conge') return 'Congé';
+    if (j.statut === 'Recup') return 'Récup';
     if (!j.statut && j.ferie) return 'Férié';
     return j.arrivee ?? '';
   }
@@ -183,7 +229,11 @@ export class PlanningItComponent implements OnInit {
     // Affichage immédiat, annulé si le serveur refuse.
     this.patchJour(m.userId, j.jour, { statut, arrivee: statut === 'Travail' ? arrivee : null });
     this.svc.saisir({ userId: m.userId, jour: j.jour.slice(0, 10), statut, arrivee }).subscribe({
-      next: () => this.terminer(k),
+      next: () => {
+        this.terminer(k);
+        // v67 : une récupération ajoutée ou retirée change le solde d'heures sup.
+        if (statut === 'Recup' || avant.statut === 'Recup') this.chargerSoldes();
+      },
       error: (err) => {
         this.terminer(k);
         this.patchJour(m.userId, j.jour, avant);

@@ -39,8 +39,28 @@ public sealed class PointageOptions
     /// <summary>Arrivée dans ce délai après l'heure de planning : pas de retard. Au-delà, tout le retard compte.</summary>
     public int ToleranceMinutes { get; set; } = 5;
 
-    /// <summary>Deux badgeages plus proches que ce délai sont fusionnés (double passage du doigt).</summary>
-    public int DoubleBadgeSecondes { get; set; } = 120;
+    /// <summary>
+    /// Deux badgeages plus proches que ce délai, sur la même pointeuse, sont fusionnés (double passage
+    /// du doigt sur le même passage).
+    /// <para>
+    /// v65 : 45 s au lieu de 120 s. À 120 s, le retour d'une pause courte (une minute) était pris pour
+    /// un double passage et purement supprimé : la journée tombait à un nombre impair de pointages
+    /// (« pointage manquant »), production et présence non calculées. Un double passage du doigt tient
+    /// en quelques dizaines de secondes ; au-delà de <see cref="PauseMinimaleSecondes"/>, ce sont deux
+    /// passages distincts et les deux sont conservés. En complément, la fusion ne rend jamais le
+    /// nombre de pointages impair : un retour de pause n'est donc jamais perdu, quel que soit ce délai.
+    /// </para>
+    /// </summary>
+    public int DoubleBadgeSecondes { get; set; } = 45;
+
+    /// <summary>
+    /// v65 — Durée au-delà de laquelle deux badgeages successifs sont toujours deux passages réels
+    /// (sortie puis retour de pause), jamais un double passage du doigt : plafond appliqué à
+    /// <see cref="DoubleBadgeSecondes"/>, y compris si une installation garde l'ancienne valeur de
+    /// 120 s. Une pause plus courte reste une vraie pause dès lors que la supprimer déséquilibrerait
+    /// la journée : les deux pointages sont alors gardés et la pause comptée.
+    /// </summary>
+    public int PauseMinimaleSecondes { get; set; } = 45;
 
     /// <summary>Durée de pause retenue quand le planning du jour n'en précise pas (si <see cref="PauseSelonShift"/>).</summary>
     public int PauseParDefautMinutes { get; set; } = 60;

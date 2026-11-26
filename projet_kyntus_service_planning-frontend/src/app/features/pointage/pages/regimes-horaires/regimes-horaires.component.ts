@@ -17,6 +17,7 @@ import {
   resumeSemaine,
   type RegimeForm,
 } from '../../lib/regime.util';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 
 /**
  * Régimes horaires (Admin ; RH en lecture) : heures fixes par jour de semaine, pause autorisée,
@@ -32,6 +33,8 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RegimesHorairesComponent implements OnInit {
+  /** v72 — Droits « Accès par rôle / par compte » : une action n'apparaît que si le serveur l'accepte. */
+  readonly droits = inject(PlatformAccessService);
   private readonly svc = inject(RegimeHoraireService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(KyntusToastService);
@@ -43,7 +46,9 @@ export class RegimesHorairesComponent implements OnInit {
   readonly resumeSemaine = resumeSemaine;
   readonly productionHebdo = productionHebdo;
 
-  readonly estAdmin = signal(false);
+  private readonly roleAdmin = signal(false);
+  /** v72 — Créer / affecter / retirer : Admin ET « Régimes horaires › Configurer » (contrôlé par le serveur). */
+  readonly estAdmin = computed(() => this.roleAdmin() && this.droits.autorise('pointage.regimes', 'Configure'));
   readonly regimes = signal<RegimeHoraireDto[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
@@ -64,7 +69,8 @@ export class RegimesHorairesComponent implements OnInit {
   readonly totalAffectations = computed(() => this.regimes().reduce((n, r) => n + r.affectations.length, 0));
 
   ngOnInit(): void {
-    this.estAdmin.set(this.auth.getRole()?.trim().toLowerCase() === 'admin');
+    void this.droits.ensureLoaded();
+    this.roleAdmin.set(this.auth.getRole()?.trim().toLowerCase() === 'admin');
     this.load();
   }
 

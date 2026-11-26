@@ -5,7 +5,11 @@ using MediatR;
 
 namespace Conge.Application.Queries.GetHistoriqueRh;
 
-public record GetHistoriqueRhQuery(int Annee) : IRequest<IEnumerable<DemandeCongeDto>>;
+/// <param name="EmployeIds">
+/// v67 — Périmètre du lecteur : null = toute l'entreprise (Admin, RH, ou droit « Toute l'entreprise ») ;
+/// sinon, seulement les demandes de ces collaborateurs (équipe gérée).
+/// </param>
+public record GetHistoriqueRhQuery(int Annee, IReadOnlyCollection<Guid>? EmployeIds = null) : IRequest<IEnumerable<DemandeCongeDto>>;
 
 public class GetHistoriqueRhHandler : IRequestHandler<GetHistoriqueRhQuery, IEnumerable<DemandeCongeDto>>
 {
@@ -23,9 +27,10 @@ public class GetHistoriqueRhHandler : IRequestHandler<GetHistoriqueRhQuery, IEnu
     public async Task<IEnumerable<DemandeCongeDto>> Handle(GetHistoriqueRhQuery request, CancellationToken ct)
     {
         var demandes = await _demandeRepo.GetByAnneeAsync(request.Annee, ct);
+        var perimetre = request.EmployeIds is null ? null : request.EmployeIds.ToHashSet();
         var result = new List<DemandeCongeDto>();
 
-        foreach (var d in demandes)
+        foreach (var d in demandes.Where(d => perimetre is null || perimetre.Contains(d.EmployeId)))
         {
             var employe = await _employeRepo.GetByEmployeIdAsync(d.EmployeId, ct);
             string? supNom = null;
