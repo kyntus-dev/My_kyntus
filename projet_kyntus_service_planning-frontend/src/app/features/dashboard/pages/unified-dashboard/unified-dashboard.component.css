@@ -739,3 +739,46 @@ body.theme-dark .ud3-kpi-courbe polyline { stroke: #60a5fa; }
   font-size: 13px; font-weight: 600; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); }
 .ud3-voir-comme:hover { border-color: var(--ky-blue, #2563eb); color: var(--ky-blue, #2563eb); }
 .ud3-voir-comme .ud-ic { width: 16px; height: 16px; }
+
+/* ═══ v90 — Raccourcis juste sous « Vos indicateurs » : une rangée compacte, sans cadre en plus ═══ */
+.ud3-raccourcis { gap: 10px; }
+.ud3-raccourcis .ud2-tete-actions { display: inline-flex; align-items: center; gap: 12px; }
+.ud3-raccourcis .ud2-tuiles { grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 10px; }
+.ud3-raccourcis .ud2-tuile {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 11px;
+  min-height: 0;
+  height: 58px;
+  padding: 0 14px;
+  text-align: left;
+  background: var(--bg-card);
+  border-radius: 14px;
+}
+.ud3-raccourcis .ud2-tuile:hover { transform: translateY(-1px); }
+.ud3-raccourcis .ud2-tuile-icone { flex: none; width: 34px; height: 34px; margin: 0; }
+.ud3-raccourcis .ud2-tuile strong,
+.ud3-raccourcis .ud2-tuile small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ud3-raccourcis .ud2-tuile strong { font-size: 0.84rem; }
+.ud3-raccourcis .ud2-tuile small { font-size: 0.72rem; margin-top: 1px; }
+/* libellé et module empilés à droite de l'icône */
+.ud3-raccourcis .ud2-tuile { display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 11px; row-gap: 1px; align-content: center; }
+.ud3-raccourcis .ud2-tuile-icone { grid-row: 1 / span 2; }
+.ud3-raccourcis .ud2-ajout { max-width: 420px; }
+.ud3-raccourcis .ud3-discret { margin: 0; }
+
+/* Activité récente et Ma semaine côte à côte : les jours passent à la ligne proprement. */
+.ud3-deux > .ud-semaine .ud-jours { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+
+@media (max-width: 640px) {
+  /* Téléphone : une rangée qui défile horizontalement, sans empiler les raccourcis. */
+  .ud3-raccourcis .ud2-tuiles:not(.is-edition) {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ud3-raccourcis .ud2-tuiles:not(.is-edition) > .ud2-tuile-wrap { flex: 0 0 72%; scroll-snap-align: start; }
+}

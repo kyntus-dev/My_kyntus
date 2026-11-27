@@ -105,6 +105,50 @@
     }
   </section>
 
+  <!-- ── Raccourcis (v90) : juste sous les indicateurs, une rangée compacte, même présentation que « Vos indicateurs » ── -->
+  @if (!loadingKpis()) {
+    <section class="ud3-bloc ud3-raccourcis" aria-labelledby="ud-raccourcis-titre">
+        <div class="ud3-kpis-tete">
+          <h2 id="ud-raccourcis-titre" class="ud3-h2">Raccourcis</h2>
+          <span class="ud2-tete-actions">
+            @if (editionRaccourcis()) {
+              <button type="button" class="ud2-lien" (click)="raccourcisParDefaut()">Par défaut</button>
+            }
+            <button type="button" class="ud2-lien" (click)="basculerEditionRaccourcis()" [attr.aria-pressed]="editionRaccourcis()">
+              {{ editionRaccourcis() ? 'Terminer' : 'Personnaliser' }}
+            </button>
+          </span>
+        </div>
+        <div class="ud2-tuiles" [class.is-edition]="editionRaccourcis()">
+          @for (r of raccourcis(); track r.module + r.label; let i = $index) {
+            <div class="ud2-tuile-wrap">
+              <button type="button" class="ud2-tuile" [attr.data-i]="i" [attr.title]="r.label + ' — ' + r.module" (click)="ouvrirRaccourci(r)" [disabled]="editionRaccourcis()">
+                <span class="ud2-tuile-icone" [innerHTML]="svg(r.icone)"></span>
+                <strong>{{ r.label }}</strong>
+                <small>{{ r.module }}</small>
+              </button>
+              @if (editionRaccourcis() && r.page) {
+                <button type="button" class="ud2-tuile-retirer" (click)="retirerRaccourci(r)" [attr.aria-label]="'Retirer le raccourci ' + r.label">×</button>
+              }
+            </div>
+          } @empty {
+            <p class="ud3-discret">Aucun raccourci. « Personnaliser » pour en ajouter.</p>
+          }
+        </div>
+        @if (editionRaccourcis()) {
+          <label class="ud2-ajout">
+            <span>Ajouter une page de votre menu</span>
+            <select class="ky-input" (change)="ajouterDepuisListe($event)">
+              <option value="">Choisir une page…</option>
+              @for (p of pagesAjoutables(); track p.module + p.label) {
+                <option [value]="clePage(p)">{{ p.module }} › {{ p.label }}</option>
+              }
+            </select>
+          </label>
+        }
+      </section>
+  }
+
   <!-- Alertes (contrats, anomalies…) : seulement s'il y en a -->
   @if (!loadingKpis() && alerts().length) {
     <section class="ud2-alertes" aria-label="Alertes">
@@ -213,50 +257,9 @@
     </div>
   </div>
 
-  <!-- ── Raccourcis | Activité récente ──────────────────────────────────────────────────────── -->
+  <!-- ── Activité récente | Ma semaine ─────────────────────────────────────────────────────────── -->
   @if (!loadingKpis()) {
     <div class="ud3-deux">
-      <section class="ud3-carte" aria-labelledby="ud-raccourcis-titre">
-        <div class="ud3-carte-tete">
-          <h2 id="ud-raccourcis-titre">Raccourcis</h2>
-          <span class="ud2-tete-actions">
-            @if (editionRaccourcis()) {
-              <button type="button" class="ud2-lien" (click)="raccourcisParDefaut()">Par défaut</button>
-            }
-            <button type="button" class="ud2-bouton-sec" (click)="basculerEditionRaccourcis()" [attr.aria-pressed]="editionRaccourcis()">
-              {{ editionRaccourcis() ? 'Terminer' : 'Personnaliser' }}
-            </button>
-          </span>
-        </div>
-        <div class="ud2-tuiles" [class.is-edition]="editionRaccourcis()">
-          @for (r of raccourcis(); track r.module + r.label; let i = $index) {
-            <div class="ud2-tuile-wrap">
-              <button type="button" class="ud2-tuile" [attr.data-i]="i" (click)="ouvrirRaccourci(r)" [disabled]="editionRaccourcis()">
-                <span class="ud2-tuile-icone" [innerHTML]="svg(r.icone)"></span>
-                <strong>{{ r.label }}</strong>
-                <small>{{ r.module }}</small>
-              </button>
-              @if (editionRaccourcis() && r.page) {
-                <button type="button" class="ud2-tuile-retirer" (click)="retirerRaccourci(r)" [attr.aria-label]="'Retirer le raccourci ' + r.label">×</button>
-              }
-            </div>
-          } @empty {
-            <p class="ud3-discret">Aucun raccourci. « Personnaliser » pour en ajouter.</p>
-          }
-        </div>
-        @if (editionRaccourcis()) {
-          <label class="ud2-ajout">
-            <span>Ajouter une page de votre menu</span>
-            <select class="ky-input" (change)="ajouterDepuisListe($event)">
-              <option value="">Choisir une page…</option>
-              @for (p of pagesAjoutables(); track p.module + p.label) {
-                <option [value]="clePage(p)">{{ p.module }} › {{ p.label }}</option>
-              }
-            </select>
-          </label>
-        }
-      </section>
-
       <section class="ud3-carte" aria-labelledby="ud-activite-titre">
         <div class="ud3-carte-tete">
           <h2 id="ud-activite-titre">Activité récente</h2>
@@ -272,23 +275,23 @@
           <p class="ud3-discret">Aucune activité récente.</p>
         }
       </section>
+      <!-- Ma semaine (collaborateurs) -->
+      @if (planningPreview(); as preview) {
+        <section class="ud3-carte ud-semaine" aria-labelledby="ud-semaine-titre">
+          <div class="ud3-carte-tete"><h2 id="ud-semaine-titre">Ma semaine — {{ preview.weekCode }}</h2></div>
+          <div class="ud-jours">
+            @for (day of preview.days; track day.label) {
+              <div class="ud-jour" [class.off]="day.off">
+                <span>{{ day.label }}</span>
+                <strong>{{ day.shift }}</strong>
+              </div>
+            }
+          </div>
+        </section>
+      }
     </div>
   }
 
-  <!-- Ma semaine (collaborateurs) -->
-  @if (!loadingKpis() && planningPreview(); as preview) {
-    <section class="ud3-carte ud-semaine" aria-labelledby="ud-semaine-titre">
-      <div class="ud3-carte-tete"><h2 id="ud-semaine-titre">Ma semaine — {{ preview.weekCode }}</h2></div>
-      <div class="ud-jours">
-        @for (day of preview.days; track day.label) {
-          <div class="ud-jour" [class.off]="day.off">
-            <span>{{ day.label }}</span>
-            <strong>{{ day.shift }}</strong>
-          </div>
-        }
-      </div>
-    </section>
-  }
 </div>
 
 <!-- v88 — « Voir comme » (Super Admin) -->
