@@ -50,7 +50,7 @@ export const DASHBOARD_BY_CLUSTER: Record<RoleCluster, RoleDashboardConfig> = {
       'pendingCongesRh',
       'openReclamations',
       'contractAlerts',
-      'primeValidations',
+      // v91 : « Validations PRIME » retiré de l'accueil Admin / RH (5 indicateurs au plus).
     ],
     healthModules: ['planning', 'conges', 'prime', 'parrainage', 'documentation', 'communication'],
     actionSources: ['conge', 'reclamation', 'contract', 'parrainage', 'documentation', 'prime', 'formation'],
@@ -90,7 +90,7 @@ export const DASHBOARD_BY_CLUSTER: Record<RoleCluster, RoleDashboardConfig> = {
       'plannedDays',
       'employeePendingConges',
       'leaveBalance',
-      'enrolledFormations',
+      // v91 : « Formations actives » retiré de l'accueil Pilote / collaborateur (5 indicateurs au plus).
       'unreadNotifications',
     ],
     healthModules: ['planning', 'conges', 'formation', 'communication', 'qualite'],
@@ -129,11 +129,15 @@ export const DASHBOARD_BY_CLUSTER: Record<RoleCluster, RoleDashboardConfig> = {
 export function kpiKeysForRole(cluster: RoleCluster, role: string): GlobalKpiKey[] {
   const base = [...DASHBOARD_BY_CLUSTER[cluster].kpiKeys];
   if (cluster === 'manager' && role === 'RP') {
+    // v91 : « Validations PRIME pôle » retiré de l'accueil RP (il remplaçait « Validations PRIME »).
     const idx = base.indexOf('primeValidations');
-    if (idx >= 0) base[idx] = 'rpPrimePending';
+    if (idx >= 0) base.splice(idx, 1);
   }
   return base;
 }
+
+/** v91 — L'accueil affiche au plus 5 indicateurs (les premiers, dans l'ordre de priorité du profil). */
+export const MAX_INDICATEURS_ACCUEIL = 5;
 
 /**
  * v80 — Module du menu dont dépend chaque indicateur. Ses chiffres ne sont lus que si le compte voit
@@ -162,12 +166,18 @@ export const KPI_MODULE: Partial<Record<GlobalKpiKey, string>> = {
 };
 
 /** v80 — Indicateurs affichés : ceux dont le module est visible au compte (ordre conservé). */
-export function kpiKeysVisibles(keys: readonly GlobalKpiKey[], visibleModuleIds: readonly string[]): GlobalKpiKey[] {
+export function kpiKeysVisibles(
+  keys: readonly GlobalKpiKey[],
+  visibleModuleIds: readonly string[],
+  max: number = MAX_INDICATEURS_ACCUEIL,
+): GlobalKpiKey[] {
   const mods = new Set(visibleModuleIds);
-  return keys.filter((k) => {
-    const module = KPI_MODULE[k];
-    return !module || mods.has(module);
-  });
+  return keys
+    .filter((k) => {
+      const module = KPI_MODULE[k];
+      return !module || mods.has(module);
+    })
+    .slice(0, max);
 }
 
 export function actionSourcesForCluster(cluster: RoleCluster): KyntusNotificationSource[] {
