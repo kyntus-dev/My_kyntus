@@ -33,6 +33,7 @@ import { GlobalSearchComponent } from './components/global-search.component';
 import { CommandPaletteComponent } from './components/command-palette.component';
 import { KyntusPaletteService } from '../../core/navigation/kyntus-palette.service';
 import { KyntusDensiteService } from '../../core/theme/kyntus-densite.service';
+import { KyntusListesService } from '../../core/ui/kyntus-listes.service';
 import { ShellNotificationBadgeComponent } from '../../shared/shell-controls/notification-badge.component';
 import { ShellNotificationDropdownComponent } from '../../shared/shell-controls/notification-dropdown.component';
 import { ShellSettingsPanelComponent } from '../../shared/shell-controls/settings-panel.component';
@@ -132,6 +133,8 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   /** v82 — palette de commandes (Ctrl K) et densité d'affichage (appliquée dès le chargement du shell). */
   readonly palette = inject(KyntusPaletteService);
   readonly densite = inject(KyntusDensiteService);
+  /** v84 — barre de traitement (filtres par statut, recherche, compteur) sur les listes de toutes les pages. */
+  private readonly listes = inject(KyntusListesService);
   readonly notifHub = inject(KyntusNotificationHubService);
   readonly notifInit = inject(KyntusNotificationInitService);
   readonly shellUi = inject(KyntusShellUiService);
@@ -306,6 +309,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
 
   ngOnInit(): void {
+    this.listes.demarrer();
 
     const userStr = localStorage.getItem('user');
 

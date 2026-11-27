@@ -295,3 +295,59 @@ body.ky-compact .ks-content .ku-page { gap: 12px; }
   .ks-content a.ky-kpi-card:hover,
   .ks-content button.ky-kpi-card:hover { transform: none; }
 }
+
+/* ═══ 8. v84 — Barre de traitement des listes (toutes les pages) ══════════════════════════════
+ * Posée par KyntusListesService au-dessus de chaque tableau de données : filtres par statut avec
+ * compteurs, recherche, nombre de lignes. Affichage seulement. */
+.ks-content .ky-tt {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px;
+  margin: 0 0 12px;
+}
+.ks-content .ky-tt-puces { display: flex; flex-wrap: wrap; gap: 6px; min-height: 0; }
+.ks-content .ky-tt-puces:empty { display: none; }
+.ks-content .ky-tt-puce {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px;
+  border: 1px solid var(--border-color); border-radius: var(--ky-ctrl-rayon, 10px);
+  background: var(--bg-card); color: var(--text-primary);
+  font: 600 0.8rem var(--font-sans, 'Inter', sans-serif); cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.ks-content .ky-tt-puce span {
+  min-width: 18px; padding: 1px 7px; border-radius: 999px; background: var(--bg-input);
+  font-size: 0.7rem; font-weight: 700; text-align: center;
+}
+.ks-content .ky-tt-puce[data-ton='warn'] span { background: var(--warning-bg); color: var(--warning-text); }
+.ks-content .ky-tt-puce[data-ton='bad'] span { background: var(--danger-bg); color: var(--danger-text); }
+.ks-content .ky-tt-puce[data-ton='ok'] span { background: var(--success-bg); color: var(--success-text); }
+.ks-content .ky-tt-puce:hover { border-color: var(--ky-blue); }
+.ks-content .ky-tt-puce.is-on { background: var(--ky-blue); border-color: var(--ky-blue); color: #fff; }
+.ks-content .ky-tt-puce.is-on span { background: rgb(255 255 255 / 0.22); color: #fff; }
+.ks-content .ky-tt-droite { display: flex; align-items: center; gap: 12px; margin-left: auto; flex-wrap: nowrap; min-width: 0; }
+.ks-content .ky-tt-recherche {
+  display: flex; align-items: center; gap: 8px; min-height: 38px; width: min(300px, 100%); padding: 0 12px;
+  border: 1px solid var(--border-color); border-radius: var(--ky-ctrl-rayon, 10px); background: var(--bg-card); color: var(--text-muted);
+}
+.ks-content .ky-tt-recherche:focus-within { border-color: var(--ky-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ky-blue) 14%, transparent); }
+.ks-content .ky-tt-recherche svg { width: 15px; height: 15px; flex: none; }
+body .ks-content .ky-tt-recherche input[type='search'],
+body.theme-light .ks-content .ky-tt-recherche input[type='search']:not([type='checkbox']):not([type='radio']),
+body.theme-dark .ks-content .ky-tt-recherche input[type='search']:not([type='checkbox']):not([type='radio']) {
+  flex: 1; min-width: 0; height: 34px; padding: 0 !important; border: 0 !important; outline: 0 !important;
+  box-shadow: none !important; background: transparent !important; color: var(--text-primary); font: 500 0.84rem var(--font-sans, 'Inter', sans-serif);
+}
+.ks-content .ky-tt-compte { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+
+/* Statuts en pastille : seulement les cellules de texte simple (les badges existants sont gardés). */
+.ks-content td[data-ky-ton]:not(:has(span, div, svg, img)) { font-weight: 600; white-space: nowrap; }
+.ks-content td[data-ky-ton]:not(:has(span, div, svg, img))::before {
+  content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%;
+  vertical-align: middle; background: currentColor; opacity: 0.85;
+}
+.ks-content td[data-ky-ton='ok']:not(:has(span, div, svg, img)) { color: var(--success-text) !important; }
+.ks-content td[data-ky-ton='warn']:not(:has(span, div, svg, img)) { color: var(--warning-text) !important; }
+.ks-content td[data-ky-ton='bad']:not(:has(span, div, svg, img)) { color: var(--danger-text) !important; }
+.ks-content td[data-ky-ton='info']:not(:has(span, div, svg, img)) { color: var(--info-text) !important; }
+
+/* Lignes cochées : surlignées comme dans la maquette (toutes les listes à cases à cocher). */
+/* (!important : les garde-fous de kyntus-theme-contrast.css forcent le fond des cellules) */
+.ks-content table tbody tr:has(> td input[type='checkbox']:checked) > td { background: color-mix(in srgb, #8b5cf6 9%, var(--bg-card)) !important; }
