@@ -504,3 +504,156 @@ body.theme-dark .ky-tr-tiroir, body.theme-dark .ky-tr-tiroir-pied { background: 
 @media (prefers-reduced-motion: reduce) {
   .ky-tr-lot, .ky-tr-tiroir, .ky-tr-tiroir-fond { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   10. v89 — Cohérence de toute l'application (pages hors maquette : formulaires, fiches de détail,
+       plannings, calendriers, fenêtres, onglets, états vides). Un seul langage visuel pour les
+       variantes de classes héritées des modules (ky-, ku-, prime-, doc-, rp-, mdc-…).
+       Interface seule : aucune règle de comportement, aucun élément masqué ou ajouté.
+       Les styles propres à un écran restent prioritaires (même spécificité, chargés après).
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* 10.1 Cartes et sections : même arrondi, même bordure, même ombre partout. */
+.ks-content .gen-card,
+.ks-content .mdc-card,
+.ks-content .rp-detail-card,
+.ks-content .form-section,
+.ks-content .card {
+  border-radius: var(--ky-carte-rayon);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--ky-carte-ombre);
+}
+.ks-content .ku-card-head,
+.ks-content .modal-header { gap: 10px; }
+
+/* 10.2 Titres de section : même typographie. */
+.ks-content .section-heading,
+.ks-content .rp-section-label,
+.ks-content .form-section > h2,
+.ks-content .form-section > h3,
+.ks-content .gen-card > h3 {
+  font-family: var(--font-display, 'Space Grotesk', 'Inter', sans-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.ks-content .section-heading--sub { font-weight: 600; }
+.ks-content .section-hint,
+.ks-content .form-hint,
+.ks-content .field-hint { color: var(--text-muted); font-size: 12.5px; line-height: 1.45; }
+
+/* 10.3 Formulaires : libellés au-dessus, champs de même hauteur, même focus. */
+.ks-content .form-group > label,
+.ks-content .rp-form-group > label,
+.ks-content .ku-field > label,
+.ks-content .field > label,
+.ks-content .field-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+.ks-content .form-grid { gap: 14px 18px; }
+.ks-content :is(.form-group, .rp-form-group, .ku-field, .field) :is(input, select, textarea):not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+.ks-content .doc-field,
+.ks-content .filter-ctl {
+  border-radius: var(--ky-ctrl-rayon);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ks-content :is(.form-group, .rp-form-group, .ku-field, .field) :is(input, select):not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+.ks-content select.doc-field, .ks-content input.doc-field,
+.ks-content select.filter-ctl, .ks-content input.filter-ctl { min-height: 38px; }
+.ks-content :is(input, select, textarea):not([type='checkbox']):not([type='radio']):not([type='range']):focus-visible,
+.ks-content .ky-input:focus,
+.ks-content .doc-field:focus,
+.ks-content .filter-ctl:focus {
+  outline: none;
+  border-color: var(--ky-blue, #2563eb);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ky-blue, #2563eb) 18%, transparent);
+}
+.ks-content :is(input, select, textarea)::placeholder { color: var(--text-muted); opacity: .8; }
+.ks-content :is(input, select, textarea):disabled { opacity: .6; cursor: not-allowed; }
+.ks-content .form-actions,
+.ks-content .modal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.ks-content .required, .ks-content .req { color: var(--danger-text, #b91c1c); }
+
+/* 10.4 Boutons : toutes les familles partagent arrondi, hauteur, graisse, focus et état désactivé. */
+.ks-content :is(.btn, .btn-primary, .btn-outline, .btn-sm, .mdc-btn, .fa-btn, .frpq-btn, .ffi-btn, .ku-btn, .ky-btn-primary, .ky-btn-secondary, .ky-btn-danger, .ky-btn-ghost, .prime-btn-primary, .prime-btn-secondary) {
+  border-radius: var(--ky-ctrl-rayon);
+  font-weight: 600;
+}
+.ks-content :is(.btn, .btn-primary, .btn-outline, .mdc-btn, .fa-btn, .ku-btn, .ky-btn-primary, .ky-btn-secondary, .ky-btn-danger, .ky-btn-ghost, .prime-btn-primary, .prime-btn-secondary):focus-visible {
+  outline: 2px solid var(--ky-blue, #2563eb);
+  outline-offset: 2px;
+}
+.ks-content :is(.btn, .btn-primary, .btn-outline, .mdc-btn, .fa-btn, .ku-btn, .ky-btn-primary, .ky-btn-secondary, .ky-btn-danger, .ky-btn-ghost, .prime-btn-primary, .prime-btn-secondary):disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* 10.5 Tableaux hors écran de traitement : même cadre. */
+.ks-content .table-wrap,
+.ks-content .table-wrapper,
+.ks-content .ku-table-wrap {
+  border-radius: var(--ky-carte-rayon-sm);
+  border: 1px solid var(--border-color);
+  overflow-x: auto;
+}
+.ks-content .ku-table th,
+.ks-content .ky-table th { font-size: 12px; font-weight: 600; color: var(--text-muted); letter-spacing: .02em; }
+
+/* 10.6 Fenêtres (modales) : fond voilé et en-tête / pied comme le panneau de détail. */
+[class*='modal-backdrop'],
+[class*='modal-overlay'] {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.modal-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); }
+.modal-title { font-family: var(--font-display, 'Space Grotesk', 'Inter', sans-serif); font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); }
+.modal-footer { border-top: 1px solid var(--border-color); }
+.modal-close { border-radius: 10px; }
+.modal-close:focus-visible { outline: 2px solid var(--ky-blue, #2563eb); outline-offset: 2px; }
+
+/* 10.7 États vides : même encadré partout. */
+.ks-content .state-empty,
+.ks-content .rp-empty,
+.ks-content .empty-state,
+.ks-content .ku-empty {
+  border: 1px dashed var(--border-color);
+  border-radius: var(--ky-carte-rayon);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* 10.8 Onglets : même arrondi, même graisse et même focus clavier dans tous les modules. */
+.ks-content :is(.rp-tab, .ku-tab, .ky-tab, .tab-btn) { border-radius: var(--ky-ctrl-rayon); font-weight: 600; }
+.ks-content :is(.rp-tab, .ku-tab, .ky-tab, .tab-btn, [role='tab']):focus-visible { outline: 2px solid var(--ky-blue, #2563eb); outline-offset: 2px; }
+
+/* 10.9 Plannings et calendriers : en-têtes lisibles, jour courant et week-end repérables
+       (classes déjà posées par les écrans ; aucune donnée ni cellule modifiée). */
+.ks-content .pt-table th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.ks-content :is(td, th).is-today {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ky-blue, #2563eb) 45%, transparent);
+}
+
+/* 10.10 Fiches de détail : « libellé : valeur » de même ton partout (priorité minimale : :where). */
+:where(.ks-content) dt { color: var(--text-muted); font-weight: 600; }
+:where(.ks-content) dd { color: var(--text-primary); overflow-wrap: anywhere; }
+
+/* 10.11 Mouvement réduit : pas de transitions pour qui le demande. */
+@media (prefers-reduced-motion: reduce) {
+  .ks-content :is(input, select, textarea, .doc-field, .filter-ctl) { transition: none; }
+  [class*='modal-backdrop'], [class*='modal-overlay'] { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
