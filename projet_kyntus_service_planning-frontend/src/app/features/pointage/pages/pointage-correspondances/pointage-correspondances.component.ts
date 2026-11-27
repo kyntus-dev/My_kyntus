@@ -10,7 +10,8 @@ import type {
 } from '../../../../core/models/pointage.models';
 import { UserService } from '../../../users/services/user.service';
 import type { User } from '../../../users/users-module';
-import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
+import { KY_TRAITEMENT } from '../../../../shared/components/ky-traitement/ky-traitement.components';
+import type { KyCompteur, KyPuce } from '../../../../shared/components/ky-traitement/ky-traitement.util';
 import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
 import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -30,7 +31,7 @@ const STATUTS: Record<PointageCorrespondanceStatut, string> = {
 @Component({
   selector: 'app-pointage-correspondances',
   standalone: true,
-  imports: [CommonModule, FormsModule, KyntusPageHeaderComponent],
+  imports: [CommonModule, FormsModule, ...KY_TRAITEMENT],
   templateUrl: './pointage-correspondances.component.html',
   styleUrls: ['../pointage-suivi/pointage-suivi.component.css', './pointage-correspondances.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -75,6 +76,31 @@ export class PointageCorrespondancesComponent implements OnInit {
     for (const r of this.rows()) c[r.statut] = (c[r.statut] ?? 0) + 1;
     return c;
   });
+  // ── v86 : puces et compteurs de la maquette ─────────────────────────────────────────────
+  readonly pucesTr = computed<KyPuce[]>(() => {
+    const c = this.compte();
+    return [
+      { id: 'AValider', label: 'À traiter', n: c['AValider'] },
+      { id: 'Auto', label: 'Proposés', n: c['Auto'] },
+      { id: 'Valide', label: 'Validés', n: c['Valide'] },
+      { id: 'Ignore', label: 'Ignorés', n: c['Ignore'] },
+      { id: '', label: 'Tous', n: this.rows().length },
+    ];
+  });
+
+  readonly compteursTr = computed<KyCompteur[]>(() => {
+    const c = this.compte();
+    return [
+      { label: 'À traiter', valeur: c['AValider'], ton: 'warn' },
+      { label: 'Proposés par le nom', valeur: c['Auto'], ton: 'info' },
+      { label: 'Validés', valeur: c['Valide'], ton: 'ok' },
+    ];
+  });
+
+  tonTr(s: PointageCorrespondanceStatut): 'ok' | 'warn' | 'bad' | 'neutre' {
+    return s === 'Valide' ? 'ok' : s === 'AValider' ? 'warn' : s === 'Auto' ? 'warn' : 'neutre';
+  }
+
   readonly affichees = computed(() => {
     const q = this.recherche().trim().toLowerCase();
     return this.rows().filter((r) =>

@@ -74,8 +74,9 @@
 .ks-notif-list-wrap {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-radius: var(--ky-carte-rayon, 14px) /* v81 */;
   overflow: hidden;
+  box-shadow: var(--ky-carte-ombre, none); /* v81 */
 }
 
 .ks-notif-empty-state {

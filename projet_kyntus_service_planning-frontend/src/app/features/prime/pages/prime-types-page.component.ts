@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div class="flex justify-between items-center">
+        <div class="ky-entete flex justify-between items-center">
           <div>
             <h1 class="prime-page-title">Types de prime</h1>
             <p class="text-muted mt-1">Gérer les catégories et définitions de primes.</p>

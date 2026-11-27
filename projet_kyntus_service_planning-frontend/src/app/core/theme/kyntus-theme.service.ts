@@ -2,6 +2,15 @@ import { Injectable, signal } from '@angular/core';
 
 export type KyntusTheme = 'light' | 'dark';
 
+/**
+ * v80 — Thème courant, partagé hors injection : les graphiques (ECharts) le lisent dans leurs
+ * `computed()` pour se redessiner aux couleurs du thème dès la bascule, sans recharger la page.
+ */
+export const kyntusThemeCourant = signal<KyntusTheme>('light');
+
+/** v80 — Couleur de la barre du navigateur mobile (même fond que l'en-tête). */
+export const KYNTUS_THEME_COLOR: Record<KyntusTheme, string> = { light: '#f8fafc', dark: '#0a1526' };
+
 export const KYNTHUS_THEME_STORAGE_KEY = 'kyntus_theme';
 /** Cookie partagé entre auth (:8201) et planning (:8200) sur le même host. */
 export const KYNTHUS_THEME_COOKIE = 'kyntus_theme';
@@ -48,7 +57,8 @@ export function resolveInitialTheme(): KyntusTheme {
 
 @Injectable({ providedIn: 'root' })
 export class KyntusThemeService {
-  readonly theme = signal<KyntusTheme>('light');
+  readonly theme = kyntusThemeCourant;
+  private finBascule: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     if (typeof document !== 'undefined') {
@@ -57,10 +67,27 @@ export class KyntusThemeService {
   }
 
   toggleTheme(): void {
-    this.applyTheme(this.theme() === 'light' ? 'dark' : 'light');
+    this.basculer(this.theme() === 'light' ? 'dark' : 'light');
   }
 
   setTheme(next: KyntusTheme): void {
+    this.basculer(next);
+  }
+
+  /**
+   * v80 — Bascule demandée par l'utilisateur : fondu de 0,3 s (classe posée le temps de la bascule
+   * seulement), puis même application et même mémorisation qu'avant (cookie + localStorage).
+   */
+  private basculer(next: KyntusTheme): void {
+    if (typeof document !== 'undefined' && next !== this.theme()) {
+      const html = document.documentElement;
+      html.classList.add('ky-theme-bascule');
+      if (this.finBascule) clearTimeout(this.finBascule);
+      this.finBascule = setTimeout(() => {
+        html.classList.remove('ky-theme-bascule');
+        this.finBascule = null;
+      }, 350);
+    }
     this.applyTheme(next);
   }
 
@@ -75,8 +102,14 @@ export class KyntusThemeService {
 
     const root = document.documentElement;
     root.classList.toggle('dark', theme === 'dark');
+    // v80 — La barre du navigateur mobile suit le thème choisi (et non plus celui du système).
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', KYNTUS_THEME_COLOR[theme]));
 
-    localStorage.setItem(KYNTHUS_THEME_STORAGE_KEY, theme);
+    try {
+      localStorage.setItem(KYNTHUS_THEME_STORAGE_KEY, theme);
+    } catch {
+      /* navigation privée : le cookie garde le choix */
+    }
     writeThemeCookie(theme);
   }
 }

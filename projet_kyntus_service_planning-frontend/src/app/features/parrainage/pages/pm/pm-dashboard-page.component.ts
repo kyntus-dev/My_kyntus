@@ -11,7 +11,7 @@ import { getScopedReferrals } from '../../lib/scoping';
   imports: [KpiStatsComponent],
   template: `
     <section class="flex-1 space-y-6">
-      <div>
+      <div class="ky-entete">
         <h1 class="prime-page-title">Tableau de bord équipe</h1>
         <p class="ky-page-subtitle">Vue d'ensemble des parrainages de votre équipe.</p>
       </div>

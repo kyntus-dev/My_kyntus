@@ -139,7 +139,7 @@
 .pcr-modal {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--ky-carte-rayon, 12px) /* v81 */;
   padding: 1.25rem;
   width: min(400px, 92vw);
   max-height: 85vh;
@@ -194,9 +194,10 @@
 .gen-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--ky-carte-rayon, 12px) /* v81 */;
   padding: 16px;
   margin-bottom: 16px;
+  box-shadow: var(--ky-carte-ombre, none); /* v81 */
 }
 .gen-card h3 {
   margin: 0 0 12px;

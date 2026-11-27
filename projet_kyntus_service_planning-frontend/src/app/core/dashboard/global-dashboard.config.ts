@@ -18,6 +18,8 @@ export function resolveRoleCluster(role: string): RoleCluster {
   // Cellule IT : accueil « Mon espace », comme un collaborateur.
   if (r === 'pilote' || r === 'employee' || r === 'ingenieur' || r === 'supportit') return 'employee';
   if (r === 'audit') return 'audit';
+  // v82 : la Comptabilité a son accueil (primes validées, parrainages à payer) au lieu du tableau générique.
+  if (r === 'comptabilite') return 'compta';
   return 'unknown';
 }
 
@@ -107,6 +109,13 @@ export const DASHBOARD_BY_CLUSTER: Record<RoleCluster, RoleDashboardConfig> = {
     healthModules: ['prime', 'parrainage', 'documentation', 'qualite'],
     actionSources: ['prime', 'parrainage', 'documentation', 'reclamation'],
   },
+  compta: {
+    title: 'Paie et paiements',
+    subtitle: 'Export paie, primes validées et parrainages à payer',
+    kpiKeys: ['parrainageReadyPay', 'primeValidations', 'unreadNotifications'],
+    healthModules: ['prime', 'parrainage', 'documentation'],
+    actionSources: ['prime', 'parrainage', 'documentation'],
+  },
   unknown: {
     title: 'Tableau de bord',
     subtitle: 'Vue d\'ensemble de votre activité',
@@ -124,6 +133,41 @@ export function kpiKeysForRole(cluster: RoleCluster, role: string): GlobalKpiKey
     if (idx >= 0) base[idx] = 'rpPrimePending';
   }
   return base;
+}
+
+/**
+ * v80 — Module du menu dont dépend chaque indicateur. Ses chiffres ne sont lus que si le compte voit
+ * ce module (voir buildMetricRequests) : sans lui, la carte afficherait un « 0 » ou un « — » trompeur.
+ * Indicateurs sans module : toujours affichés, comme avant.
+ */
+export const KPI_MODULE: Partial<Record<GlobalKpiKey, string>> = {
+  pendingCongesRh: 'conges',
+  managerPendingConges: 'conges',
+  employeePendingConges: 'conges',
+  leaveBalance: 'conges',
+  contractAlerts: 'rh',
+  primeValidations: 'prime',
+  rpPrimePending: 'prime',
+  supervisorPrimePending: 'prime',
+  primeAnomalies: 'prime',
+  parrainageSubmitted: 'parrainage',
+  parrainageReadyPay: 'parrainage',
+  parrainageAudit: 'parrainage',
+  docPending: 'documentation',
+  auditDocEvents: 'documentation',
+  formationsPending: 'formation',
+  enrolledFormations: 'formation',
+  activeWeek: 'planning',
+  plannedDays: 'planning',
+};
+
+/** v80 — Indicateurs affichés : ceux dont le module est visible au compte (ordre conservé). */
+export function kpiKeysVisibles(keys: readonly GlobalKpiKey[], visibleModuleIds: readonly string[]): GlobalKpiKey[] {
+  const mods = new Set(visibleModuleIds);
+  return keys.filter((k) => {
+    const module = KPI_MODULE[k];
+    return !module || mods.has(module);
+  });
 }
 
 export function actionSourcesForCluster(cluster: RoleCluster): KyntusNotificationSource[] {

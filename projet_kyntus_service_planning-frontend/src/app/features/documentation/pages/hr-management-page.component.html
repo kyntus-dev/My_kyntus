@@ -1,179 +1,158 @@
+<!--
+  v86 — File des demandes RH (documents) : écran de traitement de la maquette. Actions et droits inchangés :
+  chaque bouton n'apparaît que si le serveur l'autorise (allowedActions) ; décisions groupées = mêmes appels.
+-->
 @if (role$ | async; as role) {
-  <div class="space-y-6">
-    <app-kyntus-page-header
-      title="File des demandes RH"
-      subtitle="Toutes les demandes non encore générées sont visibles ici, y compris les nouvelles demandes à traiter."
-    />
+  <div class="ky-tr-page">
+    <ky-tr-entete ariane="Documents" titre="File des demandes RH"
+                  sousTitre="Toutes les demandes non encore générées, y compris les nouvelles demandes à traiter."
+                  [compteurs]="compteurs(role)" (actualiser)="reloadQueue()">
+      <button type="button" class="ky-tr-btn" style="align-self:center;height:40px" (click)="goGeneratedHistory()">Historique des documents</button>
+    </ky-tr-entete>
+
+    <div class="ky-tr-outils">
+      <ky-tr-puces [puces]="puces" [actif]="filtre" (choix)="choisir($event)" libelle="Filtrer les demandes"></ky-tr-puces>
+      <div class="ky-tr-outils-droite">
+        <label class="ky-tr-recherche">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <input type="search" placeholder="Rechercher un pilote ou un document" [(ngModel)]="recherche" (ngModelChange)="selection.garder(cochables())" aria-label="Rechercher" />
+        </label>
+      </div>
+    </div>
 
     @if (loading) {
       <div class="card-navy p-4 space-y-3" aria-busy="true" aria-label="Chargement de la file">
         <div class="ky-skeleton ky-skeleton-title"></div>
         <div class="ky-skeleton ky-skeleton-text"></div>
         <div class="ky-skeleton ky-skeleton-text"></div>
-        <div class="ky-skeleton ky-skeleton-text"></div>
       </div>
     } @else if (error) {
       <app-kyntus-error-state [message]="error" retryLabel="Réessayer" (retry)="reloadQueue()" />
-    } @else if (visibleRequests().length === 0) {
+    } @else if (lignes().length === 0) {
       <app-kyntus-empty-state
-        title="Aucune demande en attente"
-        description="Aucune demande RH n’est en attente de traitement pour le moment."
+        title="Aucune demande"
+        description="Aucune demande ne correspond à ce filtre pour le moment."
       />
     } @else {
-    <div class="card-navy overflow-hidden">
-      <table class="w-full text-left border-collapse">
-        <thead>
-          <tr class="bg-card/50 border-b border-default">
-            <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase tracking-wider">Pilote</th>
-            <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase tracking-wider">Document</th>
-            <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase tracking-wider">Date</th>
-            <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase tracking-wider">Statut</th>
-            <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase tracking-wider text-right">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-default">
-          @for (req of visibleRequests(); track req.internalId) {
-            <tr class="hover:bg-input/30 transition-colors">
-              <td class="px-6 py-4">
-                <div class="flex items-center gap-3">
-                  <div
-                    class="w-8 h-8 rounded-full bg-card flex items-center justify-center text-xs font-bold text-blue-400 border border-default"
-                  >
-                    {{ initials(employeeDisplayName(req)) }}
-                  </div>
-                  <div>
-                    <p class="text-sm font-semibold text-primary">{{ employeeDisplayName(req) }}</p>
-                  </div>
-                </div>
-              </td>
-              <td class="px-6 py-4">
-                <span class="text-sm text-primary">{{ requestDocumentType(req) }}</span>
-              </td>
-              <td class="px-6 py-4 text-sm text-muted">{{ req.requestDate }}</td>
-              <td class="px-6 py-4">
-                <app-status-badge [status]="req.status"></app-status-badge>
-              </td>
-              <td class="px-6 py-4 text-right align-top">
-                <div class="flex flex-col items-end gap-2">
-                  @if (req.reason?.trim() || req.complementaryComments?.trim()) {
-                    <div
-                      class="w-full max-w-md rounded-lg border border-blue-900/35 bg-blue-950/25 p-2.5 text-left text-[11px] leading-snug text-primary"
-                    >
-                      @if (req.reason?.trim()) {
-                        <p class="font-semibold text-muted">Motif de la demande</p>
-                        <p class="mt-0.5 whitespace-pre-wrap text-primary">{{ req.reason!.trim() }}</p>
-                      }
-                      @if (req.complementaryComments?.trim()) {
-                        <p [class]="req.reason?.trim() ? 'mt-2 font-semibold text-muted' : 'font-semibold text-muted'">
-                          Commentaires complémentaires (pilote)
-                        </p>
-                        <p class="mt-0.5 whitespace-pre-wrap text-primary">{{ req.complementaryComments!.trim() }}</p>
-                      }
-                    </div>
-                  }
-                  <div class="flex flex-wrap items-center justify-end gap-2">
-                    @if (allowed(req, 'validate')) {
-                      <button
-                        type="button"
-                        class="inline-flex items-center justify-center rounded-lg border border-sky-500/50 bg-sky-500/10 px-3 py-2 text-sky-600 dark:text-sky-300 transition-all hover:bg-sky-500/20 disabled:opacity-40"
-                        title="Vérifier la demande"
-                        [disabled]="busyWorkflowId === req.internalId"
-                        (click)="validateRequest(req)"
-                      >
-                        @if (busyWorkflowId === req.internalId) {
-                          <span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
-                        } @else {
-                          <app-doc-icon name="shield-check" klass="w-4 h-4"></app-doc-icon>
-                        }
-                      </button>
-                    }
-                    @if (allowed(req, 'approve')) {
-                      <button
-                        type="button"
-                        class="inline-flex items-center justify-center rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-3 py-2 text-[var(--success-text)] transition-all hover:border-[var(--success)] disabled:opacity-40"
-                        title="Approuver la demande"
-                        [disabled]="busyWorkflowId === req.internalId"
-                        (click)="approveRequest(req)"
-                      >
-                        @if (busyWorkflowId === req.internalId) {
-                          <span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
-                        } @else {
-                          <app-doc-icon name="check-circle-2" klass="w-4 h-4"></app-doc-icon>
-                        }
-                      </button>
-                    }
-                    @if (allowed(req, 'reject')) {
-                      <button
-                        type="button"
-                        class="inline-flex items-center justify-center rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2 text-[var(--danger-text)] transition-all hover:border-[var(--danger)] disabled:opacity-40"
-                        title="Refuser la demande"
-                        [disabled]="busyWorkflowId === req.internalId"
-                        (click)="startReject(req)"
-                      >
-                        <app-doc-icon name="x-circle" klass="w-4 h-4"></app-doc-icon>
-                      </button>
-                    }
-                    @if (canGenerate(role, req)) {
-                      <button
-                        type="button"
-                        class="ky-btn-primary px-3 py-2 text-xs min-w-0 whitespace-nowrap disabled:opacity-40"
-                        [disabled]="busyGenerateId === req.internalId"
-                        title="Ouvrir la génération du document"
-                        (click)="generateDocument(req)"
-                      >
-                        @if (busyGenerateId === req.internalId) {
-                          <span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
-                          <span>Ouverture...</span>
-                        } @else {
-                          <app-doc-icon name="file-edit" klass="w-3 h-3"></app-doc-icon>
-                          <span>Generer</span>
-                        }
-                      </button>
-                    }
-                  </div>
-                  @if (rejectingFor?.internalId === req.internalId) {
-                    <div class="w-full max-w-xs text-left rounded-lg border border-default bg-input/80 p-3 space-y-2">
-                      <label class="text-[11px] text-muted" for="rej-reason-{{ req.internalId }}">Motif de rejet</label>
-                      <textarea
-                        id="rej-reason-{{ req.internalId }}"
-                        name="rejectReason"
-                        rows="2"
-                        class="w-full text-xs bg-app border border-default rounded p-2 text-primary"
-                        [(ngModel)]="rejectReason"
-                        placeholder="Obligatoire"
-                      ></textarea>
-                      <div class="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          class="whitespace-nowrap rounded-lg border border-default px-3 py-2 text-xs font-semibold text-primary hover:bg-input"
-                          [disabled]="busyWorkflowId === req.internalId"
-                          (click)="cancelReject()"
-                        >
-                          Annuler
-                        </button>
-                        <button
-                          type="button"
-                          class="ky-btn-danger inline-flex items-center gap-2 whitespace-nowrap px-3 py-2 text-xs disabled:opacity-40"
-                          [disabled]="busyWorkflowId === req.internalId || !rejectReason.trim()"
-                          (click)="confirmReject()"
-                        >
-                          @if (busyWorkflowId === req.internalId) {
-                            <span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
-                          }
-                          <span>Confirmer le rejet</span>
-                        </button>
-                      </div>
-                    </div>
-                  }
-                </div>
-              </td>
+      <div class="ky-tr-table-wrap" data-ky-no-liste>
+        <table class="ky-tr-table" data-ky-no-liste>
+          <thead>
+            <tr>
+              <th class="ky-tr-case"><input type="checkbox" [checked]="selection.toutCoche(cochables())" [disabled]="!cochables().length"
+                     (change)="selection.basculerTout(cochables())" aria-label="Tout sélectionner" /></th>
+              <th>Pilote</th><th>Document</th><th>Date</th><th>Statut</th>
+              <th class="ky-tr-decision">Décision</th>
             </tr>
-          }
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            @for (req of lignes(); track req.internalId) {
+              <tr [class.is-coche]="selection.has(req.internalId)">
+                <td class="ky-tr-case">
+                  @if (actionnable(req)) {
+                    <input type="checkbox" [checked]="selection.has(req.internalId)" (change)="selection.basculer(req.internalId)"
+                           [attr.aria-label]="'Sélectionner ' + employeeDisplayName(req)" />
+                  }
+                </td>
+                <td>
+                  <button type="button" class="ky-tr-personne" (click)="detail = req">
+                    <ky-tr-avatar [nom]="employeeDisplayName(req)" [cle]="req.employeeId || req.internalId"></ky-tr-avatar>
+                    <span><strong>{{ employeeDisplayName(req) }}</strong><small>{{ req.reason?.trim() || 'Sans motif' }}</small></span>
+                  </button>
+                </td>
+                <td class="ky-tr-double"><strong>{{ requestDocumentType(req) }}</strong>
+                  @if (req.documentTemplateName) { <small>{{ req.documentTemplateName }}</small> }
+                </td>
+                <td class="ky-tr-muted">{{ req.requestDate }}</td>
+                <td><app-status-badge [status]="req.status"></app-status-badge></td>
+                <td class="ky-tr-decision">
+                  @if (allowed(req, 'reject')) {
+                    <button type="button" class="ky-tr-btn ky-tr-btn--refus" [disabled]="busyWorkflowId === req.internalId"
+                            (click)="detail = req; startReject(req)">Refuser</button>
+                  }
+                  @if (allowed(req, 'validate')) {
+                    <button type="button" class="ky-tr-btn" [disabled]="busyWorkflowId === req.internalId" (click)="validateRequest(req)">
+                      {{ busyWorkflowId === req.internalId ? '…' : 'Vérifier' }}
+                    </button>
+                  }
+                  @if (allowed(req, 'approve')) {
+                    <button type="button" class="ky-tr-btn ky-tr-btn--ok" [disabled]="busyWorkflowId === req.internalId" (click)="approveRequest(req)">
+                      {{ busyWorkflowId === req.internalId ? '…' : 'Approuver' }}
+                    </button>
+                  }
+                  @if (canGenerate(role, req)) {
+                    <button type="button" class="ky-tr-btn ky-tr-btn--ok" [disabled]="busyGenerateId === req.internalId" (click)="generateDocument(req)">
+                      {{ busyGenerateId === req.internalId ? 'Ouverture…' : 'Générer' }}
+                    </button>
+                  }
+                  @if (!actionnable(req) && !canGenerate(role, req)) {
+                    <button type="button" class="ky-tr-btn" (click)="detail = req">Voir</button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="ky-tr-note">Cliquez sur un nom pour le détail ; cochez plusieurs lignes pour décider en une fois.</p>
     }
+
+    <ky-tr-lot [nombre]="selection.taille" [enCours]="enCoursLot"
+               (vider)="selection.vider()" (valider)="validerSelection()" (refuser)="refuserSelection()"></ky-tr-lot>
+
+    <ky-tr-tiroir [ouvert]="!!detail" [titre]="detail ? employeeDisplayName(detail) : ''" [cleAvatar]="detail?.employeeId || detail?.internalId"
+                  [sousTitre]="detail ? requestDocumentType(detail) : ''" (fermer)="detail = null; cancelReject()">
+      @if (detail; as d) {
+        <div class="ky-tr-tuiles">
+          <span><small>Document</small><b>{{ requestDocumentType(d) }}</b></span>
+          <span><small>Demandé le</small><b>{{ d.requestDate }}</b></span>
+          <span><small>Statut</small><app-status-badge [status]="d.status"></app-status-badge></span>
+        </div>
+        <div class="ky-tr-champs">
+          @if (d.documentTemplateName) { <p><small>Modèle choisi</small>{{ d.documentTemplateName }}</p> }
+          <p><small>Motif de la demande</small><span style="white-space:pre-wrap">{{ d.reason?.trim() || '—' }}</span></p>
+          @if (d.complementaryComments?.trim()) {
+            <p><small>Commentaires complémentaires (pilote)</small><span style="white-space:pre-wrap">{{ d.complementaryComments!.trim() }}</span></p>
+          }
+          @if (d.rejectionReason) { <p><small>Motif du rejet</small>{{ d.rejectionReason }}</p> }
+        </div>
+        <section>
+          <h4>Historique</h4>
+          <ol class="ky-tr-histo">
+            <li><span>Demande créée</span><small>{{ d.requestDate }}</small></li>
+            @if (d.decidedAt) { <li><span>Décision</span><small>{{ d.decidedAt | date:'EEEE d MMMM, HH:mm' }}</small></li> }
+            @if (d.generatedAt) { <li><span>Document généré</span><small>{{ d.generatedAt | date:'EEEE d MMMM, HH:mm' }}</small></li> }
+            @if (actionnable(d)) { <li class="is-attente"><span>En attente de votre décision</span></li> }
+          </ol>
+        </section>
+        @if (rejectingFor?.internalId === d.internalId) {
+          <div class="ky-tr-champs">
+            <label class="ky-tr-muted" for="rej-reason-tiroir" style="font-size:12px">Motif de rejet (obligatoire)</label>
+            <textarea id="rej-reason-tiroir" name="rejectReason" rows="3" class="ky-input" [(ngModel)]="rejectReason" placeholder="Obligatoire"></textarea>
+          </div>
+        }
+      }
+      @if (detail && (actionnable(detail) || canGenerate(role, detail))) {
+        <ng-container kyTrPied>
+          @if (rejectingFor?.internalId === detail.internalId) {
+            <button type="button" class="ky-tr-btn ky-tr-btn--lg" (click)="cancelReject()">Annuler</button>
+            <button type="button" class="ky-tr-btn ky-tr-btn--refus ky-tr-btn--lg" [disabled]="busyWorkflowId === detail.internalId || !rejectReason.trim()"
+                    (click)="confirmReject()">Confirmer le rejet</button>
+          } @else {
+            @if (allowed(detail, 'reject')) {
+              <button type="button" class="ky-tr-btn ky-tr-btn--refus ky-tr-btn--lg" (click)="startReject(detail)">Refuser</button>
+            }
+            @if (allowed(detail, 'validate')) {
+              <button type="button" class="ky-tr-btn ky-tr-btn--lg" [disabled]="busyWorkflowId === detail.internalId" (click)="validateRequest(detail)">Vérifier</button>
+            }
+            @if (allowed(detail, 'approve')) {
+              <button type="button" class="ky-tr-btn ky-tr-btn--ok ky-tr-btn--lg" [disabled]="busyWorkflowId === detail.internalId" (click)="approveRequest(detail)">Approuver</button>
+            }
+            @if (canGenerate(role, detail)) {
+              <button type="button" class="ky-tr-btn ky-tr-btn--ok ky-tr-btn--lg" (click)="generateDocument(detail)">Générer le document</button>
+            }
+          }
+        </ng-container>
+      }
+    </ky-tr-tiroir>
   </div>
 }

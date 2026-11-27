@@ -151,8 +151,8 @@ import type { GlobalActionItem } from '../../../core/dashboard/global-dashboard.
       flex-shrink: 0;
       padding: 0.4rem 0.75rem;
       border-radius: 0.375rem;
-      border: 1px solid var(--ky-accent-border, color-mix(in srgb, #3b82f6 28%, #e2e8f0));
-      background: var(--ky-accent-muted, color-mix(in srgb, #3b82f6 10%, #fff));
+      border: 1px solid var(--ky-accent-border, color-mix(in srgb, #3b82f6 28%, var(--border-color, #e2e8f0)));
+      background: var(--ky-accent-muted, color-mix(in srgb, #3b82f6 10%, var(--bg-card, #fff)));
       color: var(--ky-accent, var(--ky-blue));
       font-size: 0.6875rem;
       font-weight: 600;

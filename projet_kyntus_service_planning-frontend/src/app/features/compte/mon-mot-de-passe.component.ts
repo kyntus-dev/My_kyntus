@@ -73,12 +73,12 @@ import { formatHttpErrorMessage } from '../../core/lib/http-error-message.util';
     .mdp-alerte--erreur {
       background: color-mix(in srgb, #dc2626 10%, var(--bg-card));
       border: 1px solid color-mix(in srgb, #dc2626 35%, var(--border-color));
-      color: #b91c1c;
+      color: var(--kyd-red, #b91c1c);
     }
     .mdp-alerte--ok {
       background: color-mix(in srgb, #16a34a 10%, var(--bg-card));
       border: 1px solid color-mix(in srgb, #16a34a 35%, var(--border-color));
-      color: #15803d;
+      color: var(--kyd-green, #15803d);
     }
   `],
 })

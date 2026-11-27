@@ -16,7 +16,7 @@
 .stat {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-card, 0.65rem);
+  border-radius: var(--ky-carte-rayon, var(--radius-card, 0.65rem));
   padding: 0.85rem 1rem;
   display: flex;
   flex-direction: column;
@@ -29,14 +29,17 @@
 }
 
 .stat-val {
-  font-size: 1.45rem;
-  font-weight: 750;
+  font-size: 1.75rem;
+  font-weight: 700;
   line-height: 1.1;
   color: var(--text-primary);
+  font-family: var(--font-display, 'Space Grotesk', sans-serif); /* v81 */
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-lbl {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -241,7 +244,7 @@
 .mi-badge--exact {
   background: color-mix(in srgb, #16a34a 14%, var(--bg-card));
   border-color: color-mix(in srgb, #16a34a 40%, var(--border-color));
-  color: #15803d;
+  color: var(--kyd-green, #15803d);
 }
 
 .mi-badge--probable {
@@ -253,7 +256,7 @@
 .mi-badge--ambigu {
   background: color-mix(in srgb, #d97706 15%, var(--bg-card));
   border-color: color-mix(in srgb, #d97706 40%, var(--border-color));
-  color: #b45309;
+  color: var(--kyd-amber, #b45309);
 }
 
 .mi-badge--introuvable,
@@ -267,7 +270,7 @@
 .mi-badge--invalide {
   background: color-mix(in srgb, #dc2626 12%, var(--bg-card));
   border-color: color-mix(in srgb, #dc2626 38%, var(--border-color));
-  color: #b91c1c;
+  color: var(--kyd-red, #b91c1c);
 }
 
 /* ── Actions ── */
@@ -294,7 +297,7 @@
 .mi-conflit {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #b91c1c;
+  color: var(--kyd-red, #b91c1c);
 }
 
 .mi-note {
@@ -363,7 +366,7 @@
 .alert-error {
   background: color-mix(in srgb, #dc2626 10%, var(--bg-card));
   border: 1px solid color-mix(in srgb, #dc2626 35%, var(--border-color));
-  color: #b91c1c;
+  color: var(--kyd-red, #b91c1c);
 }
 
 .btn-sm {
@@ -375,6 +378,6 @@
 .alert-info {
   background: color-mix(in srgb, #0ea5e9 10%, var(--bg-card));
   border: 1px solid color-mix(in srgb, #0ea5e9 35%, var(--border-color));
-  color: #0369a1;
+  color: var(--kyd-sky, #0369a1);
 }
 

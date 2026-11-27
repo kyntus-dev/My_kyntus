@@ -38,7 +38,8 @@ export class PrimeCardComponent {
 
   get cardClass(): string {
     return cn(
-      'bg-card border border-default rounded-xl shadow-sm overflow-hidden min-w-0 w-full',
+      // v81 : « ky-prime-carte » = carte de la maquette (rayon 18 px, ombre douce), voir kyntus-maquette.css.
+      'ky-prime-carte bg-card border border-default rounded-xl shadow-sm overflow-hidden min-w-0 w-full',
       this.className,
     );
   }

@@ -6,12 +6,17 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { firstValueFrom, forkJoin, switchMap } from 'rxjs';
+import { firstValueFrom, forkJoin, switchMap, type Observable } from 'rxjs';
 import { resolvePlatformOrgLabels } from '../../../core/org/platform-org-perimeter';
 import { PrimeNavRequestService } from '../services/prime-nav-request.service';
 import { PrimeScopeStore } from '../state/prime-scope.store';
 import { PrimeOrgApiService } from '../services/prime-org-api.service';
 import { AlertCircle, Check, CheckCheck, History, X } from 'lucide';
+import { KY_TRAITEMENT, executerLot } from '../../../shared/components/ky-traitement/ky-traitement.components';
+import { SelectionLot, textesBilan, type KyCompteur, type KyPuce } from '../../../shared/components/ky-traitement/ky-traitement.util';
+import { KyntusConfirmService } from '../../../shared/components/kyntus-confirm/kyntus-confirm.service';
+import { KyntusPromptService } from '../../../shared/components/kyntus-prompt/kyntus-prompt.service';
+import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
 import { PrimeFicheValidationTimelineComponent } from '../components/prime-fiche-validation-timeline.component';
 import { PrimeEmployeeFichePreviewActionsComponent } from '../components/prime-employee-fiche-preview-actions.component';
@@ -147,6 +152,7 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
     PrimeFilterBarComponent,
     PrimeFicheValidationTimelineComponent,
     PrimeEmployeeFichePreviewActionsComponent,
+    ...KY_TRAITEMENT,
   ],
   template: `
     @if (loading()) {
@@ -155,32 +161,23 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div class="flex justify-between items-start gap-4">
-          <div>
-            <h1 class="prime-page-title">Fiches à valider</h1>
-            <p class="prime-page-subtitle">
-              Contrôlez puis approuvez ou rejetez les fiches qui attendent votre décision.
-              <button
-                type="button"
-                (click)="goToValidationHistory()"
-                class="text-[color:var(--info-text)] hover:underline ml-1"
-              >
-                Consulter le suivi
-              </button>.
-            </p>
-          </div>
+        <!-- v86 — en-tête de la maquette : compteurs + actions existantes -->
+        <ky-tr-entete ariane="Primes" titre="Fiches à valider" [compteurs]="compteursTr()" (actualiser)="actualiserTr()"
+                      sousTitre="Contrôlez puis approuvez ou rejetez les fiches qui attendent votre décision.">
+          <button kyTrTexte type="button" (click)="goToValidationHistory()" class="ky-tr-btn" style="margin-top:8px">Consulter le suivi</button>
           @if (canBulkApprove()) {
             <button
               type="button"
               [disabled]="bulkBusy() || actionableRows().length === 0"
               (click)="bulkApprove()"
-              class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
+              class="ky-tr-btn ky-tr-btn--ok"
+              style="align-self:center;height:40px"
             >
               <app-lucide-icon [icon]="icons.checkAll" className="w-4 h-4" />
               Approuver toutes les fiches ({{ actionableRows().length }})
             </button>
           }
-        </div>
+        </ky-tr-entete>
 
         <div class="ky-alert ky-alert-info">
           <app-lucide-icon [icon]="icons.alert" className="w-5 h-5 shrink-0 mt-0.5 text-[color:var(--info-text)]" />
@@ -224,28 +221,18 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
           </div>
         }
 
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          @for (kpi of statusCounters(); track kpi.status) {
-            <button
-              type="button"
-              (click)="setStatusFilter(kpi.status)"
-              class="text-left rounded-xl border bg-card p-3 transition-all hover:border-indigo-300"
-              [class.border-indigo-500]="statusFilter() === kpi.status"
-              [class.border-default]="statusFilter() !== kpi.status"
-            >
-              <div class="text-xs uppercase tracking-wider text-muted">{{ kpi.label }}</div>
-              <div class="mt-1 text-2xl font-bold text-primary">{{ kpi.count }}</div>
-            </button>
-          }
-        </div>
+        <ky-tr-puces [puces]="pucesTr()" [actif]="statusFilter()" (choix)="choisirStatutTr($event)" libelle="Filtrer par statut"></ky-tr-puces>
 
         <app-prime-filter-bar [filters]="filterBarFilters()" />
 
         <app-prime-card className="p-0">
-          <div class="overflow-x-auto">
-            <table class="prime-table">
+          <div class="overflow-x-auto" data-ky-no-liste>
+            <table class="prime-table ky-tr-table" data-ky-no-liste>
               <thead>
                 <tr>
+                  <th class="ky-tr-case">
+                    <input type="checkbox" [checked]="toutCocheTr()" [disabled]="!cochablesTr().length" (change)="basculerToutTr()" aria-label="Tout sélectionner" />
+                  </th>
                   <th>Pilote</th>
                   <th>Périmètre</th>
                   <th>Période</th>
@@ -257,21 +244,27 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
               <tbody>
                 @if (filteredResults().length === 0) {
                   <tr>
-                    <td colspan="6" class="text-center prime-cell-muted py-8">
+                    <td colspan="7" class="text-center prime-cell-muted py-8">
                       {{ emptyListMessage() }}
                     </td>
                   </tr>
                 } @else {
                   @for (item of filteredResults(); track item.id) {
-                    <tr>
+                    <tr [class.is-coche]="cocheTr(item.id)">
+                      <td class="ky-tr-case">
+                        @if (canApproveRow(item)) {
+                          <input type="checkbox" [checked]="cocheTr(item.id)" (change)="basculerTr(item.id)" aria-label="Sélectionner la fiche" />
+                        }
+                      </td>
                       <td>
                         @let emp = getEmployee(item.employeeId);
-                        <div>
-                          <div class="prime-cell-strong">
-                            {{ displayPilotName(item, emp) }}
-                          </div>
-                          <div class="text-xs prime-cell-muted">{{ item.employeeRole || emp?.role || '—' }}</div>
-                        </div>
+                        <button type="button" class="ky-tr-personne" (click)="toggleHistoryPanel(item)" title="Historique de validation">
+                          <ky-tr-avatar [nom]="displayPilotName(item, emp)" [cle]="item.employeeId"></ky-tr-avatar>
+                          <span>
+                            <strong>{{ displayPilotName(item, emp) }}</strong>
+                            <small>{{ item.employeeRole || emp?.role || '—' }}</small>
+                          </span>
+                        </button>
                       </td>
                       <td>
                         @let org = orgLabels(item);
@@ -412,7 +405,7 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
                     </tr>
                     @if (expandedFicheId() === item.id) {
                       <tr class="bg-input">
-                        <td colspan="6" class="px-6 py-4">
+                        <td colspan="7" class="px-6 py-4">
                           @if (historyLoadingId() === item.id) {
                             <p class="text-xs text-muted">Chargement de l'historique…</p>
                           } @else {
@@ -432,6 +425,9 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
             </table>
           </div>
         </app-prime-card>
+
+        <ky-tr-lot [nombre]="nbCochesTr()" nom="fiche" [enCours]="bulkBusy()" libelleValider="Approuver la sélection" libelleRefuser="Rejeter"
+                   (vider)="viderTr()" (valider)="approuverSelectionTr()" (refuser)="rejeterSelectionTr()"></ky-tr-lot>
       </div>
     }
   `,
@@ -471,6 +467,115 @@ export class PrimeValidationPageComponent {
   readonly setPeriodFilter = (value: string): void => {
     this.periodFilter.set(value);
   };
+
+  // ── v86 : écran de traitement de la maquette (sélection et décisions groupées) ───────────────
+  private readonly confirmTr = inject(KyntusConfirmService);
+  private readonly promptTr = inject(KyntusPromptService);
+  private readonly toastTr = inject(KyntusToastService);
+  private readonly selTr = new SelectionLot<string>();
+  private readonly versionTr = signal(0);
+
+  readonly pucesTr = computed<KyPuce[]>(() => [
+    ...this.statusCounters().map((k) => ({ id: k.status as string, label: k.label, n: k.count })),
+    { id: '', label: 'Ma file', n: this.actionableRows().length },
+  ]);
+
+  readonly compteursTr = computed<KyCompteur[]>(() => {
+    const a = this.actionableRows();
+    return [
+      { label: 'À valider', valeur: a.length, ton: 'warn' },
+      { label: 'Montant à valider', valeur: this.formatAmount(a.reduce((t, r) => t + (r.totalAmount || 0), 0)), ton: 'info' },
+      { label: 'Rejetées', valeur: this.results().filter((r) => r.validationStatus === 'Rejected').length, ton: 'bad' },
+    ];
+  });
+
+  readonly cochablesTr = computed(() => this.filteredResults().filter((r) => this.canApproveRow(r)).map((r) => r.id));
+  readonly nbCochesTr = computed(() => {
+    this.versionTr();
+    return this.selTr.taille;
+  });
+
+  actualiserTr(): void {
+    this.fetch(this.periodFilter().trim());
+  }
+
+  cocheTr(id: string): boolean {
+    this.versionTr();
+    return this.selTr.has(id);
+  }
+  toutCocheTr(): boolean {
+    this.versionTr();
+    return this.selTr.toutCoche(this.cochablesTr());
+  }
+  basculerTr(id: string): void {
+    this.selTr.basculer(id);
+    this.versionTr.update((v) => v + 1);
+  }
+  basculerToutTr(): void {
+    this.selTr.basculerTout(this.cochablesTr());
+    this.versionTr.update((v) => v + 1);
+  }
+  viderTr(): void {
+    this.selTr.vider();
+    this.versionTr.update((v) => v + 1);
+  }
+
+  choisirStatutTr(id: string): void {
+    this.statusFilter.set(id as PrimeFicheValidationStatus | '');
+    this.selTr.garder(this.cochablesTr());
+    this.versionTr.update((v) => v + 1);
+  }
+
+  private ciblesTr(): EmployeePrimeServiceFicheValidationDto[] {
+    return this.filteredResults().filter((r) => this.selTr.has(r.id) && this.canApproveRow(r));
+  }
+
+  /** Même approbation que le bouton « Approuver » de chaque ligne, fiche par fiche. */
+  async approuverSelectionTr(): Promise<void> {
+    const cibles = this.ciblesTr();
+    if (!cibles.length) return;
+    const ok = await this.confirmTr.confirm({
+      title: 'Approuver la sélection',
+      message: `Approuver ${cibles.length} fiche${cibles.length > 1 ? 's' : ''} (${this.formatAmount(cibles.reduce((t, r) => t + (r.totalAmount || 0), 0))}) ?`,
+      confirmLabel: 'Approuver',
+    });
+    if (!ok) return;
+    const role = mapRoleForApi(this.roleService.currentRole() as string);
+    const user = this.roleService.currentUser();
+    this.lotTr(cibles, (r) => this.api.approve(r.id, { userId: user.id, role }), 'approuvée', 'approuvées');
+  }
+
+  /** Même rejet que celui de la ligne (motif obligatoire), avec un motif commun. */
+  async rejeterSelectionTr(): Promise<void> {
+    const cibles = this.ciblesTr();
+    if (!cibles.length) return;
+    const reason = await this.promptTr.prompt({
+      title: `Rejeter ${cibles.length} fiche${cibles.length > 1 ? 's' : ''}`,
+      message: 'Le même motif sera enregistré pour chaque fiche.',
+      placeholder: 'Motif de rejet (obligatoire)',
+      confirmLabel: 'Rejeter',
+      required: true,
+    });
+    if (!reason?.trim()) return;
+    const role = mapRoleForApi(this.roleService.currentRole() as string);
+    const user = this.roleService.currentUser();
+    this.lotTr(cibles, (r) => this.api.reject(r.id, { userId: user.id, role, reason: reason.trim() }), 'rejetée', 'rejetées');
+  }
+
+  private lotTr(cibles: EmployeePrimeServiceFicheValidationDto[], appel: (r: EmployeePrimeServiceFicheValidationDto) => Observable<unknown>, sing: string, plur: string): void {
+    this.cancelReject();
+    this.bulkBusy.set(true);
+    this.errorMessage.set(null);
+    executerLot(cibles, appel, (r) => this.displayPilotName(r, this.getEmployee(r.employeeId))).subscribe((bilan) => {
+      this.bulkBusy.set(false);
+      for (const r of cibles) this.invalidateHistoryCache(r.id);
+      this.viderTr();
+      const t = textesBilan(bilan, sing, plur, 'fiche');
+      if (t.succes) this.toastTr.success(t.succes);
+      if (t.erreur) this.toastTr.error(t.erreur, 8000);
+      void this.fetch(this.periodFilter().trim());
+    });
+  }
 
   goToValidationHistory(): void {
     this.nav.requestView('/validation-history');

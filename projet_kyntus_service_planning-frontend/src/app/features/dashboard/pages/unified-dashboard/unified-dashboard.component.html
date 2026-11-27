@@ -1,222 +1,297 @@
-<div class="ud-root ky-page-enter">
+<!--
+  v83 — Accueil disposé comme la maquette « Accueil intelligent » : bandeau + focus du jour, « Vos
+  indicateurs », actions en attente (anneau par module, Traiter / Plus tard) à gauche, ma journée et
+  santé des modules à droite, raccourcis et activité récente. Mêmes données et mêmes droits qu'avant
+  (GlobalDashboardService, menu du compte) ; en clair comme en sombre.
+-->
+<div class="ud-root ud2 ud3 ky-page-enter" [attr.data-profil]="profil()?.cle || 'general'">
 
-  <!-- Bandeau d'accueil et recherche « Que voulez-vous faire ? » -->
-  <section class="ud-carte ud-accueil" aria-labelledby="ud-bonjour">
-    <div class="ud-accueil-tete">
-      <span class="ud-surtitre">
-        {{ dateDuJour }}
-        @if (libelleRole()) { <span class="ud-role">{{ libelleRole() }}</span> }
+  <!-- ── Bandeau : salutation, titre du rôle, résumé du jour, priorités, focus du jour ─────── -->
+  <section class="ud3-bandeau" aria-labelledby="ud-bonjour">
+    <div class="ud3-bandeau-texte">
+      <span class="ud3-surtitre">
+        Bonjour{{ prenomAffiche() ? ', ' + prenomAffiche() : '' }}
+        @if (libelleProfil()) { <span aria-hidden="true">·</span> {{ libelleProfil() }} }
       </span>
-      <h1 id="ud-bonjour" class="ud-titre">Bonjour{{ username() ? ', ' + username() : '' }}</h1>
-      <p class="ud-resume">
+      <h1 id="ud-bonjour" class="ud3-titre">{{ titreAccueil() }}</h1>
+      <p class="ud3-resume">
         @if (loadingDetails() && loadingKpis()) {
-          {{ dashboardTitle() }}
+          {{ sousTitreAccueil() }}
         } @else if (resume().total > 0) {
-          <strong>{{ resume().total }} action{{ resume().total > 1 ? 's' : '' }}</strong>
-          <span>&nbsp;{{ phraseResume() }}</span>
+          <strong>{{ resume().total }} action{{ resume().total > 1 ? 's' : '' }}</strong> {{ phraseResume() }}
+          Commencez par les pastilles ci-dessous.
         } @else {
           Aucune action en attente : tout est à jour.
         }
       </p>
-    </div>
-
-    <div class="ud-recherche">
-      <label class="ud-recherche-champ">
-        <svg class="ud-ic ud-ic--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-        <input type="search" autocomplete="off"
-               placeholder="Que voulez-vous faire ? Ex. : valider les congés, export paie, nouvel employé…"
-               aria-label="Que voulez-vous faire ?"
-               [attr.aria-expanded]="enRecherche()" aria-controls="ud-resultats"
-               [value]="recherche()" (input)="saisir($any($event.target).value)"
-               (focus)="chargerPages()" (keydown)="toucheRecherche($event)" />
-        @if (enRecherche()) {
-          <button type="button" class="ud-effacer" (click)="effacer()" aria-label="Effacer la recherche">
-            <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
-          </button>
-        }
-      </label>
-      @if (enRecherche()) {
-        <div id="ud-resultats" class="ud-resultats" role="listbox" aria-label="Pages trouvées">
-          <p class="ud-resultats-compte">{{ resultats().length }} page{{ resultats().length > 1 ? 's' : '' }} trouvée{{ resultats().length > 1 ? 's' : '' }}</p>
-          @for (p of resultats(); track p.module + p.label) {
-            <button type="button" class="ud-resultat" role="option" (click)="ouvrirPage(p)">
-              <span class="ud-tuile" [innerHTML]="svg(p.icone)"></span>
-              <span class="ud-resultat-texte"><strong>{{ p.label }}</strong><small>{{ p.module }}</small></span>
-              <svg class="ud-ic ud-fleche" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-            </button>
-          } @empty {
-            <p class="ud-vide">Aucune page ne correspond. Essayez un autre mot (employé, congé, paie, planning…).</p>
+      @if (pastilles().length) {
+        <div class="ud3-pastilles" aria-label="Priorités">
+          @for (p of pastilles(); track p.item.id; let i = $index) {
+            <button type="button" class="ud3-pastille" [attr.data-i]="i" (click)="traiter(p.item)" [disabled]="!cliquable(p.item)">{{ p.texte }}</button>
           }
         </div>
       }
+      <button type="button" class="ud3-chercher" (click)="palette.ouvrir()">
+        <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <span>Que voulez-vous faire ? Une page, une action…</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+      @if (estSuperAdmin()) {
+        <button type="button" class="ud3-voir-comme" (click)="voirComme.set(true)">
+          <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Voir comme…
+        </button>
+      }
     </div>
 
-    @if (suggestions().length) {
-      <div class="ud-suggestions">
-        <span>Suggestions :</span>
-        @for (s of suggestions(); track s) {
-          <button type="button" class="ud-suggestion" (click)="saisir(s)">{{ s }}</button>
-        }
-      </div>
-    }
+    <div class="ud3-focus" role="img" [attr.aria-label]="focusPct() + ' % des actions du jour ouvertes ou reportées'">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <defs><linearGradient id="ud3-grad" x1="0" x2="1"><stop offset="0" stop-color="#8b5cf6" /><stop offset="1" stop-color="#22c55e" /></linearGradient></defs>
+        <circle cx="50" cy="50" r="40" class="ud3-focus-fond" />
+        <circle cx="50" cy="50" r="40" class="ud3-focus-arc" transform="rotate(-90 50 50)" [attr.stroke-dasharray]="focusDash()" />
+        <text x="50" y="50" text-anchor="middle" dominant-baseline="central">{{ focusPct() }}%</text>
+      </svg>
+      <span class="ud3-focus-texte">
+        <strong>Focus du jour</strong>
+        <small>{{ nbTraiteesJour() }} sur {{ nbTraiteesJour() + actionsDuJour().length }} priorités traitées. Cliquez sur « Traiter » ou reportez à demain.</small>
+      </span>
+    </div>
+  </section>
 
-    @if (quickActions().length) {
-      <div class="ud-raccourcis" aria-label="Raccourcis">
-        @for (qa of quickActions(); track qa.label) {
-          <button type="button" class="ud-raccourci" (click)="ouvrir(qa)">
-            <span class="ud-tuile" [innerHTML]="iconeRaccourci(qa)"></span>
-            <span>{{ qa.label }}</span>
-          </button>
+  <!-- ── Vos indicateurs ──────────────────────────────────────────────────────────────────────── -->
+  <section class="ud3-bloc" aria-labelledby="ud-kpis-titre">
+    <div class="ud3-kpis-tete">
+      <h2 id="ud-kpis-titre" class="ud3-h2">Vos indicateurs</h2>
+      <div class="ud3-periodes" role="group" aria-label="Période de comparaison">
+        @for (p of periodes; track p.id) {
+          <button type="button" [class.is-on]="periode() === p.id" [attr.aria-pressed]="periode() === p.id" (click)="choisirPeriode(p.id)">{{ p.label }}</button>
         }
       </div>
+    </div>
+    @if (loadingKpis()) {
+      <div class="ud3-kpis" aria-busy="true">
+        @for (i of [1, 2, 3, 4]; track i) { <div class="ku-skeleton ud3-kpi-squelette" aria-hidden="true"></div> }
+      </div>
+    } @else if (kpiItems().length) {
+      <div class="ud3-kpis">
+        @for (k of kpiItems(); track k.label) {
+          @if (cliquable(k)) {
+            <button type="button" class="ud3-kpi ud3-kpi--lien" [attr.data-ton]="tonCarte(k)" (click)="ouvrir(k)">
+              <span class="ud3-kpi-label">{{ k.label }}</span>
+              <span class="ud3-kpi-valeur">{{ valeurAnimee(k.value, kpiAnim()) }}</span>
+              <ng-container *ngTemplateOutlet="evolution; context: { $implicit: k }"></ng-container>
+              <span class="ud3-kpi-pied">Ouvrir <span aria-hidden="true">→</span></span>
+            </button>
+          } @else {
+            <div class="ud3-kpi" [attr.data-ton]="tonCarte(k)">
+              <span class="ud3-kpi-label">{{ k.label }}</span>
+              <span class="ud3-kpi-valeur">{{ valeurAnimee(k.value, kpiAnim()) }}</span>
+              <ng-container *ngTemplateOutlet="evolution; context: { $implicit: k }"></ng-container>
+            </div>
+          }
+        }
+      </div>
+      <!-- v87 — tendance par rapport à hier / 7 j / 30 j et courbe (historique personnel, depuis l'installation) -->
+      <ng-template #evolution let-k>
+        @if (tendanceDe(k); as t) {
+          <span class="ud3-kpi-tendance" [attr.data-sens]="t.sens">{{ texteTendance(t) }}</span>
+        } @else {
+          <span class="ud3-kpi-tendance" data-sens="aucune">Pas encore d’historique</span>
+        }
+        @if (courbeDe(k); as c) {
+          <svg class="ud3-kpi-courbe" viewBox="0 0 96 28" preserveAspectRatio="none" aria-hidden="true"><polyline [attr.points]="c" /></svg>
+        }
+      </ng-template>
     }
   </section>
 
-  <!-- Indicateurs -->
-  @if (loadingKpis()) {
-    <div class="ud-kpis" aria-busy="true" aria-label="Chargement des indicateurs">
-      @for (i of [1, 2, 3, 4]; track i) { <div class="ku-skeleton ud-kpi-squelette"></div> }
-    </div>
-  } @else if (kpiItems().length) {
-    <section class="ud-kpis" aria-label="Indicateurs">
-      @for (k of kpiItems(); track k.label) {
-        @if (cliquable(k)) {
-          <button type="button" class="ud-kpi ud-kpi--lien" (click)="ouvrir(k)">
-            <span class="ud-kpi-haut"><span class="ud-kpi-label">{{ k.label }}</span><span class="ud-point" [ngClass]="tonKpi(k)"></span></span>
-            <span class="ud-kpi-valeur">{{ k.value }}</span>
-          </button>
-        } @else {
-          <div class="ud-kpi">
-            <span class="ud-kpi-haut"><span class="ud-kpi-label">{{ k.label }}</span><span class="ud-point" [ngClass]="tonKpi(k)"></span></span>
-            <span class="ud-kpi-valeur">{{ k.value }}</span>
+  <!-- Alertes (contrats, anomalies…) : seulement s'il y en a -->
+  @if (!loadingKpis() && alerts().length) {
+    <section class="ud2-alertes" aria-label="Alertes">
+      @for (al of alerts(); track $index) {
+        <div class="ud2-alerte" [ngClass]="'ud2-alerte--' + al.severity">
+          <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <div class="ud2-alerte-texte">
+            @if (al.title) { <strong>{{ al.title }}</strong> }
+            <span>{{ al.message }}</span>
           </div>
-        }
+          @if (cliquable(al)) {
+            <button type="button" class="ud2-lien" (click)="ouvrir(al)">{{ al.actionLabel || 'Ouvrir' }} →</button>
+          }
+        </div>
       }
     </section>
   }
 
-  <div class="ud-colonnes">
-    <!-- File d'actions prioritaires -->
-    <section class="ud-carte ud-file" aria-labelledby="ud-file-titre">
-      <div class="ud-carte-tete">
-        <h2 id="ud-file-titre">File d’actions prioritaires</h2>
-        <a routerLink="/notifications" class="ud-lien">Centre de notifications</a>
+  <!-- ── Actions en attente | Ma journée + Santé des modules ─────────────────────────────────── -->
+  <div class="ud3-deux">
+    <section class="ud3-carte" aria-labelledby="ud-file-titre">
+      <div class="ud3-carte-tete">
+        <h2 id="ud-file-titre">{{ profil()?.cle === 'audit' ? 'Points de vigilance' : profil()?.cle === 'employe' ? 'Mes demandes et actions' : 'Actions en attente' }}</h2>
+        <a routerLink="/notifications" class="ud2-lien">Tout voir</a>
       </div>
-      @if (filtres().length) {
-        <div class="ud-filtres" role="group" aria-label="Filtrer par module">
-          @for (f of filtres(); track f.id) {
-            <button type="button" class="ud-filtre" [class.is-on]="filtre() === f.id" [attr.aria-pressed]="filtre() === f.id" (click)="choisirFiltre(f.id)">
-              {{ f.label }}<span>{{ f.n }}</span>
-            </button>
-          }
-        </div>
-      }
+
       @if (loadingDetails() && !actionItems().length) {
-        <div class="ku-skeleton"></div>
-      } @else {
-        <div class="ud-actions">
+        <div class="ku-skeleton ud3-squelette" aria-hidden="true"></div>
+      } @else if (anneauModules().total) {
+        <div class="ud3-anneau-bloc">
+          <svg class="ud3-anneau" viewBox="0 0 100 100" role="img" [attr.aria-label]="resume().total + ' action(s) restantes'">
+            <circle class="ud3-anneau-fond" cx="50" cy="50" r="40" />
+            @for (seg of anneauModules().segments; track seg.id) {
+              <circle cx="50" cy="50" r="40" fill="none" transform="rotate(-90 50 50)" class="ud3-segment"
+                      [attr.stroke]="seg.couleur" [attr.stroke-width]="seg.largeur" [attr.stroke-dasharray]="seg.dash" [attr.stroke-dashoffset]="seg.offset" />
+            }
+            <text x="50" y="47" class="ud3-anneau-total" text-anchor="middle" dominant-baseline="central">{{ resume().total }}</text>
+            <text x="50" y="65" class="ud3-anneau-legende" text-anchor="middle">{{ profil()?.cle === 'employe' ? 'en cours' : 'restantes' }}</text>
+          </svg>
+          <div class="ud3-legende" role="group" aria-label="Filtrer par module">
+            <button type="button" class="ud3-legende-ligne" [class.is-on]="filtre() === 'tout'" [attr.aria-pressed]="filtre() === 'tout'" (click)="choisirFiltre('tout')">
+              <span class="ud2-point ud3-point-tout"></span><span class="ud3-legende-texte">Tout</span><b>{{ resume().total }}</b>
+            </button>
+            @for (m of modulesActions(); track m.id) {
+              <button type="button" class="ud3-legende-ligne" [class.is-on]="filtre() === m.id" [attr.aria-pressed]="filtre() === m.id" (click)="choisirFiltre(m.id)">
+                <span class="ud2-point" [style.background]="m.couleur"></span><span class="ud3-legende-texte">{{ m.label }}</span><b>{{ m.n }}</b>
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="ud3-actions">
           @for (a of actionsVisibles(); track a.id) {
-            <div class="ud-action" [ngClass]="'ud-action--' + (a.severity || 'info')">
-              <span class="ud-action-nb">{{ a.count || '!' }}</span>
-              <div class="ud-action-texte">
-                <span class="ud-action-module">{{ a.module }}</span>
-                <strong>{{ a.label }}</strong>
-                <small>{{ a.detail }}</small>
-              </div>
+            <div class="ud3-action" [class.is-urgent]="a.severity === 'error'">
+              <span class="ud3-action-barre" [style.background]="couleurModule(a.moduleId)"></span>
+              <span class="ud3-action-texte">
+                <strong>{{ a.label }}{{ a.count ? ' · ' + a.count : '' }}</strong>
+                <small>{{ a.module }} · {{ a.detail }}</small>
+              </span>
+              <button type="button" class="ud3-plus-tard" (click)="plusTard(a)" [attr.aria-label]="'Reporter à demain : ' + a.label" title="Plus tard (demain)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              </button>
               @if (cliquable(a)) {
-                <button type="button" class="ud-bouton" (click)="ouvrir(a)">
-                  Traiter
-                  <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-                </button>
+                <button type="button" class="ud3-traiter" (click)="traiter(a)">Traiter</button>
               }
             </div>
           } @empty {
-            <div class="ud-vide ud-vide--ok">
-              <svg class="ud-ic ud-ic--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
-              <strong>Aucune action en attente</strong>
-            </div>
+            <div class="ud2-vide"><strong>Tout est traité pour ce filtre.</strong></div>
           }
+        </div>
+      } @else {
+        <div class="ud2-vide">
+          <svg class="ud-ic ud-ic--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
+          <strong>Aucune action en attente</strong>
+          <span>Tout est à jour.</span>
         </div>
       }
     </section>
 
-    <div class="ud-cote">
-      <!-- Ma journée (pointage du jour) -->
-      <app-pointage-jour-widget />
-
-      @if (!loadingKpis() && alerts().length) {
-        <section class="ud-carte" aria-labelledby="ud-alertes-titre">
-          <div class="ud-carte-tete"><h2 id="ud-alertes-titre">Alertes</h2></div>
-          <div class="ud-alertes">
-            @for (al of alerts(); track $index) {
-              <div class="ud-alerte" [ngClass]="'ud-alerte--' + al.severity">
-                <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>
-                <div class="ud-alerte-texte">
-                  @if (al.title) { <strong>{{ al.title }}</strong> }
-                  <span>{{ al.message }}</span>
-                  @if (cliquable(al)) {
-                    <button type="button" class="ud-lien ud-lien--bouton" (click)="ouvrir(al)">{{ al.actionLabel || 'Ouvrir' }}</button>
-                  }
-                </div>
-              </div>
-            }
-          </div>
-        </section>
-      }
+    <div class="ud3-colonne">
+      <!-- Ma journée (pointage du jour) : masquée si le compte n'a pas de fiche Planning -->
+      <div class="ud2-journee ud3-journee">
+        <app-pointage-jour-widget />
+      </div>
 
       @if (!loadingDetails() && moduleHealth().length) {
-        <section class="ud-carte" aria-labelledby="ud-sante-titre">
-          <div class="ud-carte-tete"><h2 id="ud-sante-titre">Santé des modules</h2></div>
-          <div class="ud-sante">
-            @for (s of moduleHealth(); track s.moduleId) {
-              @if (cliquable(s)) {
-                <button type="button" class="ud-sante-ligne ud-sante-ligne--lien" (click)="ouvrir(s)">
-                  <span class="ud-sante-repere" [ngClass]="tonSante(s).cls">{{ tonSante(s).repere }}</span>
-                  <span class="ud-sante-texte"><strong>{{ s.label }}</strong><small>{{ s.detail }}</small></span>
-                  <svg class="ud-ic ud-fleche" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-                </button>
-              } @else {
-                <div class="ud-sante-ligne">
-                  <span class="ud-sante-repere" [ngClass]="tonSante(s).cls">{{ tonSante(s).repere }}</span>
-                  <span class="ud-sante-texte"><strong>{{ s.label }}</strong><small>{{ s.detail }}</small></span>
-                </div>
-              }
-            }
+        <section class="ud3-carte" aria-labelledby="ud-sante-titre">
+          <div class="ud3-carte-tete">
+            <h2 id="ud-sante-titre">{{ profil()?.cle === 'employe' ? 'Mes infos' : 'Santé des modules' }}</h2>
           </div>
+          <ul class="ud2-sante-liste">
+            @for (s of moduleHealth(); track s.moduleId) {
+              <li class="ud2-sante-ligne">
+                <span class="ud2-point ud3-point-halo" [ngClass]="'ud2-point--' + pointSante(s)" aria-hidden="true"></span>
+                <span class="ud2-sante-texte"><strong>{{ s.label }}</strong><small>{{ s.detail }}</small></span>
+                @if (cliquable(s)) {
+                  <button type="button" class="ud2-lien" (click)="ouvrir(s)" [attr.aria-label]="'Voir ' + s.label">Voir</button>
+                }
+              </li>
+            }
+          </ul>
         </section>
+      } @else if (loadingDetails()) {
+        <div class="ku-skeleton ud3-squelette" aria-hidden="true"></div>
       }
     </div>
   </div>
 
-  @if (!loadingKpis() && (planningPreview() || recentActivity().length)) {
-    <div class="ud-colonnes">
-      @if (planningPreview(); as preview) {
-        <section class="ud-carte ud-semaine" aria-labelledby="ud-semaine-titre">
-          <div class="ud-carte-tete"><h2 id="ud-semaine-titre">Ma semaine — {{ preview.weekCode }}</h2></div>
-          <div class="ud-jours">
-            @for (day of preview.days; track day.label) {
-              <div class="ud-jour" [class.off]="day.off">
-                <span>{{ day.label }}</span>
-                <strong>{{ day.shift }}</strong>
-              </div>
+  <!-- ── Raccourcis | Activité récente ──────────────────────────────────────────────────────── -->
+  @if (!loadingKpis()) {
+    <div class="ud3-deux">
+      <section class="ud3-carte" aria-labelledby="ud-raccourcis-titre">
+        <div class="ud3-carte-tete">
+          <h2 id="ud-raccourcis-titre">Raccourcis</h2>
+          <span class="ud2-tete-actions">
+            @if (editionRaccourcis()) {
+              <button type="button" class="ud2-lien" (click)="raccourcisParDefaut()">Par défaut</button>
             }
-          </div>
-        </section>
-      }
-      @if (recentActivity().length) {
-        <section class="ud-carte ud-activite" aria-labelledby="ud-activite-titre">
-          <div class="ud-carte-tete">
-            <h2 id="ud-activite-titre">Activité récente</h2>
-            <a routerLink="/notifications" class="ud-lien">Voir tout</a>
-          </div>
-          @for (item of recentActivity(); track item.id) {
-            <div class="ud-activite-ligne">
-              <div class="ud-activite-texte"><strong>{{ item.title }}</strong><small>{{ item.meta }}</small></div>
-              <button type="button" class="ud-lien ud-lien--bouton" (click)="openActivity(item.id)">Ouvrir</button>
+            <button type="button" class="ud2-bouton-sec" (click)="basculerEditionRaccourcis()" [attr.aria-pressed]="editionRaccourcis()">
+              {{ editionRaccourcis() ? 'Terminer' : 'Personnaliser' }}
+            </button>
+          </span>
+        </div>
+        <div class="ud2-tuiles" [class.is-edition]="editionRaccourcis()">
+          @for (r of raccourcis(); track r.module + r.label; let i = $index) {
+            <div class="ud2-tuile-wrap">
+              <button type="button" class="ud2-tuile" [attr.data-i]="i" (click)="ouvrirRaccourci(r)" [disabled]="editionRaccourcis()">
+                <span class="ud2-tuile-icone" [innerHTML]="svg(r.icone)"></span>
+                <strong>{{ r.label }}</strong>
+                <small>{{ r.module }}</small>
+              </button>
+              @if (editionRaccourcis() && r.page) {
+                <button type="button" class="ud2-tuile-retirer" (click)="retirerRaccourci(r)" [attr.aria-label]="'Retirer le raccourci ' + r.label">×</button>
+              }
             </div>
+          } @empty {
+            <p class="ud3-discret">Aucun raccourci. « Personnaliser » pour en ajouter.</p>
           }
-        </section>
-      }
+        </div>
+        @if (editionRaccourcis()) {
+          <label class="ud2-ajout">
+            <span>Ajouter une page de votre menu</span>
+            <select class="ky-input" (change)="ajouterDepuisListe($event)">
+              <option value="">Choisir une page…</option>
+              @for (p of pagesAjoutables(); track p.module + p.label) {
+                <option [value]="clePage(p)">{{ p.module }} › {{ p.label }}</option>
+              }
+            </select>
+          </label>
+        }
+      </section>
+
+      <section class="ud3-carte" aria-labelledby="ud-activite-titre">
+        <div class="ud3-carte-tete">
+          <h2 id="ud-activite-titre">Activité récente</h2>
+          <a routerLink="/notifications" class="ud2-lien">Voir tout</a>
+        </div>
+        @for (item of recentActivity(); track item.id) {
+          <div class="ud3-activite-ligne">
+            <span class="ud3-activite-ini" aria-hidden="true">{{ item.title.charAt(0) }}</span>
+            <div class="ud-activite-texte"><strong>{{ item.title }}</strong><small>{{ item.meta }}</small></div>
+            <button type="button" class="ud2-lien" (click)="openActivity(item.id)">Ouvrir</button>
+          </div>
+        } @empty {
+          <p class="ud3-discret">Aucune activité récente.</p>
+        }
+      </section>
     </div>
   }
+
+  <!-- Ma semaine (collaborateurs) -->
+  @if (!loadingKpis() && planningPreview(); as preview) {
+    <section class="ud3-carte ud-semaine" aria-labelledby="ud-semaine-titre">
+      <div class="ud3-carte-tete"><h2 id="ud-semaine-titre">Ma semaine — {{ preview.weekCode }}</h2></div>
+      <div class="ud-jours">
+        @for (day of preview.days; track day.label) {
+          <div class="ud-jour" [class.off]="day.off">
+            <span>{{ day.label }}</span>
+            <strong>{{ day.shift }}</strong>
+          </div>
+        }
+      </div>
+    </section>
+  }
 </div>
+
+<!-- v88 — « Voir comme » (Super Admin) -->
+@if (estSuperAdmin()) {
+  <app-voir-comme [ouvert]="voirComme()" (fermer)="voirComme.set(false)"></app-voir-comme>
+}

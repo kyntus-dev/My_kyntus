@@ -1,7 +1,8 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { KyntusPageHeaderComponent } from '../../../shared/components/ui/kyntus-page-header.component';
+import { KY_TRAITEMENT } from '../../../shared/components/ky-traitement/ky-traitement.components';
+import type { KyCompteur, KyPuce } from '../../../shared/components/ky-traitement/ky-traitement.util';
 import { KyntusToastService } from '../../../shared/components/ui/kyntus-toast.service';
 import { KyMediaUploaderComponent } from '../../../shared/components/ui/ky-media-uploader.component';
 import { KyMediaGalleryComponent } from '../../../shared/components/ui/ky-media-gallery.component';
@@ -28,7 +29,7 @@ type UnifiedItem = (Reclamation | Proposition) & { _kind: DemandKind };
   selector: 'app-reclamation-admin',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, DatePipe, KyntusPageHeaderComponent,
+    CommonModule, FormsModule, DatePipe, ...KY_TRAITEMENT,
     KyMediaUploaderComponent, KyMediaGalleryComponent
   ],
   templateUrl: './reclamation-admin.component.html',
@@ -120,6 +121,24 @@ export class ReclamationAdminComponent implements OnInit, OnDestroy {
       items = items.filter(i => i.priorite === this.filterPriorite);
     }
     return items.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+  }
+
+  // ── v86 : en-tête et puces de la maquette ─────────────────────────────────────────────────
+  get pucesTr(): KyPuce[] {
+    return [
+      { id: 'all', label: 'Toutes', n: this.recTotal + this.propTotal },
+      { id: 'reclamations', label: 'Réclamations', n: this.recTotal },
+      { id: 'propositions', label: 'Propositions', n: this.propTotal },
+    ];
+  }
+
+  get compteursTr(): KyCompteur[] {
+    const ouvertes = [...this.reclamations, ...this.propositions].filter((i) => ['Soumise', 'EnCours', 'EnEvaluation'].includes(i.status));
+    return [
+      { label: 'À traiter', valeur: this.totalOpen, ton: 'warn' },
+      { label: 'Ouvertes depuis 7 j et plus', valeur: ouvertes.filter((i) => this.daysOpen(i.createdAt) >= 7).length, ton: 'bad' },
+      { label: 'Non assignées', valeur: ouvertes.filter((i) => !i.assigneeNom).length, ton: 'info' },
+    ];
   }
 
   get totalOpen(): number {

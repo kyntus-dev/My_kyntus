@@ -1298,6 +1298,25 @@ public static class PlanningSchemaPatches
             ct);
     }
 
+    /// <summary>v87 : historique personnel des indicateurs de l'accueil (tendances et courbes).</summary>
+    public static async Task EnsureAccueilIndicateursAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS accueil_indicateurs_jour (
+                "Id" bigserial PRIMARY KEY,
+                "SubjectId" uuid NOT NULL,
+                "Jour" date NOT NULL,
+                "Cle" character varying(60) NOT NULL,
+                "Valeur" numeric(14,2) NOT NULL,
+                "MisAJourLe" timestamp with time zone NOT NULL DEFAULT now()
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_accueil_indicateurs_jour_SubjectId_Jour_Cle"
+                ON accueil_indicateurs_jour ("SubjectId", "Jour", "Cle");
+            """,
+            ct);
+    }
+
     /// <summary>v31 : types de manquement et d'élément variable de paie ajoutés à la main.</summary>
     public static async Task EnsurePresenceTypesAsync(AppDbContext db, CancellationToken ct = default)
     {

@@ -55,7 +55,7 @@ function resolvePoleLabel(
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div>
+        <div class="ky-entete">
           <h1 class="prime-page-title">Périmètre Chef de projet</h1>
           <p class="prime-page-subtitle">
             Collaborateurs du même pôle que votre affectation (superviseurs, référents techniques, pilotes).

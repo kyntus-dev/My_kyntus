@@ -19,7 +19,7 @@ import { currentAllowancePeriod } from '../../lib/allowance-status';
   imports: [CommonModule, FormsModule],
   template: `
     <div class="mgr-dash">
-      <header class="mgr-dash__header">
+      <header class="ky-entete mgr-dash__header">
         <div>
           <h1 class="mgr-dash__title">Tableau de bord — Primes Support</h1>
           <p class="mgr-dash__subtitle">{{ dept.managedDepartmentLabel() }} · {{ dept.directReportCount() }} collaborateur(s) N-1</p>

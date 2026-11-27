@@ -40,7 +40,7 @@ function friendlyPeriod(period: string): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="prime-page-shell space-y-6">
-      <header class="flex flex-wrap items-end justify-between gap-3">
+      <header class="ky-entete flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 class="prime-page-title">Tableau de bord superviseur</h1>
           <p class="mt-1 text-sm text-muted">

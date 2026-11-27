@@ -11,7 +11,7 @@ import { ParrainageNavService } from '../../state/parrainage-nav.service';
   imports: [KpiCardComponent, StatusBadgeComponent],
   template: `
     <div class="space-y-4">
-      <div>
+      <div class="ky-entete">
         <h1 class="prime-page-title">Tableau de bord</h1>
         <p class="ky-page-subtitle">Vue d'ensemble de vos parrainages et primes.</p>
       </div>

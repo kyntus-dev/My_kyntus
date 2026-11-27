@@ -1,0 +1,659 @@
+/*
+ * v81 — Charte « maquette retenue » (Propositions accueil et menu) appliquée à toutes les pages.
+ *
+ * Chargée après les feuilles existantes (angular.json) et avant les garde-fous de contraste :
+ * elle aligne les briques communes sur l'accueil v80 — bandeau d'en-tête, cartes à 18 px avec ombre
+ * douce, indicateurs (grand chiffre, libellé lisible, teinte rouge / ambre), tableaux, boutons,
+ * champs. Uniquement de la présentation : aucun sélecteur ne masque, n'ajoute ni ne déplace
+ * d'élément ; toutes les couleurs passent par les variables du thème (clair et sombre).
+ */
+
+body {
+  --ky-carte-rayon: 18px;
+  --ky-carte-rayon-sm: 14px;
+  --ky-ctrl-rayon: 10px;
+  --ky-carte-ombre: 0 1px 2px rgb(2 6 23 / 0.05), 0 8px 24px rgb(2 6 23 / 0.05);
+  --ky-carte-ombre-survol: 0 2px 4px rgb(2 6 23 / 0.06), 0 14px 32px rgb(2 6 23 / 0.09);
+  --ky-violet: #8b5cf6;
+}
+body.theme-dark {
+  --ky-carte-ombre: 0 1px 2px rgb(0 0 0 / 0.35), 0 10px 30px rgb(0 0 0 / 0.28);
+  --ky-carte-ombre-survol: 0 2px 4px rgb(0 0 0 / 0.4), 0 16px 36px rgb(0 0 0 / 0.36);
+}
+
+/* ═══ 1. En-têtes de page : le bandeau de l'accueil ═══════════════════════════════════════════
+ * - <app-kyntus-page-header> (68 pages) ;
+ * - .ku-hero (pointage, présences, réaffectations…) : n'est plus un bloc bleu plein ;
+ * - .ky-entete : posée page par page sur les en-têtes écrits à la main (Prime, Parrainage…). */
+.ks-content .kyntus-page-header,
+.ks-content .ku-hero,
+.ks-content .ky-entete {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 24px;
+  padding: 22px 26px !important;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--ky-violet) 22%, var(--border-color)) !important;
+  border-radius: var(--ky-carte-rayon) !important;
+  background-color: var(--bg-card) !important;
+  background-image:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--ky-violet) 13%, transparent) 0%, transparent 55%),
+    radial-gradient(90% 120% at 0% 100%, color-mix(in srgb, var(--ky-blue) 9%, transparent) 0%, transparent 60%) !important;
+  box-shadow: var(--ky-carte-ombre) !important;
+  color: var(--text-primary);
+  overflow: visible;
+}
+.ks-content .ku-hero::after { display: none; }
+
+/* Titres du bandeau */
+.ks-content .kyntus-page-header .ky-page-title,
+.ks-content .ku-hero .ku-hero-title,
+.ks-content .ky-entete h1 {
+  margin: 0;
+  font-family: var(--font-display, 'Space Grotesk', 'Inter', sans-serif);
+  font-size: clamp(1.45rem, 2.2vw, 1.95rem) !important;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.ks-content .ku-hero .ku-hero-title { color: var(--text-primary) !important; }
+/* La barre de marque sous le titre n'existe pas dans la maquette. */
+.ks-content .kyntus-page-header h1::after,
+.ks-content .ku-hero h1::after,
+.ks-content .ky-entete h1::after { display: none !important; }
+
+.ks-content .kyntus-page-header .ky-page-subtitle,
+.ks-content .ku-hero .ku-hero-sub,
+.ks-content .ky-entete h1 + p {
+  margin: 6px 0 0;
+  max-width: 68ch;
+  font-size: 0.9rem;
+  color: var(--text-muted) !important;
+}
+.ks-content .ku-hero .ku-hero-eyebrow { color: var(--text-muted); letter-spacing: 0.06em; }
+
+/* Boutons du bandeau : boutons normaux (le bandeau n'est plus bleu foncé). */
+.ks-content .ku-hero .ku-btn { background: var(--bg-card); color: var(--text-primary); border-color: var(--border-color); }
+.ks-content .ku-hero .ku-btn:hover:not(:disabled) { background: var(--bg-card); border-color: var(--ky-blue); }
+.ks-content .ku-hero .ku-btn--primary { background: var(--ky-blue); color: #fff; border-color: var(--ky-blue); }
+.ks-content .ku-hero .ku-btn--primary:hover:not(:disabled) { background: var(--ky-blue-strong); }
+.ks-content .ku-hero .ku-chip { background: var(--bg-input); }
+
+/* ═══ 2. Cartes ════════════════════════════════════════════════════════════════════════════ */
+.ks-content .ky-card,
+.ks-content .card-navy,
+.ks-content .ku-card,
+.ks-content .ky-table-card,
+.ks-content .ky-stat-card,
+.ks-content .prime-kpi-card {
+  border-radius: var(--ky-carte-rayon);
+  box-shadow: var(--ky-carte-ombre);
+}
+/* Carte Prime (PrimeCardComponent) et cartes Tailwind « bg-card + bordure + rounded-xl ». */
+.ks-content .ky-prime-carte {
+  border-radius: var(--ky-carte-rayon);
+  box-shadow: var(--ky-carte-ombre);
+}
+.ks-content .bg-card.border.rounded-xl:not(.ky-prime-carte) { border-radius: var(--ky-carte-rayon-sm); }
+
+body.theme-light .ks-content .ky-card,
+body.theme-light .ks-content .card-navy { border-color: var(--border-color); }
+.ks-content .card-navy:hover,
+.ks-content a.ky-card:hover,
+.ks-content button.ky-card:hover { box-shadow: var(--ky-carte-ombre-survol); }
+
+.ks-content .ky-card-title,
+.ks-content .ku-card-title,
+.ks-content .card-title {
+  font-family: var(--font-display, 'Space Grotesk', 'Inter', sans-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ═══ 3. Indicateurs : grand chiffre, libellé lisible, teinte selon l'état ═════════════════ */
+.ks-content .ku-kpi,
+.ks-content .ky-kpi-card,
+.ks-content .kpi-card {
+  border-radius: var(--ky-carte-rayon) !important;
+  box-shadow: var(--ky-carte-ombre);
+  padding: 18px 20px 16px;
+  gap: 6px;
+}
+.ks-content .ku-kpi-label,
+.ks-content .ky-kpi-label,
+.ks-content .kpi-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+.ks-content .ku-kpi-value,
+.ks-content .ky-kpi-value,
+.ks-content .kpi-value {
+  font-family: var(--font-display, 'Space Grotesk', 'Inter', sans-serif);
+  font-size: clamp(1.6rem, 2.2vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+/* Pastille d'état : tuile d'icône douce plutôt qu'un simple point. */
+.ks-content .ku-kpi::before {
+  top: 16px;
+  right: 16px;
+  width: 12px;
+  height: 12px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--ku-accent) 16%, transparent);
+}
+.ks-content .ku-kpi--danger {
+  background: linear-gradient(160deg, var(--danger-bg) 0%, var(--bg-card) 75%);
+  border-color: var(--danger-border);
+}
+.ks-content .ku-kpi--danger .ku-kpi-value { color: var(--danger-text); }
+.ks-content .ku-kpi--warn { border-color: var(--warning-border); }
+
+/* Anciennes cartes à liseré latéral (kc-*) : bordure et teinte de l'état, comme la maquette. */
+.ks-content .kc-blue,
+.ks-content .kc-green,
+.ks-content .kc-amber,
+.ks-content .kc-rose,
+.ks-content .kc-gray { border-left-width: 1px !important; }
+.ks-content .kc-blue { border-color: var(--info-border) !important; }
+.ks-content .kc-green { border-color: var(--success-border) !important; }
+.ks-content .kc-amber { border-color: var(--warning-border) !important; }
+.ks-content .kc-rose {
+  border-color: var(--danger-border) !important;
+  background: linear-gradient(160deg, var(--danger-bg) 0%, var(--bg-card) 75%);
+}
+
+/* ═══ 4. Tableaux ══════════════════════════════════════════════════════════════════════════ */
+.ks-content .ku-table-wrap,
+.ks-content .table-wrap,
+.ks-content .table-wrapper {
+  border-radius: var(--ky-carte-rayon-sm);
+}
+.ks-content .ky-table thead,
+.ks-content .prime-table thead,
+.ks-content .ky-table--sticky thead th,
+.ks-content .prime-table--sticky thead th {
+  background-color: color-mix(in srgb, var(--bg-input) 70%, var(--bg-card));
+}
+.ks-content .ky-table thead th,
+.ks-content .prime-table thead th,
+.ks-content .ku-table th {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.ks-content .ky-table tbody tr:hover,
+.ks-content .prime-table tbody tr:hover {
+  background-color: color-mix(in srgb, var(--ky-blue) 5%, var(--bg-card));
+}
+
+/* ═══ 5. Boutons, champs, puces ═════════════════════════════════════════════════════════════ */
+.ks-content .ky-btn-primary,
+.ks-content .ky-btn-secondary,
+.ks-content .ky-btn-danger,
+.ks-content .ky-btn-ghost,
+.ks-content .prime-btn-primary,
+.ks-content .prime-btn-secondary,
+.ks-content .ku-btn {
+  border-radius: var(--ky-ctrl-rayon);
+}
+.ks-content .ky-input,
+.ks-content .ku-input,
+.ks-content .ky-select,
+.ks-content .ky-textarea {
+  border-radius: var(--ky-ctrl-rayon);
+}
+.ks-content .ku-seg { border-radius: calc(var(--ky-ctrl-rayon) + 2px); }
+.ks-content .ku-seg button { border-radius: calc(var(--ky-ctrl-rayon) - 2px); }
+
+.ks-content .ku-alert,
+.ks-content .ky-alert { border-radius: var(--ky-carte-rayon-sm); }
+
+.ks-content .ku-empty,
+.ks-content .empty-state { color: var(--text-muted); }
+
+.ks-content .ku-skeleton { border-radius: var(--ky-carte-rayon); }
+
+@media (max-width: 640px) {
+  .ks-content .kyntus-page-header,
+  .ks-content .ku-hero,
+  .ks-content .ky-entete { padding: 18px 16px !important; }
+  .ks-content .ku-kpi,
+  .ks-content .ky-kpi-card,
+  .ks-content .kpi-card { padding: 14px 16px; }
+}
+
+/* Les garde-fous « headers legacy » (kyntus-theme-contrast.css) forcent fond et bordure des
+   <header> en clair : le bandeau garde sa surface et sa bordure de la maquette. */
+body.theme-light .ks-content header.ku-hero:not(.kyntus-page-header),
+body.theme-light .ks-content header.ky-entete:not(.kyntus-page-header) {
+  background-color: var(--bg-card) !important;
+  border-color: color-mix(in srgb, var(--ky-violet) 22%, var(--border-color)) !important;
+}
+
+/* ═══ 6. v82 — Mode compact (Paramètres › Apparence, ou palette Ctrl K) ═════════════════════
+ * Plus de lignes visibles dans les tableaux, cartes et bandeaux plus serrés. Rien n'est masqué. */
+body.ky-compact .ks-content .ky-table thead th,
+body.ky-compact .ks-content .prime-table thead th { padding-top: 8px; padding-bottom: 8px; }
+body.ky-compact .ks-content .ky-table tbody td,
+body.ky-compact .ks-content .prime-table tbody td { padding-top: 7px; padding-bottom: 7px; }
+body.ky-compact .ks-content .ku-table th { padding-top: 7px; padding-bottom: 7px; }
+body.ky-compact .ks-content .ku-table td { padding-top: 5px; padding-bottom: 5px; }
+body.ky-compact .ks-content table td,
+body.ky-compact .ks-content table th { line-height: 1.3; }
+body.ky-compact .ks-content .kyntus-page-header,
+body.ky-compact .ks-content .ku-hero,
+body.ky-compact .ks-content .ky-entete { padding: 14px 20px !important; }
+body.ky-compact .ks-content .ky-page-title,
+body.ky-compact .ks-content .ku-hero-title,
+body.ky-compact .ks-content .ky-entete h1 { font-size: clamp(1.25rem, 1.8vw, 1.55rem) !important; }
+body.ky-compact .ks-content .ku-card,
+body.ky-compact .ks-content .ku-kpi,
+body.ky-compact .ks-content .ky-kpi-card,
+body.ky-compact .ks-content .kpi-card { padding: 12px 14px; }
+body.ky-compact .ks-content .ku-kpi-value,
+body.ky-compact .ks-content .ky-kpi-value,
+body.ky-compact .ks-content .kpi-value { font-size: clamp(1.3rem, 1.8vw, 1.6rem); }
+body.ky-compact .ks-content .ky-page-shell,
+body.ky-compact .ks-content .prime-page-shell,
+body.ky-compact .ks-content .ku-page { gap: 12px; }
+
+/* ═══ 7. v82 — Interactions : les éléments cliquables réagissent au survol et au clavier ═══ */
+.ks-content a.card-navy,
+.ks-content button.card-navy,
+.ks-content a.ku-kpi,
+.ks-content button.ku-kpi,
+.ks-content a.ky-kpi-card,
+.ks-content button.ky-kpi-card {
+  transition: transform var(--duration-fast, 150ms) var(--ease-out, ease-out), box-shadow var(--duration-fast, 150ms) var(--ease-out, ease-out), border-color var(--duration-fast, 150ms) ease;
+}
+.ks-content a.card-navy:hover,
+.ks-content button.card-navy:hover,
+.ks-content a.ky-kpi-card:hover,
+.ks-content button.ky-kpi-card:hover { transform: translateY(-2px); box-shadow: var(--ky-carte-ombre-survol); }
+.ks-content .ky-btn-primary:active:not(:disabled),
+.ks-content .ky-btn-secondary:active:not(:disabled),
+.ks-content .ku-btn:active:not(:disabled) { transform: translateY(1px); }
+.ks-content button:focus-visible,
+.ks-content a:focus-visible,
+.ks-content [tabindex]:focus-visible { outline: 2px solid var(--ky-blue-soft, #6f95cf); outline-offset: 2px; }
+/* Cases cochées et curseurs à la couleur de la marque, en clair et en sombre. */
+.ks-content input[type='checkbox'],
+.ks-content input[type='radio'],
+.ks-content input[type='range'] { accent-color: var(--ky-blue); }
+@media (prefers-reduced-motion: reduce) {
+  .ks-content a.card-navy:hover,
+  .ks-content button.card-navy:hover,
+  .ks-content a.ky-kpi-card:hover,
+  .ks-content button.ky-kpi-card:hover { transform: none; }
+}
+
+/* ═══ 8. v84 — Barre de traitement des listes (toutes les pages) ══════════════════════════════
+ * Posée par KyntusListesService au-dessus de chaque tableau de données : filtres par statut avec
+ * compteurs, recherche, nombre de lignes. Affichage seulement. */
+.ks-content .ky-tt {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px;
+  margin: 0 0 12px;
+}
+.ks-content .ky-tt-puces { display: flex; flex-wrap: wrap; gap: 6px; min-height: 0; }
+.ks-content .ky-tt-puces:empty { display: none; }
+.ks-content .ky-tt-puce {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px;
+  border: 1px solid var(--border-color); border-radius: var(--ky-ctrl-rayon, 10px);
+  background: var(--bg-card); color: var(--text-primary);
+  font: 600 0.8rem var(--font-sans, 'Inter', sans-serif); cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.ks-content .ky-tt-puce span {
+  min-width: 18px; padding: 1px 7px; border-radius: 999px; background: var(--bg-input);
+  font-size: 0.7rem; font-weight: 700; text-align: center;
+}
+.ks-content .ky-tt-puce[data-ton='warn'] span { background: var(--warning-bg); color: var(--warning-text); }
+.ks-content .ky-tt-puce[data-ton='bad'] span { background: var(--danger-bg); color: var(--danger-text); }
+.ks-content .ky-tt-puce[data-ton='ok'] span { background: var(--success-bg); color: var(--success-text); }
+.ks-content .ky-tt-puce:hover { border-color: var(--ky-blue); }
+.ks-content .ky-tt-puce.is-on { background: var(--ky-blue); border-color: var(--ky-blue); color: #fff; }
+.ks-content .ky-tt-puce.is-on span { background: rgb(255 255 255 / 0.22); color: #fff; }
+.ks-content .ky-tt-droite { display: flex; align-items: center; gap: 12px; margin-left: auto; flex-wrap: nowrap; min-width: 0; }
+.ks-content .ky-tt-recherche {
+  display: flex; align-items: center; gap: 8px; min-height: 38px; width: min(300px, 100%); padding: 0 12px;
+  border: 1px solid var(--border-color); border-radius: var(--ky-ctrl-rayon, 10px); background: var(--bg-card); color: var(--text-muted);
+}
+.ks-content .ky-tt-recherche:focus-within { border-color: var(--ky-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ky-blue) 14%, transparent); }
+.ks-content .ky-tt-recherche svg { width: 15px; height: 15px; flex: none; }
+body .ks-content .ky-tt-recherche input[type='search'],
+body.theme-light .ks-content .ky-tt-recherche input[type='search']:not([type='checkbox']):not([type='radio']),
+body.theme-dark .ks-content .ky-tt-recherche input[type='search']:not([type='checkbox']):not([type='radio']) {
+  flex: 1; min-width: 0; height: 34px; padding: 0 !important; border: 0 !important; outline: 0 !important;
+  box-shadow: none !important; background: transparent !important; color: var(--text-primary); font: 500 0.84rem var(--font-sans, 'Inter', sans-serif);
+}
+.ks-content .ky-tt-compte { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+
+/* Statuts en pastille : seulement les cellules de texte simple (les badges existants sont gardés). */
+.ks-content td[data-ky-ton]:not(:has(span, div, svg, img)) { font-weight: 600; white-space: nowrap; }
+.ks-content td[data-ky-ton]:not(:has(span, div, svg, img))::before {
+  content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%;
+  vertical-align: middle; background: currentColor; opacity: 0.85;
+}
+.ks-content td[data-ky-ton='ok']:not(:has(span, div, svg, img)) { color: var(--success-text) !important; }
+.ks-content td[data-ky-ton='warn']:not(:has(span, div, svg, img)) { color: var(--warning-text) !important; }
+.ks-content td[data-ky-ton='bad']:not(:has(span, div, svg, img)) { color: var(--danger-text) !important; }
+.ks-content td[data-ky-ton='info']:not(:has(span, div, svg, img)) { color: var(--info-text) !important; }
+
+/* Lignes cochées : surlignées comme dans la maquette (toutes les listes à cases à cocher). */
+/* (!important : les garde-fous de kyntus-theme-contrast.css forcent le fond des cellules) */
+.ks-content table tbody tr:has(> td input[type='checkbox']:checked) > td { background: color-mix(in srgb, #8b5cf6 9%, var(--bg-card)) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   9. v86 — Écran de traitement commun (maquette « Valider les congés ») pour tous les modules :
+      en-tête + compteurs, puces, barre d'outils, tableau, sélection, barre d'actions groupées,
+      panneau de détail. Classes ky-tr-* (aucune ne pré-existait).
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+.ky-tr-page { display: flex; flex-direction: column; gap: 14px; padding-bottom: 90px; }
+.ky-tr-entete { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+.ky-tr-entete-texte { min-width: 0; }
+.ky-tr-ariane { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.ky-tr-ariane strong { color: var(--text-primary); font-weight: 600; }
+.ky-tr-entete h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.01em; color: var(--text-primary); }
+.ky-tr-entete p { margin: 4px 0 0; font-size: 13.5px; color: var(--text-muted); max-width: 66ch; }
+.ky-tr-entete-droite { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+.ky-tr-compteur { display: flex; flex-direction: column; justify-content: center; min-width: 112px; padding: 9px 14px; border-radius: 14px;
+  background: var(--bg-card); border: 1px solid var(--border-color); }
+.ky-tr-compteur small { font-size: 11.5px; color: var(--text-muted); }
+.ky-tr-compteur b { font-size: 22px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.ky-tr-compteur b[data-ton=warn] { color: var(--warning-text, #b45309); }
+.ky-tr-compteur b[data-ton=bad] { color: var(--danger-text, #b91c1c); }
+.ky-tr-compteur b[data-ton=ok] { color: var(--success-text, #15803d); }
+.ky-tr-compteur b[data-ton=info] { color: var(--info-text, #1d4ed8); }
+.ky-tr-icone { display: inline-grid; place-items: center; width: 40px; min-height: 40px; border-radius: 12px; cursor: pointer; align-self: center;
+  background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); }
+.ky-tr-icone svg { width: 18px; height: 18px; }
+.ky-tr-icone:hover { border-color: var(--ky-blue, #2563eb); color: var(--ky-blue, #2563eb); }
+.ky-tr-icone:focus-visible, .ky-tr-puce:focus-visible, .ky-tr-personne:focus-visible { outline: 2px solid var(--ky-blue, #2563eb); outline-offset: 2px; }
+
+.ky-tr-outils { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ky-tr-outils-droite { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ky-tr-puces { display: flex; gap: 6px; flex-wrap: wrap; }
+.ky-tr-puce { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: 999px; cursor: pointer;
+  font-size: 13px; font-weight: 600; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); }
+.ky-tr-puce span { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--bg-input); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ky-tr-puce.is-on { background: var(--ky-blue, #2563eb); border-color: var(--ky-blue, #2563eb); color: #fff; }
+.ky-tr-puce.is-on span { background: rgba(255,255,255,.22); color: #fff; }
+.ky-tr-recherche { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 11px; border-radius: 10px; min-width: 220px;
+  background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-muted); }
+.ky-tr-recherche svg { width: 16px; height: 16px; flex: none; }
+.ks-content .ky-tr-recherche input[type=search]:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]),
+.ky-tr-recherche input { border: 0 !important; outline: 0; background: transparent !important; box-shadow: none !important; padding: 0 !important;
+  color: var(--text-primary); font: inherit; font-size: 13.5px; width: 100%; height: auto; }
+.ky-tr-recherche:focus-within { border-color: var(--ky-blue, #2563eb); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.ky-tr-select { height: 36px; min-width: 160px; }
+
+.ky-tr-table-wrap { border-radius: var(--ky-carte-rayon, 18px); border: 1px solid var(--border-color); background: var(--bg-card); overflow-x: auto; }
+.ky-tr-table { width: 100%; border-collapse: collapse; }
+.ky-tr-table th { text-align: left; font-size: 12px; font-weight: 600; color: var(--text-muted); padding: 11px 14px; border-bottom: 1px solid var(--border-color); white-space: nowrap; background: transparent; }
+.ky-tr-table td { padding: 12px 14px; border-bottom: 1px solid var(--border-color); vertical-align: middle; font-size: 13.5px; color: var(--text-primary); }
+.ky-tr-table tbody tr:last-child td { border-bottom: 0; }
+.ky-tr-table .ky-tr-case { width: 36px; padding-right: 0; }
+.ky-tr-table input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--ky-blue, #2563eb); cursor: pointer; }
+.ky-tr-table .ky-tr-decision { text-align: right; white-space: nowrap; }
+.ky-tr-table .ky-tr-decision > * + * { margin-left: 6px; }
+.ks-content .ky-tr-table tbody tr:hover > td { background: color-mix(in srgb, var(--ky-blue, #2563eb) 4%, var(--bg-card)) !important; }
+.ks-content .ky-tr-table tbody tr.is-coche:not(#ky-tr-z) > td, .ks-content .ky-tr-table tbody tr.is-coche:hover:not(#ky-tr-z) > td { background: color-mix(in srgb, var(--ky-blue, #2563eb) 10%, var(--bg-card)) !important; }
+.ky-tr-personne { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; padding: 0; cursor: pointer; text-align: left; color: inherit; font: inherit; }
+.ky-tr-personne:hover strong { color: var(--ky-blue, #2563eb); }
+.ky-tr-personne > span:last-child, .ky-tr-double { display: flex; flex-direction: column; min-width: 0; }
+.ky-tr-personne strong, .ky-tr-double strong { font-weight: 600; color: var(--text-primary); }
+.ky-tr-personne small, .ky-tr-double small { font-size: 12px; color: var(--text-muted); max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ky-tr-avatar { display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; color: #fff !important; font-size: 12.5px; font-weight: 700; letter-spacing: .02em; }
+.ky-tr-avatar--lg { width: 46px; height: 46px; font-size: 15px; }
+.ky-tr-statut { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
+  background: var(--bg-input); color: var(--text-muted); border: 1px solid var(--border-color); }
+.ky-tr-statut::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ky-tr-statut[data-ton=ok] { background: var(--success-bg, #f0fdf4); color: var(--success-text, #15803d); border-color: var(--success-border, #bbf7d0); }
+.ky-tr-statut[data-ton=warn] { background: var(--warning-bg, #fffbeb); color: var(--warning-text, #b45309); border-color: var(--warning-border, #fde68a); }
+.ky-tr-statut[data-ton=bad] { background: var(--danger-bg, #fef2f2); color: var(--danger-text, #b91c1c); border-color: var(--danger-border, #fecaca); }
+.ky-tr-muted { color: var(--text-muted); }
+.ky-tr-note { margin: 0; font-size: 12px; color: var(--text-muted); }
+.ky-tr-vide { padding: 40px 20px; text-align: center; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: var(--ky-carte-rayon, 18px); }
+.ky-tr-vide h3 { margin: 0 0 4px; color: var(--text-primary); font-size: 16px; }
+
+.ky-tr-btn { height: 32px; padding: 0 13px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--border-color);
+  background: var(--bg-input); color: var(--text-primary); }
+.ky-tr-btn:disabled { opacity: .55; cursor: not-allowed; }
+.ky-tr-btn--ok { background: var(--ky-blue, #2563eb); border-color: var(--ky-blue, #2563eb); color: #fff; }
+.ky-tr-btn--ok:hover:not(:disabled) { filter: brightness(1.08); }
+.ky-tr-btn--refus { background: transparent; color: var(--danger-text, #b91c1c); }
+.ky-tr-btn--refus:hover:not(:disabled) { border-color: var(--danger-text, #b91c1c); background: var(--danger-bg, #fef2f2); }
+.ky-tr-btn--lg { height: 40px; flex: 1; }
+body.ky-compact .ky-tr-table td { padding-top: 7px; padding-bottom: 7px; }
+body.ky-compact .ky-tr-avatar { width: 28px; height: 28px; font-size: 11px; }
+body.ky-compact .ky-tr-personne small { display: none; }
+
+.ky-tr-lot { position: sticky; bottom: 14px; z-index: 30; align-self: center; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px 10px 18px; border-radius: 16px; background: #0f172a; color: #fff; box-shadow: 0 14px 40px rgba(2,6,23,.35); animation: ky-tr-monte .22s ease-out; }
+.ky-tr-lot strong { font-size: 13.5px; margin-right: 6px; color: #fff; }
+.ky-tr-lot button { height: 34px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+.ky-tr-lot button:disabled { opacity: .6; cursor: progress; }
+.ky-tr-lot .ky-tr-lot-sec { background: transparent; color: #cbd5e1; border-color: rgba(255,255,255,.18); }
+.ky-tr-lot .ky-tr-lot-refus { background: rgba(239,68,68,.16); color: #fca5a5; }
+.ky-tr-lot .ky-tr-lot-valider { background: #22c55e; color: #052e16; }
+body.theme-dark .ky-tr-lot { background: #1e293b; border: 1px solid rgba(255,255,255,.08); }
+@keyframes ky-tr-monte { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.ky-tr-tiroir-fond { position: fixed; inset: 0; z-index: 1000; background: rgba(2,6,23,.42); display: flex; justify-content: flex-end; animation: ky-tr-fondu .18s ease-out; }
+.ky-tr-tiroir { width: min(460px, 100%); height: 100%; overflow-y: auto; background: #fff; color: var(--text-primary);
+  border-left: 1px solid var(--border-color); display: flex; flex-direction: column; box-shadow: -18px 0 50px rgba(2,6,23,.25); animation: ky-tr-glisse .24s cubic-bezier(.2,.8,.2,1); }
+body.theme-dark .ky-tr-tiroir, body.theme-dark .ky-tr-tiroir-pied { background: #0b1324; }
+.ky-tr-tiroir-tete { display: flex; align-items: center; gap: 12px; padding: 20px 20px 0; }
+.ky-tr-tiroir-nom { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ky-tr-tiroir-nom strong { font-size: 17px; }
+.ky-tr-tiroir-nom small { color: var(--text-muted); font-size: 12.5px; }
+.ky-tr-tiroir-corps { padding: 18px 20px; display: flex; flex-direction: column; gap: 18px; flex: 1; }
+.ky-tr-tiroir-corps h4 { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
+.ky-tr-tiroir-pied { position: sticky; bottom: 0; padding: 14px 20px; display: flex; gap: 8px; background: #fff; border-top: 1px solid var(--border-color); }
+.ky-tr-tiroir-pied:empty { display: none; }
+.ky-tr-tuiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ky-tr-tuiles > span { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 12px; background: var(--bg-input); border: 1px solid var(--border-color); min-width: 0; }
+.ky-tr-tuiles small, .ky-tr-champs small { font-size: 11.5px; color: var(--text-muted); }
+.ky-tr-tuiles b { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.ky-tr-champs { display: flex; flex-direction: column; gap: 9px; margin: 0; }
+.ky-tr-champs p, .ky-tr-champs > div { margin: 0; display: flex; flex-direction: column; font-size: 13.5px; overflow-wrap: anywhere; }
+.ky-tr-histo { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--border-color); display: flex; flex-direction: column; gap: 10px; }
+.ky-tr-histo li { position: relative; display: flex; flex-direction: column; font-size: 13px; }
+.ky-tr-histo li::before { content: ''; position: absolute; left: -20px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--ky-blue, #2563eb); box-shadow: 0 0 0 3px var(--bg-card); }
+.ky-tr-histo li.is-attente::before { background: var(--warning-text, #d97706); }
+.ky-tr-histo small { color: var(--text-muted); font-size: 12px; }
+.ky-tr-alerte { margin: 0; font-size: 12.5px; padding: 9px 11px; border-radius: 10px; background: var(--info-bg, #eff6ff); color: var(--info-text, #1d4ed8); }
+.ky-tr-alerte[data-ton=warn] { background: var(--warning-bg, #fffbeb); color: var(--warning-text, #b45309); }
+.ky-tr-alerte[data-ton=bad] { background: var(--danger-bg, #fef2f2); color: var(--danger-text, #b91c1c); }
+.ky-tr-alerte[data-ton=ok] { background: var(--success-bg, #f0fdf4); color: var(--success-text, #15803d); }
+.ky-tr-table td.ky-tr-double { display: table-cell; }
+.ky-tr-table td.ky-tr-double > strong, .ky-tr-table td.ky-tr-double > small { display: block; }
+.ky-tr-tuiles .ky-tr-statut { white-space: normal; height: auto; min-height: 24px; padding: 3px 9px; align-self: flex-start; }
+@keyframes ky-tr-glisse { from { transform: translateX(30px); opacity: .4; } to { transform: none; opacity: 1; } }
+@keyframes ky-tr-fondu { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 860px) {
+  .ky-tr-entete-droite { width: 100%; }
+  .ky-tr-compteur { flex: 1; min-width: 0; }
+  .ky-tr-outils-droite, .ky-tr-recherche { width: 100%; }
+  .ky-tr-select { flex: 1; }
+  .ky-tr-table thead { display: none; }
+  .ky-tr-table, .ky-tr-table tbody, .ky-tr-table tr, .ky-tr-table td { display: block; width: 100%; box-sizing: border-box; }
+  .ky-tr-table tr { position: relative; padding: 12px 14px 12px 44px; border-bottom: 1px solid var(--border-color); background: var(--bg-card); }
+  .ky-tr-table tr.is-coche { background: rgba(37,99,235,.09); }
+  .ks-content .ky-tr-table tbody tr:not(#ky-tr-z):not(#ky-tr-y) > td { background: transparent !important; }
+  .ky-tr-table td.ky-tr-double { display: block; }
+  .ky-tr-table td, .ks-content .ky-tr-table td { border: 0; padding: 3px 0; text-align: left; }
+  .ky-tr-table td[data-label]::before { content: attr(data-label) ' · '; color: var(--text-muted); font-size: 12px; }
+  .ky-tr-table .ky-tr-case { position: absolute; left: 14px; top: 18px; width: auto; }
+  .ky-tr-table .ky-tr-decision { display: flex; gap: 6px; padding-top: 8px; text-align: left; }
+  .ky-tr-table .ky-tr-decision > * { flex: 1; height: 38px; margin: 0 !important; }
+  .ky-tr-lot { left: 10px; right: 10px; bottom: 10px; justify-content: center; gap: 6px; padding: 10px; }
+  .ky-tr-lot strong { width: 100%; text-align: center; margin: 0; }
+  .ky-tr-lot button { flex: 1; padding: 0 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ky-tr-lot, .ky-tr-tiroir, .ky-tr-tiroir-fond { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   10. v89 — Cohérence de toute l'application (pages hors maquette : formulaires, fiches de détail,
+       plannings, calendriers, fenêtres, onglets, états vides). Un seul langage visuel pour les
+       variantes de classes héritées des modules (ky-, ku-, prime-, doc-, rp-, mdc-…).
+       Interface seule : aucune règle de comportement, aucun élément masqué ou ajouté.
+       Les styles propres à un écran restent prioritaires (même spécificité, chargés après).
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* 10.1 Cartes et sections : même arrondi, même bordure, même ombre partout. */
+.ks-content .gen-card,
+.ks-content .mdc-card,
+.ks-content .rp-detail-card,
+.ks-content .form-section,
+.ks-content .card {
+  border-radius: var(--ky-carte-rayon);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--ky-carte-ombre);
+}
+.ks-content .ku-card-head,
+.ks-content .modal-header { gap: 10px; }
+
+/* 10.2 Titres de section : même typographie. */
+.ks-content .section-heading,
+.ks-content .rp-section-label,
+.ks-content .form-section > h2,
+.ks-content .form-section > h3,
+.ks-content .gen-card > h3 {
+  font-family: var(--font-display, 'Space Grotesk', 'Inter', sans-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.ks-content .section-heading--sub { font-weight: 600; }
+.ks-content .section-hint,
+.ks-content .form-hint,
+.ks-content .field-hint { color: var(--text-muted); font-size: 12.5px; line-height: 1.45; }
+
+/* 10.3 Formulaires : libellés au-dessus, champs de même hauteur, même focus. */
+.ks-content .form-group > label,
+.ks-content .rp-form-group > label,
+.ks-content .ku-field > label,
+.ks-content .field > label,
+.ks-content .field-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+.ks-content .form-grid { gap: 14px 18px; }
+.ks-content :is(.form-group, .rp-form-group, .ku-field, .field) :is(input, select, textarea):not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+.ks-content .doc-field,
+.ks-content .filter-ctl {
+  border-radius: var(--ky-ctrl-rayon);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ks-content :is(.form-group, .rp-form-group, .ku-field, .field) :is(input, select):not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+.ks-content select.doc-field, .ks-content input.doc-field,
+.ks-content select.filter-ctl, .ks-content input.filter-ctl { min-height: 38px; }
+.ks-content :is(input, select, textarea):not([type='checkbox']):not([type='radio']):not([type='range']):focus-visible,
+.ks-content .ky-input:focus,
+.ks-content .doc-field:focus,
+.ks-content .filter-ctl:focus {
+  outline: none;
+  border-color: var(--ky-blue, #2563eb);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ky-blue, #2563eb) 18%, transparent);
+}
+.ks-content :is(input, select, textarea)::placeholder { color: var(--text-muted); opacity: .8; }
+.ks-content :is(input, select, textarea):disabled { opacity: .6; cursor: not-allowed; }
+.ks-content .form-actions,
+.ks-content .modal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.ks-content .required, .ks-content .req { color: var(--danger-text, #b91c1c); }
+
+/* 10.4 Boutons : toutes les familles partagent arrondi, hauteur, graisse, focus et état désactivé. */
+.ks-content :is(.btn, .btn-primary, .btn-outline, .btn-sm, .mdc-btn, .fa-btn, .frpq-btn, .ffi-btn, .ku-btn, .ky-btn-primary, .ky-btn-secondary, .ky-btn-danger, .ky-btn-ghost, .prime-btn-primary, .prime-btn-secondary) {
+  border-radius: var(--ky-ctrl-rayon);
+  font-weight: 600;
+}
+.ks-content :is(.btn, .btn-primary, .btn-outline, .mdc-btn, .fa-btn, .ku-btn, .ky-btn-primary, .ky-btn-secondary, .ky-btn-danger, .ky-btn-ghost, .prime-btn-primary, .prime-btn-secondary):focus-visible {
+  outline: 2px solid var(--ky-blue, #2563eb);
+  outline-offset: 2px;
+}
+.ks-content :is(.btn, .btn-primary, .btn-outline, .mdc-btn, .fa-btn, .ku-btn, .ky-btn-primary, .ky-btn-secondary, .ky-btn-danger, .ky-btn-ghost, .prime-btn-primary, .prime-btn-secondary):disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* 10.5 Tableaux hors écran de traitement : même cadre. */
+.ks-content .table-wrap,
+.ks-content .table-wrapper,
+.ks-content .ku-table-wrap {
+  border-radius: var(--ky-carte-rayon-sm);
+  border: 1px solid var(--border-color);
+  overflow-x: auto;
+}
+.ks-content .ku-table th,
+.ks-content .ky-table th { font-size: 12px; font-weight: 600; color: var(--text-muted); letter-spacing: .02em; }
+
+/* 10.6 Fenêtres (modales) : fond voilé et en-tête / pied comme le panneau de détail. */
+[class*='modal-backdrop'],
+[class*='modal-overlay'] {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.modal-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); }
+.modal-title { font-family: var(--font-display, 'Space Grotesk', 'Inter', sans-serif); font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); }
+.modal-footer { border-top: 1px solid var(--border-color); }
+.modal-close { border-radius: 10px; }
+.modal-close:focus-visible { outline: 2px solid var(--ky-blue, #2563eb); outline-offset: 2px; }
+
+/* 10.7 États vides : même encadré partout. */
+.ks-content .state-empty,
+.ks-content .rp-empty,
+.ks-content .empty-state,
+.ks-content .ku-empty {
+  border: 1px dashed var(--border-color);
+  border-radius: var(--ky-carte-rayon);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* 10.8 Onglets : même arrondi, même graisse et même focus clavier dans tous les modules. */
+.ks-content :is(.rp-tab, .ku-tab, .ky-tab, .tab-btn) { border-radius: var(--ky-ctrl-rayon); font-weight: 600; }
+.ks-content :is(.rp-tab, .ku-tab, .ky-tab, .tab-btn, [role='tab']):focus-visible { outline: 2px solid var(--ky-blue, #2563eb); outline-offset: 2px; }
+
+/* 10.9 Plannings et calendriers : en-têtes lisibles, jour courant et week-end repérables
+       (classes déjà posées par les écrans ; aucune donnée ni cellule modifiée). */
+.ks-content .pt-table th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.ks-content :is(td, th).is-today {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ky-blue, #2563eb) 45%, transparent);
+}
+
+/* 10.10 Fiches de détail : « libellé : valeur » de même ton partout (priorité minimale : :where). */
+:where(.ks-content) dt { color: var(--text-muted); font-weight: 600; }
+:where(.ks-content) dd { color: var(--text-primary); overflow-wrap: anywhere; }
+
+/* 10.11 Mouvement réduit : pas de transitions pour qui le demande. */
+@media (prefers-reduced-motion: reduce) {
+  .ks-content :is(input, select, textarea, .doc-field, .filter-ctl) { transition: none; }
+  [class*='modal-backdrop'], [class*='modal-overlay'] { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}

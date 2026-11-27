@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnDestroy, OnInit, ViewEncapsulation, inject, ElementRef, ViewChild, HostListener, computed, effect, signal } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, OnInit, ViewEncapsulation, inject, ElementRef, ViewChild, HostListener, computed, effect, signal, NgZone } from '@angular/core';
 import { KyntusRoleWatchService } from '../../core/session/kyntus-role-watch.service';
 import { libelleRole } from '../../core/org/role-libelle';
 
@@ -13,6 +13,8 @@ import { Bell, Briefcase, CircleHelp, KeyRound, LifeBuoy, Moon, Settings, Sun, U
 
 import { Microservice, MenuItem } from '../../core/navigation/microservices.config';
 import { compteurModule, grouperParRubrique, type MenuRubrique } from '../../core/navigation/menu-rubriques';
+import { AccueilHistoriqueService } from '../../core/dashboard/accueil-historique.service';
+import { appliquerCompteurs, filBarreHaut, pageCourante } from '../../core/dashboard/accueil-historique.util';
 import { NavigationMenuService } from '../../core/navigation/navigation-menu.service';
 import { HeureSortieAccessService } from '../../core/services/heure-sortie-access.service';
 import { WorkspaceHatService } from '../../core/navigation/workspace-hat.service';
@@ -30,6 +32,10 @@ import { personInitials } from '../../core/session/person-display-name.util';
 import { KyntusThemeService } from '../../core/theme/kyntus-theme.service';
 import { LucideIconComponent } from '../../shared/lucide-icon.component';
 import { GlobalSearchComponent } from './components/global-search.component';
+import { CommandPaletteComponent } from './components/command-palette.component';
+import { KyntusPaletteService } from '../../core/navigation/kyntus-palette.service';
+import { KyntusDensiteService } from '../../core/theme/kyntus-densite.service';
+import { KyntusListesService } from '../../core/ui/kyntus-listes.service';
 import { ShellNotificationBadgeComponent } from '../../shared/shell-controls/notification-badge.component';
 import { ShellNotificationDropdownComponent } from '../../shared/shell-controls/notification-dropdown.component';
 import { ShellSettingsPanelComponent } from '../../shared/shell-controls/settings-panel.component';
@@ -75,6 +81,7 @@ import { APP_GUIDE_ROUTE } from '../../core/navigation/microservices.config';
     RouterModule,
     LucideIconComponent,
     GlobalSearchComponent,
+    CommandPaletteComponent,
     ShellNotificationBadgeComponent,
     ShellNotificationDropdownComponent,
     ShellSettingsPanelComponent,
@@ -91,6 +98,7 @@ import { APP_GUIDE_ROUTE } from '../../core/navigation/microservices.config';
 export class ShellLayoutComponent implements OnInit, OnDestroy {
 
   private readonly router = inject(Router);
+  private readonly zoneHorloge = inject(NgZone);
 
   private readonly auth = inject(AuthService);
   private readonly users = inject(UserService);
@@ -125,6 +133,11 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   private readonly docAuditNav = inject(AuditInterfaceNavService);
 
   readonly theme = inject(KyntusThemeService);
+  /** v82 — palette de commandes (Ctrl K) et densité d'affichage (appliquée dès le chargement du shell). */
+  readonly palette = inject(KyntusPaletteService);
+  readonly densite = inject(KyntusDensiteService);
+  /** v84 — barre de traitement (filtres par statut, recherche, compteur) sur les listes de toutes les pages. */
+  private readonly listes = inject(KyntusListesService);
   readonly notifHub = inject(KyntusNotificationHubService);
   readonly notifInit = inject(KyntusNotificationInitService);
   readonly shellUi = inject(KyntusShellUiService);
@@ -177,7 +190,13 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   readonly openGroups = signal(new Set<string>());
 
   /** v68 — Modules rangés par rubriques (Pilotage, Collaborateurs, Temps et paie…). */
-  readonly rubriques = computed(() => grouperParRubrique(this.groups()));
+  // ── v87 : compteurs du menu (actions en attente de l'accueil) et fil « page · date · heure » ──
+  private readonly accueilHistorique = inject(AccueilHistoriqueService);
+  private readonly urlCourante = signal('/');
+  private readonly maintenant = signal(new Date());
+  private horloge: ReturnType<typeof setInterval> | null = null;
+  readonly filBarre = computed(() => filBarreHaut(pageCourante(this.urlCourante(), this.groups()), this.maintenant()));
+  readonly rubriques = computed(() => grouperParRubrique(appliquerCompteurs(this.groups(), this.accueilHistorique.compteursMenu())));
   /** v68 — Compteur d'un module (somme des compteurs de ses entrées). */
   readonly compteurModule = compteurModule;
   /** v68 — Rubriques repliées par la personne (mémorisées sur ce navigateur). */
@@ -225,6 +244,11 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   @HostListener('document:keydown', ['$event'])
   raccourciMenu(e: KeyboardEvent): void {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      // v82 — Ctrl K ouvre la palette de commandes (pages du menu du compte + actions d'affichage).
+      // La recherche du menu latéral reste disponible : Ctrl Maj K.
+      this.palette.basculer();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && e.shiftKey && !e.altKey) {
       e.preventDefault();
       if (this.sidebarCollapsed) this.toggleCollapse();
       this.sidebarOpen = true;
@@ -294,6 +318,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
 
   ngOnInit(): void {
+    this.listes.demarrer();
 
     const userStr = localStorage.getItem('user');
 
@@ -346,6 +371,11 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
     void this.heureSortieAccess.charger().then(() => this.refreshGroups());
 
     this.updateModuleClass(this.router.url);
+    this.urlCourante.set(this.router.url);
+    // v87 — heure de la barre du haut, à la minute (hors détection Angular, sans effet sur les pages).
+    this.zoneHorloge.runOutsideAngular(() => {
+      this.horloge = setInterval(() => this.zoneHorloge.run(() => this.maintenant.set(new Date())), 30_000);
+    });
 
 
 
@@ -354,6 +384,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
 
       .subscribe((e) => {
+        this.urlCourante.set(e.urlAfterRedirects || e.url);
         // v65 : droits et accès « Heure de sortie » relus à chaque changement de page, puis menu
         // reconstruit — une fonctionnalité retirée par le Super Admin disparaît aussitôt, sans
         // attendre la fin du cache ni une reconnexion.
@@ -721,6 +752,7 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subDocRole?.unsubscribe();
+    if (this.horloge) clearInterval(this.horloge);
   }
 
 }

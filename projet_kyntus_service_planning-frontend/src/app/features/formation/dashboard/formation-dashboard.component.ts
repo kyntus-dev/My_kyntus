@@ -31,6 +31,7 @@ import {
 import { buildOperationalOrgFilterOptions } from '../../../core/org/org-structure-filter';
 import { enrichUserOrgPerimeter, type UserOrgPerimeterView } from '../../../core/org/user-org-perimeter';
 import { resolveUserGuid } from '../../../core/lib/user-guid.util';
+import { kyntusThemeCourant } from '../../../core/theme/kyntus-theme.service';
 
 echarts.use([BarChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
@@ -110,6 +111,7 @@ export class FormationDashboardComponent implements OnInit {
 
   /** Couleurs d'encre ECharts lues au runtime (theme-aware). */
   private chartThemeInk(): { muted: string; primary: string; border: string } {
+    kyntusThemeCourant(); // v80 — redessine les graphiques à la bascule clair / sombre
     const s = typeof document !== 'undefined' ? getComputedStyle(document.body) : null;
     const read = (name: string, fallback: string) =>
       (s?.getPropertyValue(name).trim() || fallback);

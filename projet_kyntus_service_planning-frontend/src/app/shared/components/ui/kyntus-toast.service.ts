@@ -2,11 +2,18 @@ import { Injectable, signal } from '@angular/core';
 
 export type KyntusToastKind = 'success' | 'error' | 'info';
 
+/** v81 — Action proposée dans le toast (ex. « Annuler » après une action réversible). */
+export interface KyntusToastAction {
+  label: string;
+  run: () => void;
+}
+
 export interface KyntusToast {
   id: number;
   kind: KyntusToastKind;
   message: string;
   durationMs: number;
+  action?: KyntusToastAction;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -15,12 +22,12 @@ export class KyntusToastService {
   readonly active = signal<KyntusToast | null>(null);
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
 
-  show(message: string, kind: KyntusToastKind = 'info', durationMs = 4000): void {
+  show(message: string, kind: KyntusToastKind = 'info', durationMs = 4000, action?: KyntusToastAction): void {
     if (this.hideTimer) {
       clearTimeout(this.hideTimer);
       this.hideTimer = null;
     }
-    const toast: KyntusToast = { id: ++this.seq, kind, message, durationMs };
+    const toast: KyntusToast = { id: ++this.seq, kind, message, durationMs, action };
     this.active.set(toast);
     this.hideTimer = setTimeout(() => this.dismiss(), durationMs);
   }
@@ -37,6 +44,18 @@ export class KyntusToastService {
 
   info(message: string, durationMs = 4000): void {
     this.show(message, 'info', durationMs);
+  }
+
+  /** v81 — Toast avec un bouton (« Annuler »…) : 6 s pour laisser le temps de cliquer. */
+  withAction(message: string, action: KyntusToastAction, kind: KyntusToastKind = 'info', durationMs = 6000): void {
+    this.show(message, kind, durationMs, action);
+  }
+
+  /** Exécute l'action du toast affiché puis le ferme. */
+  runAction(): void {
+    const t = this.active();
+    this.dismiss();
+    t?.action?.run();
   }
 
   dismiss(): void {

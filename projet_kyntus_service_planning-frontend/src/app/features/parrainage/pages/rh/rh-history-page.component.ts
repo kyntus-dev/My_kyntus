@@ -9,7 +9,7 @@ import type { ReferralHistoryEntry } from '../../models/referral.model';
   imports: [],
   template: `
     <section class="flex-1 min-w-0 space-y-6">
-      <div>
+      <div class="ky-entete">
         <h1 class="prime-page-title">Historique des parrainages</h1>
         <p class="text-sm text-muted mt-1">Historique des actions enregistrées par le processus RH.</p>
       </div>

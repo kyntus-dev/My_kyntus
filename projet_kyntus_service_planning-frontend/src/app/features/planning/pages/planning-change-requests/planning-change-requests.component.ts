@@ -2,7 +2,11 @@ import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { KyntusPageHeaderComponent } from '../../../../shared/components/ui/kyntus-page-header.component';
+import type { Observable } from 'rxjs';
+import { KY_TRAITEMENT, executerLot } from '../../../../shared/components/ky-traitement/ky-traitement.components';
+import { SelectionLot, construirePuces, textesBilan, type KyCompteur, type KyPuce } from '../../../../shared/components/ky-traitement/ky-traitement.util';
+import { KyntusPromptService } from '../../../../shared/components/kyntus-prompt/kyntus-prompt.service';
+import { KyntusDensiteService } from '../../../../core/theme/kyntus-densite.service';
 import { PlanningService } from '../../services/planning.service';
 import { KyntusSessionService } from '../../../../core/session/kyntus-session.service';
 import { KyntusRoleNames } from '../../../../core/org/kyntus-role-names';
@@ -14,7 +18,7 @@ import { PlatformAccessService } from '../../../../core/platform-access/platform
 @Component({
   selector: 'app-planning-change-requests',
   standalone: true,
-  imports: [CommonModule, FormsModule, KyntusPageHeaderComponent, BodyPortalDirective],
+  imports: [CommonModule, FormsModule, BodyPortalDirective, ...KY_TRAITEMENT],
   templateUrl: './planning-change-requests.component.html',
   styleUrls: ['./planning-change-requests.component.css'],
 })
@@ -47,6 +51,113 @@ export class PlanningChangeRequestsComponent implements OnInit {
   historyRejected = 0;
 
   readonly formatWeekLabel = formatWeekLabel;
+
+  // ── v86 : écran de traitement de la maquette ─────────────────────────────────────────────
+  private readonly prompt = inject(KyntusPromptService);
+  readonly densite = inject(KyntusDensiteService);
+  /** Toutes les demandes de la période (le statut est filtré à l'affichage, avec les nombres). */
+  private toutes: any[] = [];
+  recherche = '';
+  selection = new SelectionLot<number>();
+  enCoursLot = false;
+  detail: any | null = null;
+
+  private readonly filtresStatut: Record<string, (r: any) => boolean> = {
+    '': () => true,
+    PendingPartner: (r) => r?.status === 'PendingPartner' || r?.status === 'Pending',
+    PendingSupervisor: (r) => r?.status === 'PendingSupervisor',
+    Pending: (r) => this.isPendingStatus(r?.status),
+    Approved: (r) => r?.status === 'Approved',
+    Rejected: (r) => r?.status === 'Rejected',
+    Cancelled: (r) => r?.status === 'Cancelled',
+  };
+
+  get puces(): KyPuce[] {
+    const f = this.filtresStatut;
+    return construirePuces(this.toutes, [
+      { id: 'PendingSupervisor', label: 'À valider', filtre: f['PendingSupervisor'], toujours: true },
+      { id: 'PendingPartner', label: 'En attente collègue', filtre: f['PendingPartner'] },
+      { id: 'Approved', label: 'Approuvées', filtre: f['Approved'] },
+      { id: 'Rejected', label: 'Rejetées', filtre: f['Rejected'] },
+      { id: 'Cancelled', label: 'Annulées', filtre: f['Cancelled'] },
+      { id: '', label: 'Toutes', filtre: f[''], toujours: true },
+    ]);
+  }
+
+  get compteurs(): KyCompteur[] {
+    return [
+      { label: 'À valider', valeur: this.toutes.filter(this.filtresStatut['PendingSupervisor']).length, ton: 'warn' },
+      { label: 'Chez le collègue', valeur: this.toutes.filter(this.filtresStatut['PendingPartner']).length, ton: 'info' },
+      { label: 'Approuvées', valeur: this.toutes.filter(this.filtresStatut['Approved']).length, ton: 'ok' },
+    ];
+  }
+
+  choisirStatut(id: string): void {
+    this.filterStatus = id;
+    this.appliquer();
+  }
+
+  /** Filtre d'affichage : statut + recherche (demandeur, collègue, motif, shift). */
+  private appliquer(): void {
+    const f = this.filtresStatut[this.filterStatus] ?? this.filtresStatut[''];
+    const q = this.recherche.trim().toLowerCase();
+    this.requests = this.toutes.filter((r) => f(r) && (!q || [r?.requesterName, r?.proposedSwapUserName, r?.reason, r?.shiftLabel, r?.subServiceName]
+      .some((v) => String(v ?? '').toLowerCase().includes(q))));
+    this.selection.garder(this.cochables);
+  }
+
+  onRecherche(): void {
+    this.appliquer();
+  }
+
+  get cochables(): number[] {
+    return this.requests.filter((r) => this.canActOn(r)).map((r) => r.id);
+  }
+
+  ouvrirDetail(r: any): void {
+    this.detail = r;
+  }
+
+  async validerSelection(): Promise<void> {
+    const cibles = this.requests.filter((r) => this.selection.has(r.id) && this.canActOn(r));
+    if (!cibles.length) return;
+    const ok = await this.confirmService.confirm({
+      title: 'Valider la sélection',
+      message: `Valider et appliquer ${cibles.length} switch${cibles.length > 1 ? 's' : ''} ?`,
+      confirmLabel: 'Valider',
+      cancelLabel: 'Annuler',
+      variant: 'default',
+    });
+    if (!ok) return;
+    this.lancerLot(cibles, (r) => this.planning.approveChangeRequest(r.id, this.authUserId), 'approuvée', 'approuvées');
+  }
+
+  async refuserSelection(): Promise<void> {
+    const cibles = this.requests.filter((r) => this.selection.has(r.id) && this.canActOn(r));
+    if (!cibles.length) return;
+    const motif = await this.prompt.prompt({
+      title: `Refuser ${cibles.length} demande${cibles.length > 1 ? 's' : ''}`,
+      message: 'Le même motif sera envoyé pour chaque demande.',
+      placeholder: 'Motif (optionnel)',
+      confirmLabel: 'Refuser',
+      required: false,
+    });
+    if (motif === null) return;
+    this.lancerLot(cibles, (r) => this.planning.rejectChangeRequest(r.id, this.authUserId, motif), 'rejetée', 'rejetées');
+  }
+
+  private lancerLot(cibles: any[], appel: (r: any) => Observable<unknown>, sing: string, plur: string): void {
+    this.enCoursLot = true;
+    this.error = '';
+    executerLot(cibles, appel, (r) => String(r?.requesterName ?? `#${r?.id}`)).subscribe((bilan) => {
+      this.enCoursLot = false;
+      this.selection.vider();
+      const t = textesBilan(bilan, sing, plur);
+      this.toast = t.succes ?? '';
+      this.error = t.erreur ?? '';
+      this.reload();
+    });
+  }
 
   get recapTotal(): number {
     return this.requests.length;
@@ -123,7 +234,7 @@ export class PlanningChangeRequestsComponent implements OnInit {
     const period = weekApi ? undefined : this.filterPeriod;
     this.planning
       .getChangeRequests(
-        this.filterStatus || undefined,
+        undefined,
         weekApi || undefined,
         this.authUserId,
         undefined,
@@ -131,7 +242,8 @@ export class PlanningChangeRequestsComponent implements OnInit {
       )
       .subscribe({
         next: (list) => {
-          this.requests = list ?? [];
+          this.toutes = list ?? [];
+          this.appliquer();
           this.loading = false;
           this.cdr.detectChanges();
         },
@@ -214,6 +326,7 @@ export class PlanningChangeRequestsComponent implements OnInit {
     this.error = '';
     this.planning.approveChangeRequest(id, this.authUserId).subscribe({
       next: () => {
+        this.detail = null;
         this.toast = 'Switch appliqué — demande approuvée.';
         this.reload();
       },
@@ -234,6 +347,7 @@ export class PlanningChangeRequestsComponent implements OnInit {
     this.planning.rejectChangeRequest(this.rejectId, this.authUserId, this.rejectReason).subscribe({
       next: () => {
         this.rejectId = null;
+        this.detail = null;
         this.toast = 'Demande rejetée.';
         this.reload();
       },

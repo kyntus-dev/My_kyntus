@@ -225,7 +225,7 @@
 .mp-modal {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--ky-carte-rayon, 12px) /* v81 */;
   padding: 1.25rem 1.5rem;
   width: min(420px, 92vw);
   box-shadow: var(--shadow-3, 0 12px 32px rgb(2 6 23 / 0.16));

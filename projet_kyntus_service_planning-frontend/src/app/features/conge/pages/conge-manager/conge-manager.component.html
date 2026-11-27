@@ -1,14 +1,34 @@
-<div class="ky-page-shell">
+<!--
+  v85 — « Valider les congés » comme la maquette « Écran de traitement » : en-tête avec compteurs,
+  puces de filtre, recherche, densité, effectif de la cellule sur la période, sélection et décisions
+  groupées, panneau de détail. Mêmes appels et mêmes contrôles qu'avant (aucune API nouvelle).
+-->
+<div class="ky-page-shell cm-page">
 
-  <app-kyntus-page-header
-    [title]="pageTitle"
-    [subtitle]="pageSubtitle">
-    <div actions>
-      <button type="button" class="ky-btn-secondary" (click)="loadDemandes()">
-        Actualiser
+  <header class="ky-entete cm-entete">
+    <div class="cm-entete-texte">
+      <nav class="cm-ariane" aria-label="Fil d’Ariane">Congés et absences › <strong>{{ pageTitle }}</strong></nav>
+      <h1>{{ pageTitle }}</h1>
+      <p>{{ pageSubtitle }}. Les conflits d’effectif sont signalés avant votre décision.</p>
+    </div>
+    <div class="cm-entete-droite">
+      <div class="cm-compteur">
+        <small>{{ isRhFlow ? 'En attente RH' : 'En attente' }}</small>
+        <b class="is-warn">{{ nbActionnable }}</b>
+      </div>
+      <div class="cm-compteur">
+        <small>Conflits d’effectif</small>
+        <b class="is-bad">{{ chargementEffectif ? '…' : nbConflits }}</b>
+      </div>
+      <div class="cm-compteur">
+        <small>Validées ce mois</small>
+        <b class="is-ok">{{ nbValideesMois }}</b>
+      </div>
+      <button type="button" class="cm-icone" (click)="loadDemandes()" aria-label="Actualiser" title="Actualiser">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
       </button>
     </div>
-  </app-kyntus-page-header>
+  </header>
 
   <p class="cm-readonly-hint" *ngIf="!canValidateLeaves()">
     Consultation uniquement : la validation des congés n’est pas activée pour votre rôle.
@@ -26,38 +46,35 @@
     </div>
   </div>
 
-  <div class="cm-stats-grid">
-    <div class="cm-stat-card pending">
-      <span class="cm-stat-value">{{ nbActionnable }}</span>
-      <span class="cm-stat-label">{{ isRhFlow ? 'En attente RH' : 'En attente superviseur' }}</span>
+  <!-- Barre d'outils : puces, cellule, recherche, densité -->
+  <div class="cm-outils">
+    <div class="cm-puces" role="group" aria-label="Filtrer les demandes">
+      <button type="button" *ngFor="let p of puces" class="cm-puce" [class.is-on]="filtreRapide === p.id"
+              [attr.aria-pressed]="filtreRapide === p.id" (click)="choisirPuce(p.id)">
+        {{ p.label }} <span>{{ p.id === 'conflit' && chargementEffectif ? '…' : p.n }}</span>
+      </button>
     </div>
-    <div class="cm-stat-card total">
-      <span class="cm-stat-value">{{ demandes.length }}</span>
-      <span class="cm-stat-label">Dans la file</span>
+    <div class="cm-outils-droite">
+      <select class="ky-input cm-select" [(ngModel)]="filtreCellule" (change)="onFiltreChange()" aria-label="Filtrer par cellule">
+        <option value="">Toutes les cellules</option>
+        <option *ngFor="let c of celluleOptions" [value]="c.value">{{ c.label }}</option>
+      </select>
+      <label class="cm-recherche">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input type="search" placeholder="Rechercher un collaborateur" aria-label="Rechercher un collaborateur ou un motif"
+               [(ngModel)]="filtreSearch" (input)="onFiltreChange()" />
+      </label>
+      <div class="cm-densite" role="group" aria-label="Densité">
+        <button type="button" [class.is-on]="densite.densite() === 'confort'" (click)="densite.densite() === 'compact' && densite.basculer()">Confort</button>
+        <button type="button" [class.is-on]="densite.densite() === 'compact'" (click)="densite.densite() === 'confort' && densite.basculer()">Compact</button>
+      </div>
     </div>
-  </div>
-
-  <div class="cm-filters">
-    <select class="ky-input" [(ngModel)]="filtreStatut" (change)="onFiltreChange()">
-      <option value="">Tous les statuts</option>
-      <option [value]="StatutDemande.EnAttente">En attente superviseur</option>
-      <option [value]="StatutDemande.EnAttenteRh">En attente RH</option>
-      <option [value]="StatutDemande.Validee">Validée</option>
-      <option [value]="StatutDemande.Refusee">Refusée</option>
-      <option [value]="StatutDemande.Annulee">Annulée</option>
-    </select>
-    <select class="ky-input" [(ngModel)]="filtreCellule" (change)="onFiltreChange()" aria-label="Filtrer par cellule">
-      <option value="">Toutes les cellules</option>
-      <option *ngFor="let c of celluleOptions" [value]="c.value">{{ c.label }}</option>
-    </select>
-    <input class="ky-input" type="text" placeholder="Rechercher par employé ou motif…"
-      [(ngModel)]="filtreSearch" (input)="onFiltreChange()" />
   </div>
 
   <div class="cm-loading" *ngIf="loading"><div class="cm-spinner"></div><p>Chargement…</p></div>
 
   <div class="cm-empty" *ngIf="!loading && demandesFiltrees.length === 0">
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
       <rect x="3" y="4" width="18" height="18" rx="2"/>
       <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
     </svg>
@@ -65,123 +82,162 @@
     <p>Aucune demande ne correspond à vos filtres.</p>
   </div>
 
-  <div class="cm-table-wrap" *ngIf="!loading && demandesFiltrees.length > 0">
-    <table class="prime-table cm-table">
+  <div class="cm-table-wrap" *ngIf="!loading && demandesFiltrees.length > 0" data-ky-no-liste>
+    <table class="prime-table cm-table" data-ky-no-liste>
       <thead>
         <tr>
-          <th>Employé</th><th>Type</th><th>Dates</th>
-          <th>Jours</th><th>Motif</th><th>Statut</th>
-          <th>Demandé le</th><th>Actions</th>
+          <th class="cm-th-case">
+            <input type="checkbox" [checked]="toutSelectionne" [disabled]="!selectionnables.length" (change)="basculerTout()" aria-label="Tout sélectionner" />
+          </th>
+          <th>Collaborateur</th><th>Période</th><th>Type</th>
+          <th>Effectif ce jour-là</th><th>Statut</th>
+          <th class="cm-th-decision">Décision</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let d of demandesFiltrees" [class.row-pending]="canAct(d)">
-      <td class="cm-td-employe">
-    <div class="cm-avatar">
-        {{ (d.prenomEmploye || d.employeId).substring(0,1).toUpperCase() }}{{ (d.nomEmploye || '').substring(0,1).toUpperCase() }}
-    </div>
-    <span>
-      {{ d.prenomEmploye || '' }} {{ d.nomEmploye || (d.employeId | slice:0:8) + '…' }}
-      <small class="cm-sub-type" *ngIf="celluleNom(d) as cellule">{{ cellule }}</small>
-    </span>
-</td>
+        <tr *ngFor="let d of demandesFiltrees" [class.row-pending]="canAct(d)" [class.is-coche]="selection.has(d.id)">
+          <td class="cm-td-case">
+            <input *ngIf="canAct(d)" type="checkbox" [checked]="selection.has(d.id)" (change)="basculerSelection(d)"
+                   [attr.aria-label]="'Sélectionner ' + (d.prenomEmploye || '') + ' ' + (d.nomEmploye || '')" />
+          </td>
+          <td class="cm-td-employe">
+            <button type="button" class="cm-personne" (click)="voirDetail(d)">
+              <span class="cm-avatar" [style.background]="couleurAvatar(d.employeId)">{{ initialesDe(d) }}</span>
+              <span class="cm-personne-texte">
+                <strong>{{ d.prenomEmploye || '' }} {{ d.nomEmploye || (d.employeId | slice:0:8) + '…' }}</strong>
+                <small>{{ celluleNom(d) || 'Sans cellule' }}{{ d.motif ? ' · ' + d.motif : '' }}</small>
+              </span>
+            </button>
+          </td>
+          <td class="cm-td-date">
+            <strong>{{ libellePeriode(d.dateDebut, d.dateFin) }}</strong>
+            <small>{{ d.nombreJours }} jour{{ d.nombreJours > 1 ? 's' : '' }}</small>
+          </td>
           <td>
             {{ typeCongeLabels[d.typeConge] }}
             <small *ngIf="d.typeExceptionnel" class="cm-sub-type">{{ exceptionnelLabels[d.typeExceptionnel] }}</small>
           </td>
-          <td class="cm-td-date">{{ d.dateDebut | date:'dd/MM/yy' }} → {{ d.dateFin | date:'dd/MM/yy' }}</td>
-          <td><strong>{{ d.nombreJours }}</strong></td>
-          <td>{{ d.motif || '—' }}</td>
-          <td><span class="cm-badge" [ngClass]="getStatutClass(d.statut)">{{ statutLabels[d.statut] || d.statut }}</span></td>
-          <td class="cm-td-date">{{ d.dateDemande | date:'dd/MM/yy' }}</td>
-          <td class="cm-td-actions">
-            <button class="cm-btn-detail" (click)="voirDetail(d)" title="Voir détail">Voir</button>
-            <button class="cm-btn-valid" *ngIf="canAct(d)" (click)="valider(d)">
-              {{ isRhFlow ? 'Valider RH' : 'Valider' }}
-            </button>
-            <button class="cm-btn-refuse" *ngIf="canAct(d)" (click)="ouvrirRefus(d)">Refuser</button>
+          <td>
+            <ng-container *ngIf="effectifDe(d) as e; else effectifVide">
+              <span class="cm-effectif" [attr.data-ton]="e.ton">
+                <span class="cm-jauge"><span [style.width]="jauge(e)"></span></span>
+                <small>{{ e.presentsMin }} / {{ e.effectif }}{{ e.ton === 'conflit' ? ' · sous le seuil' : e.ton === 'limite' ? ' · limite' : '' }}</small>
+              </span>
+            </ng-container>
+            <ng-template #effectifVide><small class="cm-muted">{{ chargementEffectif ? 'Calcul…' : '—' }}</small></ng-template>
           </td>
-        </tr>      </tbody>
+          <td><span class="cm-badge" [ngClass]="getStatutClass(d.statut)">{{ statutLabels[d.statut] || d.statut }}</span></td>
+          <td class="cm-td-actions">
+            <ng-container *ngIf="canAct(d); else voir">
+              <button type="button" class="cm-btn-refuse" (click)="ouvrirRefus(d)">Refuser</button>
+              <button type="button" class="cm-btn-valid" (click)="valider(d)">{{ isRhFlow ? 'Valider RH' : 'Valider' }}</button>
+            </ng-container>
+            <ng-template #voir><button type="button" class="cm-btn-detail" (click)="voirDetail(d)">Voir</button></ng-template>
+          </td>
+        </tr>
+      </tbody>
     </table>
   </div>
+  <p class="cm-note" *ngIf="!loading && demandesFiltrees.length > 0">
+    Cliquez sur un nom pour ouvrir le détail ; cochez plusieurs lignes pour décider en une fois.
+    « Effectif ce jour-là » : présents dans la cellule le jour le plus chargé de la période.
+  </p>
 
-  <!-- MODAL REFUS -->
+  <!-- Barre d'actions groupées -->
+  <div class="cm-lot" *ngIf="selection.size > 0" role="region" aria-label="Actions sur la sélection">
+    <strong>{{ selection.size }} demande{{ selection.size > 1 ? 's' : '' }} sélectionnée{{ selection.size > 1 ? 's' : '' }}</strong>
+    <button type="button" class="cm-lot-sec" (click)="viderSelection()" [disabled]="enCoursLot">Désélectionner</button>
+    <button type="button" class="cm-lot-refus" (click)="refuserSelection()" [disabled]="enCoursLot">Refuser</button>
+    <button type="button" class="cm-lot-valider" (click)="validerSelection()" [disabled]="enCoursLot">
+      {{ enCoursLot ? 'En cours…' : 'Valider la sélection' }}
+    </button>
+  </div>
+
+  <!-- MODAL REFUS (unitaire ou groupé) -->
   <div class="cm-modal-overlay" *ngIf="showRefusModal" appBodyPortal (click)="showRefusModal = false">
-    <div class="cm-modal" (click)="$event.stopPropagation()">
+    <div class="cm-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Refuser">
       <div class="cm-modal-head">
-        <h3>Refuser la demande</h3>
-        <button (click)="showRefusModal = false">Fermer</button>
+        <h3>{{ demandeSelectee ? 'Refuser la demande' : 'Refuser ' + refusLotIds.length + ' demande(s)' }}</h3>
+        <button type="button" (click)="showRefusModal = false">Fermer</button>
       </div>
-      <div class="cm-modal-body" *ngIf="demandeSelectee">
-        <div class="cm-refus-info">
+      <div class="cm-modal-body">
+        <div class="cm-refus-info" *ngIf="demandeSelectee">
           <p>Congé de <strong>{{ demandeSelectee.nombreJours }} jours</strong></p>
           <p>Du <strong>{{ demandeSelectee.dateDebut | date:'dd/MM/yyyy' }}</strong>
              au <strong>{{ demandeSelectee.dateFin | date:'dd/MM/yyyy' }}</strong></p>
         </div>
+        <div class="cm-refus-info" *ngIf="!demandeSelectee">
+          <p>Le même motif sera envoyé à chaque collaborateur.</p>
+        </div>
         <div class="cm-field">
-          <label>Motif du refus <span class="required">*</span></label>
-          <textarea class="ky-input" [(ngModel)]="commentaireRefus" rows="4"
+          <label for="cm-motif">Motif du refus <span class="required">*</span></label>
+          <textarea id="cm-motif" class="ky-input" [(ngModel)]="commentaireRefus" rows="4"
             placeholder="Expliquez la raison du refus (obligatoire)…"></textarea>
         </div>
       </div>
       <div class="cm-modal-foot">
-        <button class="prime-btn-secondary" (click)="showRefusModal = false">Annuler</button>
-        <button class="cm-btn-refuse-confirm" (click)="confirmerRefus()">Confirmer le refus</button>
+        <button type="button" class="prime-btn-secondary" (click)="showRefusModal = false">Annuler</button>
+        <button type="button" class="cm-btn-refuse-confirm" (click)="confirmerRefus()">Confirmer le refus</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL DÉTAIL -->
-  <div class="cm-modal-overlay" *ngIf="showDetailModal" appBodyPortal (click)="showDetailModal = false">
-    <div class="cm-modal cm-modal-detail" (click)="$event.stopPropagation()">
-      <div class="cm-modal-head">
-        <h3>Détail de la demande</h3>
-        <button (click)="showDetailModal = false">Fermer</button>
+  <!-- PANNEAU DE DÉTAIL (glisse depuis la droite) -->
+  <div class="cm-tiroir-fond" *ngIf="showDetailModal" appBodyPortal (click)="showDetailModal = false">
+    <aside class="cm-tiroir" (click)="$event.stopPropagation()" role="dialog" aria-label="Détail de la demande" *ngIf="demandeDetail as dd">
+      <div class="cm-tiroir-tete">
+        <span class="cm-avatar cm-avatar--lg" [style.background]="couleurAvatar(dd.employeId)">{{ initialesDe(dd) }}</span>
+        <span class="cm-tiroir-nom">
+          <strong>{{ dd.prenomEmploye || '' }} {{ dd.nomEmploye || '' }}</strong>
+          <small>{{ celluleNom(dd) || 'Sans cellule' }}</small>
+        </span>
+        <button type="button" class="cm-icone" (click)="showDetailModal = false" aria-label="Fermer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
       </div>
-      <div class="cm-modal-body" *ngIf="demandeDetail">
-        <div class="cm-detail-grid">
-          <div class="cm-detail-item">
-            <span class="cm-detail-label">Type</span>
-            <span>{{ typeCongeLabels[demandeDetail.typeConge] }}</span>
-          </div>
-          <div class="cm-detail-item">
-            <span class="cm-detail-label">Statut</span>
-            <span class="cm-badge" [ngClass]="getStatutClass(demandeDetail.statut)">{{ statutLabels[demandeDetail.statut] }}</span>
-          </div>
-          <div class="cm-detail-item">
-            <span class="cm-detail-label">Date début</span>
-            <span>{{ demandeDetail.dateDebut | date:'dd/MM/yyyy' }}</span>
-          </div>
-          <div class="cm-detail-item">
-            <span class="cm-detail-label">Date fin</span>
-            <span>{{ demandeDetail.dateFin | date:'dd/MM/yyyy' }}</span>
-          </div>
-          <div class="cm-detail-item">
-            <span class="cm-detail-label">Nombre de jours</span>
-            <span><strong>{{ demandeDetail.nombreJours }} jours</strong></span>
-          </div>
-          <div class="cm-detail-item">
-            <span class="cm-detail-label">Demandé le</span>
-            <span>{{ demandeDetail.dateDemande | date:'dd/MM/yyyy HH:mm' }}</span>
-          </div>
-          <div class="cm-detail-item full">
-            <span class="cm-detail-label">Motif</span>
-            <span>{{ demandeDetail.motif || '—' }}</span>
-          </div>
-          <div class="cm-detail-item full" *ngIf="demandeDetail.commentaireManager">
-            <span class="cm-detail-label">Commentaire manager</span>
-            <span>{{ demandeDetail.commentaireManager }}</span>
-          </div>
+
+      <div class="cm-tuiles">
+        <span><small>Période</small><b>{{ libellePeriode(dd.dateDebut, dd.dateFin) }}</b></span>
+        <span><small>Durée</small><b>{{ dd.nombreJours }} jour{{ dd.nombreJours > 1 ? 's' : '' }}</b></span>
+        <span><small>Statut</small><b class="cm-badge" [ngClass]="getStatutClass(dd.statut)">{{ statutLabels[dd.statut] }}</b></span>
+      </div>
+
+      <section *ngIf="effectifDe(dd) as e">
+        <h4>Effectif de la cellule sur la période</h4>
+        <div class="cm-jours">
+          <span *ngFor="let j of e.jours.slice(0, 15)" class="cm-jour" [class.is-bad]="j.sature" [class.is-warn]="!j.sature && e.quota !== null && j.absents >= e.quota - 1">
+            <small>{{ j.jour | date:'EEE d' }}</small><b>{{ j.presents }}</b><small>/ {{ e.effectif }}</small>
+          </span>
         </div>
+        <p class="cm-note-effectif" [attr.data-ton]="e.ton">
+          {{ e.ton === 'conflit' ? 'Attention : la cellule atteint son quota d’absences sur au moins un jour de la période.'
+            : e.ton === 'limite' ? 'Effectif limite : il reste une place avant le quota d’absences.'
+            : 'Aucun conflit d’effectif sur la période.' }}
+        </p>
+      </section>
+
+      <section>
+        <h4>Historique</h4>
+        <ol class="cm-histo">
+          <li><span>Demande créée</span><small>{{ dd.dateDemande | date:'EEEE d MMMM, HH:mm' }}</small></li>
+          <li *ngIf="dd.dateValidationSuperviseur"><span>Visée par le superviseur{{ dd.superviseurDecideurNom ? ' (' + dd.superviseurDecideurNom + ')' : '' }}</span><small>{{ dd.dateValidationSuperviseur | date:'EEEE d MMMM, HH:mm' }}</small></li>
+          <li *ngIf="dd.dateDecision"><span>Décision{{ dd.rhDecideurNom ? ' (' + dd.rhDecideurNom + ')' : '' }}</span><small>{{ dd.dateDecision | date:'EEEE d MMMM, HH:mm' }}</small></li>
+          <li *ngIf="canAct(dd)"><span>En attente de votre décision</span></li>
+        </ol>
+      </section>
+
+      <section class="cm-tiroir-textes">
+        <p><small>Type</small>{{ typeCongeLabels[dd.typeConge] }}<ng-container *ngIf="dd.typeExceptionnel"> · {{ exceptionnelLabels[dd.typeExceptionnel] }}</ng-container></p>
+        <p><small>Motif</small>{{ dd.motif || '—' }}</p>
+        <p *ngIf="dd.commentaireManager"><small>Commentaire manager</small>{{ dd.commentaireManager }}</p>
+        <p *ngIf="dd.commentaireRh"><small>Commentaire RH</small>{{ dd.commentaireRh }}</p>
+      </section>
+
+      <div class="cm-tiroir-pied" *ngIf="canAct(dd)">
+        <button type="button" class="cm-btn-refuse cm-btn-lg" (click)="ouvrirRefus(dd); showDetailModal = false">Refuser</button>
+        <button type="button" class="cm-btn-valid cm-btn-lg" (click)="valider(dd); showDetailModal = false">{{ isRhFlow ? 'Valider (RH)' : 'Valider la demande' }}</button>
       </div>
-      <div class="cm-modal-foot">
-        <button class="prime-btn-secondary" (click)="showDetailModal = false">Fermer</button>
-        <ng-container *ngIf="demandeDetail?.statut === StatutDemande.EnAttente">
-          <button class="cm-btn-valid-modal" (click)="valider(demandeDetail!); showDetailModal = false">Valider</button>
-          <button class="cm-btn-refuse-modal" (click)="ouvrirRefus(demandeDetail!); showDetailModal = false">Refuser</button>
-        </ng-container>
-      </div>
-    </div>
+    </aside>
   </div>
 
 </div>

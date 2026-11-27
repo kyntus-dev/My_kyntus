@@ -26,7 +26,7 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input #menuSearch type="search" placeholder="Rechercher un menu…" aria-label="Rechercher un menu"
              [value]="menuRecherche()" (input)="menuRecherche.set($any($event.target).value)" (keydown)="toucheRecherche($event)" />
-      <kbd *ngIf="!menuRecherche()">Ctrl K</kbd>
+      <kbd *ngIf="!menuRecherche()">Ctrl Maj K</kbd>
     </div>
 
     <nav class="ks-nav">
@@ -150,9 +150,16 @@
       </button>
       <div class="ks-topbar-title">
         <strong>Plateforme unifiée Kyntus</strong>
-        <span>Plateforme RH Kyntus</span>
+        <!-- v87 — fil de la maquette : page courante · date · heure -->
+        <span class="ks-tb-fil" aria-live="off">{{ filBarre() }}</span>
       </div>
       <div class="ks-topbar-right">
+        <!-- v82 — palette de commandes -->
+        <button type="button" class="ks-tb-palette" (click)="palette.ouvrir()" aria-label="Rechercher une page ou une action (Ctrl K)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <span class="ks-tb-palette-texte">Aller à…</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         <button type="button" class="ks-tb-icon" (click)="theme.toggleTheme()" [attr.aria-label]="theme.theme() === 'light' ? 'Mode sombre' : 'Mode clair'">
           <app-lucide-icon [icon]="theme.theme() === 'light' ? icons.moon : icons.sun" className="w-4 h-4" />
         </button>
@@ -193,3 +200,6 @@
 
   <app-shell-settings-panel />
 </div>
+
+<!-- v82 — Palette de commandes : pages du menu du compte (mêmes droits) et actions d'affichage -->
+<app-command-palette [groupes]="groups()" (page)="onItemClick($event)"></app-command-palette>

@@ -38,7 +38,7 @@ interface ChartPoint {
       <div class="p-8 text-muted">Chargement de votre performance…</div>
     } @else {
       <div class="prime-page-shell">
-        <div>
+        <div class="ky-entete">
           <h1 class="text-3xl font-bold text-primary">Ma performance PRIME</h1>
           <p class="text-muted mt-1">
             Évolution de vos scores de prime et comparaison à la moyenne de votre équipe (données PRIME).

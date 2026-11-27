@@ -32,7 +32,7 @@ type ToastType = 'success' | 'error' | 'info';
   template: `
     <section class="flex-1 min-w-0 space-y-6">
       <div class="space-y-2">
-        <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="ky-entete flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 class="prime-page-title">Décision RH</h1>
             <p class="text-sm text-muted mt-1">Validation uniquement depuis l'écran de détail.</p>

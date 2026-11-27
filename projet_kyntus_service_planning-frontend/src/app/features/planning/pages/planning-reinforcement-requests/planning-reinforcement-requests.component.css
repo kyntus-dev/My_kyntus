@@ -49,9 +49,10 @@
 .mdc-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 0.875rem;
+  border-radius: var(--ky-carte-rayon, 0.875rem) /* v81 */;
   padding: 18px 20px;
   margin-bottom: 18px;
+  box-shadow: var(--ky-carte-ombre, none); /* v81 */
 }
 
 .mdc-filters {
@@ -221,7 +222,7 @@
 .mdc-modal-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 0.875rem;
+  border-radius: var(--ky-carte-rayon, 0.875rem) /* v81 */;
   padding: 1.25rem;
   width: min(420px, 100%);
   display: flex;

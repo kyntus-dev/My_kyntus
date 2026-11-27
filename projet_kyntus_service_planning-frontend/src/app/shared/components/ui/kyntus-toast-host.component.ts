@@ -26,6 +26,9 @@ const LONG_MESSAGE_CHARS = 160;
           [style.--toast-duration]="t.durationMs + 'ms'"
         >
           <span class="kyntus-toast-text">{{ t.message }}</span>
+          @if (t.action) {
+            <button type="button" class="kyntus-toast-action" (click)="toast.runAction()">{{ t.action.label }}</button>
+          }
           <button type="button" class="kyntus-toast-close" (click)="toast.dismiss()" aria-label="Fermer">×</button>
           @if (!isLong()) {
             <span class="kyntus-toast-progress" aria-hidden="true"></span>
@@ -131,6 +134,19 @@ const LONG_MESSAGE_CHARS = 160;
       max-height: inherit;
       padding-right: 0.15rem;
     }
+    /* v81 — bouton d'action (« Annuler ») */
+    .kyntus-toast-action {
+      flex: none;
+      min-height: 30px;
+      padding: 0 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: var(--bg-card);
+      color: var(--ky-blue-text, var(--text-primary));
+      font: 700 0.8rem var(--font-sans, 'Inter', sans-serif);
+      cursor: pointer;
+    }
+    .kyntus-toast-action:hover { border-color: var(--ky-blue); }
     .kyntus-toast-close {
       border: none;
       background: transparent;

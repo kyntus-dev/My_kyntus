@@ -100,7 +100,7 @@ function resolveCelluleLabel(
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div>
+        <div class="ky-entete">
           <h1 class="prime-page-title">Périmètre Superviseur</h1>
           <p class="prime-page-subtitle">
             Collaborateurs rattachés à la cellule que vous supervisez (référents techniques, pilotes).

@@ -1,135 +1,124 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Download } from 'lucide';
 import { LucideIconComponent } from '@/shared/lucide-icon.component';
 import { ReferralService } from '../../services/referral.service';
 import { ParrainageRoleService } from '../../state/parrainage-role.service';
 import type { Referral } from '../../models/referral.model';
+import { KY_TRAITEMENT, executerLot } from '../../../../shared/components/ky-traitement/ky-traitement.components';
+import { SelectionLot, textesBilan, type KyCompteur, type KyPuce } from '../../../../shared/components/ky-traitement/ky-traitement.util';
+import { KyntusConfirmService } from '../../../../shared/components/kyntus-confirm/kyntus-confirm.service';
+import { KyntusPromptService } from '../../../../shared/components/kyntus-prompt/kyntus-prompt.service';
+import { KyntusToastService } from '../../../../shared/components/ui/kyntus-toast.service';
+import { defer } from 'rxjs';
 
 @Component({
   selector: 'app-compta-payments-page',
   standalone: true,
-  imports: [FormsModule, LucideIconComponent],
+  imports: [FormsModule, LucideIconComponent, ...KY_TRAITEMENT],
   template: `
-    <section class="flex-1 space-y-6">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 class="prime-page-title">Primes de parrainage à verser</h1>
-          <p class="text-sm text-muted mt-1">
-            Dossiers éligibles après la période minimum — marquage comptable uniquement.
-          </p>
+    <!-- v86 — Primes de parrainage à verser : écran de traitement de la maquette ; mêmes appels. -->
+    <section class="flex-1 ky-tr-page">
+      <ky-tr-entete ariane="Parrainage" titre="Primes de parrainage à verser" (actualiser)="load()"
+                    sousTitre="Dossiers éligibles après la période minimum — marquage comptable uniquement." [compteurs]="compteurs()"></ky-tr-entete>
+
+      <div class="ky-tr-outils">
+        <ky-tr-puces [puces]="puces()" [actif]="filtre()" (choix)="filtre.set($event)" libelle="Filtrer"></ky-tr-puces>
+        <div class="ky-tr-outils-droite">
+          <label class="ky-tr-muted" style="font-size:12px;display:flex;align-items:center;gap:6px">Date de paiement
+            <input type="date" class="ky-input ky-tr-select" style="min-width:150px" [(ngModel)]="payDate" />
+          </label>
+          <label class="ky-tr-recherche">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            <input type="search" placeholder="Rechercher un parrain ou un candidat" [value]="recherche()" (input)="recherche.set($any($event.target).value)" aria-label="Rechercher" />
+          </label>
         </div>
-        @if (summary(); as s) {
-          <div class="rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-2 text-sm text-[var(--success-text)]">
-            {{ s.paidCount }} / {{ s.paidCount + s.readyCount }} payée(s) · {{ s.readyCount }} en attente
-          </div>
-        }
       </div>
 
       @if (loading()) {
-        <div class="card-navy p-10 text-center text-muted text-sm">Chargement…</div>
+        <div class="ky-tr-vide">Chargement…</div>
       } @else {
-        <div class="card-navy overflow-hidden">
-          <table class="w-full text-left border-collapse">
+        <div class="ky-tr-table-wrap" data-ky-no-liste>
+          <table class="ky-tr-table" data-ky-no-liste>
             <thead>
-              <tr class="bg-card/50 border-b border-default">
-                <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase">Parrain</th>
-                <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase">Candidat</th>
-                <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase">Employé</th>
-                <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase">Montant</th>
-                <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase">Éligible le</th>
-                <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase">Statut</th>
-                <th class="px-6 py-4 text-[11px] font-bold text-muted uppercase text-right">Actions</th>
+              <tr>
+                <th class="ky-tr-case"><input type="checkbox" [checked]="toutCoche()" [disabled]="!cochables().length" (change)="basculerTout()" aria-label="Tout sélectionner" /></th>
+                <th>Parrain</th><th>Candidat</th><th>Employé</th><th>Montant</th><th>Éligible le</th><th>Statut</th>
+                <th class="ky-tr-decision">Décision</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-default">
-              @for (item of items(); track item.referral.id) {
-                <tr class="hover:bg-input/30">
-                  <td class="px-6 py-4 text-sm text-primary">{{ item.referral.referrerName }}</td>
-                  <td class="px-6 py-4 text-sm text-muted">
-                    {{ item.referral.candidateName }}
-                    @if (item.referral.employmentCheckSummary?.blockReason) {
-                      <span class="block text-xs text-[var(--warning-text)] mt-1">{{ item.referral.employmentCheckSummary?.blockReason }}</span>
-                    }
-                  </td>
-                  <td class="px-6 py-4 text-sm text-muted">
-                    @if (item.referral.candidateEmployeeId) {
-                      <span class="font-mono text-xs">{{ item.referral.candidateEmployeeId }}</span>
-                    } @else {
-                      —
-                    }
-                  </td>
-                  <td class="px-6 py-4 text-sm text-primary">{{ item.amount }} DH</td>
-                  <td class="px-6 py-4 text-sm text-muted">{{ formatDate(item.referral.eligibleForPaymentAt) }}</td>
-                  <td class="px-6 py-4">
-                    <span [class]="badgeClass(item.referral)">{{ paymentLabel(item.referral) }}</span>
-                  </td>
-                  <td class="px-6 py-4 text-right">
+            <tbody>
+              @for (item of lignes(); track item.referral.id) {
+                <tr [class.is-coche]="coche(item.referral.id)">
+                  <td class="ky-tr-case">
                     @if (item.canMarkPaid) {
-                      <button type="button" (click)="expandedId.set(item.referral.id)" class="text-sm text-soft-blue hover:underline">
-                        Marquer payé
-                      </button>
+                      <input type="checkbox" [checked]="coche(item.referral.id)" (change)="basculer(item.referral.id)" [attr.aria-label]="'Sélectionner ' + item.referral.referrerName" />
+                    }
+                  </td>
+                  <td>
+                    <span class="ky-tr-personne">
+                      <ky-tr-avatar [nom]="item.referral.referrerName" [cle]="item.referral.referrerName"></ky-tr-avatar>
+                      <span><strong>{{ item.referral.referrerName }}</strong><small>{{ item.referral.projectName }}</small></span>
+                    </span>
+                  </td>
+                  <td class="ky-tr-double">
+                    <strong>{{ item.referral.candidateName }}</strong>
+                    @if (item.referral.employmentCheckSummary?.blockReason) {
+                      <small style="color:var(--warning-text)">{{ item.referral.employmentCheckSummary?.blockReason }}</small>
+                    }
+                  </td>
+                  <td class="ky-tr-muted">
+                    @if (item.referral.candidateEmployeeId) { <span class="font-mono text-xs">{{ item.referral.candidateEmployeeId }}</span> } @else { — }
+                  </td>
+                  <td><strong>{{ item.amount }} DH</strong></td>
+                  <td class="ky-tr-muted">{{ formatDate(item.referral.eligibleForPaymentAt) }}</td>
+                  <td><span [class]="badgeClass(item.referral)">{{ paymentLabel(item.referral) }}</span></td>
+                  <td class="ky-tr-decision">
+                    @if (item.canMarkPaid) {
+                      <button type="button" class="ky-tr-btn ky-tr-btn--ok" (click)="expandedId.set(item.referral.id)">Marquer payé</button>
                     } @else if (item.canUndoPayment) {
-                      <button
-                        type="button"
-                        (click)="undoPayment(item.referral.id)"
-                        class="text-sm text-[var(--warning-text)] hover:underline"
-                        [disabled]="busyId() === item.referral.id"
-                      >
-                        Annuler paiement
-                      </button>
+                      <button type="button" class="ky-tr-btn ky-tr-btn--refus" (click)="undoPayment(item.referral.id)" [disabled]="busyId() === item.referral.id">Annuler paiement</button>
                     }
                   </td>
                 </tr>
                 @if (expandedId() === item.referral.id && item.canMarkPaid) {
                   <tr>
-                    <td colspan="7" class="px-6 py-4 bg-input/40">
+                    <td colspan="8" style="background:var(--bg-input)">
                       <div class="flex flex-wrap items-end gap-4 max-w-2xl">
                         <div>
                           <label class="block text-xs text-muted mb-1">Date de paiement</label>
-                          <input type="date" class="rounded-lg border border-default bg-app px-3 py-2 text-sm text-primary" [(ngModel)]="payDate" />
+                          <input type="date" class="ky-input" [(ngModel)]="payDate" />
                         </div>
                         <div class="flex-1 min-w-[180px]">
                           <label class="block text-xs text-muted mb-1">Référence compta</label>
-                          <input type="text" class="w-full rounded-lg border border-default bg-app px-3 py-2 text-sm text-primary" [(ngModel)]="payReference" placeholder="N° virement…" />
+                          <input type="text" class="ky-input w-full" [(ngModel)]="payReference" placeholder="N° virement…" />
                         </div>
-                        <button
-                          type="button"
-                          (click)="confirmPayment(item.referral.id)"
-                          [disabled]="busyId() === item.referral.id"
-                          class="rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-2 text-sm font-medium text-[var(--success-text)] hover:border-[var(--success)] disabled:opacity-50"
-                        >
-                          Confirmer paiement
-                        </button>
-                        <button type="button" (click)="expandedId.set(null)" class="text-sm text-muted hover:text-primary">Annuler</button>
+                        <button type="button" class="ky-tr-btn ky-tr-btn--ok" (click)="confirmPayment(item.referral.id)" [disabled]="busyId() === item.referral.id">Confirmer paiement</button>
+                        <button type="button" class="ky-tr-btn" (click)="expandedId.set(null)">Annuler</button>
                       </div>
                     </td>
                   </tr>
                 }
               } @empty {
-                <tr>
-                  <td colspan="7" class="px-6 py-12 text-center text-muted text-sm">Aucune prime à traiter</td>
-                </tr>
+                <tr><td colspan="8" class="ky-tr-muted" style="text-align:center;padding:40px">Aucune prime à traiter</td></tr>
               }
             </tbody>
           </table>
         </div>
 
         <div class="flex flex-wrap justify-between gap-3">
-          <button
-            type="button"
-            (click)="payAll()"
-            [disabled]="!summary()?.readyCount || busyId() === 'all'"
-            class="ky-btn-primary px-4 py-2 text-sm disabled:opacity-50"
-          >
+          <button type="button" (click)="payAll()" [disabled]="!summary()?.readyCount || busyId() === 'all'" class="ky-tr-btn ky-tr-btn--ok" style="height:38px">
             Tout marquer payé
           </button>
-          <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-default px-4 py-2 text-sm text-primary hover:bg-input">
+          <button type="button" class="ky-tr-btn" style="height:38px;display:inline-flex;align-items:center;gap:8px">
             <app-lucide-icon [icon]="downloadIcon" className="h-4 w-4" />
             Exporter
           </button>
         </div>
       }
+
+      <ky-tr-lot [nombre]="nbCoches()" nom="prime" [enCours]="busyId() === 'lot'" libelleValider="Marquer payé" [libelleRefuser]="''"
+                 (vider)="vider()" (valider)="payerSelection()"></ky-tr-lot>
     </section>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -151,6 +140,110 @@ export class ComptaPaymentsPageComponent {
 
   constructor() {
     void this.load();
+  }
+
+  // ── v86 : écran de traitement de la maquette ─────────────────────────────────────────────
+  private readonly confirmTr = inject(KyntusConfirmService);
+  private readonly promptTr = inject(KyntusPromptService);
+  private readonly toastTr = inject(KyntusToastService);
+  private readonly sel = new SelectionLot<string>();
+  private readonly versionSel = signal(0);
+  readonly filtre = signal('aPayer');
+  readonly recherche = signal('');
+
+  readonly puces = computed<KyPuce[]>(() => {
+    const it = this.items();
+    return [
+      { id: 'aPayer', label: 'À verser', n: it.filter((i) => i.canMarkPaid).length },
+      { id: 'payees', label: 'Versées', n: it.filter((i) => i.canUndoPayment || i.referral.status === 'REWARDED').length },
+      { id: 'tout', label: 'Toutes', n: it.length },
+    ];
+  });
+
+  readonly compteurs = computed<KyCompteur[]>(() => {
+    const it = this.items();
+    const s = this.summary();
+    return [
+      { label: 'À verser', valeur: s?.readyCount ?? 0, ton: 'warn' },
+      { label: 'Montant à verser', valeur: `${it.filter((i) => i.canMarkPaid).reduce((t, i) => t + (i.amount || 0), 0).toLocaleString('fr-FR')} DH`, ton: 'info' },
+      { label: 'Versées', valeur: s?.paidCount ?? 0, ton: 'ok' },
+    ];
+  });
+
+  readonly lignes = computed(() => {
+    const f = this.filtre();
+    const q = this.recherche().trim().toLowerCase();
+    return this.items().filter((i) => (f === 'tout' || (f === 'aPayer' ? i.canMarkPaid : i.canUndoPayment || i.referral.status === 'REWARDED'))
+      && (!q || [i.referral.referrerName, i.referral.candidateName, i.referral.projectName].some((v) => (v ?? '').toLowerCase().includes(q))));
+  });
+
+  readonly cochables = computed(() => this.lignes().filter((i) => i.canMarkPaid).map((i) => i.referral.id));
+  readonly nbCoches = computed(() => {
+    this.versionSel();
+    return this.sel.taille;
+  });
+
+  coche(id: string): boolean {
+    this.versionSel();
+    return this.sel.has(id);
+  }
+  toutCoche(): boolean {
+    this.versionSel();
+    return this.sel.toutCoche(this.cochables());
+  }
+  basculer(id: string): void {
+    this.sel.basculer(id);
+    this.versionSel.update((v) => v + 1);
+  }
+  basculerTout(): void {
+    this.sel.basculerTout(this.cochables());
+    this.versionSel.update((v) => v + 1);
+  }
+  vider(): void {
+    this.sel.vider();
+    this.versionSel.update((v) => v + 1);
+  }
+
+  /** Même marquage « payé » que la ligne, pour chaque prime cochée, à la date de paiement choisie. */
+  async payerSelection(): Promise<void> {
+    const cibles = this.lignes().filter((i) => i.canMarkPaid && this.sel.has(i.referral.id));
+    if (!cibles.length) return;
+    const total = cibles.reduce((t, i) => t + (i.amount || 0), 0);
+    const ok = await this.confirmTr.confirm({
+      title: 'Marquer payé',
+      message: `Marquer ${cibles.length} prime${cibles.length > 1 ? 's' : ''} comme payée${cibles.length > 1 ? 's' : ''} (${total.toLocaleString('fr-FR')} DH) au ${this.payDate ? new Date(this.payDate).toLocaleDateString('fr-FR') : 'jour même'} ?`,
+      confirmLabel: 'Continuer',
+    });
+    if (!ok) return;
+    const reference = await this.promptTr.prompt({
+      title: 'Référence compta',
+      message: 'Facultatif — la même référence sera enregistrée pour chaque prime.',
+      placeholder: 'N° virement…',
+      confirmLabel: 'Marquer payé',
+      required: false,
+    });
+    if (reference === null) return;
+    const u = this.role.user();
+    this.busyId.set('lot');
+    executerLot(
+      cibles,
+      (i) => defer(() => this.referrals.markReferralPaid(
+        i.referral.id,
+        { paid: true, paidAt: this.payDate ? new Date(this.payDate).toISOString() : undefined, reference: reference || undefined },
+        { id: u.id, label: u.name },
+      )),
+      (i) => i.referral.referrerName,
+    ).subscribe(async (bilan) => {
+      this.vider();
+      const t = textesBilan(bilan, 'payée', 'payées', 'prime');
+      if (t.succes) this.toastTr.success(t.succes);
+      if (t.erreur) this.toastTr.error(t.erreur, 8000);
+      try {
+        await this.load();
+      } finally {
+        this.busyId.set(null);
+      }
+    });
   }
 
   async load(): Promise<void> {

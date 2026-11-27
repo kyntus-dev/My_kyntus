@@ -5,7 +5,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   standalone: true,
   template: `
     <div class="prime-page-shell supervision-shell">
-      <header class="supervision-shell__header">
+      <header class="ky-entete supervision-shell__header">
         <div class="supervision-shell__titles">
           <h1 class="prime-page-title">{{ title() }}</h1>
           @if (subtitle()) {

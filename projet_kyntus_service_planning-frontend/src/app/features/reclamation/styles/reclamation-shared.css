@@ -74,24 +74,27 @@
 
 .kpi-card {
   padding: 16px 18px;
-  border-radius: var(--radius-card, 0.875rem);
+  border-radius: var(--ky-carte-rayon, var(--radius-card, 0.875rem));
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
 .kpi-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-muted);
 }
 
 .kpi-value {
-  font-size: 1.45rem;
-  font-weight: 800;
+  font-size: 1.75rem;
+  font-weight: 700;
   line-height: 1;
+  font-family: var(--font-display, 'Space Grotesk', sans-serif); /* v81 */
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .kc-blue { border-left: 4px solid var(--info); }
@@ -388,17 +391,20 @@
 }
 
 .rp-stat-val {
-  font-size: 1.45rem;
-  font-weight: 800;
+  font-size: 1.75rem;
+  font-weight: 700;
   color: var(--text-primary);
+  font-family: var(--font-display, 'Space Grotesk', sans-serif); /* v81 */
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .rp-stat-lbl {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
 }
 
 .rp-val-ok {
@@ -1005,22 +1011,25 @@
 }
 
 .rpa-kpi {
-  border-radius: var(--radius-card, 0.875rem);
+  border-radius: var(--ky-carte-rayon, var(--radius-card, 0.875rem));
   padding: 20px;
   text-align: center;
 }
 
 .rpa-kpi-val {
   font-size: 1.9rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
+  font-family: var(--font-display, 'Space Grotesk', sans-serif); /* v81 */
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .rpa-kpi-lbl {
   margin-top: 4px;
   font-size: 0.82rem;
   color: var(--text-muted);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .rpa-bar-group {

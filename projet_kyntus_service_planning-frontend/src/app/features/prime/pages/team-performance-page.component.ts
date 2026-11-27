@@ -50,7 +50,7 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendCompone
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div class="flex justify-between items-center">
+        <div class="ky-entete flex justify-between items-center">
           <div>
             <h1 class="prime-page-title">Performance service</h1>
             <p class="prime-page-subtitle">
@@ -363,20 +363,22 @@ export class TeamPerformancePageComponent {
     return {
       tooltip: { trigger: 'axis' },
       grid: { left: 24, right: 12, top: 24, bottom: 72, containLabel: true },
-      xAxis: { type: 'category', data: data.map((x) => x.label), axisLabel: { rotate: 30 } },
-      yAxis: { type: 'value' },
+      // v80 — libellés et quadrillage aux couleurs du thème (lisibles en sombre)
+      xAxis: { type: 'category', data: data.map((x) => x.label), axisLabel: { rotate: 30, color: c.axisLabel } },
+      yAxis: { type: 'value', axisLabel: { color: c.axisLabel }, splitLine: { lineStyle: { color: c.splitLine } } },
       series: [{ type: 'bar', data: data.map((x) => x.count), itemStyle: { color: c.info } }],
     };
   });
 
   readonly agentChartOptions = computed<EChartsCoreOption>(() => {
     const data = this.agentPerformance();
+    const c = primeChartTheme(); // v80 — couleurs du thème
     return {
       tooltip: { trigger: 'axis' },
-      legend: { top: 0 },
+      legend: { top: 0, textStyle: { color: c.axisLabel } },
       grid: { left: 24, right: 12, top: 40, bottom: 76, containLabel: true },
-      xAxis: { type: 'category', data: data.map((x) => x.name), axisLabel: { rotate: 30 } },
-      yAxis: { type: 'value' },
+      xAxis: { type: 'category', data: data.map((x) => x.name), axisLabel: { rotate: 30, color: c.axisLabel } },
+      yAxis: { type: 'value', axisLabel: { color: c.axisLabel }, splitLine: { lineStyle: { color: c.splitLine } } },
       series: [
         { name: 'Validées RH', type: 'bar', stack: 'total', data: data.map((x) => x.approved) },
         { name: 'En attente', type: 'bar', stack: 'total', data: data.map((x) => x.pending) },

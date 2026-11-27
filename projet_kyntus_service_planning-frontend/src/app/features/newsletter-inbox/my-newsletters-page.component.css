@@ -14,20 +14,24 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  border-radius: var(--ky-carte-rayon, var(--radius-card)); /* v81 */
 }
 
 .kpi-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-muted);
 }
 
 .kpi-value {
-  font-size: 1.45rem;
-  font-weight: 800;
+  font-size: 1.75rem;
+  font-weight: 700;
   color: var(--text-primary);
+  font-family: var(--font-display, 'Space Grotesk', sans-serif); /* v81 */
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .filters-toolbar {

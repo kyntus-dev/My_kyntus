@@ -1,4 +1,5 @@
 import type { Role } from '../models';
+import { kyntusThemeCourant } from '../../../core/theme/kyntus-theme.service';
 
 export const ALLOWANCE_STATUSES = {
   Draft: 'Draft',
@@ -58,6 +59,8 @@ export function primeChartRgba(rgbVar: string, alpha: number): string {
 }
 
 export function primeChartTheme() {
+  // v80 — Lecture du thème courant : les options de graphique (computed) se recalculent à la bascule.
+  kyntusThemeCourant();
   const t = primeCssToken;
   const accent = t('--electric-blue');
   const info = t('--soft-blue') || t('--info');

@@ -273,13 +273,13 @@
   font-weight: 650;
   background: color-mix(in srgb, #d97706 13%, var(--bg-card));
   border: 1px solid color-mix(in srgb, #d97706 35%, var(--border-color));
-  color: #b45309;
+  color: var(--kyd-amber, #b45309);
 }
 
 .pb-badge--tous {
   background: color-mix(in srgb, #16a34a 12%, var(--bg-card));
   border-color: color-mix(in srgb, #16a34a 35%, var(--border-color));
-  color: #15803d;
+  color: var(--kyd-green, #15803d);
 }
 
 /* ── Recherche, états ── */
@@ -342,7 +342,7 @@
 .alert-error {
   background: color-mix(in srgb, #dc2626 10%, var(--bg-card));
   border: 1px solid color-mix(in srgb, #dc2626 35%, var(--border-color));
-  color: #b91c1c;
+  color: var(--kyd-red, #b91c1c);
 }
 
 .btn-sm {
@@ -351,6 +351,6 @@
 }
 
 .btn-danger {
-  color: #b91c1c;
+  color: var(--kyd-red, #b91c1c);
   margin-left: 0.4rem;
 }

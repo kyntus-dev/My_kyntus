@@ -12,7 +12,7 @@ import { getScopedReferrals } from '../../lib/scoping';
   imports: [MonthlyChartComponent],
   template: `
     <section class="flex-1 space-y-6">
-      <div>
+      <div class="ky-entete">
         <h1 class="prime-page-title">Performance de l'équipe</h1>
         <p class="ky-page-subtitle">Meilleurs parraineurs et statistiques.</p>
       </div>

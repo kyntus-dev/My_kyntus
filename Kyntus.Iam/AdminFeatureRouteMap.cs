@@ -222,6 +222,8 @@ public static class AdminFeatureRouteMap
         // ───────────── Planification ─────────────
         yield return R("/api/planning/notifications", Core);
         yield return R("/api/planning/app-guides", Core);
+        // v87 : historique personnel des indicateurs de l'accueil (chacun ne lit et n'écrit que ses valeurs).
+        yield return R("/api/planning/accueil/indicateurs", Core);
         yield return R("/api/planning/pending-requests-summary", Core);
         yield return R("/api/planning/my", "planning.self", Methods.All, "View");
         // v72 : la validation consulte le planning avant de le publier.

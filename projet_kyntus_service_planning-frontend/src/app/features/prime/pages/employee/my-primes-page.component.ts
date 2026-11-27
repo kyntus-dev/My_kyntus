@@ -33,7 +33,7 @@ import { RoleService } from '../../state/role.service';
       <div class="p-8 text-muted">Chargement de vos primes…</div>
     } @else {
       <div class="prime-page-shell">
-        <div class="flex items-start justify-between">
+        <div class="ky-entete flex items-start justify-between">
           <div>
             <h1 class="text-3xl font-bold text-primary">Mes primes</h1>
             <p class="text-muted mt-1">Fiche de prime et suivi du paiement par période.</p>

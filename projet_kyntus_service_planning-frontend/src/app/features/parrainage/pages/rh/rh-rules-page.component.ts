@@ -15,7 +15,7 @@ import type { ReferralRule, ReferralRuleStatus, ReferralRuleType } from '../../m
           Accès refusé. Réservé à la RH.
         </div>
       }
-      <div>
+      <div class="ky-entete">
         <h1 class="prime-page-title">Règles de parrainage</h1>
         <p class="text-sm text-muted mt-1">Gérez les règles métier (hors configuration système).</p>
       </div>

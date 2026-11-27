@@ -12,7 +12,7 @@ import { PrimeCellSaisieContextService } from '../services/prime-cell-saisie-con
   imports: [LucideIconComponent, PrimeCardComponent, PrimeCellSaisieBlockComponent],
   template: `
     <div class="p-4 sm:p-6 max-w-3xl mx-auto pb-20 space-y-6">
-      <header class="space-y-2">
+      <header class="ky-entete space-y-2">
         <h1 class="text-2xl font-bold text-primary flex items-center gap-2">
           <app-lucide-icon [icon]="icons.sheet" className="w-8 h-8 text-blue-600 shrink-0" />
           Saisie — partie cellule

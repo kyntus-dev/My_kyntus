@@ -48,7 +48,7 @@ import { toPreviewStoredTemplate, type StoredPrimeTemplate } from '../models/pri
   template: `
     <div class="flex flex-col min-h-0 p-3 sm:p-4 xl:p-5 space-y-6 w-full max-w-none pb-16">
       @if (!embeddedInShell) {
-      <div>
+      <div class="ky-entete">
         <h1 class="text-xl font-bold tracking-tight text-primary sm:text-2xl">
           Importer une fiche remplie
         </h1>

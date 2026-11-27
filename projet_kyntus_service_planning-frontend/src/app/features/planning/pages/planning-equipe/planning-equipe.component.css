@@ -104,7 +104,8 @@
 .gen-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--ky-carte-rayon, 12px) /* v81 */;
   padding: 16px 18px;
   margin-top: 12px;
+  box-shadow: var(--ky-carte-ombre, none); /* v81 */
 }

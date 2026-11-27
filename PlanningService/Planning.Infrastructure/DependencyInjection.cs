@@ -34,6 +34,8 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddSingleton<Planning.Infrastructure.Persistence.JournalActions.JournalActionsInterceptor>();
         services.AddScoped<IJournalActionsService, JournalActionsService>();
+        // v87 : historique personnel des indicateurs de l'accueil.
+        services.AddScoped<IAccueilIndicateursService, AccueilIndicateursService>();
         if (isTesting)
         {
             services.AddDbContext<AppDbContext>((sp, options) =>

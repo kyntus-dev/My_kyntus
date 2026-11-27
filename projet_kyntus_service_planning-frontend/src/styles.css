@@ -186,3 +186,52 @@ body.ky-body-modal-open {
   z-index: 10000 !important;
   box-sizing: border-box;
 }
+
+/*
+ * v80 — Couleurs de texte et pastilles lisibles en mode sombre.
+ * Ces jetons n'existent QU'EN SOMBRE : les feuilles des pages les utilisent sous la forme
+ * `var(--kyd-red, #b91c1c)`. En mode clair la variable n'est pas définie, la valeur d'origine
+ * s'applique telle quelle : l'affichage clair est strictement inchangé.
+ */
+body.theme-dark {
+  --kyd-red: #fca5a5;
+  --kyd-green: #86efac;
+  --kyd-amber: #fcd34d;
+  --kyd-sky: #7dd3fc;
+  --kyd-cyan: #67e8f9;
+  --kyd-violet: #c4b5fd;
+  --kyd-teal: #5eead4;
+  --kyd-pink: #f9a8d4;
+  --kyd-indigo: #a5b4fc;
+  --kyd-muted: var(--text-muted);
+  --kyd-bg-red: color-mix(in srgb, #dc2626 18%, var(--bg-card));
+  --kyd-bg-green: color-mix(in srgb, #16a34a 18%, var(--bg-card));
+  --kyd-bg-blue: color-mix(in srgb, #3b82f6 20%, var(--bg-card));
+  --kyd-bg-teal: color-mix(in srgb, #14b8a6 18%, var(--bg-card));
+  --kyd-border-red: color-mix(in srgb, #dc2626 45%, var(--border-color));
+  --kyd-border-green: color-mix(in srgb, #16a34a 45%, var(--border-color));
+  --kyd-border-blue: color-mix(in srgb, #3b82f6 45%, var(--border-color));
+  --kyd-border-teal: color-mix(in srgb, #14b8a6 45%, var(--border-color));
+}
+
+/*
+ * v80 — Bascule clair / sombre en fondu. La classe n'est posée que pendant la bascule (≈ 0,35 s) :
+ * aucune transition permanente sur les milliers d'éléments des grands tableaux.
+ */
+html.ky-theme-bascule *,
+html.ky-theme-bascule *::before,
+html.ky-theme-bascule *::after {
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    fill 0.3s ease,
+    stroke 0.3s ease !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.ky-theme-bascule *,
+  html.ky-theme-bascule *::before,
+  html.ky-theme-bascule *::after {
+    transition: none !important;
+  }
+}

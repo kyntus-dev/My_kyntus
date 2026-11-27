@@ -41,7 +41,7 @@ const ROLE_LABEL: Record<Role, string> = {
   imports: [LucideIconComponent],
   template: `
     <div class="max-w-4xl mx-auto space-y-8 p-8 min-h-full bg-app">
-      <div>
+      <div class="ky-entete">
         <h1 class="text-2xl font-semibold text-primary">Paramètres</h1>
         <p class="text-sm text-muted mt-1">Profil, notifications et préférences.</p>
       </div>
