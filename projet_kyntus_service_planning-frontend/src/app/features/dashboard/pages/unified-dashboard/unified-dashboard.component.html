@@ -54,7 +54,14 @@
 
   <!-- ── Vos indicateurs ──────────────────────────────────────────────────────────────────────── -->
   <section class="ud3-bloc" aria-labelledby="ud-kpis-titre">
-    <h2 id="ud-kpis-titre" class="ud3-h2">Vos indicateurs</h2>
+    <div class="ud3-kpis-tete">
+      <h2 id="ud-kpis-titre" class="ud3-h2">Vos indicateurs</h2>
+      <div class="ud3-periodes" role="group" aria-label="Période de comparaison">
+        @for (p of periodes; track p.id) {
+          <button type="button" [class.is-on]="periode() === p.id" [attr.aria-pressed]="periode() === p.id" (click)="choisirPeriode(p.id)">{{ p.label }}</button>
+        }
+      </div>
+    </div>
     @if (loadingKpis()) {
       <div class="ud3-kpis" aria-busy="true">
         @for (i of [1, 2, 3, 4]; track i) { <div class="ku-skeleton ud3-kpi-squelette" aria-hidden="true"></div> }
@@ -66,16 +73,29 @@
             <button type="button" class="ud3-kpi ud3-kpi--lien" [attr.data-ton]="tonCarte(k)" (click)="ouvrir(k)">
               <span class="ud3-kpi-label">{{ k.label }}</span>
               <span class="ud3-kpi-valeur">{{ valeurAnimee(k.value, kpiAnim()) }}</span>
+              <ng-container *ngTemplateOutlet="evolution; context: { $implicit: k }"></ng-container>
               <span class="ud3-kpi-pied">Ouvrir <span aria-hidden="true">→</span></span>
             </button>
           } @else {
             <div class="ud3-kpi" [attr.data-ton]="tonCarte(k)">
               <span class="ud3-kpi-label">{{ k.label }}</span>
               <span class="ud3-kpi-valeur">{{ valeurAnimee(k.value, kpiAnim()) }}</span>
+              <ng-container *ngTemplateOutlet="evolution; context: { $implicit: k }"></ng-container>
             </div>
           }
         }
       </div>
+      <!-- v87 — tendance par rapport à hier / 7 j / 30 j et courbe (historique personnel, depuis l'installation) -->
+      <ng-template #evolution let-k>
+        @if (tendanceDe(k); as t) {
+          <span class="ud3-kpi-tendance" [attr.data-sens]="t.sens">{{ texteTendance(t) }}</span>
+        } @else {
+          <span class="ud3-kpi-tendance" data-sens="aucune">Pas encore d’historique</span>
+        }
+        @if (courbeDe(k); as c) {
+          <svg class="ud3-kpi-courbe" viewBox="0 0 96 28" preserveAspectRatio="none" aria-hidden="true"><polyline [attr.points]="c" /></svg>
+        }
+      </ng-template>
     }
   </section>
 

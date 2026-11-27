@@ -79,6 +79,8 @@ public class AppDbContext : DbContext
     public DbSet<PaiePeriodeValidation> PaiePeriodeValidations { get; set; } = null!;
     /// <summary>v64 : journal d'actions (Audit et conformité).</summary>
     public DbSet<JournalAction> JournalActions { get; set; } = null!;
+    /// <summary>v87 — historique personnel des indicateurs de l'accueil.</summary>
+    public DbSet<IndicateurAccueilJour> IndicateursAccueil { get; set; } = null!;
     public DbSet<DossierDocument> DossierDocuments { get; set; } = null!;
     /// <summary>v48 : bibliothèque « Process Bytel » (procédures partagées aux agents).</summary>
     public DbSet<ProcessDocument> ProcessDocuments { get; set; } = null!;
@@ -767,6 +769,15 @@ public class AppDbContext : DbContext
             e.Property(x => x.Commentaire).HasMaxLength(1000).IsRequired();
             e.Property(x => x.CreatedByNom).HasMaxLength(120);
             e.HasIndex(x => new { x.UserId, x.Date });
+        });
+
+        modelBuilder.Entity<IndicateurAccueilJour>(e =>
+        {
+            e.ToTable("accueil_indicateurs_jour");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Cle).HasMaxLength(60).IsRequired();
+            e.Property(x => x.Valeur).HasPrecision(14, 2);
+            e.HasIndex(x => new { x.SubjectId, x.Jour, x.Cle }).IsUnique();
         });
 
         modelBuilder.Entity<JournalAction>(e =>

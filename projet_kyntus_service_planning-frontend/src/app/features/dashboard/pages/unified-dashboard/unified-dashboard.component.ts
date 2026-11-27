@@ -17,6 +17,17 @@ import { libelleRole } from '../../../../core/org/role-libelle';
 import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
 import { KyntusToastService } from '@/shared/components/ui/kyntus-toast.service';
 import { KyntusPaletteService } from '../../../../core/navigation/kyntus-palette.service';
+import { AccueilHistoriqueService } from '../../../../core/dashboard/accueil-historique.service';
+import {
+  cleIndicateur,
+  serie,
+  tendance,
+  texteTendance,
+  traceCourbe,
+  valeurNumerique,
+  type PeriodeAccueil,
+  type Tendance,
+} from '../../../../core/dashboard/accueil-historique.util';
 import {
   modulesDesActions,
   cleJour,
@@ -84,6 +95,32 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
   private readonly access = inject(PlatformAccessService);
   private readonly toasts = inject(KyntusToastService);
   readonly palette = inject(KyntusPaletteService);
+
+  // ── v87 : tendances ▲/▼, courbes et périodes des indicateurs ──────────────────────────────
+  private readonly historiqueSvc = inject(AccueilHistoriqueService);
+  readonly periode = signal<PeriodeAccueil>(lirePeriode());
+  readonly periodes: { id: PeriodeAccueil; label: string }[] = [
+    { id: 'jour', label: 'Jour' },
+    { id: 'semaine', label: 'Semaine' },
+    { id: 'mois', label: 'Mois' },
+  ];
+
+  choisirPeriode(p: PeriodeAccueil): void {
+    this.periode.set(p);
+    try { localStorage.setItem('ky.accueil.periode', p); } catch { /* ignoré */ }
+  }
+
+  tendanceDe(k: KyntusKpiItem): Tendance | null {
+    return tendance(this.historiqueSvc.historique(), cleIndicateur(k.label), valeurNumerique(k.value), this.periode());
+  }
+
+  texteTendance(t: Tendance): string {
+    return texteTendance(t);
+  }
+
+  courbeDe(k: KyntusKpiItem): string {
+    return traceCourbe(serie(this.historiqueSvc.historique(), cleIndicateur(k.label), valeurNumerique(k.value), this.periode()));
+  }
 
   private sub = new Subscription();
   private loadStartedAt = 0;
@@ -205,6 +242,7 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
   );
 
   ngOnInit(): void {
+    void this.historiqueSvc.charger(35);
     this.session.syncStoredUserFromAccessToken();
     const stored = this.session.getStoredUser();
     this.applyGreeting();
@@ -456,6 +494,9 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
           this.kpiItems.set(snapshot.kpis);
           this.alerts.set(snapshot.alerts);
           this.actionItems.set(snapshot.actionItems);
+          // v87 — historique personnel (tendances, courbes) et compteurs du menu.
+          void this.historiqueSvc.enregistrer(snapshot.kpis);
+          this.historiqueSvc.publierCompteurs(snapshot.actionItems);
           // Un filtre qui ne correspond plus à aucun module revient sur « Tout ».
           if (this.filtre() !== 'tout' && !snapshot.actionItems.some((a) => a.moduleId === this.filtre())) {
             this.filtre.set('tout');
@@ -481,5 +522,15 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
         },
       }),
     );
+  }
+}
+
+/** v87 — Période choisie pour les tendances (gardée d'une visite à l'autre). */
+function lirePeriode(): PeriodeAccueil {
+  try {
+    const v = localStorage.getItem('ky.accueil.periode');
+    return v === 'semaine' || v === 'mois' ? v : 'jour';
+  } catch {
+    return 'jour';
   }
 }

@@ -1264,3 +1264,7 @@ body.theme-dark .ks-rubrique-cpt { background: color-mix(in srgb, var(--ky-blue)
   .ks-tb-palette-texte,
   .ks-tb-palette kbd { display: none; }
 }
+
+/* v87 — fil « page · date · heure » de la barre du haut */
+.ks-topbar-title .ks-tb-fil { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; font-variant-numeric: tabular-nums; }
+.ks-topbar-title .ks-tb-fil::first-letter { text-transform: uppercase; }
