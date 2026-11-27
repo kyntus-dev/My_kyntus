@@ -190,3 +190,20 @@ describe('v83 — anneau par module (légende de la maquette)', () => {
     expect(m[1].couleur).toBe('#f59e0b');
   });
 });
+
+describe('v91 — 5 indicateurs au plus, retraits demandés', () => {
+  it('Admin / RH sans « Validations PRIME », RP sans « Validations PRIME pôle », Pilote sans « Formations actives »', async () => {
+    const { kpiKeysForRole, kpiKeysVisibles: visibles } = await import('../../../../core/dashboard/global-dashboard.config');
+    const tous = ['conges', 'rh', 'prime', 'parrainage', 'documentation', 'formation', 'planning'];
+    const rh = visibles(kpiKeysForRole('adminRh', 'RH'), tous);
+    expect(rh.length).toBe(5);
+    expect(rh.includes('primeValidations')).toBe(false);
+    const rp = visibles(kpiKeysForRole('manager', 'RP'), tous);
+    expect(rp.includes('rpPrimePending') || rp.includes('primeValidations')).toBe(false);
+    expect(rp.length).toBe(5);
+    const pilote = visibles(kpiKeysForRole('employee', 'Pilote'), tous);
+    expect(pilote.includes('enrolledFormations')).toBe(false);
+    expect(pilote.length).toBe(5);
+    expect(visibles(kpiKeysForRole('manager', 'Manager'), tous).length).toBe(5);
+  });
+});
