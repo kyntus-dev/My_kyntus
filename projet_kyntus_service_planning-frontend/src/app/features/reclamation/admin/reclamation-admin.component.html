@@ -1,20 +1,16 @@
-<div class="ky-page-shell rp-root">
+<!-- v86 — Traiter les demandes (qualité) : en-tête, puces et tableau de la maquette « Écran de traitement ».
+     Le traitement reste individuel (réponse écrite, statut, responsable) : formulaire existant inchangé. -->
+<div class="ky-page-shell rp-root ky-tr-page">
 
-  <app-kyntus-page-header
-    title="Traiter les demandes"
-    subtitle="Liste unifiée des réclamations et propositions. Traitez chaque demande sans quitter l’écran.">
-    <div actions>
-      <button type="button" class="ky-btn-secondary" [class.active-mode]="mode==='demandes' && !detailOpen" (click)="setMode('demandes')">
-        Demandes
-      </button>
-      <button type="button" class="ky-btn-secondary" [class.active-mode]="mode==='stats'" (click)="setMode('stats')">
-        Statistiques
-      </button>
-      <button type="button" class="ky-btn-secondary" [class.active-mode]="mode==='historique'" (click)="setMode('historique')">
-        Historique
-      </button>
+  <ky-tr-entete ariane="Qualité" titre="Traiter les demandes"
+                sousTitre="Liste unifiée des réclamations et propositions. Traitez chaque demande sans quitter l’écran."
+                [compteurs]="mode==='demandes' && !detailOpen ? compteursTr : []" (actualiser)="loadDemandes()">
+    <div class="ky-tr-puces" style="align-self:center" role="group" aria-label="Vue">
+      <button type="button" class="ky-tr-puce" [class.is-on]="mode==='demandes' && !detailOpen" (click)="setMode('demandes')">Demandes</button>
+      <button type="button" class="ky-tr-puce" [class.is-on]="mode==='stats'" (click)="setMode('stats')">Statistiques</button>
+      <button type="button" class="ky-tr-puce" [class.is-on]="mode==='historique'" (click)="setMode('historique')">Historique</button>
     </div>
-  </app-kyntus-page-header>
+  </ky-tr-entete>
 
   <div class="emp-loading" *ngIf="loading && !detailOpen">
     <div class="emp-spinner"></div>
@@ -23,100 +19,68 @@
 
   <!-- ══ DEMANDES — liste ══ -->
   <ng-container *ngIf="mode==='demandes' && !detailOpen">
-    <div class="kpi-row" *ngIf="!loading">
-      <div class="kpi-card ky-card kc-blue">
-        <span class="kpi-label">Réclamations</span>
-        <span class="kpi-value">{{ recTotal }}</span>
-      </div>
-      <div class="kpi-card ky-card kc-green">
-        <span class="kpi-label">Propositions</span>
-        <span class="kpi-value">{{ propTotal }}</span>
-      </div>
-      <div class="kpi-card ky-card kc-amber">
-        <span class="kpi-label">À traiter</span>
-        <span class="kpi-value">{{ totalOpen }}</span>
-      </div>
-    </div>
-
-    <div class="rp-tabs">
-      <button type="button" class="rp-tab" [class.active]="kindFilter==='all'" (click)="setKindFilter('all')">
-        Toutes
-        <span class="rp-tab-count">{{ recTotal + propTotal }}</span>
-      </button>
-      <button type="button" class="rp-tab" [class.active]="kindFilter==='reclamations'" (click)="setKindFilter('reclamations')">
-        Réclamations
-        <span class="rp-tab-count">{{ recTotal }}</span>
-      </button>
-      <button type="button" class="rp-tab" [class.active]="kindFilter==='propositions'" (click)="setKindFilter('propositions')">
-        Propositions
-        <span class="rp-tab-count">{{ propTotal }}</span>
-      </button>
-    </div>
-
-    <div class="filters-panel ky-card rpa-filters">
-      <div class="filters-toolbar">
-        <input
-          class="filter-ctl ky-input rpa-search"
-          type="search"
-          placeholder="Rechercher un titre, un auteur…"
-          [(ngModel)]="searchTerm"
-        />
-        <select class="filter-ctl ky-input" [(ngModel)]="filterStatus">
+    <div class="ky-tr-outils">
+      <ky-tr-puces [puces]="pucesTr" [actif]="kindFilter" (choix)="setKindFilter($any($event))" libelle="Type de demande"></ky-tr-puces>
+      <div class="ky-tr-outils-droite">
+        <select class="ky-input ky-tr-select" [(ngModel)]="filterStatus" aria-label="Statut">
           <option value="">Tous les statuts</option>
           <option *ngFor="let s of filterStatuts" [value]="s">{{ getStatusLabel(s) }}</option>
         </select>
-        <select class="filter-ctl ky-input" [(ngModel)]="filterPriorite">
+        <select class="ky-input ky-tr-select" [(ngModel)]="filterPriorite" aria-label="Priorité">
           <option value="">Toutes les priorités</option>
           <option *ngFor="let p of priorities" [value]="p">{{ p }}</option>
         </select>
-        <button type="button" class="ky-btn-secondary" (click)="clearFilters()">Réinitialiser</button>
+        <label class="ky-tr-recherche">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <input type="search" placeholder="Rechercher un titre, un auteur…" [(ngModel)]="searchTerm" aria-label="Rechercher" />
+        </label>
+        <button type="button" class="ky-tr-btn" style="height:36px" (click)="clearFilters()">Réinitialiser</button>
       </div>
     </div>
 
-    <div class="rp-empty ky-card" *ngIf="!loading && unifiedList.length===0">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
-        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-      </svg>
+    <div class="ky-tr-vide" *ngIf="!loading && unifiedList.length===0">
       <h3>Aucune demande</h3>
       <p>Les réclamations et propositions à traiter apparaîtront ici.</p>
     </div>
 
-    <div class="rp-list" *ngIf="!loading && unifiedList.length">
-      <article
-        class="rp-item ky-card"
-        *ngFor="let item of unifiedList"
-        role="button"
-        tabindex="0"
-        (click)="openItem(item)"
-        (keydown.enter)="openItem(item)">
-        <div class="rp-item-left">
-          <div class="rp-item-icon" [class.rp-icon-prop]="item._kind==='proposition'">
-            <span>{{ item._kind==='reclamation' ? 'R' : 'P' }}</span>
-          </div>
-          <div class="rp-item-body">
-            <div class="rp-item-title">{{ item.titre }}</div>
-            <div class="rp-item-meta">
-              <span class="rp-badge-type">{{ item._kind==='reclamation' ? 'Réclamation' : 'Proposition' }}</span>
-              <span *ngIf="item._kind==='reclamation' && $any(item).type">· {{ getTypeLabel($any(item).type) }}</span>
-              <span>· {{ item.auteurNom }}</span>
-              <span>· {{ item.createdAt | date:'dd/MM/yyyy' }}</span>
-              <span
-                class="rp-aging"
-                [class.rp-aging-warn]="daysOpen(item.createdAt) >= 3"
-                [class.rp-aging-breach]="daysOpen(item.createdAt) >= 7">
-                · {{ daysOpen(item.createdAt) }} j
+    <div class="ky-tr-table-wrap" *ngIf="!loading && unifiedList.length" data-ky-no-liste>
+      <table class="ky-tr-table" data-ky-no-liste>
+        <thead>
+          <tr><th>Demande</th><th>Auteur</th><th>Ouverte depuis</th><th>Responsable</th><th>Priorité</th><th>Statut</th><th class="ky-tr-decision">Action</th></tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of unifiedList" (click)="openItem(item)" style="cursor:pointer">
+            <td>
+              <span class="ky-tr-personne">
+                <span class="rp-item-icon" [class.rp-icon-prop]="item._kind==='proposition'"><span>{{ item._kind==='reclamation' ? 'R' : 'P' }}</span></span>
+                <span><strong>{{ item.titre }}</strong>
+                  <small>{{ item._kind==='reclamation' ? 'Réclamation' : 'Proposition' }}{{ item._kind==='reclamation' && $any(item).type ? ' · ' + getTypeLabel($any(item).type) : '' }}</small></span>
               </span>
-              <span *ngIf="item.assigneeNom">· Responsable : {{ item.assigneeNom }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="rp-item-right">
-          <span class="rp-prio" [ngClass]="getPriorityClass(item.priorite)">{{ item.priorite }}</span>
-          <span class="rp-status" [ngClass]="getStatusClass(item.status)">{{ getStatusLabel(item.status) }}</span>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-      </article>
+            </td>
+            <td>
+              <span class="ky-tr-personne">
+                <ky-tr-avatar [nom]="item.auteurNom" [cle]="item.auteurNom"></ky-tr-avatar>
+                <span><strong>{{ item.auteurNom }}</strong><small>{{ item.createdAt | date:'dd/MM/yyyy' }}</small></span>
+              </span>
+            </td>
+            <td>
+              <span class="rp-aging" [class.rp-aging-warn]="daysOpen(item.createdAt) >= 3" [class.rp-aging-breach]="daysOpen(item.createdAt) >= 7">
+                {{ daysOpen(item.createdAt) }} j
+              </span>
+            </td>
+            <td class="ky-tr-muted">{{ item.assigneeNom || 'Non assignée' }}</td>
+            <td><span class="rp-prio" [ngClass]="getPriorityClass(item.priorite)">{{ item.priorite }}</span></td>
+            <td><ky-tr-statut [libelle]="getStatusLabel(item.status)"></ky-tr-statut></td>
+            <td class="ky-tr-decision">
+              <button type="button" class="ky-tr-btn ky-tr-btn--ok" (click)="$event.stopPropagation(); openItem(item)">Traiter</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
+    <p class="ky-tr-note" *ngIf="!loading && unifiedList.length">
+      Chaque demande se traite individuellement (réponse écrite, statut, responsable). Au-delà de 7 jours, le délai passe en rouge.
+    </p>
   </ng-container>
 
   <!-- ══ DEMANDES — détail + traitement ══ -->

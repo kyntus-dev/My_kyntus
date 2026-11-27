@@ -1,104 +1,113 @@
-<div class="ky-page-shell">
-  <app-kyntus-page-header
-    title="Gestion des demandes de switch"
-    [subtitle]="pageSubtitle">
-  </app-kyntus-page-header>
+<!--
+  v86 — Demandes de switch : écran de traitement de la maquette (compteurs, puces, recherche, sélection et
+  décisions groupées, panneau de détail). Mêmes appels (approve / reject) et mêmes droits (canActOn).
+-->
+<div class="ky-page-shell ky-tr-page">
+  <ky-tr-entete ariane="Planning" titre="Gestion des demandes de switch" [sousTitre]="pageSubtitle"
+                [compteurs]="compteurs" (actualiser)="reload()"></ky-tr-entete>
 
   <div class="pcr-toast" *ngIf="toast">{{ toast }}</div>
   <div class="pcr-error" *ngIf="error">{{ error }}</div>
+  <p class="pcr-readonly-hint" *ngIf="isRhReadonly">Mode lecture seule (RH).</p>
 
-  <div class="pcr-filters gen-card">
-    <label>
-      Statut
-      <select [(ngModel)]="filterStatus" (change)="reload()">
-        <option value="">Tous</option>
-        <option value="PendingPartner">En attente collègue</option>
-        <option value="PendingSupervisor">En attente superviseur</option>
-        <option value="Pending">Toutes en cours</option>
-        <option value="Approved">Approuvée</option>
-        <option value="Rejected">Rejetée</option>
-        <option value="Cancelled">Annulée</option>
-      </select>
-    </label>
-    <label>
-      Période
-      <select [(ngModel)]="filterPeriod" (change)="onPeriodChange()">
+  <div class="ky-tr-outils">
+    <ky-tr-puces [puces]="puces" [actif]="filterStatus" (choix)="choisirStatut($event)" libelle="Filtrer par statut"></ky-tr-puces>
+    <div class="ky-tr-outils-droite">
+      <select class="ky-input ky-tr-select" [(ngModel)]="filterPeriod" (change)="onPeriodChange()" aria-label="Période">
         <option *ngFor="let opt of periodOptions" [value]="opt.value">{{ opt.label }}</option>
       </select>
-    </label>
-    <label>
-      Semaine
-      <select [(ngModel)]="filterWeek" (change)="onWeekChange()">
-        <option value="">Toutes (selon période)</option>
+      <select class="ky-input ky-tr-select" [(ngModel)]="filterWeek" (change)="onWeekChange()" aria-label="Semaine">
+        <option value="">Toutes les semaines</option>
         <option *ngFor="let w of weekOptions" [value]="w.value">{{ w.label }}</option>
       </select>
-    </label>
-    <button type="button" class="ky-btn-secondary" (click)="reload()">Filtrer</button>
-  </div>
-
-  <div class="pcr-recap gen-card" *ngIf="!loading">
-    <div class="pcr-recap-head">
-      <h3>Récapitulatif</h3>
-      <span class="pcr-recap-scope">{{ filterScopeLabel }}</span>
-    </div>
-    <div class="pcr-history-stats">
-      <span><strong>{{ recapTotal }}</strong> total</span>
-      <span><strong>{{ recapPending }}</strong> en cours</span>
-      <span><strong>{{ recapApproved }}</strong> approuvées</span>
-      <span><strong>{{ recapRejected }}</strong> rejetées</span>
+      <label class="ky-tr-recherche">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input type="search" placeholder="Rechercher un collaborateur" [(ngModel)]="recherche" (input)="onRecherche()" aria-label="Rechercher" />
+      </label>
     </div>
   </div>
 
-  <div class="gen-card">
-    <h3>Liste des demandes</h3>
-    <p class="pcr-readonly-hint" *ngIf="isRhReadonly">Mode lecture seule (RH).</p>
-    <p *ngIf="loading">Chargement…</p>
-    <table class="pcr-table" *ngIf="!loading">
+  <p *ngIf="loading" class="ky-tr-note">Chargement…</p>
+
+  <div class="ky-tr-vide" *ngIf="!loading && requests.length === 0">
+    <h3>Aucune demande</h3><p>Aucune demande pour ces filtres ({{ filterScopeLabel }}).</p>
+  </div>
+
+  <div class="ky-tr-table-wrap" *ngIf="!loading && requests.length > 0" data-ky-no-liste>
+    <table class="ky-tr-table" data-ky-no-liste>
       <thead>
         <tr>
-          <th>Semaine</th>
-          <th>Demandeur</th>
-          <th>Jour / Shift</th>
-          <th>Switch</th>
-          <th>Motif</th>
-          <th>Statut</th>
-          <th>Actions</th>
+          <th class="ky-tr-case"><input type="checkbox" [checked]="selection.toutCoche(cochables)" [disabled]="!cochables.length"
+                 (change)="selection.basculerTout(cochables)" aria-label="Tout sélectionner" /></th>
+          <th>Demandeur</th><th>Jour / shift</th><th>Switch avec</th><th>Motif</th><th>Statut</th>
+          <th class="ky-tr-decision">Décision</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let r of requests">
-          <td>{{ formatWeekLabel(r.weekCode) }}</td>
-          <td class="pcr-emp-cell">
-            <span>{{ r.requesterName }}</span>
-            <button
-              type="button"
-              class="pcr-eye-btn"
-              *ngIf="r.requesterUserId"
-              title="Historique du demandeur (période active)"
-              aria-label="Historique du demandeur"
-              (click)="openEmployeeHistory({ userId: r.requesterUserId, fullName: r.requesterName })">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
+        <tr *ngFor="let r of requests" [class.is-coche]="selection.has(r.id)">
+          <td class="ky-tr-case">
+            <input *ngIf="canActOn(r)" type="checkbox" [checked]="selection.has(r.id)" (change)="selection.basculer(r.id)"
+                   [attr.aria-label]="'Sélectionner ' + r.requesterName" />
+          </td>
+          <td>
+            <button type="button" class="ky-tr-personne" (click)="ouvrirDetail(r)">
+              <ky-tr-avatar [nom]="r.requesterName" [cle]="r.requesterUserId"></ky-tr-avatar>
+              <span><strong>{{ r.requesterName }}</strong><small>{{ r.subServiceName || formatWeekLabel(r.weekCode) }}</small></span>
             </button>
           </td>
-          <td>{{ r.assignmentDate | date:'dd/MM' }} — {{ r.shiftLabel }}</td>
+          <td class="ky-tr-double"><strong>{{ r.assignmentDate | date:'EEE d MMM' }}</strong><small>{{ r.shiftLabel }} · {{ formatWeekLabel(r.weekCode) }}</small></td>
           <td>{{ r.proposedSwapUserName || '—' }}</td>
-          <td>{{ r.reason }}</td>
-          <td>{{ statusLabel(r.status) }}</td>
-          <td class="pcr-actions" *ngIf="canActOn(r)">
-            <button type="button" class="pcr-approve" (click)="approve(r.id)">Valider switch</button>
-            <button type="button" class="pcr-reject" (click)="openReject(r.id)">Refuser</button>
+          <td><span class="ky-tr-muted">{{ r.reason || '—' }}</span></td>
+          <td><ky-tr-statut [libelle]="statusLabel(r.status)"></ky-tr-statut></td>
+          <td class="ky-tr-decision">
+            <ng-container *ngIf="canActOn(r); else voir">
+              <button type="button" class="ky-tr-btn ky-tr-btn--refus" (click)="openReject(r.id)">Refuser</button>
+              <button type="button" class="ky-tr-btn ky-tr-btn--ok" (click)="approve(r.id)">Valider</button>
+            </ng-container>
+            <ng-template #voir><button type="button" class="ky-tr-btn" (click)="ouvrirDetail(r)">Voir</button></ng-template>
           </td>
-          <td *ngIf="!canActOn(r)">—</td>
-        </tr>
-        <tr *ngIf="requests.length === 0">
-          <td colspan="7" class="pcr-empty-row">Aucune demande pour ces filtres.</td>
         </tr>
       </tbody>
     </table>
   </div>
+  <p class="ky-tr-note" *ngIf="!loading && requests.length > 0">
+    {{ filterScopeLabel }} · cliquez sur un nom pour le détail ; cochez plusieurs lignes pour décider en une fois.
+  </p>
+
+  <ky-tr-lot [nombre]="selection.taille" [enCours]="enCoursLot" libelleValider="Valider la sélection"
+             (vider)="selection.vider()" (valider)="validerSelection()" (refuser)="refuserSelection()"></ky-tr-lot>
+
+  <ky-tr-tiroir [ouvert]="!!detail" [titre]="detail?.requesterName || ''" [cleAvatar]="detail?.requesterUserId"
+                [sousTitre]="detail?.subServiceName || ''" (fermer)="detail = null">
+    <ng-container *ngIf="detail as d">
+      <div class="ky-tr-tuiles">
+        <span><small>Jour</small><b>{{ d.assignmentDate | date:'EEE d MMM' }}</b></span>
+        <span><small>Shift</small><b>{{ d.shiftLabel }}</b></span>
+        <span><small>Statut</small><ky-tr-statut [libelle]="statusLabel(d.status)"></ky-tr-statut></span>
+      </div>
+      <div class="ky-tr-champs">
+        <p><small>Semaine</small>{{ formatWeekLabel(d.weekCode) }}</p>
+        <p><small>Switch avec</small>{{ d.proposedSwapUserName || '—' }}</p>
+        <p><small>Motif</small>{{ d.reason || '—' }}</p>
+        <p *ngIf="d.rejectionReason"><small>Motif du refus</small>{{ d.rejectionReason }}</p>
+      </div>
+      <section>
+        <h4>Historique</h4>
+        <ol class="ky-tr-histo">
+          <li *ngIf="d.createdAt"><span>Demande créée</span><small>{{ d.createdAt | date:'EEEE d MMMM, HH:mm' }}</small></li>
+          <li *ngIf="d.partnerRespondedAt"><span>Réponse du collègue</span><small>{{ d.partnerRespondedAt | date:'EEEE d MMMM, HH:mm' }}</small></li>
+          <li *ngIf="d.processedAt"><span>Traitée{{ d.processedByName ? ' par ' + d.processedByName : '' }}</span><small>{{ d.processedAt | date:'EEEE d MMMM, HH:mm' }}</small></li>
+          <li *ngIf="canActOn(d)" class="is-attente"><span>En attente de votre décision</span></li>
+        </ol>
+      </section>
+      <button type="button" class="ky-tr-btn" *ngIf="d.requesterUserId"
+              (click)="openEmployeeHistory({ userId: d.requesterUserId, fullName: d.requesterName })">Récapitulatif du demandeur</button>
+    </ng-container>
+    <ng-container kyTrPied *ngIf="detail && canActOn(detail)">
+      <button type="button" class="ky-tr-btn ky-tr-btn--refus ky-tr-btn--lg" (click)="openReject(detail.id)">Refuser</button>
+      <button type="button" class="ky-tr-btn ky-tr-btn--ok ky-tr-btn--lg" (click)="approve(detail.id)">Valider le switch</button>
+    </ng-container>
+  </ky-tr-tiroir>
 
   <div class="pcr-modal-backdrop" *ngIf="rejectId !== null" appBodyPortal>
     <div class="pcr-modal">
@@ -120,10 +129,8 @@
         </div>
         <button type="button" class="pcr-close" (click)="closeEmployeeHistory()" aria-label="Fermer">×</button>
       </div>
-
       <p *ngIf="historyLoading">Chargement…</p>
       <p class="pcr-error" *ngIf="historyError">{{ historyError }}</p>
-
       <div class="pcr-history-stats" *ngIf="!historyLoading && !historyError">
         <span><strong>{{ historyTotal }}</strong> total</span>
         <span><strong>{{ historyPending }}</strong> en cours</span>

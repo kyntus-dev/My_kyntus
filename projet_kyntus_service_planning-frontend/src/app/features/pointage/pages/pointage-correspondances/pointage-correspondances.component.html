@@ -1,14 +1,14 @@
 <div class="ky-page-shell pt">
-  <app-kyntus-page-header
-    title="Correspondance pointeuses"
-    subtitle="Reliez chaque ID de pointeuse ZKBio Time à un collaborateur My-Kyntus.">
-    <div actions>
-      @if (isAdmin() && peutModifier()) {
-        <button type="button" class="ky-btn-secondary" (click)="synchroniser()" [disabled]="busy()">Synchroniser maintenant</button>
-      }
-      <button type="button" class="ky-btn-secondary" (click)="load()" [disabled]="loading()">Actualiser</button>
-    </div>
-  </app-kyntus-page-header>
+  <!-- v86 — en-tête, puces et tableau de la maquette « Écran de traitement » ; actions inchangées. -->
+  <ky-tr-entete ariane="Pointage" titre="Correspondance pointeuses" [actualisable]="false"
+                sousTitre="Reliez chaque ID de pointeuse ZKBio Time à un collaborateur My-Kyntus." [compteurs]="compteursTr()">
+    @if (isAdmin() && peutModifier()) {
+      <button type="button" class="ky-tr-btn" style="align-self:center;height:40px" (click)="synchroniser()" [disabled]="busy()">Synchroniser maintenant</button>
+    }
+    <button type="button" class="ky-tr-icone" (click)="load()" [disabled]="loading()" aria-label="Actualiser" title="Actualiser">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+    </button>
+  </ky-tr-entete>
 
   @if (etat(); as e) {
     <div class="pt-banner" [class.pt-banner--warn]="!e.active || e.derniereErreur">
@@ -31,27 +31,25 @@
     </div>
   }
 
-  <div class="ky-card pc-toolbar">
-    <div class="pt-presets" role="group" aria-label="Statut">
-      <button type="button" class="pt-chip" [class.is-active]="filtre() === 'AValider'" (click)="filtre.set('AValider')">À traiter ({{ compte()['AValider'] }})</button>
-      <button type="button" class="pt-chip" [class.is-active]="filtre() === 'Auto'" (click)="filtre.set('Auto')">Proposés ({{ compte()['Auto'] }})</button>
-      <button type="button" class="pt-chip" [class.is-active]="filtre() === 'Valide'" (click)="filtre.set('Valide')">Validés ({{ compte()['Valide'] }})</button>
-      <button type="button" class="pt-chip" [class.is-active]="filtre() === 'Ignore'" (click)="filtre.set('Ignore')">Ignorés ({{ compte()['Ignore'] }})</button>
-      <button type="button" class="pt-chip" [class.is-active]="filtre() === ''" (click)="filtre.set('')">Tous</button>
+  <div class="ky-tr-outils">
+    <ky-tr-puces [puces]="pucesTr()" [actif]="filtre()" (choix)="filtre.set($any($event))" libelle="Statut"></ky-tr-puces>
+    <div class="ky-tr-outils-droite">
+      <label class="ky-tr-recherche">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input type="search" placeholder="ID, nom, département…" aria-label="Rechercher" [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
+      </label>
+      @if (compte()['Auto'] && peutModifier()) {
+        <button type="button" class="ky-tr-btn ky-tr-btn--ok" style="height:36px" (click)="validerTout()" [disabled]="busy()">Valider les {{ compte()['Auto'] }} propositions</button>
+      }
     </div>
-    <input class="ky-input pc-search" type="search" placeholder="ID, nom, département…" aria-label="Rechercher"
-      [ngModel]="recherche()" (ngModelChange)="recherche.set($event)" />
-    @if (compte()['Auto'] && peutModifier()) {
-      <button type="button" class="ky-btn-primary" (click)="validerTout()" [disabled]="busy()">Valider les {{ compte()['Auto'] }} propositions</button>
-    }
   </div>
 
-  <section class="ky-card pt-table-card">
+  <section class="ky-tr-table-wrap" data-ky-no-liste>
     @if (loading()) {
       <div class="pt-state">Chargement…</div>
     } @else {
       <div class="table-wrapper">
-        <table class="pt-table">
+        <table class="pt-table ky-tr-table" data-ky-no-liste>
           <thead>
             <tr>
               <th>ID pointeuse</th>
@@ -77,14 +75,14 @@
                     @for (o of options(); track o.id) { <option [value]="o.id">{{ o.label }}</option> }
                   </select>
                 </td>
-                <td><span class="pc-statut" [attr.data-statut]="r.statut">{{ statutsLabels[r.statut] }}</span></td>
-                <td class="pt-nowrap">
+                <td><ky-tr-statut [libelle]="statutsLabels[r.statut]" [ton]="tonTr(r.statut)"></ky-tr-statut></td>
+                <td class="pt-nowrap ky-tr-decision">
                   @if (peutModifier()) {
-                  <button type="button" class="pc-link" (click)="enregistrer(r)" [disabled]="busy()">
+                  <button type="button" class="ky-tr-btn ky-tr-btn--ok" (click)="enregistrer(r)" [disabled]="busy()">
                     {{ r.statut === 'Auto' && valeur(r) === (r.userId?.toString() ?? '') ? 'Valider' : 'Enregistrer' }}
                   </button>
                   @if (r.statut !== 'Ignore') {
-                    <button type="button" class="pc-link pc-link--muted" (click)="ignorer(r)" [disabled]="busy()"
+                    <button type="button" class="ky-tr-btn" (click)="ignorer(r)" [disabled]="busy()"
                       title="Badge de test, prestataire hors My-Kyntus…">Ignorer</button>
                   }
                   } @else { <span class="ku-muted">—</span> }

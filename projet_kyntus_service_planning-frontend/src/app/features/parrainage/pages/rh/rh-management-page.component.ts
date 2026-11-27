@@ -9,6 +9,8 @@ import {
   REFERRAL_STATUS_LABELS,
   REFERRAL_STATUS_STYLES,
 } from '../../utils/referral-status.util';
+import { KY_TRAITEMENT } from '../../../../shared/components/ky-traitement/ky-traitement.components';
+import type { KyCompteur, KyPuce } from '../../../../shared/components/ky-traitement/ky-traitement.util';
 
 const FILTER_OPTIONS = [
   { id: 'all', label: 'Tous' },
@@ -29,99 +31,70 @@ type RhFilter = ParrainageRhManagementFilter;
 @Component({
   selector: 'app-rh-management-page',
   standalone: true,
-  imports: [],
+  imports: [...KY_TRAITEMENT],
   template: `
+    <!-- v86 — Gestion des parrainages (RH) : écran de traitement de la maquette ; actions inchangées. -->
     <section class="flex-1 min-w-0">
-      <div class="space-y-6">
+      <div class="ky-tr-page">
         @if (unauthorized) {
           <div class="card-navy p-10 text-center text-[var(--danger-text)] text-sm">
             Accès refusé. Réservé à la RH.
           </div>
         }
-        <div class="ky-entete">
-          <h1 class="prime-page-title">Gestion des parrainages</h1>
-          <p class="text-sm text-muted mt-1">Cliquez sur une ligne pour ouvrir et traiter le dossier.</p>
-        </div>
+        <ky-tr-entete ariane="Parrainage" titre="Gestion des parrainages" [actualisable]="false"
+                      sousTitre="Cliquez sur une ligne pour ouvrir et traiter le dossier." [compteurs]="compteurs()"></ky-tr-entete>
 
-        <div class="flex flex-wrap gap-2">
-          @for (f of filterOptions; track f.id) {
-            <button
-              type="button"
-              (click)="activeFilter.set(f.id)"
-              [class]="'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ' + (activeFilter() === f.id ? 'bg-soft-blue/20 border-soft-blue/50 text-soft-blue' : 'border-default text-muted hover:border-default')"
-            >
-              {{ f.label }}
-            </button>
-          }
+        <div class="ky-tr-outils">
+          <ky-tr-puces [puces]="puces()" [actif]="activeFilter()" (choix)="activeFilter.set($any($event))" libelle="Filtrer les dossiers"></ky-tr-puces>
+          <div class="ky-tr-outils-droite">
+            <label class="ky-tr-recherche">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+              <input type="search" placeholder="Rechercher un candidat ou un parrain" [value]="recherche()" (input)="recherche.set($any($event.target).value)" aria-label="Rechercher" />
+            </label>
+          </div>
         </div>
 
         @if (loading()) {
-          <div class="card-navy p-10 text-center text-muted text-sm">Chargement…</div>
+          <div class="ky-tr-vide">Chargement…</div>
         } @else if (rows().length === 0) {
-          <div class="card-navy p-10 text-center text-muted text-sm">Aucun dossier.</div>
+          <div class="ky-tr-vide"><h3>Aucun dossier</h3><p>Aucun dossier pour ce filtre.</p></div>
         } @else {
-          <div class="card-navy overflow-hidden">
-            <div class="overflow-x-auto">
-              <table class="min-w-full text-sm">
-                <thead class="bg-app/50 text-left text-xs uppercase tracking-wide text-muted">
-                  <tr>
-                    <th class="px-4 py-3">Candidat</th>
-                    <th class="px-4 py-3">Poste</th>
-                    <th class="px-4 py-3">Parrain</th>
-                    <th class="px-4 py-3">Projet</th>
-                    <th class="px-4 py-3">Statut</th>
-                    <th class="px-4 py-3">Paiement</th>
-                    <th class="px-4 py-3">Montant</th>
-                    <th class="px-4 py-3">Date</th>
-                    <th class="px-4 py-3 text-right">Action</th>
+          <div class="ky-tr-table-wrap" data-ky-no-liste>
+            <table class="ky-tr-table" data-ky-no-liste>
+              <thead>
+                <tr>
+                  <th>Candidat</th><th>Parrain</th><th>Projet</th><th>Statut</th><th>Paiement</th><th>Montant</th><th>Date</th>
+                  <th class="ky-tr-decision">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of rows(); track r.id) {
+                  <tr tabindex="0" role="button" style="cursor:pointer" [attr.aria-label]="'Ouvrir le dossier de ' + r.candidateName"
+                      (click)="openDetail(r.id)" (keydown)="onRowKeydown($event, r.id)">
+                    <td>
+                      <span class="ky-tr-personne">
+                        <ky-tr-avatar [nom]="r.candidateName" [cle]="r.id"></ky-tr-avatar>
+                        <span><strong>{{ r.candidateName }}</strong><small>{{ r.position }}</small></span>
+                      </span>
+                    </td>
+                    <td>{{ r.referrerName }}</td>
+                    <td class="ky-tr-muted">{{ r.projectName }}</td>
+                    <td><span [class]="'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ' + statusStyles[r.status]">{{ statusLabels[r.status] }}</span></td>
+                    <td class="ky-tr-muted">{{ paymentLabel(r) }}</td>
+                    <td><strong>{{ r.rewardAmount > 0 ? r.rewardAmount + ' DH' : '—' }}</strong></td>
+                    <td class="ky-tr-muted">{{ fr(r.createdAt) }}</td>
+                    <td class="ky-tr-decision" (click)="$event.stopPropagation()">
+                      @if (r.status === 'PROCESSED' && !r.candidateEmployeeId) {
+                        <button type="button" class="ky-tr-btn ky-tr-btn--ok" (click)="validateAndCreateEmployee(r.id)">Valider</button>
+                      }
+                      <button type="button" class="ky-tr-btn" (click)="openDetail(r.id)">Ouvrir</button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody class="divide-y divide-default">
-                  @for (r of rows(); track r.id) {
-                    <tr
-                      class="hover:bg-card/30 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-soft-blue/60"
-                      tabindex="0"
-                      role="button"
-                      [attr.aria-label]="'Ouvrir le dossier de ' + r.candidateName"
-                      (click)="openDetail(r.id)"
-                      (keydown)="onRowKeydown($event, r.id)"
-                    >
-                      <td class="px-4 py-3 text-primary whitespace-nowrap">{{ r.candidateName }}</td>
-                      <td class="px-4 py-3 text-primary whitespace-nowrap">{{ r.position }}</td>
-                      <td class="px-4 py-3 text-primary whitespace-nowrap">{{ r.referrerName }}</td>
-                      <td class="px-4 py-3 text-primary whitespace-nowrap">{{ r.projectName }}</td>
-                      <td class="px-4 py-3">
-                        <span [class]="'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ' + statusStyles[r.status]">{{ statusLabels[r.status] }}</span>
-                      </td>
-                      <td class="px-4 py-3 text-muted text-xs">{{ paymentLabel(r) }}</td>
-                      <td class="px-4 py-3 text-primary text-xs">{{ r.rewardAmount > 0 ? r.rewardAmount + ' DH' : '—' }}</td>
-                      <td class="px-4 py-3 text-muted whitespace-nowrap">
-                        {{ fr(r.createdAt) }}
-                      </td>
-                      <td class="px-4 py-3 text-right" (click)="$event.stopPropagation()">
-                        @if (r.status === 'PROCESSED' && !r.candidateEmployeeId) {
-                          <button
-                            type="button"
-                            class="rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-3 py-1.5 text-xs font-medium text-[var(--success-text)] hover:border-[var(--success)] mr-2"
-                            (click)="validateAndCreateEmployee(r.id)"
-                          >
-                            Valider
-                          </button>
-                        }
-                        <button
-                          type="button"
-                          class="text-xs text-soft-blue font-medium hover:underline"
-                          (click)="openDetail(r.id)"
-                        >
-                          Ouvrir →
-                        </button>
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
+                }
+              </tbody>
+            </table>
           </div>
+          <p class="ky-tr-note">« Valider » ouvre la création du collaborateur à partir du dossier, comme avant.</p>
         }
       </div>
     </section>
@@ -150,9 +123,34 @@ export class RhManagementPageComponent {
   }
 
   readonly loading = computed(() => this.store.loading());
+  // ── v86 : puces avec nombres, compteurs, recherche ─────────────────────────────────────
+  readonly recherche = signal('');
+  private readonly tous = computed(() => [...this.store.referrals()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
+
+  readonly puces = computed<KyPuce[]>(() => {
+    const all = this.tous();
+    return this.filterOptions
+      .map((f) => ({ id: f.id as string, label: f.label, n: this.filtrer(all, f.id).length }))
+      .filter((p) => p.n > 0 || p.id === 'all' || p.id === 'pending-rh' || p.id === this.activeFilter());
+  });
+
+  readonly compteurs = computed<KyCompteur[]>(() => {
+    const all = this.tous();
+    return [
+      { label: 'En attente RH', valeur: this.filtrer(all, 'pending-rh').length, ton: 'warn' },
+      { label: 'Fin de formation à traiter', valeur: this.filtrer(all, 'training-end-due').length, ton: 'bad' },
+      { label: 'Prêts compta', valeur: this.filtrer(all, 'ready-compta').length, ton: 'ok' },
+    ];
+  });
+
   readonly rows = computed(() => {
-    const filter = this.activeFilter();
-    const all = [...this.store.referrals()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const q = this.recherche().trim().toLowerCase();
+    const liste = this.filtrer(this.tous(), this.activeFilter());
+    return q ? liste.filter((r) => [r.candidateName, r.referrerName, r.projectName, r.position].some((v) => (v ?? '').toLowerCase().includes(q))) : liste;
+  });
+
+  /** Même filtrage qu'avant (déplacé ici pour compter chaque puce). */
+  private filtrer(all: Referral[], filter: RhFilter): Referral[] {
     if (filter === 'all') return all;
     if (filter === 'pending-rh') return all.filter((r) => r.status === 'SUBMITTED');
     if (filter === 'processed-rh') return all.filter((r) => r.status === 'PROCESSED');
@@ -172,7 +170,7 @@ export class RhManagementPageComponent {
     if (filter === 'awaiting-rh') return all.filter((r) => r.paymentStatus === 'AWAITING_RH');
     if (filter === 'in-period') return all.filter((r) => r.status === 'APPROVED' && r.paymentStatus === 'NOT_ELIGIBLE');
     return all;
-  });
+  }
 
   get unauthorized(): boolean {
     return this.role.user().role !== 'RH';
