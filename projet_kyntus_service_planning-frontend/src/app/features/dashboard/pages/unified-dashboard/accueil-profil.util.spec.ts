@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  modulesDesActions,
   cleJour,
   clePage,
   easeOut,
@@ -173,5 +174,19 @@ describe('v82 — accueil interactif', () => {
     const r = raccourcisEpingles(pages, ['planning|Mes plannings', 'admin|Accès par rôle', 'conges|Mes congés']);
     expect(r?.map((x) => x.label)).toEqual(['Mes plannings', 'Mes congés']);
     expect(clePage(pages[0])).toBe('conges|Mes congés');
+  });
+});
+
+describe('v83 — anneau par module (légende de la maquette)', () => {
+  it('regroupe par module, couleur stable dans l’ordre d’apparition', () => {
+    const m = modulesDesActions([
+      { moduleId: 'documentation', module: 'Documentation', count: 13 },
+      { moduleId: 'rh', module: 'Contrats', count: 10 },
+      { moduleId: 'documentation', module: 'Documentation', count: 2 },
+      { moduleId: 'qualite', module: 'Qualité', count: 0 },
+    ]);
+    expect(m.map((x) => [x.id, x.n])).toEqual([['documentation', 15], ['rh', 10], ['qualite', 1]]);
+    expect(m[0].couleur).toBe('#8b5cf6');
+    expect(m[1].couleur).toBe('#f59e0b');
   });
 });

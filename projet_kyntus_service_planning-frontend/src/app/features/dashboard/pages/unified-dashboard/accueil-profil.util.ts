@@ -295,3 +295,27 @@ export function raccourcisEpingles(pages: readonly PageMenu[], epingles: readonl
   }
   return out;
 }
+
+// ── v83 : disposition de la maquette (anneau par module, comme sa légende) ─────────────────
+
+export interface ModuleActions {
+  id: string;
+  label: string;
+  /** Total des actions du module (1 par action non chiffrée). */
+  n: number;
+  couleur: string;
+}
+
+/** Modules des actions, dans l'ordre d'apparition, avec une couleur stable par module. */
+export function modulesDesActions(items: readonly Pick<GlobalActionItem, 'moduleId' | 'module' | 'count'>[]): ModuleActions[] {
+  const out: ModuleActions[] = [];
+  for (const a of items) {
+    let m = out.find((x) => x.id === a.moduleId);
+    if (!m) {
+      m = { id: a.moduleId, label: a.module, n: 0, couleur: COULEURS_ANNEAU[out.length % COULEURS_ANNEAU.length] };
+      out.push(m);
+    }
+    m.n += a.count && a.count > 0 ? a.count : 1;
+  }
+  return out;
+}

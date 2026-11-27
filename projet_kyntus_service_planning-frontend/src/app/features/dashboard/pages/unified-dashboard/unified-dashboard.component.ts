@@ -18,6 +18,7 @@ import { PlatformAccessService } from '../../../../core/platform-access/platform
 import { KyntusToastService } from '@/shared/components/ui/kyntus-toast.service';
 import { KyntusPaletteService } from '../../../../core/navigation/kyntus-palette.service';
 import {
+  modulesDesActions,
   cleJour,
   clePage,
   easeOut,
@@ -154,6 +155,20 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
   readonly kpisReparties = computed(() => repartirKpis(this.kpiItems()));
   readonly pastilles = computed(() => pastillesBandeau(this.actionsDuJour()));
   readonly anneau = computed(() => segmentsAnneau(this.actionsVisibles()));
+  /** v83 — Anneau par module, comme la légende de la maquette (le module choisi reste en avant). */
+  readonly modulesActions = computed(() => modulesDesActions(this.actionsDuJour()));
+  readonly anneauModules = computed(() => {
+    const mods = this.modulesActions();
+    const base = segmentsAnneau(mods.map((m) => ({ id: m.id, label: m.label, count: m.n })));
+    const f = this.filtre();
+    return {
+      total: base.total,
+      segments: base.segments.map((seg, i) => ({ ...seg, couleur: mods[i].couleur, largeur: f === 'tout' || f === seg.id ? 13 : 7 })),
+    };
+  });
+  couleurModule(id: string): string {
+    return this.modulesActions().find((m) => m.id === id)?.couleur ?? '#64748b';
+  }
   /** Raccourcis proposés pour le rôle (v80) ; remplacés par ceux épinglés par la personne (v82). */
   readonly raccourcisProfil = computed<Raccourci[]>(() =>
     raccourcisAccueil(this.pages(), this.profil()?.raccourcis ?? [], this.quickActions(), FLECHE_ACTION),
