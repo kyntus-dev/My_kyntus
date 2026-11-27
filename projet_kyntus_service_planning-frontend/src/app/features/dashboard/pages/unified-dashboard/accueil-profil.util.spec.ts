@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cleJour,
+  clePage,
+  easeOut,
+  progressionFocus,
+  raccourcisEpingles,
+  sansReportees,
+  valeurAnimee,
   pastillesBandeau,
   pointSante,
   prenom,
@@ -136,5 +143,35 @@ describe('v80 — divers', () => {
     expect(prenom('Youssef Alaoui')).toBe('Youssef');
     expect(prenom('admin@kyntus.com')).toBe('admin@kyntus.com');
     expect(prenom('')).toBe('');
+  });
+});
+
+describe('v82 — accueil interactif', () => {
+  const pages = [
+    page('conges', 'Congés et absences', 'Mes congés', '/mes-conges'),
+    page('planning', 'Planification', 'Mes plannings', '/mes-plannings'),
+  ];
+
+  it('« Plus tard » masque l’action pour la journée seulement', () => {
+    const items = [{ id: 'a' }, { id: 'b' }];
+    expect(sansReportees(items, { a: '2026-11-23' }, '2026-11-23').map((x) => x.id)).toEqual(['b']);
+    expect(sansReportees(items, { a: '2026-11-23' }, '2026-11-24').map((x) => x.id)).toEqual(['a', 'b']);
+    expect(cleJour(new Date(2026, 10, 3))).toBe('2026-11-03');
+  });
+
+  it('focus du jour et compteurs animés', () => {
+    expect(progressionFocus(1, 3)).toBe(25);
+    expect(progressionFocus(0, 0)).toBe(100);
+    expect(valeurAnimee(272, 0.5)).toBe(136);
+    expect(valeurAnimee('12,5', 0.5)).toBe('12,5');
+    expect(valeurAnimee(272, 1)).toBe(272);
+    expect(easeOut(1)).toBe(1);
+  });
+
+  it('raccourcis épinglés : seulement les pages encore dans le menu, dans l’ordre choisi', () => {
+    expect(raccourcisEpingles(pages, null)).toBeNull();
+    const r = raccourcisEpingles(pages, ['planning|Mes plannings', 'admin|Accès par rôle', 'conges|Mes congés']);
+    expect(r?.map((x) => x.label)).toEqual(['Mes plannings', 'Mes congés']);
+    expect(clePage(pages[0])).toBe('conges|Mes congés');
   });
 });

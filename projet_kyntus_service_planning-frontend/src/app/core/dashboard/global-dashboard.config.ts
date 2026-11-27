@@ -18,6 +18,8 @@ export function resolveRoleCluster(role: string): RoleCluster {
   // Cellule IT : accueil « Mon espace », comme un collaborateur.
   if (r === 'pilote' || r === 'employee' || r === 'ingenieur' || r === 'supportit') return 'employee';
   if (r === 'audit') return 'audit';
+  // v82 : la Comptabilité a son accueil (primes validées, parrainages à payer) au lieu du tableau générique.
+  if (r === 'comptabilite') return 'compta';
   return 'unknown';
 }
 
@@ -107,6 +109,13 @@ export const DASHBOARD_BY_CLUSTER: Record<RoleCluster, RoleDashboardConfig> = {
     healthModules: ['prime', 'parrainage', 'documentation', 'qualite'],
     actionSources: ['prime', 'parrainage', 'documentation', 'reclamation'],
   },
+  compta: {
+    title: 'Paie et paiements',
+    subtitle: 'Export paie, primes validées et parrainages à payer',
+    kpiKeys: ['parrainageReadyPay', 'primeValidations', 'unreadNotifications'],
+    healthModules: ['prime', 'parrainage', 'documentation'],
+    actionSources: ['prime', 'parrainage', 'documentation'],
+  },
   unknown: {
     title: 'Tableau de bord',
     subtitle: 'Vue d\'ensemble de votre activité',
@@ -142,6 +151,7 @@ export const KPI_MODULE: Partial<Record<GlobalKpiKey, string>> = {
   supervisorPrimePending: 'prime',
   primeAnomalies: 'prime',
   parrainageSubmitted: 'parrainage',
+  parrainageReadyPay: 'parrainage',
   parrainageAudit: 'parrainage',
   docPending: 'documentation',
   auditDocEvents: 'documentation',

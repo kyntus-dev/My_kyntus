@@ -284,7 +284,7 @@ export class GlobalDashboardService {
       );
     }
 
-    if ((cluster === 'adminRh' || cluster === 'manager' || cluster === 'superviseur') && mods.has('prime')) {
+    if ((cluster === 'adminRh' || cluster === 'manager' || cluster === 'superviseur' || cluster === 'compta') && mods.has('prime')) {
       priority.primeSummary = this.dashCall(
         from(
           primeApiGet<ValidationSummary>('/api/prime/validation/summary').catch(() => ({
@@ -361,7 +361,7 @@ export class GlobalDashboardService {
       );
     }
 
-    if ((cluster === 'adminRh' || cluster === 'audit') && mods.has('parrainage')) {
+    if ((cluster === 'adminRh' || cluster === 'audit' || cluster === 'compta') && mods.has('parrainage')) {
       deferred.referrals = this.dashCall(from(this.parrainageApi.getReferrals().catch(() => [])), []);
     }
 
@@ -571,6 +571,8 @@ export class GlobalDashboardService {
         return parrainageRhManagementTarget();
       case 'parrainageAudit':
         return platformAuditJournalTarget('parrainage');
+      case 'parrainageReadyPay':
+        return { route: DASHBOARD_ROUTES.parrainage, parrainageView: 'compta-payments' };
       case 'docPending':
         return this.documentationPendingTarget(cluster);
       case 'formationsPending':
@@ -754,6 +756,11 @@ export class GlobalDashboardService {
         label: 'Validations PRIME pôle',
         value: m.rpPrimePending,
         accent: m.rpPrimePending > 0 ? 'orange' : 'neutral',
+      },
+      parrainageReadyPay: {
+        label: 'Parrainages à payer',
+        value: m.parrainageReadyPay,
+        accent: m.parrainageReadyPay > 0 ? 'orange' : 'neutral',
       },
       supervisorPrimePending: {
         label: 'Fiches PRIME en cours',
@@ -1024,6 +1031,32 @@ export class GlobalDashboardService {
           moduleId: 'prime',
           count: m.primeValidations,
           action: this.navAction({ route: DASHBOARD_ROUTES.prime, primePath: '/validation' }),
+        });
+      }
+    }
+
+    // v82 : Comptabilité — parrainages prêts à payer et primes en cours de validation.
+    if (cluster === 'compta') {
+      if (mods.has('parrainage') && m.parrainageReadyPay > 0) {
+        push({
+          id: 'compta-parrainage',
+          label: 'Parrainages à payer',
+          detail: `${m.parrainageReadyPay} prêt(s) pour la comptabilité`,
+          module: moduleLabel('parrainage'),
+          moduleId: 'parrainage',
+          count: m.parrainageReadyPay,
+          action: this.navAction({ route: DASHBOARD_ROUTES.parrainage, parrainageView: 'compta-payments' }),
+        });
+      }
+      if (mods.has('prime') && m.primeValidations > 0) {
+        push({
+          id: 'compta-prime',
+          label: 'Primes en validation',
+          detail: `${m.primeValidations} fiche(s) en cours`,
+          module: moduleLabel('prime'),
+          moduleId: 'prime',
+          count: m.primeValidations,
+          action: this.navAction(this.primeValidationTarget(role)),
         });
       }
     }

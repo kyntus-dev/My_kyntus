@@ -11,13 +11,32 @@
         Bonjour{{ prenomAffiche() ? ', ' + prenomAffiche() : '' }}
         @if (libelleProfil()) { <span aria-hidden="true">·</span> {{ libelleProfil() }} }
       </span>
-      <h1 id="ud-bonjour" class="ud2-titre">{{ titreAccueil() }}</h1>
-      @if (sousTitreAccueil()) { <p class="ud2-sous-titre">{{ sousTitreAccueil() }}</p> }
+      <div class="ud2-bandeau-haut">
+        <div class="ud2-bandeau-texte">
+          <h1 id="ud-bonjour" class="ud2-titre">{{ titreAccueil() }}</h1>
+          @if (sousTitreAccueil()) { <p class="ud2-sous-titre">{{ sousTitreAccueil() }}</p> }
+          <!-- v82 — résumé du jour en une phrase -->
+          @if (!loadingDetails() && resume().total > 0) {
+            <p class="ud2-resume"><strong>{{ resume().total }} action{{ resume().total > 1 ? 's' : '' }}</strong> {{ phraseResume() }}</p>
+          }
+        </div>
+        <!-- v82 — focus du jour : actions ouvertes ou reportées aujourd'hui -->
+        @if (!loadingDetails() && actionItems().length) {
+          <div class="ud2-focus" role="img" [attr.aria-label]="focusPct() + ' % des actions du jour ouvertes ou reportées'">
+            <svg viewBox="0 0 100 100" aria-hidden="true">
+              <circle cx="50" cy="50" r="40" class="ud2-focus-fond" />
+              <circle cx="50" cy="50" r="40" class="ud2-focus-arc" transform="rotate(-90 50 50)" [attr.stroke-dasharray]="focusDash()" />
+              <text x="50" y="50" text-anchor="middle" dominant-baseline="central">{{ focusPct() }}%</text>
+            </svg>
+            <span><strong>Focus du jour</strong><small>{{ nbTraiteesJour() }} action{{ nbTraiteesJour() > 1 ? 's' : '' }} ouverte{{ nbTraiteesJour() > 1 ? 's' : '' }} ou reportée{{ nbTraiteesJour() > 1 ? 's' : '' }} aujourd’hui</small></span>
+          </div>
+        }
+      </div>
 
       @if (pastilles().length) {
         <div class="ud2-pastilles" aria-label="Priorités">
           @for (p of pastilles(); track p.item.id; let i = $index) {
-            <button type="button" class="ud2-pastille" [attr.data-i]="i" (click)="ouvrir(p.item)" [disabled]="!cliquable(p.item)">
+            <button type="button" class="ud2-pastille" [attr.data-i]="i" (click)="traiter(p.item)" [disabled]="!cliquable(p.item)">
               {{ p.texte }}
             </button>
           }
@@ -60,6 +79,7 @@
           </div>
         } @else if (suggestions().length) {
           <div class="ud-suggestions">
+            <button type="button" class="ud-suggestion ud2-palette-lien" (click)="palette.ouvrir()">Toutes les commandes <kbd>Ctrl K</kbd></button>
             <span>Suggestions :</span>
             @for (s of suggestions(); track s) {
               <button type="button" class="ud-suggestion" (click)="saisir(s)">{{ s }}</button>
@@ -129,12 +149,16 @@
           </svg>
           <ul class="ud2-legende">
             @for (a of actionsVisibles(); track a.id; let i = $index) {
-              <li>
-                <button type="button" class="ud2-legende-ligne" [class.is-urgent]="a.severity === 'error'" (click)="ouvrir(a)" [disabled]="!cliquable(a)"
+              <li class="ud2-legende-item">
+                <button type="button" class="ud2-legende-ligne" [class.is-urgent]="a.severity === 'error'" (click)="traiter(a)" [disabled]="!cliquable(a)"
                         [attr.title]="a.module + ' — ' + a.detail">
                   <span class="ud2-point" [style.background]="anneau().segments[i].couleur"></span>
                   <span class="ud2-legende-texte">{{ a.label }}</span>
                   <b>{{ a.count || '!' }}</b>
+                </button>
+                <!-- v82 — reporter à demain (rien n'est modifié dans le module ; « Annuler » dans le message) -->
+                <button type="button" class="ud2-plus-tard" (click)="plusTard(a)" [attr.aria-label]="'Reporter à demain : ' + a.label" title="Plus tard (demain)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
                 </button>
               </li>
             }
@@ -177,7 +201,7 @@
   </div>
 
   <!-- ── Ligne 3 : petites cartes + raccourcis ──────────────────────────────── -->
-  @if (!loadingKpis() && (kpisReparties().petits.length || raccourcis().length)) {
+  @if (!loadingKpis() && (kpisReparties().petits.length || raccourcis().length || epingles() !== null)) {
     <div class="ud2-ligne ud2-ligne--bas">
       @if (kpisReparties().petits.length) {
         <div class="ud2-petites">
@@ -186,21 +210,44 @@
           }
         </div>
       }
-      @if (raccourcis().length) {
+      @if (raccourcis().length || epingles() !== null) {
         <section class="ud2-carte ud2-raccourcis" aria-labelledby="ud-raccourcis-titre">
           <div class="ud2-carte-tete">
             <h2 id="ud-raccourcis-titre">Raccourcis</h2>
-            <span class="ud2-discret">{{ raccourcis().length }} action{{ raccourcis().length > 1 ? 's' : '' }} rapide{{ raccourcis().length > 1 ? 's' : '' }}</span>
-          </div>
-          <div class="ud2-tuiles">
-            @for (r of raccourcis(); track r.module + r.label; let i = $index) {
-              <button type="button" class="ud2-tuile" [attr.data-i]="i" (click)="ouvrirRaccourci(r)">
-                <span class="ud2-tuile-icone" [innerHTML]="svg(r.icone)"></span>
-                <strong>{{ r.label }}</strong>
-                <small>{{ r.module }}</small>
+            <span class="ud2-tete-actions">
+              @if (editionRaccourcis()) {
+                <button type="button" class="ud2-lien" (click)="raccourcisParDefaut()">Par défaut</button>
+              }
+              <button type="button" class="ud2-bouton-sec" (click)="basculerEditionRaccourcis()" [attr.aria-pressed]="editionRaccourcis()">
+                {{ editionRaccourcis() ? 'Terminer' : 'Personnaliser' }}
               </button>
+            </span>
+          </div>
+          <div class="ud2-tuiles" [class.is-edition]="editionRaccourcis()">
+            @for (r of raccourcis(); track r.module + r.label; let i = $index) {
+              <div class="ud2-tuile-wrap">
+                <button type="button" class="ud2-tuile" [attr.data-i]="i" (click)="ouvrirRaccourci(r)" [disabled]="editionRaccourcis()">
+                  <span class="ud2-tuile-icone" [innerHTML]="svg(r.icone)"></span>
+                  <strong>{{ r.label }}</strong>
+                  <small>{{ r.module }}</small>
+                </button>
+                @if (editionRaccourcis() && r.page) {
+                  <button type="button" class="ud2-tuile-retirer" (click)="retirerRaccourci(r)" [attr.aria-label]="'Retirer le raccourci ' + r.label">×</button>
+                }
+              </div>
             }
           </div>
+          @if (editionRaccourcis()) {
+            <label class="ud2-ajout">
+              <span>Ajouter une page de votre menu</span>
+              <select class="ky-input" (change)="ajouterDepuisListe($event)">
+                <option value="">Choisir une page…</option>
+                @for (p of pagesAjoutables(); track p.module + p.label) {
+                  <option [value]="clePage(p)">{{ p.module }} › {{ p.label }}</option>
+                }
+              </select>
+            </label>
+          }
         </section>
       }
     </div>
@@ -248,7 +295,7 @@
         <span class="ud2-kpi-label">{{ k.label }}</span>
         @if (grande) { <ng-container *ngTemplateOutlet="iconeKpi; context: { $implicit: tonCarte(k) }"></ng-container> }
       </span>
-      <span class="ud2-kpi-valeur">{{ k.value }}</span>
+      <span class="ud2-kpi-valeur">{{ valeurAnimee(k.value, kpiAnim()) }}</span>
       <span class="ud2-kpi-pied">Ouvrir <span aria-hidden="true">→</span></span>
     </button>
   } @else {
@@ -257,7 +304,7 @@
         <span class="ud2-kpi-label">{{ k.label }}</span>
         @if (grande) { <ng-container *ngTemplateOutlet="iconeKpi; context: { $implicit: tonCarte(k) }"></ng-container> }
       </span>
-      <span class="ud2-kpi-valeur">{{ k.value }}</span>
+      <span class="ud2-kpi-valeur">{{ valeurAnimee(k.value, kpiAnim()) }}</span>
     </div>
   }
 </ng-template>

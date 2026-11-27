@@ -245,3 +245,53 @@ export function prenom(nomAffiche: string | null | undefined): string {
   if (!t || t.includes('@')) return t;
   return t.split(/\s+/)[0];
 }
+
+// ── v82 : « Plus tard », focus du jour, compteurs animés, raccourcis épinglés ─────────────────
+
+/** « 2026-11-23 » (heure locale) : les reports et le focus du jour se remettent à zéro chaque jour. */
+export function cleJour(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Actions encore à montrer : celles reportées AUJOURD'HUI (« Plus tard ») reviennent demain. */
+export function sansReportees<T extends { id: string }>(items: readonly T[], reportees: Readonly<Record<string, string>>, jour: string): T[] {
+  return items.filter((a) => reportees[a.id] !== jour);
+}
+
+/** Pourcentage du « focus du jour » : actions ouvertes ou reportées aujourd'hui / actions du jour. */
+export function progressionFocus(traitees: number, restantes: number): number {
+  const total = traitees + restantes;
+  return total ? Math.round((traitees / total) * 100) : 100;
+}
+
+/** Valeur d'un indicateur pendant l'animation (0 → 1) : seuls les nombres entiers « montent ». */
+export function valeurAnimee(valeur: string | number, t: number): string | number {
+  if (typeof valeur !== 'number' || !Number.isFinite(valeur) || t >= 1) return valeur;
+  return Math.round(valeur * Math.max(0, t));
+}
+
+/** Courbe d'animation douce (sortie rapide puis ralentie). */
+export function easeOut(t: number): number {
+  const x = Math.min(1, Math.max(0, t));
+  return 1 - Math.pow(1 - x, 3);
+}
+
+/** Clé stable d'une page du menu (raccourcis épinglés). */
+export function clePage(p: Pick<PageMenu, 'moduleId' | 'label'>): string {
+  return `${p.moduleId}|${p.label}`;
+}
+
+/**
+ * Raccourcis personnalisés : les pages épinglées par la personne, dans son ordre, et SEULEMENT si elles
+ * sont toujours dans son menu (un droit retiré retire le raccourci). Sans choix enregistré : null.
+ */
+export function raccourcisEpingles(pages: readonly PageMenu[], epingles: readonly string[] | null, max = 8): Raccourci[] | null {
+  if (!epingles) return null;
+  const parCle = new Map(pages.map((p) => [clePage(p), p]));
+  const out: Raccourci[] = [];
+  for (const cle of epingles) {
+    const page = parCle.get(cle);
+    if (page && out.length < max) out.push({ label: page.label, module: page.module, icone: page.icone, page });
+  }
+  return out;
+}

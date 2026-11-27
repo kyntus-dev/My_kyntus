@@ -30,6 +30,9 @@ import { personInitials } from '../../core/session/person-display-name.util';
 import { KyntusThemeService } from '../../core/theme/kyntus-theme.service';
 import { LucideIconComponent } from '../../shared/lucide-icon.component';
 import { GlobalSearchComponent } from './components/global-search.component';
+import { CommandPaletteComponent } from './components/command-palette.component';
+import { KyntusPaletteService } from '../../core/navigation/kyntus-palette.service';
+import { KyntusDensiteService } from '../../core/theme/kyntus-densite.service';
 import { ShellNotificationBadgeComponent } from '../../shared/shell-controls/notification-badge.component';
 import { ShellNotificationDropdownComponent } from '../../shared/shell-controls/notification-dropdown.component';
 import { ShellSettingsPanelComponent } from '../../shared/shell-controls/settings-panel.component';
@@ -75,6 +78,7 @@ import { APP_GUIDE_ROUTE } from '../../core/navigation/microservices.config';
     RouterModule,
     LucideIconComponent,
     GlobalSearchComponent,
+    CommandPaletteComponent,
     ShellNotificationBadgeComponent,
     ShellNotificationDropdownComponent,
     ShellSettingsPanelComponent,
@@ -125,6 +129,9 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   private readonly docAuditNav = inject(AuditInterfaceNavService);
 
   readonly theme = inject(KyntusThemeService);
+  /** v82 — palette de commandes (Ctrl K) et densité d'affichage (appliquée dès le chargement du shell). */
+  readonly palette = inject(KyntusPaletteService);
+  readonly densite = inject(KyntusDensiteService);
   readonly notifHub = inject(KyntusNotificationHubService);
   readonly notifInit = inject(KyntusNotificationInitService);
   readonly shellUi = inject(KyntusShellUiService);
@@ -225,6 +232,11 @@ export class ShellLayoutComponent implements OnInit, OnDestroy {
   @HostListener('document:keydown', ['$event'])
   raccourciMenu(e: KeyboardEvent): void {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      // v82 — Ctrl K ouvre la palette de commandes (pages du menu du compte + actions d'affichage).
+      // La recherche du menu latéral reste disponible : Ctrl Maj K.
+      this.palette.basculer();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && e.shiftKey && !e.altKey) {
       e.preventDefault();
       if (this.sidebarCollapsed) this.toggleCollapse();
       this.sidebarOpen = true;

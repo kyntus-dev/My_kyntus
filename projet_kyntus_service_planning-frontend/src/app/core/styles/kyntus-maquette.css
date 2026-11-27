@@ -238,3 +238,60 @@ body.theme-light .ks-content header.ky-entete:not(.kyntus-page-header) {
   background-color: var(--bg-card) !important;
   border-color: color-mix(in srgb, var(--ky-violet) 22%, var(--border-color)) !important;
 }
+
+/* ═══ 6. v82 — Mode compact (Paramètres › Apparence, ou palette Ctrl K) ═════════════════════
+ * Plus de lignes visibles dans les tableaux, cartes et bandeaux plus serrés. Rien n'est masqué. */
+body.ky-compact .ks-content .ky-table thead th,
+body.ky-compact .ks-content .prime-table thead th { padding-top: 8px; padding-bottom: 8px; }
+body.ky-compact .ks-content .ky-table tbody td,
+body.ky-compact .ks-content .prime-table tbody td { padding-top: 7px; padding-bottom: 7px; }
+body.ky-compact .ks-content .ku-table th { padding-top: 7px; padding-bottom: 7px; }
+body.ky-compact .ks-content .ku-table td { padding-top: 5px; padding-bottom: 5px; }
+body.ky-compact .ks-content table td,
+body.ky-compact .ks-content table th { line-height: 1.3; }
+body.ky-compact .ks-content .kyntus-page-header,
+body.ky-compact .ks-content .ku-hero,
+body.ky-compact .ks-content .ky-entete { padding: 14px 20px !important; }
+body.ky-compact .ks-content .ky-page-title,
+body.ky-compact .ks-content .ku-hero-title,
+body.ky-compact .ks-content .ky-entete h1 { font-size: clamp(1.25rem, 1.8vw, 1.55rem) !important; }
+body.ky-compact .ks-content .ku-card,
+body.ky-compact .ks-content .ku-kpi,
+body.ky-compact .ks-content .ky-kpi-card,
+body.ky-compact .ks-content .kpi-card { padding: 12px 14px; }
+body.ky-compact .ks-content .ku-kpi-value,
+body.ky-compact .ks-content .ky-kpi-value,
+body.ky-compact .ks-content .kpi-value { font-size: clamp(1.3rem, 1.8vw, 1.6rem); }
+body.ky-compact .ks-content .ky-page-shell,
+body.ky-compact .ks-content .prime-page-shell,
+body.ky-compact .ks-content .ku-page { gap: 12px; }
+
+/* ═══ 7. v82 — Interactions : les éléments cliquables réagissent au survol et au clavier ═══ */
+.ks-content a.card-navy,
+.ks-content button.card-navy,
+.ks-content a.ku-kpi,
+.ks-content button.ku-kpi,
+.ks-content a.ky-kpi-card,
+.ks-content button.ky-kpi-card {
+  transition: transform var(--duration-fast, 150ms) var(--ease-out, ease-out), box-shadow var(--duration-fast, 150ms) var(--ease-out, ease-out), border-color var(--duration-fast, 150ms) ease;
+}
+.ks-content a.card-navy:hover,
+.ks-content button.card-navy:hover,
+.ks-content a.ky-kpi-card:hover,
+.ks-content button.ky-kpi-card:hover { transform: translateY(-2px); box-shadow: var(--ky-carte-ombre-survol); }
+.ks-content .ky-btn-primary:active:not(:disabled),
+.ks-content .ky-btn-secondary:active:not(:disabled),
+.ks-content .ku-btn:active:not(:disabled) { transform: translateY(1px); }
+.ks-content button:focus-visible,
+.ks-content a:focus-visible,
+.ks-content [tabindex]:focus-visible { outline: 2px solid var(--ky-blue-soft, #6f95cf); outline-offset: 2px; }
+/* Cases cochées et curseurs à la couleur de la marque, en clair et en sombre. */
+.ks-content input[type='checkbox'],
+.ks-content input[type='radio'],
+.ks-content input[type='range'] { accent-color: var(--ky-blue); }
+@media (prefers-reduced-motion: reduce) {
+  .ks-content a.card-navy:hover,
+  .ks-content button.card-navy:hover,
+  .ks-content a.ky-kpi-card:hover,
+  .ks-content button.ky-kpi-card:hover { transform: none; }
+}

@@ -2,7 +2,8 @@ import type { KyntusDashboardAlert } from '@/shared/components/ui';
 import type { KyntusKpiItem } from '@/shared/components/ui';
 import type { KyntusNotificationSource } from '../notifications/kyntus-notification-hub.service';
 
-export type RoleCluster = 'adminRh' | 'manager' | 'superviseur' | 'employee' | 'audit' | 'unknown';
+/** v82 : « compta » = Comptabilité (paie, primes validées, parrainages à payer). */
+export type RoleCluster = 'adminRh' | 'manager' | 'superviseur' | 'employee' | 'audit' | 'compta' | 'unknown';
 
 export type ModuleHealthSeverity = 'ok' | 'warn' | 'error' | 'neutral';
 
@@ -71,7 +72,8 @@ export type GlobalKpiKey =
   | 'auditDocEvents'
   | 'parrainageAudit'
   | 'rpPrimePending'
-  | 'supervisorPrimePending';
+  | 'supervisorPrimePending'
+  | 'parrainageReadyPay';
 
 export interface RoleDashboardConfig {
   title: string;

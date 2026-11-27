@@ -1236,3 +1236,31 @@ body.theme-dark .ks-rubrique-cpt { background: color-mix(in srgb, var(--ky-blue)
 /* v68 : les icônes du menu suivent la couleur de leur tuile
    (neutralise « :root nav button svg » de styles-documentation.css). */
 :root nav .ks-ic svg { color: inherit; }
+
+/* v82 — bouton de la palette de commandes (en-tête) */
+.ks-tb-palette {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  font: 500 0.8rem var(--font-sans, 'Inter', sans-serif);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.ks-tb-palette:hover { border-color: var(--ky-blue); color: var(--text-primary); }
+.ks-tb-palette kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-card);
+  font: 600 0.66rem var(--font-sans, 'Inter', sans-serif);
+}
+@media (max-width: 900px) {
+  .ks-tb-palette-texte,
+  .ks-tb-palette kbd { display: none; }
+}

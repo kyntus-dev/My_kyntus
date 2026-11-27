@@ -513,3 +513,52 @@ body.theme-dark .ud2-tuile[data-i='4'] .ud2-tuile-icone { color: #f9a8d4; }
   .ud2-tuile:hover,
   .ud2-pastille:hover:not(:disabled) { transform: none; }
 }
+
+/* ═══ v82 — Accueil interactif : résumé, focus du jour, « Plus tard », raccourcis personnalisés ═══ */
+.ud2-bandeau-haut { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 20px; }
+.ud2-bandeau-texte { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.ud2-resume { margin: 0; font-size: 0.9rem; color: var(--text-muted); }
+.ud2-resume strong { color: var(--text-primary); }
+.ud2-focus {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 10px;
+  border: 1px solid var(--border-color); border-radius: 14px; background: var(--bg-card); max-width: 260px;
+}
+.ud2-focus svg { width: 64px; height: 64px; flex: none; }
+.ud2-focus-fond { fill: none; stroke: var(--bg-input, #eef2f7); stroke-width: 11; }
+.ud2-focus-arc { fill: none; stroke: #8b5cf6; stroke-width: 11; stroke-linecap: round; transition: stroke-dasharray 0.6s var(--ease-out, ease-out); }
+.ud2-focus text { font: 700 20px var(--font-display, 'Space Grotesk', sans-serif); fill: var(--text-primary); }
+.ud2-focus span { display: flex; flex-direction: column; gap: 2px; }
+.ud2-focus strong { font-size: 0.86rem; }
+.ud2-focus small { font-size: 0.74rem; line-height: 1.35; color: var(--text-muted); }
+.ud2-palette-lien { display: inline-flex; align-items: center; gap: 6px; }
+.ud2-palette-lien kbd { padding: 0 5px; border: 1px solid var(--border-color); border-radius: 5px; font: 600 0.64rem var(--font-sans, 'Inter', sans-serif); color: var(--text-muted); }
+
+.ud2-legende-item { display: flex; align-items: center; gap: 4px; }
+.ud2-legende-item .ud2-legende-ligne { flex: 1; min-width: 0; }
+.ud2-plus-tard {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 30px; height: 30px; border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--text-muted); cursor: pointer; opacity: 0.55;
+  transition: opacity 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.ud2-plus-tard svg { width: 15px; height: 15px; }
+.ud2-legende-item:hover .ud2-plus-tard,
+.ud2-plus-tard:focus-visible { opacity: 1; }
+.ud2-plus-tard:hover { border-color: var(--border-color); color: var(--text-primary); }
+
+.ud2-tete-actions { display: inline-flex; align-items: center; gap: 8px; }
+.ud2-bouton-sec {
+  min-height: 32px; padding: 0 12px; border: 1px solid var(--border-color); border-radius: 9px;
+  background: var(--bg-card); color: var(--text-primary); font: 600 0.78rem var(--font-sans, 'Inter', sans-serif); cursor: pointer;
+}
+.ud2-bouton-sec:hover { border-color: var(--ky-blue); }
+.ud2-tuile-wrap { position: relative; display: flex; min-width: 0; }
+.ud2-tuile-wrap > .ud2-tuile { flex: 1; }
+.ud2-tuiles.is-edition .ud2-tuile { border-style: dashed; cursor: default; transform: none; }
+.ud2-tuile-retirer {
+  position: absolute; top: -8px; right: -8px; width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid var(--danger-border); background: var(--bg-card); color: var(--danger-text);
+  font-size: 1rem; line-height: 1; cursor: pointer; box-shadow: var(--shadow-1, 0 1px 2px rgb(2 6 23 / .06));
+}
+.ud2-ajout { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+@media (prefers-reduced-motion: reduce) { .ud2-focus-arc { transition: none; } }

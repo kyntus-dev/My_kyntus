@@ -15,7 +15,16 @@ import { NavigationMenuService } from '../../../../core/navigation/navigation-me
 import { NavigationActionsService } from '../../../../core/navigation/navigation-actions.service';
 import { libelleRole } from '../../../../core/org/role-libelle';
 import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
+import { KyntusToastService } from '@/shared/components/ui/kyntus-toast.service';
+import { KyntusPaletteService } from '../../../../core/navigation/kyntus-palette.service';
 import {
+  cleJour,
+  clePage,
+  easeOut,
+  progressionFocus,
+  raccourcisEpingles,
+  sansReportees,
+  valeurAnimee,
   pastillesBandeau,
   pointSante,
   prenom,
@@ -72,6 +81,8 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
   private readonly navActions = inject(NavigationActionsService);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly access = inject(PlatformAccessService);
+  private readonly toasts = inject(KyntusToastService);
+  readonly palette = inject(KyntusPaletteService);
 
   private sub = new Subscription();
   private loadStartedAt = 0;
@@ -102,12 +113,24 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
 
   /** File d'actions : filtre par module. */
   readonly filtre = signal<string>('tout');
-  readonly filtres = computed(() => filtresActions(this.actionItems()));
+  // ── v82 : « Plus tard », focus du jour, compteurs animés, raccourcis épinglés ──────────
+  /** Choix de la personne sur cet accueil (navigateur) : reports du jour, actions ouvertes, raccourcis. */
+  readonly jour = signal(cleJour());
+  readonly reportees = signal<Record<string, string>>({});
+  readonly traitees = signal<Record<string, string>>({});
+  readonly epingles = signal<string[] | null>(null);
+  readonly editionRaccourcis = signal(false);
+  readonly kpiAnim = signal(1);
+  private animRaf = 0;
+  /** Actions du jour : celles reportées aujourd'hui reviennent demain. */
+  readonly actionsDuJour = computed(() => sansReportees(this.actionItems(), this.reportees(), this.jour()));
+
+  readonly filtres = computed(() => filtresActions(this.actionsDuJour()));
   readonly actionsVisibles = computed(() => {
     const f = this.filtre();
-    return f === 'tout' ? this.actionItems() : this.actionItems().filter((a) => a.moduleId === f);
+    return f === 'tout' ? this.actionsDuJour() : this.actionsDuJour().filter((a) => a.moduleId === f);
   });
-  readonly resume = computed(() => resumeActions(this.actionItems()));
+  readonly resume = computed(() => resumeActions(this.actionsDuJour()));
   readonly phraseResume = computed(() => {
     const r = this.resume();
     const verbe = r.total > 1 ? 'vous attendent' : 'vous attend';
@@ -129,11 +152,34 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
   readonly libelleProfil = computed(() => (this.access.superAdmin() ? 'Super Admin' : this.libelleRole()));
   readonly prenomAffiche = computed(() => prenom(this.username()));
   readonly kpisReparties = computed(() => repartirKpis(this.kpiItems()));
-  readonly pastilles = computed(() => pastillesBandeau(this.actionItems()));
+  readonly pastilles = computed(() => pastillesBandeau(this.actionsDuJour()));
   readonly anneau = computed(() => segmentsAnneau(this.actionsVisibles()));
-  readonly raccourcis = computed<Raccourci[]>(() =>
+  /** Raccourcis proposés pour le rôle (v80) ; remplacés par ceux épinglés par la personne (v82). */
+  readonly raccourcisProfil = computed<Raccourci[]>(() =>
     raccourcisAccueil(this.pages(), this.profil()?.raccourcis ?? [], this.quickActions(), FLECHE_ACTION),
   );
+  readonly raccourcis = computed<Raccourci[]>(() => raccourcisEpingles(this.pages(), this.epingles()) ?? this.raccourcisProfil());
+  /** Pages du menu qu'on peut encore épingler (mode « Personnaliser »). */
+  readonly pagesAjoutables = computed(() => {
+    const pris = new Set(this.raccourcis().filter((r) => r.page).map((r) => clePage(r.page!)));
+    return this.pages().filter((p) => !pris.has(clePage(p)));
+  });
+  /** Focus du jour : actions ouvertes ou reportées aujourd'hui, sur toutes celles du jour. */
+  readonly nbTraiteesJour = computed(() => {
+    const j = this.jour();
+    const ids = new Set(this.actionItems().map((a) => a.id));
+    const faits = new Set<string>();
+    for (const [id, d] of Object.entries(this.traitees())) if (d === j && ids.has(id)) faits.add(id);
+    for (const [id, d] of Object.entries(this.reportees())) if (d === j && ids.has(id)) faits.add(id);
+    return faits.size;
+  });
+  readonly focusPct = computed(() => progressionFocus(this.nbTraiteesJour(), this.actionsDuJour().filter((a) => !this.traitees()[a.id]).length));
+  readonly focusDash = computed(() => {
+    const c = 2 * Math.PI * 40;
+    const v = (this.focusPct() / 100) * c;
+    return `${v.toFixed(1)} ${(c - v).toFixed(1)}`;
+  });
+  readonly valeurAnimee = valeurAnimee;
 
   readonly recentActivity = computed(() =>
     this.notifHub.notifications().slice(0, 5).map((n) => ({
@@ -148,6 +194,7 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
     const stored = this.session.getStoredUser();
     this.applyGreeting();
     this.role.set((this.auth.getRole() || stored?.role || '').trim());
+    this.lirePreferencesAccueil();
     this.chargerPages();
     this.sub.add(
       this.users.getCurrentUser().subscribe({
@@ -167,6 +214,116 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.sub.unsubscribe();
+    cancelAnimationFrame(this.animRaf);
+  }
+
+  // ── v82 : préférences de l'accueil (navigateur, par compte) ──────────────────────────────
+
+  private cleStockage(): string {
+    return `kyntus_accueil_v82_${this.auth.getAuthUserId() ?? 'anonyme'}`;
+  }
+
+  private lirePreferencesAccueil(): void {
+    try {
+      const brut = localStorage.getItem(this.cleStockage());
+      if (!brut) return;
+      const p = JSON.parse(brut) as { reportees?: Record<string, string>; traitees?: Record<string, string>; epingles?: string[] | null };
+      const j = this.jour();
+      // Seuls les choix du jour sont gardés : rien ne reste masqué au-delà d'une journée.
+      const duJour = (r?: Record<string, string>) => Object.fromEntries(Object.entries(r ?? {}).filter(([, d]) => d === j));
+      this.reportees.set(duJour(p.reportees));
+      this.traitees.set(duJour(p.traitees));
+      this.epingles.set(Array.isArray(p.epingles) ? p.epingles.filter((x) => typeof x === 'string') : null);
+    } catch {
+      /* préférences illisibles : accueil par défaut */
+    }
+  }
+
+  private enregistrerPreferencesAccueil(): void {
+    try {
+      localStorage.setItem(this.cleStockage(), JSON.stringify({ reportees: this.reportees(), traitees: this.traitees(), epingles: this.epingles() }));
+    } catch {
+      /* navigation privée : valable pour la session */
+    }
+  }
+
+  /** « Plus tard » : l'action disparaît de l'accueil jusqu'à demain (rien n'est modifié dans le module). */
+  plusTard(a: GlobalActionItem): void {
+    const j = this.jour();
+    this.reportees.update((r) => ({ ...r, [a.id]: j }));
+    this.enregistrerPreferencesAccueil();
+    this.toasts.withAction(`« ${a.label} » reporté à demain.`, {
+      label: 'Annuler',
+      run: () => {
+        this.reportees.update((r) => {
+          const n = { ...r };
+          delete n[a.id];
+          return n;
+        });
+        this.enregistrerPreferencesAccueil();
+      },
+    });
+  }
+
+  /** Ouvrir une action : comptée dans le focus du jour, puis même navigation qu'avant. */
+  traiter(a: GlobalActionItem): void {
+    this.traitees.update((t) => ({ ...t, [a.id]: this.jour() }));
+    this.enregistrerPreferencesAccueil();
+    this.ouvrir(a);
+  }
+
+  basculerEditionRaccourcis(): void {
+    if (!this.editionRaccourcis() && this.epingles() === null) {
+      // Première personnalisation : on part des raccourcis proposés pour le rôle.
+      this.epingles.set(this.raccourcisProfil().filter((r) => r.page).map((r) => clePage(r.page!)));
+    }
+    this.editionRaccourcis.set(!this.editionRaccourcis());
+    this.enregistrerPreferencesAccueil();
+  }
+
+  retirerRaccourci(r: Raccourci): void {
+    if (!r.page) return;
+    const cle = clePage(r.page);
+    this.epingles.update((e) => (e ?? []).filter((x) => x !== cle));
+    this.enregistrerPreferencesAccueil();
+  }
+
+  ajouterRaccourci(cle: string): void {
+    if (!cle) return;
+    this.epingles.update((e) => [...(e ?? []).filter((x) => x !== cle), cle].slice(0, 8));
+    this.enregistrerPreferencesAccueil();
+  }
+
+  /** Liste « Ajouter une page » : épingle la page choisie puis remet la liste à zéro. */
+  ajouterDepuisListe(e: Event): void {
+    const liste = e.target as HTMLSelectElement | null;
+    if (!liste) return;
+    this.ajouterRaccourci(liste.value);
+    liste.value = '';
+  }
+
+  raccourcisParDefaut(): void {
+    this.epingles.set(null);
+    this.editionRaccourcis.set(false);
+    this.enregistrerPreferencesAccueil();
+  }
+
+  clePage(p: PageMenu): string {
+    return clePage(p);
+  }
+
+  /** Compteurs des indicateurs : montée douce de 0 à la valeur (désactivée si « réduire les animations »). */
+  private animerKpis(): void {
+    if (typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    cancelAnimationFrame(this.animRaf);
+    const debut = performance.now();
+    const pas = (t: number) => {
+      const x = Math.min(1, (t - debut) / 700);
+      this.kpiAnim.set(easeOut(x));
+      if (x < 1) this.animRaf = requestAnimationFrame(pas);
+    };
+    this.kpiAnim.set(0);
+    this.animRaf = requestAnimationFrame(pas);
   }
 
   // ── Recherche ─────────────────────────────────────────────────────────────
@@ -274,6 +431,7 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
             performance.measure('kyntus-dashboard-kpis', 'kyntus-dashboard-load-start', 'kyntus-dashboard-kpis-ready');
             console.info(`[Kyntus /home] KPIs prêts en ${kpiMs} ms (rôle: ${this.role() || 'inconnu'})`);
             this.loadingKpis.set(false);
+            this.animerKpis();
           } else {
             console.info(`[Kyntus /home] Détails complets en ${kpiMs} ms`);
             this.loadingDetails.set(false);
