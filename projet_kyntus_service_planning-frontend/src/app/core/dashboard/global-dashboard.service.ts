@@ -39,6 +39,7 @@ import {
   DASHBOARD_BY_CLUSTER,
   healthModulesForCluster,
   kpiKeysForRole,
+  kpiKeysVisibles,
   moduleLabel,
   planningDayLabel,
   REFERRAL_STATUS_FR,
@@ -496,7 +497,8 @@ export class GlobalDashboardService {
   ): GlobalDashboardSnapshot {
     const config = DASHBOARD_BY_CLUSTER[cluster];
     const unread = this.notifHub.unreadCount();
-    const kpiKeys = kpiKeysForRole(cluster, role);
+    // v80 — Un indicateur dont le module n'est pas ouvert au compte n'est plus affiché (il valait 0).
+    const kpiKeys = kpiKeysVisibles(kpiKeysForRole(cluster, role), visibleModuleIds);
     const kpis = this.buildKpis(kpiKeys, metrics, unread, cluster, role);
     const alerts = this.buildAlerts(cluster, metrics, visibleModuleIds);
     const actionItems = this.buildActionItems(cluster, role, metrics, hubNotifications, visibleModuleIds);

@@ -36,7 +36,7 @@
 }
 
 .guide-progress--done {
-  color: #15803d;
+  color: var(--kyd-green, #15803d);
   background: color-mix(in srgb, #22c55e 14%, transparent);
 }
 
@@ -51,7 +51,7 @@
   padding: 10px 14px;
   border-radius: 10px;
   font-size: 0.875rem;
-  color: #b91c1c;
+  color: var(--kyd-red, #b91c1c);
   background: color-mix(in srgb, #ef4444 10%, transparent);
 }
 
@@ -163,7 +163,7 @@
   border-radius: 999px;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #15803d;
+  color: var(--kyd-green, #15803d);
   background: color-mix(in srgb, #22c55e 14%, transparent);
 }
 

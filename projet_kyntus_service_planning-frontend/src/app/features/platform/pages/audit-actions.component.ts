@@ -181,11 +181,11 @@ import { journalChangements, journalResume, operationTon } from '../lib/journal-
     .ja-date { white-space: nowrap; } .ja-date span, .ja-role { color: var(--text-muted); font-size: 0.74rem; }
     .ja-element { min-width: 220px; } .ja-resume { color: var(--text-muted); max-width: 320px; }
     .ja-op { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap;
-      background: color-mix(in srgb, #64748b 14%, transparent); color: #475569; }
-    .ja-op[data-ton="creation"] { background: color-mix(in srgb, #16a34a 14%, transparent); color: #15803d; }
-    .ja-op[data-ton="suppression"] { background: color-mix(in srgb, #dc2626 12%, transparent); color: #b91c1c; }
+      background: color-mix(in srgb, #64748b 14%, transparent); color: var(--kyd-muted, #475569); }
+    .ja-op[data-ton="creation"] { background: color-mix(in srgb, #16a34a 14%, transparent); color: var(--kyd-green, #15803d); }
+    .ja-op[data-ton="suppression"] { background: color-mix(in srgb, #dc2626 12%, transparent); color: var(--kyd-red, #b91c1c); }
     .ja-op[data-ton="validation"] { background: color-mix(in srgb, #2563eb 12%, transparent); color: var(--ky-blue-text); }
-    .ja-op[data-ton="alerte"] { background: color-mix(in srgb, #d97706 14%, transparent); color: #b45309; }
+    .ja-op[data-ton="alerte"] { background: color-mix(in srgb, #d97706 14%, transparent); color: var(--kyd-amber, #b45309); }
     .ja-pages { display: flex; align-items: center; justify-content: flex-end; gap: 10px; font-size: 0.8rem; color: var(--text-muted); }
     .ja-voile { position: fixed; inset: 0; background: rgba(15, 23, 42, .25); z-index: 60; }
     .ja-tiroir { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); z-index: 61; overflow-y: auto; padding: 20px;
@@ -200,8 +200,8 @@ import { journalChangements, journalResume, operationTon } from '../lib/journal-
     .ja-diff { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
     .ja-diff th, .ja-diff td { padding: 7px 8px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
     .ja-diff th { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; }
-    .ja-avant { color: #b91c1c; text-decoration: line-through; text-decoration-color: color-mix(in srgb, #b91c1c 40%, transparent); }
-    .ja-apres { color: #15803d; font-weight: 600; }
+    .ja-avant { color: var(--kyd-red, #b91c1c); text-decoration: line-through; text-decoration-color: color-mix(in srgb, #b91c1c 40%, transparent); }
+    .ja-apres { color: var(--kyd-green, #15803d); font-weight: 600; }
     .ja-details { margin: 0; font-size: 0.82rem; color: var(--text-muted); }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,

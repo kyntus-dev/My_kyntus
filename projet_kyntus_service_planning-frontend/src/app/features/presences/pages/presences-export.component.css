@@ -50,8 +50,8 @@
 .pze-legende { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: 0.74rem; }
 .pze-legende small { color: var(--text-muted); }
 .pze-leg { padding: 3px 10px; border-radius: 6px; font-weight: 600; border: 1px solid transparent; }
-.pze-leg--en-formation { background: #bfdbfe; color: var(--ky-blue); border-color: #93c5fd; }
-.pze-leg--integre { background: #ccfbf1; color: #115e59; border-color: #5eead4; }
+.pze-leg--en-formation { background: var(--kyd-bg-blue, #bfdbfe); color: var(--kyd-sky, var(--ky-blue)); border-color: var(--kyd-border-blue, #93c5fd); }
+.pze-leg--integre { background: var(--kyd-bg-teal, #ccfbf1); color: var(--kyd-teal, #115e59); border-color: var(--kyd-border-teal, #5eead4); }
 .pze-leg--for { background: #60a5fa; color: #fff; }
 .pze-table tbody tr.pze-formation > th,
 .pze-table tbody tr.pze-formation > td { background: color-mix(in srgb, #3b82f6 20%, var(--bg-card)) !important; }

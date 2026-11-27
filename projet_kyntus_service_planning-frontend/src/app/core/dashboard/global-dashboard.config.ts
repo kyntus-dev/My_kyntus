@@ -126,6 +126,40 @@ export function kpiKeysForRole(cluster: RoleCluster, role: string): GlobalKpiKey
   return base;
 }
 
+/**
+ * v80 — Module du menu dont dépend chaque indicateur. Ses chiffres ne sont lus que si le compte voit
+ * ce module (voir buildMetricRequests) : sans lui, la carte afficherait un « 0 » ou un « — » trompeur.
+ * Indicateurs sans module : toujours affichés, comme avant.
+ */
+export const KPI_MODULE: Partial<Record<GlobalKpiKey, string>> = {
+  pendingCongesRh: 'conges',
+  managerPendingConges: 'conges',
+  employeePendingConges: 'conges',
+  leaveBalance: 'conges',
+  contractAlerts: 'rh',
+  primeValidations: 'prime',
+  rpPrimePending: 'prime',
+  supervisorPrimePending: 'prime',
+  primeAnomalies: 'prime',
+  parrainageSubmitted: 'parrainage',
+  parrainageAudit: 'parrainage',
+  docPending: 'documentation',
+  auditDocEvents: 'documentation',
+  formationsPending: 'formation',
+  enrolledFormations: 'formation',
+  activeWeek: 'planning',
+  plannedDays: 'planning',
+};
+
+/** v80 — Indicateurs affichés : ceux dont le module est visible au compte (ordre conservé). */
+export function kpiKeysVisibles(keys: readonly GlobalKpiKey[], visibleModuleIds: readonly string[]): GlobalKpiKey[] {
+  const mods = new Set(visibleModuleIds);
+  return keys.filter((k) => {
+    const module = KPI_MODULE[k];
+    return !module || mods.has(module);
+  });
+}
+
 export function actionSourcesForCluster(cluster: RoleCluster): KyntusNotificationSource[] {
   return DASHBOARD_BY_CLUSTER[cluster].actionSources;
 }

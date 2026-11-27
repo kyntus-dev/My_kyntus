@@ -39,7 +39,7 @@
 .alert-error {
   background: color-mix(in srgb, #dc2626 10%, var(--bg-card));
   border: 1px solid color-mix(in srgb, #dc2626 35%, var(--border-color));
-  color: #b91c1c;
+  color: var(--kyd-red, #b91c1c);
 }
 
 /* ── Dépôt ── */
@@ -235,19 +235,19 @@
 .ie-badge--ok {
   background: color-mix(in srgb, #16a34a 14%, var(--bg-card));
   border-color: color-mix(in srgb, #16a34a 40%, var(--border-color));
-  color: #15803d;
+  color: var(--kyd-green, #15803d);
 }
 
 .ie-badge--warn {
   background: color-mix(in srgb, #d97706 15%, var(--bg-card));
   border-color: color-mix(in srgb, #d97706 40%, var(--border-color));
-  color: #b45309;
+  color: var(--kyd-amber, #b45309);
 }
 
 .ie-badge--ko {
   background: color-mix(in srgb, #dc2626 12%, var(--bg-card));
   border-color: color-mix(in srgb, #dc2626 38%, var(--border-color));
-  color: #b91c1c;
+  color: var(--kyd-red, #b91c1c);
 }
 
 /* ── Actions et rapport ── */
@@ -265,7 +265,7 @@
 .ie-conflit {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #b91c1c;
+  color: var(--kyd-red, #b91c1c);
 }
 
 .ie-rapport {
@@ -287,7 +287,7 @@
 .alert-info {
   background: color-mix(in srgb, #0ea5e9 10%, var(--bg-card));
   border: 1px solid color-mix(in srgb, #0ea5e9 35%, var(--border-color));
-  color: #0369a1;
+  color: var(--kyd-sky, #0369a1);
 }
 
 .ie-details {

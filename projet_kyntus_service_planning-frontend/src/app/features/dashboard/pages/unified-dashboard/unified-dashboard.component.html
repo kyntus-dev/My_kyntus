@@ -1,107 +1,109 @@
-<div class="ud-root ky-page-enter">
+<!--
+  v80 — Accueil par rôle (maquette « Propositions accueil et menu »), en clair comme en sombre.
+  Mêmes données et mêmes droits qu'avant (GlobalDashboardService, menu du compte) : présentation seule.
+-->
+<div class="ud-root ud2 ky-page-enter" [attr.data-profil]="profil()?.cle || 'general'">
 
-  <!-- Bandeau d'accueil et recherche « Que voulez-vous faire ? » -->
-  <section class="ud-carte ud-accueil" aria-labelledby="ud-bonjour">
-    <div class="ud-accueil-tete">
-      <span class="ud-surtitre">
-        {{ dateDuJour }}
-        @if (libelleRole()) { <span class="ud-role">{{ libelleRole() }}</span> }
+  <!-- ── Ligne 1 : bandeau du profil + trois grandes cartes ───────────────────── -->
+  <div class="ud2-ligne ud2-ligne--haut" [class.ud2-ligne--sans-kpi]="!loadingKpis() && !kpisReparties().grands.length">
+    <section class="ud2-carte ud2-bandeau" aria-labelledby="ud-bonjour">
+      <span class="ud2-surtitre">
+        Bonjour{{ prenomAffiche() ? ', ' + prenomAffiche() : '' }}
+        @if (libelleProfil()) { <span aria-hidden="true">·</span> {{ libelleProfil() }} }
       </span>
-      <h1 id="ud-bonjour" class="ud-titre">Bonjour{{ username() ? ', ' + username() : '' }}</h1>
-      <p class="ud-resume">
-        @if (loadingDetails() && loadingKpis()) {
-          {{ dashboardTitle() }}
-        } @else if (resume().total > 0) {
-          <strong>{{ resume().total }} action{{ resume().total > 1 ? 's' : '' }}</strong>
-          <span>&nbsp;{{ phraseResume() }}</span>
-        } @else {
-          Aucune action en attente : tout est à jour.
-        }
-      </p>
-    </div>
+      <h1 id="ud-bonjour" class="ud2-titre">{{ titreAccueil() }}</h1>
+      @if (sousTitreAccueil()) { <p class="ud2-sous-titre">{{ sousTitreAccueil() }}</p> }
 
-    <div class="ud-recherche">
-      <label class="ud-recherche-champ">
-        <svg class="ud-ic ud-ic--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-        <input type="search" autocomplete="off"
-               placeholder="Que voulez-vous faire ? Ex. : valider les congés, export paie, nouvel employé…"
-               aria-label="Que voulez-vous faire ?"
-               [attr.aria-expanded]="enRecherche()" aria-controls="ud-resultats"
-               [value]="recherche()" (input)="saisir($any($event.target).value)"
-               (focus)="chargerPages()" (keydown)="toucheRecherche($event)" />
-        @if (enRecherche()) {
-          <button type="button" class="ud-effacer" (click)="effacer()" aria-label="Effacer la recherche">
-            <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
-          </button>
-        }
-      </label>
-      @if (enRecherche()) {
-        <div id="ud-resultats" class="ud-resultats" role="listbox" aria-label="Pages trouvées">
-          <p class="ud-resultats-compte">{{ resultats().length }} page{{ resultats().length > 1 ? 's' : '' }} trouvée{{ resultats().length > 1 ? 's' : '' }}</p>
-          @for (p of resultats(); track p.module + p.label) {
-            <button type="button" class="ud-resultat" role="option" (click)="ouvrirPage(p)">
-              <span class="ud-tuile" [innerHTML]="svg(p.icone)"></span>
-              <span class="ud-resultat-texte"><strong>{{ p.label }}</strong><small>{{ p.module }}</small></span>
-              <svg class="ud-ic ud-fleche" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      @if (pastilles().length) {
+        <div class="ud2-pastilles" aria-label="Priorités">
+          @for (p of pastilles(); track p.item.id; let i = $index) {
+            <button type="button" class="ud2-pastille" [attr.data-i]="i" (click)="ouvrir(p.item)" [disabled]="!cliquable(p.item)">
+              {{ p.texte }}
             </button>
-          } @empty {
-            <p class="ud-vide">Aucune page ne correspond. Essayez un autre mot (employé, congé, paie, planning…).</p>
           }
         </div>
+      } @else if (!loadingDetails()) {
+        <p class="ud2-a-jour">
+          <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>
+          Aucune action en attente : tout est à jour.
+        </p>
       }
-    </div>
 
-    @if (suggestions().length) {
-      <div class="ud-suggestions">
-        <span>Suggestions :</span>
-        @for (s of suggestions(); track s) {
-          <button type="button" class="ud-suggestion" (click)="saisir(s)">{{ s }}</button>
-        }
-      </div>
-    }
-
-    @if (quickActions().length) {
-      <div class="ud-raccourcis" aria-label="Raccourcis">
-        @for (qa of quickActions(); track qa.label) {
-          <button type="button" class="ud-raccourci" (click)="ouvrir(qa)">
-            <span class="ud-tuile" [innerHTML]="iconeRaccourci(qa)"></span>
-            <span>{{ qa.label }}</span>
-          </button>
-        }
-      </div>
-    }
-  </section>
-
-  <!-- Indicateurs -->
-  @if (loadingKpis()) {
-    <div class="ud-kpis" aria-busy="true" aria-label="Chargement des indicateurs">
-      @for (i of [1, 2, 3, 4]; track i) { <div class="ku-skeleton ud-kpi-squelette"></div> }
-    </div>
-  } @else if (kpiItems().length) {
-    <section class="ud-kpis" aria-label="Indicateurs">
-      @for (k of kpiItems(); track k.label) {
-        @if (cliquable(k)) {
-          <button type="button" class="ud-kpi ud-kpi--lien" (click)="ouvrir(k)">
-            <span class="ud-kpi-haut"><span class="ud-kpi-label">{{ k.label }}</span><span class="ud-point" [ngClass]="tonKpi(k)"></span></span>
-            <span class="ud-kpi-valeur">{{ k.value }}</span>
-          </button>
-        } @else {
-          <div class="ud-kpi">
-            <span class="ud-kpi-haut"><span class="ud-kpi-label">{{ k.label }}</span><span class="ud-point" [ngClass]="tonKpi(k)"></span></span>
-            <span class="ud-kpi-valeur">{{ k.value }}</span>
+      <!-- Recherche « Que voulez-vous faire ? » (v68) : pages du menu autorisées au compte -->
+      <div class="ud-recherche ud2-recherche">
+        <label class="ud-recherche-champ">
+          <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <input type="search" autocomplete="off"
+                 placeholder="Que voulez-vous faire ? Ex. : valider les congés, export paie…"
+                 aria-label="Que voulez-vous faire ?"
+                 [attr.aria-expanded]="enRecherche()" aria-controls="ud-resultats"
+                 [value]="recherche()" (input)="saisir($any($event.target).value)"
+                 (focus)="chargerPages()" (keydown)="toucheRecherche($event)" />
+          @if (enRecherche()) {
+            <button type="button" class="ud-effacer" (click)="effacer()" aria-label="Effacer la recherche">
+              <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+          }
+        </label>
+        @if (enRecherche()) {
+          <div id="ud-resultats" class="ud-resultats" role="listbox" aria-label="Pages trouvées">
+            <p class="ud-resultats-compte">{{ resultats().length }} page{{ resultats().length > 1 ? 's' : '' }} trouvée{{ resultats().length > 1 ? 's' : '' }}</p>
+            @for (p of resultats(); track p.module + p.label) {
+              <button type="button" class="ud-resultat" role="option" (click)="ouvrirPage(p)">
+                <span class="ud-tuile" [innerHTML]="svg(p.icone)"></span>
+                <span class="ud-resultat-texte"><strong>{{ p.label }}</strong><small>{{ p.module }}</small></span>
+                <svg class="ud-ic ud-fleche" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+            } @empty {
+              <p class="ud-vide">Aucune page ne correspond. Essayez un autre mot (employé, congé, paie, planning…).</p>
+            }
+          </div>
+        } @else if (suggestions().length) {
+          <div class="ud-suggestions">
+            <span>Suggestions :</span>
+            @for (s of suggestions(); track s) {
+              <button type="button" class="ud-suggestion" (click)="saisir(s)">{{ s }}</button>
+            }
           </div>
         }
+      </div>
+    </section>
+
+    @if (loadingKpis()) {
+      @for (i of [1, 2, 3]; track i) { <div class="ku-skeleton ud2-carte ud2-kpi-squelette" aria-hidden="true"></div> }
+    } @else {
+      @for (k of kpisReparties().grands; track k.label) {
+        <ng-container *ngTemplateOutlet="carteKpi; context: { $implicit: k, grande: true }"></ng-container>
+      }
+    }
+  </div>
+
+  <!-- Alertes (contrats, anomalies…) : seulement s'il y en a -->
+  @if (!loadingKpis() && alerts().length) {
+    <section class="ud2-alertes" aria-label="Alertes">
+      @for (al of alerts(); track $index) {
+        <div class="ud2-alerte" [ngClass]="'ud2-alerte--' + al.severity">
+          <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <div class="ud2-alerte-texte">
+            @if (al.title) { <strong>{{ al.title }}</strong> }
+            <span>{{ al.message }}</span>
+          </div>
+          @if (cliquable(al)) {
+            <button type="button" class="ud2-lien" (click)="ouvrir(al)">{{ al.actionLabel || 'Ouvrir' }} →</button>
+          }
+        </div>
       }
     </section>
   }
 
-  <div class="ud-colonnes">
-    <!-- File d'actions prioritaires -->
-    <section class="ud-carte ud-file" aria-labelledby="ud-file-titre">
-      <div class="ud-carte-tete">
-        <h2 id="ud-file-titre">File d’actions prioritaires</h2>
-        <a routerLink="/notifications" class="ud-lien">Centre de notifications</a>
+  <!-- ── Ligne 2 : actions en attente · ma journée · santé des modules ──────── -->
+  <div class="ud2-ligne ud2-ligne--milieu">
+    <section class="ud2-carte ud2-actions" aria-labelledby="ud-file-titre">
+      <div class="ud2-carte-tete">
+        <h2 id="ud-file-titre">{{ profil()?.cle === 'audit' ? 'Points de vigilance' : profil()?.cle === 'employe' ? 'Mes demandes et actions' : 'Actions en attente' }}</h2>
+        <a routerLink="/notifications" class="ud2-lien">Tout voir</a>
       </div>
+
       @if (filtres().length) {
         <div class="ud-filtres" role="group" aria-label="Filtrer par module">
           @for (f of filtres(); track f.id) {
@@ -111,88 +113,105 @@
           }
         </div>
       }
+
       @if (loadingDetails() && !actionItems().length) {
-        <div class="ku-skeleton"></div>
-      } @else {
-        <div class="ud-actions">
-          @for (a of actionsVisibles(); track a.id) {
-            <div class="ud-action" [ngClass]="'ud-action--' + (a.severity || 'info')">
-              <span class="ud-action-nb">{{ a.count || '!' }}</span>
-              <div class="ud-action-texte">
-                <span class="ud-action-module">{{ a.module }}</span>
-                <strong>{{ a.label }}</strong>
-                <small>{{ a.detail }}</small>
-              </div>
-              @if (cliquable(a)) {
-                <button type="button" class="ud-bouton" (click)="ouvrir(a)">
-                  Traiter
-                  <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <div class="ku-skeleton ud2-squelette-bloc" aria-hidden="true"></div>
+      } @else if (anneau().total) {
+        <div class="ud2-anneau-bloc">
+          <svg class="ud2-anneau" viewBox="0 0 100 100" role="img" [attr.aria-label]="anneau().total + ' action(s) au total'">
+            <circle class="ud2-anneau-fond" cx="50" cy="50" r="42" />
+            @for (seg of anneau().segments; track seg.id) {
+              <circle cx="50" cy="50" r="42" fill="none" stroke-width="13" transform="rotate(-90 50 50)"
+                      [attr.stroke]="seg.couleur" [attr.stroke-dasharray]="seg.dash" [attr.stroke-dashoffset]="seg.offset" />
+            }
+            <text x="50" y="50" class="ud2-anneau-total" text-anchor="middle" dominant-baseline="central">{{ anneau().total }}</text>
+            <text x="50" y="66" class="ud2-anneau-legende" text-anchor="middle">{{ profil()?.cle === 'employe' ? 'en cours' : 'au total' }}</text>
+          </svg>
+          <ul class="ud2-legende">
+            @for (a of actionsVisibles(); track a.id; let i = $index) {
+              <li>
+                <button type="button" class="ud2-legende-ligne" [class.is-urgent]="a.severity === 'error'" (click)="ouvrir(a)" [disabled]="!cliquable(a)"
+                        [attr.title]="a.module + ' — ' + a.detail">
+                  <span class="ud2-point" [style.background]="anneau().segments[i].couleur"></span>
+                  <span class="ud2-legende-texte">{{ a.label }}</span>
+                  <b>{{ a.count || '!' }}</b>
                 </button>
-              }
-            </div>
-          } @empty {
-            <div class="ud-vide ud-vide--ok">
-              <svg class="ud-ic ud-ic--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
-              <strong>Aucune action en attente</strong>
-            </div>
-          }
+              </li>
+            }
+          </ul>
+        </div>
+      } @else {
+        <div class="ud2-vide">
+          <svg class="ud-ic ud-ic--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
+          <strong>Aucune action en attente</strong>
+          <span>Tout est à jour.</span>
         </div>
       }
     </section>
 
-    <div class="ud-cote">
-      <!-- Ma journée (pointage du jour) -->
+    <!-- Ma journée (pointage du jour) : masquée si le compte n'a pas de fiche Planning -->
+    <div class="ud2-journee">
       <app-pointage-jour-widget />
+    </div>
 
-      @if (!loadingKpis() && alerts().length) {
-        <section class="ud-carte" aria-labelledby="ud-alertes-titre">
-          <div class="ud-carte-tete"><h2 id="ud-alertes-titre">Alertes</h2></div>
-          <div class="ud-alertes">
-            @for (al of alerts(); track $index) {
-              <div class="ud-alerte" [ngClass]="'ud-alerte--' + al.severity">
-                <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>
-                <div class="ud-alerte-texte">
-                  @if (al.title) { <strong>{{ al.title }}</strong> }
-                  <span>{{ al.message }}</span>
-                  @if (cliquable(al)) {
-                    <button type="button" class="ud-lien ud-lien--bouton" (click)="ouvrir(al)">{{ al.actionLabel || 'Ouvrir' }}</button>
-                  }
-                </div>
-              </div>
-            }
-          </div>
-        </section>
-      }
-
-      @if (!loadingDetails() && moduleHealth().length) {
-        <section class="ud-carte" aria-labelledby="ud-sante-titre">
-          <div class="ud-carte-tete"><h2 id="ud-sante-titre">Santé des modules</h2></div>
-          <div class="ud-sante">
-            @for (s of moduleHealth(); track s.moduleId) {
+    @if (!loadingDetails() && moduleHealth().length) {
+      <section class="ud2-carte ud2-sante" aria-labelledby="ud-sante-titre">
+        <div class="ud2-carte-tete">
+          <h2 id="ud-sante-titre">{{ profil()?.cle === 'employe' ? 'Mes infos' : 'Santé des modules' }}</h2>
+        </div>
+        <ul class="ud2-sante-liste">
+          @for (s of moduleHealth(); track s.moduleId) {
+            <li class="ud2-sante-ligne">
+              <span class="ud2-point" [ngClass]="'ud2-point--' + pointSante(s)" aria-hidden="true"></span>
+              <span class="ud2-sante-texte"><strong>{{ s.label }}</strong><small>{{ s.detail }}</small></span>
               @if (cliquable(s)) {
-                <button type="button" class="ud-sante-ligne ud-sante-ligne--lien" (click)="ouvrir(s)">
-                  <span class="ud-sante-repere" [ngClass]="tonSante(s).cls">{{ tonSante(s).repere }}</span>
-                  <span class="ud-sante-texte"><strong>{{ s.label }}</strong><small>{{ s.detail }}</small></span>
-                  <svg class="ud-ic ud-fleche" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-                </button>
-              } @else {
-                <div class="ud-sante-ligne">
-                  <span class="ud-sante-repere" [ngClass]="tonSante(s).cls">{{ tonSante(s).repere }}</span>
-                  <span class="ud-sante-texte"><strong>{{ s.label }}</strong><small>{{ s.detail }}</small></span>
-                </div>
+                <button type="button" class="ud2-lien" (click)="ouvrir(s)" [attr.aria-label]="'Voir ' + s.label">Voir</button>
               }
+            </li>
+          }
+        </ul>
+      </section>
+    } @else if (loadingDetails()) {
+      <div class="ku-skeleton ud2-carte ud2-squelette-bloc" aria-hidden="true"></div>
+    }
+  </div>
+
+  <!-- ── Ligne 3 : petites cartes + raccourcis ──────────────────────────────── -->
+  @if (!loadingKpis() && (kpisReparties().petits.length || raccourcis().length)) {
+    <div class="ud2-ligne ud2-ligne--bas">
+      @if (kpisReparties().petits.length) {
+        <div class="ud2-petites">
+          @for (k of kpisReparties().petits; track k.label) {
+            <ng-container *ngTemplateOutlet="carteKpi; context: { $implicit: k, grande: false }"></ng-container>
+          }
+        </div>
+      }
+      @if (raccourcis().length) {
+        <section class="ud2-carte ud2-raccourcis" aria-labelledby="ud-raccourcis-titre">
+          <div class="ud2-carte-tete">
+            <h2 id="ud-raccourcis-titre">Raccourcis</h2>
+            <span class="ud2-discret">{{ raccourcis().length }} action{{ raccourcis().length > 1 ? 's' : '' }} rapide{{ raccourcis().length > 1 ? 's' : '' }}</span>
+          </div>
+          <div class="ud2-tuiles">
+            @for (r of raccourcis(); track r.module + r.label; let i = $index) {
+              <button type="button" class="ud2-tuile" [attr.data-i]="i" (click)="ouvrirRaccourci(r)">
+                <span class="ud2-tuile-icone" [innerHTML]="svg(r.icone)"></span>
+                <strong>{{ r.label }}</strong>
+                <small>{{ r.module }}</small>
+              </button>
             }
           </div>
         </section>
       }
     </div>
-  </div>
+  }
 
+  <!-- ── Ma semaine et activité récente (inchangés, s'il y a des données) ───────── -->
   @if (!loadingKpis() && (planningPreview() || recentActivity().length)) {
-    <div class="ud-colonnes">
+    <div class="ud2-ligne ud2-ligne--deux">
       @if (planningPreview(); as preview) {
-        <section class="ud-carte ud-semaine" aria-labelledby="ud-semaine-titre">
-          <div class="ud-carte-tete"><h2 id="ud-semaine-titre">Ma semaine — {{ preview.weekCode }}</h2></div>
+        <section class="ud2-carte ud-semaine" aria-labelledby="ud-semaine-titre">
+          <div class="ud2-carte-tete"><h2 id="ud-semaine-titre">Ma semaine — {{ preview.weekCode }}</h2></div>
           <div class="ud-jours">
             @for (day of preview.days; track day.label) {
               <div class="ud-jour" [class.off]="day.off">
@@ -204,15 +223,15 @@
         </section>
       }
       @if (recentActivity().length) {
-        <section class="ud-carte ud-activite" aria-labelledby="ud-activite-titre">
-          <div class="ud-carte-tete">
+        <section class="ud2-carte ud-activite" aria-labelledby="ud-activite-titre">
+          <div class="ud2-carte-tete">
             <h2 id="ud-activite-titre">Activité récente</h2>
-            <a routerLink="/notifications" class="ud-lien">Voir tout</a>
+            <a routerLink="/notifications" class="ud2-lien">Voir tout</a>
           </div>
           @for (item of recentActivity(); track item.id) {
             <div class="ud-activite-ligne">
               <div class="ud-activite-texte"><strong>{{ item.title }}</strong><small>{{ item.meta }}</small></div>
-              <button type="button" class="ud-lien ud-lien--bouton" (click)="openActivity(item.id)">Ouvrir</button>
+              <button type="button" class="ud2-lien" (click)="openActivity(item.id)">Ouvrir</button>
             </div>
           }
         </section>
@@ -220,3 +239,37 @@
     </div>
   }
 </div>
+
+<!-- Carte indicateur : grande (ligne 1) ou petite (ligne 3). Cliquable si elle mène à une page. -->
+<ng-template #carteKpi let-k let-grande="grande">
+  @if (cliquable(k)) {
+    <button type="button" class="ud2-carte ud2-kpi ud2-kpi--lien" [class.ud2-kpi--grande]="grande" [attr.data-ton]="tonCarte(k)" (click)="ouvrir(k)">
+      <span class="ud2-kpi-tete">
+        <span class="ud2-kpi-label">{{ k.label }}</span>
+        @if (grande) { <ng-container *ngTemplateOutlet="iconeKpi; context: { $implicit: tonCarte(k) }"></ng-container> }
+      </span>
+      <span class="ud2-kpi-valeur">{{ k.value }}</span>
+      <span class="ud2-kpi-pied">Ouvrir <span aria-hidden="true">→</span></span>
+    </button>
+  } @else {
+    <div class="ud2-carte ud2-kpi" [class.ud2-kpi--grande]="grande" [attr.data-ton]="tonCarte(k)">
+      <span class="ud2-kpi-tete">
+        <span class="ud2-kpi-label">{{ k.label }}</span>
+        @if (grande) { <ng-container *ngTemplateOutlet="iconeKpi; context: { $implicit: tonCarte(k) }"></ng-container> }
+      </span>
+      <span class="ud2-kpi-valeur">{{ k.value }}</span>
+    </div>
+  }
+</ng-template>
+
+<ng-template #iconeKpi let-ton>
+  <span class="ud2-kpi-icone" aria-hidden="true">
+    @if (ton === 'alerte') {
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>
+    } @else if (ton === 'attention') {
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    } @else {
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+    }
+  </span>
+</ng-template>

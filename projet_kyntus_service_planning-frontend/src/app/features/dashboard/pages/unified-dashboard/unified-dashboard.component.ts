@@ -14,6 +14,18 @@ import { PointageJourWidgetComponent } from '../../../pointage/components/pointa
 import { NavigationMenuService } from '../../../../core/navigation/navigation-menu.service';
 import { NavigationActionsService } from '../../../../core/navigation/navigation-actions.service';
 import { libelleRole } from '../../../../core/org/role-libelle';
+import { PlatformAccessService } from '../../../../core/platform-access/platform-access.service';
+import {
+  pastillesBandeau,
+  pointSante,
+  prenom,
+  profilAccueil,
+  raccourcisAccueil,
+  repartirKpis,
+  segmentsAnneau,
+  tonCarte,
+  type Raccourci,
+} from './accueil-profil.util';
 import {
   chercherPages,
   dateDuJour,
@@ -27,7 +39,15 @@ import {
   type PageMenu,
 } from './accueil.util';
 
+/** Icône des raccourcis issus d'une action en attente. */
+const FLECHE_ACTION =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+
 /**
+ * v80 — Accueil par rôle (maquette « Propositions accueil et menu ») : bandeau du profil, trois
+ * grandes cartes, actions en attente (anneau), ma journée, santé des modules, petites cartes et
+ * raccourcis. Mêmes données et mêmes droits qu'en v68 : seule la présentation change.
+ *
  * v68 — Accueil « modèle retenu » (combinaison A + E) : bandeau d'accueil avec la recherche
  * « Que voulez-vous faire ? » (pages du menu autorisées au compte) et les raccourcis, indicateurs
  * cliquables, file d'actions filtrable par module, ma journée, alertes et santé des modules.
@@ -51,6 +71,7 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
   private readonly menu = inject(NavigationMenuService);
   private readonly navActions = inject(NavigationActionsService);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly access = inject(PlatformAccessService);
 
   private sub = new Subscription();
   private loadStartedAt = 0;
@@ -97,6 +118,22 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
   readonly libelleRole = computed(() => libelleRole(this.role(), true));
   readonly tonKpi = tonKpi;
   readonly tonSante = tonSante;
+
+  // ── v80 : présentation par rôle ──────────────────────────────────────────
+  readonly tonCarte = tonCarte;
+  readonly pointSante = pointSante;
+  /** Profil d'accueil (titre, sous-titre, raccourcis) ; null = rôle sans profil dédié. */
+  readonly profil = computed(() => profilAccueil(this.role(), this.access.superAdmin()));
+  readonly titreAccueil = computed(() => this.profil()?.titre ?? this.dashboardTitle());
+  readonly sousTitreAccueil = computed(() => this.profil()?.sousTitre ?? this.dashboardSubtitle());
+  readonly libelleProfil = computed(() => (this.access.superAdmin() ? 'Super Admin' : this.libelleRole()));
+  readonly prenomAffiche = computed(() => prenom(this.username()));
+  readonly kpisReparties = computed(() => repartirKpis(this.kpiItems()));
+  readonly pastilles = computed(() => pastillesBandeau(this.actionItems()));
+  readonly anneau = computed(() => segmentsAnneau(this.actionsVisibles()));
+  readonly raccourcis = computed<Raccourci[]>(() =>
+    raccourcisAccueil(this.pages(), this.profil()?.raccourcis ?? [], this.quickActions(), FLECHE_ACTION),
+  );
 
   readonly recentActivity = computed(() =>
     this.notifHub.notifications().slice(0, 5).map((n) => ({
@@ -189,6 +226,15 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
 
   choisirFiltre(id: string): void {
     this.filtre.set(id);
+  }
+
+  /** v80 — Raccourci : page du menu (même navigation que le menu latéral) ou action en attente. */
+  async ouvrirRaccourci(r: Raccourci): Promise<void> {
+    if (r.page) {
+      await this.navActions.applyMenuItem(r.page.item);
+      return;
+    }
+    this.ouvrir(r);
   }
 
   /** Icône (SVG du menu) d'un raccourci : celle du module de sa page, sinon une flèche. */
