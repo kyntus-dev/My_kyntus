@@ -29,7 +29,7 @@ import { PrimeNavRequestService } from '../services/prime-nav-request.service';
   imports: [LucideIconComponent, PrimeCardComponent, PrimeTemplatePreviewComponent],
   template: `
     <div class="p-3 sm:p-4 xl:p-5 space-y-6 w-full max-w-none pb-16">
-      <div class="flex flex-wrap items-start justify-between gap-4">
+      <div class="ky-entete flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 class="text-2xl font-bold tracking-tight text-primary sm:text-3xl flex items-center gap-2">
             <app-lucide-icon [icon]="icons.layout" className="w-8 h-8 text-blue-600 shrink-0" />

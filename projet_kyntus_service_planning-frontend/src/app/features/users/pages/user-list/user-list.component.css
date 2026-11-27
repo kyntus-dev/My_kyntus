@@ -251,7 +251,7 @@
 
 .level-modal {
   background: var(--bg-card);
-  border-radius: 12px;
+  border-radius: var(--ky-carte-rayon, 12px) /* v81 */;
   padding: 1.25rem 1.5rem;
   width: min(420px, 100%);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);

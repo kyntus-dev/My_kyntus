@@ -16,7 +16,7 @@ import type { OperationalDepartmentNode } from '../models/org-tree.types';
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div class="flex justify-between items-center">
+        <div class="ky-entete flex justify-between items-center">
           <div>
             <h1 class="prime-page-title">Configuration</h1>
             <p class="prime-page-subtitle">

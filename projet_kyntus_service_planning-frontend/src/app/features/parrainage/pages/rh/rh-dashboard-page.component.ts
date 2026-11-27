@@ -24,7 +24,7 @@ import {
         <div class="card-navy p-10 text-center text-muted text-sm">Chargement…</div>
       } @else {
         <div class="space-y-6">
-          <div>
+          <div class="ky-entete">
             <h1 class="prime-page-title">Pilotage parrainage (RH)</h1>
             <p class="text-sm text-muted mt-1">Vue d'ensemble pour le pilotage et la décision.</p>
           </div>

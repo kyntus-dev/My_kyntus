@@ -37,7 +37,7 @@ echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
       <div class="p-8 text-muted">Chargement de votre tableau de bord…</div>
     } @else {
       <div class="prime-page-shell">
-        <div>
+        <div class="ky-entete">
           <h1 class="text-3xl font-bold text-primary">Bonjour, {{ user().firstName }}</h1>
           <p class="text-muted mt-1">
             Votre espace PRIME personnel — consultation seule, centré sur vos résultats.

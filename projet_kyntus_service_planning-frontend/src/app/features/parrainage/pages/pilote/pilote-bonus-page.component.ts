@@ -10,7 +10,7 @@ import type { Referral } from '../../models/referral.model';
   imports: [],
   template: `
     <div class="space-y-4">
-      <div>
+      <div class="ky-entete">
         <h1 class="prime-page-title">Suivi des primes</h1>
         <p class="ky-page-subtitle">Montants engagés, éligibilité et versements.</p>
       </div>

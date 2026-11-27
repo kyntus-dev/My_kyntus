@@ -50,7 +50,7 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendCompone
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div class="flex justify-between items-center">
+        <div class="ky-entete flex justify-between items-center">
           <div>
             <h1 class="prime-page-title">Performance service</h1>
             <p class="prime-page-subtitle">

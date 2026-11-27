@@ -55,7 +55,7 @@ function mapRoleForApi(role: string): string {
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div class="flex flex-wrap justify-between items-start gap-4">
+        <div class="ky-entete flex flex-wrap justify-between items-start gap-4">
           <div>
             <h1 class="prime-page-title">Historique des validations</h1>
             <p class="prime-page-subtitle">

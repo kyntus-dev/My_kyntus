@@ -155,7 +155,7 @@ function isPreWorkflowSubmissionStatus(status: string): boolean {
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div class="flex justify-between items-start gap-4">
+        <div class="ky-entete flex justify-between items-start gap-4">
           <div>
             <h1 class="prime-page-title">Fiches à valider</h1>
             <p class="prime-page-subtitle">

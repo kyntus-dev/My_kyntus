@@ -1,0 +1,240 @@
+/*
+ * v81 — Charte « maquette retenue » (Propositions accueil et menu) appliquée à toutes les pages.
+ *
+ * Chargée après les feuilles existantes (angular.json) et avant les garde-fous de contraste :
+ * elle aligne les briques communes sur l'accueil v80 — bandeau d'en-tête, cartes à 18 px avec ombre
+ * douce, indicateurs (grand chiffre, libellé lisible, teinte rouge / ambre), tableaux, boutons,
+ * champs. Uniquement de la présentation : aucun sélecteur ne masque, n'ajoute ni ne déplace
+ * d'élément ; toutes les couleurs passent par les variables du thème (clair et sombre).
+ */
+
+body {
+  --ky-carte-rayon: 18px;
+  --ky-carte-rayon-sm: 14px;
+  --ky-ctrl-rayon: 10px;
+  --ky-carte-ombre: 0 1px 2px rgb(2 6 23 / 0.05), 0 8px 24px rgb(2 6 23 / 0.05);
+  --ky-carte-ombre-survol: 0 2px 4px rgb(2 6 23 / 0.06), 0 14px 32px rgb(2 6 23 / 0.09);
+  --ky-violet: #8b5cf6;
+}
+body.theme-dark {
+  --ky-carte-ombre: 0 1px 2px rgb(0 0 0 / 0.35), 0 10px 30px rgb(0 0 0 / 0.28);
+  --ky-carte-ombre-survol: 0 2px 4px rgb(0 0 0 / 0.4), 0 16px 36px rgb(0 0 0 / 0.36);
+}
+
+/* ═══ 1. En-têtes de page : le bandeau de l'accueil ═══════════════════════════════════════════
+ * - <app-kyntus-page-header> (68 pages) ;
+ * - .ku-hero (pointage, présences, réaffectations…) : n'est plus un bloc bleu plein ;
+ * - .ky-entete : posée page par page sur les en-têtes écrits à la main (Prime, Parrainage…). */
+.ks-content .kyntus-page-header,
+.ks-content .ku-hero,
+.ks-content .ky-entete {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 24px;
+  padding: 22px 26px !important;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--ky-violet) 22%, var(--border-color)) !important;
+  border-radius: var(--ky-carte-rayon) !important;
+  background-color: var(--bg-card) !important;
+  background-image:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--ky-violet) 13%, transparent) 0%, transparent 55%),
+    radial-gradient(90% 120% at 0% 100%, color-mix(in srgb, var(--ky-blue) 9%, transparent) 0%, transparent 60%) !important;
+  box-shadow: var(--ky-carte-ombre) !important;
+  color: var(--text-primary);
+  overflow: visible;
+}
+.ks-content .ku-hero::after { display: none; }
+
+/* Titres du bandeau */
+.ks-content .kyntus-page-header .ky-page-title,
+.ks-content .ku-hero .ku-hero-title,
+.ks-content .ky-entete h1 {
+  margin: 0;
+  font-family: var(--font-display, 'Space Grotesk', 'Inter', sans-serif);
+  font-size: clamp(1.45rem, 2.2vw, 1.95rem) !important;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.ks-content .ku-hero .ku-hero-title { color: var(--text-primary) !important; }
+/* La barre de marque sous le titre n'existe pas dans la maquette. */
+.ks-content .kyntus-page-header h1::after,
+.ks-content .ku-hero h1::after,
+.ks-content .ky-entete h1::after { display: none !important; }
+
+.ks-content .kyntus-page-header .ky-page-subtitle,
+.ks-content .ku-hero .ku-hero-sub,
+.ks-content .ky-entete h1 + p {
+  margin: 6px 0 0;
+  max-width: 68ch;
+  font-size: 0.9rem;
+  color: var(--text-muted) !important;
+}
+.ks-content .ku-hero .ku-hero-eyebrow { color: var(--text-muted); letter-spacing: 0.06em; }
+
+/* Boutons du bandeau : boutons normaux (le bandeau n'est plus bleu foncé). */
+.ks-content .ku-hero .ku-btn { background: var(--bg-card); color: var(--text-primary); border-color: var(--border-color); }
+.ks-content .ku-hero .ku-btn:hover:not(:disabled) { background: var(--bg-card); border-color: var(--ky-blue); }
+.ks-content .ku-hero .ku-btn--primary { background: var(--ky-blue); color: #fff; border-color: var(--ky-blue); }
+.ks-content .ku-hero .ku-btn--primary:hover:not(:disabled) { background: var(--ky-blue-strong); }
+.ks-content .ku-hero .ku-chip { background: var(--bg-input); }
+
+/* ═══ 2. Cartes ════════════════════════════════════════════════════════════════════════════ */
+.ks-content .ky-card,
+.ks-content .card-navy,
+.ks-content .ku-card,
+.ks-content .ky-table-card,
+.ks-content .ky-stat-card,
+.ks-content .prime-kpi-card {
+  border-radius: var(--ky-carte-rayon);
+  box-shadow: var(--ky-carte-ombre);
+}
+/* Carte Prime (PrimeCardComponent) et cartes Tailwind « bg-card + bordure + rounded-xl ». */
+.ks-content .ky-prime-carte {
+  border-radius: var(--ky-carte-rayon);
+  box-shadow: var(--ky-carte-ombre);
+}
+.ks-content .bg-card.border.rounded-xl:not(.ky-prime-carte) { border-radius: var(--ky-carte-rayon-sm); }
+
+body.theme-light .ks-content .ky-card,
+body.theme-light .ks-content .card-navy { border-color: var(--border-color); }
+.ks-content .card-navy:hover,
+.ks-content a.ky-card:hover,
+.ks-content button.ky-card:hover { box-shadow: var(--ky-carte-ombre-survol); }
+
+.ks-content .ky-card-title,
+.ks-content .ku-card-title,
+.ks-content .card-title {
+  font-family: var(--font-display, 'Space Grotesk', 'Inter', sans-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ═══ 3. Indicateurs : grand chiffre, libellé lisible, teinte selon l'état ═════════════════ */
+.ks-content .ku-kpi,
+.ks-content .ky-kpi-card,
+.ks-content .kpi-card {
+  border-radius: var(--ky-carte-rayon) !important;
+  box-shadow: var(--ky-carte-ombre);
+  padding: 18px 20px 16px;
+  gap: 6px;
+}
+.ks-content .ku-kpi-label,
+.ks-content .ky-kpi-label,
+.ks-content .kpi-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+.ks-content .ku-kpi-value,
+.ks-content .ky-kpi-value,
+.ks-content .kpi-value {
+  font-family: var(--font-display, 'Space Grotesk', 'Inter', sans-serif);
+  font-size: clamp(1.6rem, 2.2vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+/* Pastille d'état : tuile d'icône douce plutôt qu'un simple point. */
+.ks-content .ku-kpi::before {
+  top: 16px;
+  right: 16px;
+  width: 12px;
+  height: 12px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--ku-accent) 16%, transparent);
+}
+.ks-content .ku-kpi--danger {
+  background: linear-gradient(160deg, var(--danger-bg) 0%, var(--bg-card) 75%);
+  border-color: var(--danger-border);
+}
+.ks-content .ku-kpi--danger .ku-kpi-value { color: var(--danger-text); }
+.ks-content .ku-kpi--warn { border-color: var(--warning-border); }
+
+/* Anciennes cartes à liseré latéral (kc-*) : bordure et teinte de l'état, comme la maquette. */
+.ks-content .kc-blue,
+.ks-content .kc-green,
+.ks-content .kc-amber,
+.ks-content .kc-rose,
+.ks-content .kc-gray { border-left-width: 1px !important; }
+.ks-content .kc-blue { border-color: var(--info-border) !important; }
+.ks-content .kc-green { border-color: var(--success-border) !important; }
+.ks-content .kc-amber { border-color: var(--warning-border) !important; }
+.ks-content .kc-rose {
+  border-color: var(--danger-border) !important;
+  background: linear-gradient(160deg, var(--danger-bg) 0%, var(--bg-card) 75%);
+}
+
+/* ═══ 4. Tableaux ══════════════════════════════════════════════════════════════════════════ */
+.ks-content .ku-table-wrap,
+.ks-content .table-wrap,
+.ks-content .table-wrapper {
+  border-radius: var(--ky-carte-rayon-sm);
+}
+.ks-content .ky-table thead,
+.ks-content .prime-table thead,
+.ks-content .ky-table--sticky thead th,
+.ks-content .prime-table--sticky thead th {
+  background-color: color-mix(in srgb, var(--bg-input) 70%, var(--bg-card));
+}
+.ks-content .ky-table thead th,
+.ks-content .prime-table thead th,
+.ks-content .ku-table th {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.ks-content .ky-table tbody tr:hover,
+.ks-content .prime-table tbody tr:hover {
+  background-color: color-mix(in srgb, var(--ky-blue) 5%, var(--bg-card));
+}
+
+/* ═══ 5. Boutons, champs, puces ═════════════════════════════════════════════════════════════ */
+.ks-content .ky-btn-primary,
+.ks-content .ky-btn-secondary,
+.ks-content .ky-btn-danger,
+.ks-content .ky-btn-ghost,
+.ks-content .prime-btn-primary,
+.ks-content .prime-btn-secondary,
+.ks-content .ku-btn {
+  border-radius: var(--ky-ctrl-rayon);
+}
+.ks-content .ky-input,
+.ks-content .ku-input,
+.ks-content .ky-select,
+.ks-content .ky-textarea {
+  border-radius: var(--ky-ctrl-rayon);
+}
+.ks-content .ku-seg { border-radius: calc(var(--ky-ctrl-rayon) + 2px); }
+.ks-content .ku-seg button { border-radius: calc(var(--ky-ctrl-rayon) - 2px); }
+
+.ks-content .ku-alert,
+.ks-content .ky-alert { border-radius: var(--ky-carte-rayon-sm); }
+
+.ks-content .ku-empty,
+.ks-content .empty-state { color: var(--text-muted); }
+
+.ks-content .ku-skeleton { border-radius: var(--ky-carte-rayon); }
+
+@media (max-width: 640px) {
+  .ks-content .kyntus-page-header,
+  .ks-content .ku-hero,
+  .ks-content .ky-entete { padding: 18px 16px !important; }
+  .ks-content .ku-kpi,
+  .ks-content .ky-kpi-card,
+  .ks-content .kpi-card { padding: 14px 16px; }
+}
+
+/* Les garde-fous « headers legacy » (kyntus-theme-contrast.css) forcent fond et bordure des
+   <header> en clair : le bandeau garde sa surface et sa bordure de la maquette. */
+body.theme-light .ks-content header.ku-hero:not(.kyntus-page-header),
+body.theme-light .ks-content header.ky-entete:not(.kyntus-page-header) {
+  background-color: var(--bg-card) !important;
+  border-color: color-mix(in srgb, var(--ky-violet) 22%, var(--border-color)) !important;
+}

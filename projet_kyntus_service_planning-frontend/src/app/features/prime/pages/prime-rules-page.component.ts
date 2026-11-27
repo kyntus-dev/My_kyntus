@@ -28,7 +28,7 @@ import type { Department, PrimeRule, PrimeType } from '../models';
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div class="flex justify-between items-center">
+        <div class="ky-entete flex justify-between items-center">
           <div>
             <h1 class="prime-page-title">Règles de prime</h1>
             <p class="text-muted mt-1">Configurer la logique et les conditions des primes.</p>

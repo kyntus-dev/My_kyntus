@@ -87,7 +87,7 @@ export class TierEditorBlockComponent {
       />
     } @else {
       <section class="flex-1 space-y-6 max-w-4xl">
-        <div>
+        <div class="ky-entete">
           <h1 class="prime-page-title">Configuration système</h1>
           <p class="text-sm text-muted mt-1">
             {{ role === 'RH'

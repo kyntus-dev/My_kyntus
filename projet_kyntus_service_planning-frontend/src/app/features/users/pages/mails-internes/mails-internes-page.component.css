@@ -16,7 +16,7 @@
 .stat {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-card, 0.65rem);
+  border-radius: var(--ky-carte-rayon, var(--radius-card, 0.65rem));
   padding: 0.85rem 1rem;
   display: flex;
   flex-direction: column;
@@ -29,14 +29,17 @@
 }
 
 .stat-val {
-  font-size: 1.45rem;
-  font-weight: 750;
+  font-size: 1.75rem;
+  font-weight: 700;
   line-height: 1.1;
   color: var(--text-primary);
+  font-family: var(--font-display, 'Space Grotesk', sans-serif); /* v81 */
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-lbl {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-muted);
 }

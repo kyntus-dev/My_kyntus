@@ -35,7 +35,7 @@ import { BodyPortalDirective } from '../../../../shared/directives/body-portal.d
   ],
   template: `
     <div class="allocation-page">
-      <header class="allocation-page__header">
+      <header class="ky-entete allocation-page__header">
         <div>
           <h1 class="allocation-page__title">Affectation Primes Support</h1>
           <p class="allocation-page__subtitle">

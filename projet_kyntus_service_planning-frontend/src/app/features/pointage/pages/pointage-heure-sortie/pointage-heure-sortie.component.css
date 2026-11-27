@@ -1,6 +1,6 @@
 .hs-clock {
   display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px;
-  border-radius: var(--radius-md); background: rgb(255 255 255 / 0.12);
+  border-radius: var(--radius-md); background: var(--bg-input, rgb(255 255 255 / 0.12)); /* v81 : bandeau clair */
   font: 700 1.05rem var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
 }
 .hs-grid { display: grid; grid-template-columns: minmax(280px, 400px) 1fr; gap: 18px; align-items: start; }

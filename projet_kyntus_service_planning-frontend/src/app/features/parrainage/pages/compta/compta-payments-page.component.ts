@@ -12,7 +12,7 @@ import type { Referral } from '../../models/referral.model';
   imports: [FormsModule, LucideIconComponent],
   template: `
     <section class="flex-1 space-y-6">
-      <div class="flex flex-wrap items-start justify-between gap-4">
+      <div class="ky-entete flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 class="prime-page-title">Primes de parrainage à verser</h1>
           <p class="text-sm text-muted mt-1">

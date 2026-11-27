@@ -23,7 +23,7 @@
 .cm-circuit-state { font-size: 0.8rem; color: var(--text-primary); white-space: nowrap; }
 .cm-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .cm-stat-card {
-  border-radius: var(--radius-md);
+  border-radius: var(--ky-carte-rayon, var(--radius-md));
   padding: 16px 20px;
   text-align: center;
   display: flex;
@@ -37,8 +37,8 @@
 .cm-stat-card.valid   { border-left-color: var(--success); }
 .cm-stat-card.refused { border-left-color: var(--danger); }
 .cm-stat-card.total   { border-left-color: var(--blue-600); }
-.cm-stat-value { font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1.1; }
-.cm-stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: .5px; }
+.cm-stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); line-height: 1.1; font-family: var(--font-display, 'Space Grotesk', sans-serif); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.cm-stat-label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; text-transform: none; letter-spacing: 0; }
 
 .cm-stat-card.pending { background: var(--warning-bg); border-color: var(--warning-border); }
 .cm-stat-card.valid   { background: var(--success-bg); border-color: var(--success-border); }

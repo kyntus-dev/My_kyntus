@@ -35,7 +35,7 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRendere
       </div>
     } @else if (stats()) {
       <div class="prime-page-shell space-y-8">
-        <div class="flex justify-between items-end">
+        <div class="ky-entete flex justify-between items-end">
           <div>
             <h1 class="prime-page-title">
               {{ dashboardTitle() }}

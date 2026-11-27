@@ -92,7 +92,7 @@ interface PilotageCelluleGroup {
     <div [class]="embeddedInShell ? 'min-h-0 w-full' : 'ky-page-shell'">
       <div class="w-full space-y-6">
         @if (!embeddedInShell) {
-        <div class="space-y-2">
+        <div class="ky-entete space-y-2">
           <h1 class="ky-page-title text-2xl sm:text-3xl flex items-center gap-2">
             <app-lucide-icon [icon]="icons.board" className="w-8 h-8 text-blue-400 shrink-0" />
             Partie service — fiches pilotes

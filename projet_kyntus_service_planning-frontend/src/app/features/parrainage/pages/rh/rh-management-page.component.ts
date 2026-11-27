@@ -38,7 +38,7 @@ type RhFilter = ParrainageRhManagementFilter;
             Accès refusé. Réservé à la RH.
           </div>
         }
-        <div>
+        <div class="ky-entete">
           <h1 class="prime-page-title">Gestion des parrainages</h1>
           <p class="text-sm text-muted mt-1">Cliquez sur une ligne pour ouvrir et traiter le dossier.</p>
         </div>

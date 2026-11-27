@@ -11,7 +11,7 @@ import { getScopedReferrals } from '../../lib/scoping';
   imports: [ReferralTableComponent],
   template: `
     <div class="space-y-4">
-      <div>
+      <div class="ky-entete">
         <h1 class="prime-page-title">Suivi des parrainages</h1>
         <p class="ky-page-subtitle">Parrainages de votre équipe.</p>
       </div>

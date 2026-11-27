@@ -50,7 +50,7 @@ type DashboardPayload = Awaited<ReturnType<typeof AdminPrimeService.getDashboard
       } @else {
         @let d = data()!;
         <div class="prime-page-shell space-y-8">
-          <div>
+          <div class="ky-entete">
             <h1 class="prime-page-title">Tableau de bord administrateur</h1>
             <p class="text-muted mt-1">Supervision technique, gouvernance et controle du moteur PRIME.</p>
           </div>

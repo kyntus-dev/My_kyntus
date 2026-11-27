@@ -77,7 +77,7 @@ const VALIDATION_STATUSES: { value: PrimeFicheValidationStatus; label: string }[
   imports: [LucideIconComponent, PrimeCardComponent, PrimeFilterBarComponent],
   template: `
     <div class="prime-page-shell">
-      <div class="flex justify-between items-start gap-4">
+      <div class="ky-entete flex justify-between items-start gap-4">
         <div>
           <h1 class="prime-page-title">Résultats PRIME</h1>
           <p class="prime-page-subtitle">

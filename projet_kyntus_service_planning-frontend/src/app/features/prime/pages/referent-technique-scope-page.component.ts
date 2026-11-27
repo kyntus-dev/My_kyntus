@@ -69,7 +69,7 @@ function resolveServiceLabel(
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div>
+        <div class="ky-entete">
           <h1 class="prime-page-title">Périmètre référent technique</h1>
           <p class="prime-page-subtitle">
             Collaborateurs rattachés au service dont vous êtes référent technique (pilotes du périmètre).

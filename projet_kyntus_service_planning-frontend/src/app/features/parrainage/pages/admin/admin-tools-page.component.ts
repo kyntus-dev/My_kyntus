@@ -36,7 +36,7 @@ const STATUS_OPTIONS: ReadonlyArray<[ReferralStatus, string]> = (
       />
     } @else {
       <section class="space-y-6">
-        <div>
+        <div class="ky-entete">
           <h1 class="prime-page-title flex items-center gap-2">
             <app-lucide-icon [icon]="wrenchIcon" className="w-7 h-7 text-blue-500 shrink-0" />
             Outils administrateur

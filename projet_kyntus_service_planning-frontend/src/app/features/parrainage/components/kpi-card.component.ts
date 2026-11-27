@@ -7,14 +7,15 @@ import { LucideIconComponent } from '@/shared/lucide-icon.component';
   standalone: true,
   imports: [LucideIconComponent],
   template: `
-    <div class="card-navy p-4 md:p-5 flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <p class="text-xs uppercase tracking-wide text-muted">{{ label }}</p>
-        <span [class]="'inline-flex h-8 w-8 items-center justify-center rounded-full border ' + accentClass">
+    <!-- v81 : carte indicateur de la maquette (libellé lisible, grand chiffre, tuile d'icône) -->
+    <div class="card-navy p-4 md:p-5 flex flex-col gap-3">
+      <div class="flex items-start justify-between gap-2">
+        <p class="ky-kpi-label m-0">{{ label }}</p>
+        <span [class]="'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border ' + accentClass">
           <app-lucide-icon [icon]="activityIcon" className="h-4 w-4 text-soft-blue" />
         </span>
       </div>
-      <p class="text-xl md:text-2xl font-semibold text-primary">{{ value }}</p>
+      <p class="ky-kpi-value m-0">{{ value }}</p>
     </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

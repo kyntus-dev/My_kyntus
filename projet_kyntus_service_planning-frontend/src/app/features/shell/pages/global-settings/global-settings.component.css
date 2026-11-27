@@ -4,6 +4,9 @@
   padding: 28px 24px 48px;
 }
 
+/* v81 — en-tête en bandeau (maquette) : l'espace sous le bandeau remplace la marge du paragraphe. */
+.ks-settings-page-head { margin-bottom: 24px; }
+
 .ks-settings-page-head h1 {
   font-size: 1.5rem;
   font-weight: 700;

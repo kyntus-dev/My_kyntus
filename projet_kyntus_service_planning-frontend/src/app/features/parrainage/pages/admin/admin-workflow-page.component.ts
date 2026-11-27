@@ -24,7 +24,7 @@ const ROLE_DETAILS: Record<string, string> = {
       <app-access-denied message="Accès refusé. Workflow réservé à Admin/RH." backLabel="Retour" />
     } @else {
       <div class="space-y-6">
-        <div class="flex items-center gap-4">
+        <div class="ky-entete flex items-center gap-4">
           <div class="w-12 h-12 bg-[var(--info-bg)] rounded-xl flex items-center justify-center text-[var(--soft-blue)]">
             <app-lucide-icon [icon]="gitIcon" className="w-6 h-6" />
           </div>

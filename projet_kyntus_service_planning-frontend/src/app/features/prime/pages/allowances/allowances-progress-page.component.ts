@@ -21,7 +21,7 @@ import { sortMembersByPriority } from '../../lib/allowance-treatment-status';
   imports: [CommonModule, FormsModule, AllowanceTeamProgressListComponent],
   template: `
     <div class="progress-page">
-      <header class="progress-page__header">
+      <header class="ky-entete progress-page__header">
         <div>
           <h1 class="progress-page__title">Avancement de traitement</h1>
           <p class="progress-page__subtitle">Suivi collaborateur par collaborateur pour la période sélectionnée</p>

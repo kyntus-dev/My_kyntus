@@ -18,7 +18,7 @@ import { allowanceApiErrorMessage } from '../../lib/allowance-api-error';
   imports: [CommonModule, FormsModule, AllowanceStatusBadgeComponent],
   template: `
     <div class="history-page">
-      <header class="history-page__header">
+      <header class="ky-entete history-page__header">
         <div>
           <h1 class="history-page__title">Historique des primes</h1>
           <p class="history-page__subtitle">Demandes passées de votre équipe Support</p>

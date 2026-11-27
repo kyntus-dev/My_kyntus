@@ -70,7 +70,7 @@ type LineStatusFilter = 'all' | 'PendingReview' | 'Approved' | 'LineRejected';
   template: `
     <div class="p-6 lg:p-8 space-y-5 min-h-full bg-app">
       <!-- Header -->
-      <div class="flex flex-wrap justify-between items-start gap-4">
+      <div class="ky-entete flex flex-wrap justify-between items-start gap-4">
         <div>
           <h1 class="text-2xl lg:text-3xl font-bold text-primary tracking-tight">Synthèse globale PRIME</h1>
           @if (isComptaOnly()) {

@@ -28,7 +28,7 @@ import { primeValidationStatusShortLabel } from '../lib/prime-workflow-labels';
       </div>
     } @else {
       <div class="prime-page-shell">
-        <div class="flex justify-between items-center">
+        <div class="ky-entete flex justify-between items-center">
           <div>
             <h1 class="prime-page-title">Historique des primes</h1>
             <p class="text-muted mt-1">Journal de toutes les primes traitées.</p>

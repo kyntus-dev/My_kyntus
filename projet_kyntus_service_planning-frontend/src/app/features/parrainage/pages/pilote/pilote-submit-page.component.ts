@@ -25,7 +25,7 @@ const ALLOWED_CV_EXT = /\.(pdf|doc|docx)$/i;
   imports: [FormsModule, NgClass, LucideIconComponent],
   template: `
     <div class="space-y-4">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div class="ky-entete flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 class="prime-page-title">Soumettre un parrainage</h1>
           <p class="ky-page-subtitle">Recommandez un talent pour rejoindre l'équipe.</p>

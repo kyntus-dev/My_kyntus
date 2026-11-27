@@ -2,8 +2,9 @@
 .adr-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 0.8rem;
+  border-radius: var(--ky-carte-rayon, 0.8rem) /* v81 */;
   padding: 14px 16px;
+  box-shadow: var(--ky-carte-ombre, none); /* v81 */
 }
 .adr-intro {
   display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
