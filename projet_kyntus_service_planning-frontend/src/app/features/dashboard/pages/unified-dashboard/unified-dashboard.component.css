@@ -733,3 +733,9 @@ body.theme-dark .ud2-tuile[data-i='4'] .ud2-tuile-icone { color: #f9a8d4; }
 .ud3-kpi-courbe { display: block; width: 100%; max-width: 120px; height: 28px; margin-top: 6px; overflow: visible; }
 .ud3-kpi-courbe polyline { fill: none; stroke: var(--ky-blue, #2563eb); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 body.theme-dark .ud3-kpi-courbe polyline { stroke: #60a5fa; }
+
+/* v88 — bouton « Voir comme » (Super Admin) */
+.ud3-voir-comme { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; height: 34px; padding: 0 13px; border-radius: 10px; cursor: pointer;
+  font-size: 13px; font-weight: 600; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); }
+.ud3-voir-comme:hover { border-color: var(--ky-blue, #2563eb); color: var(--ky-blue, #2563eb); }
+.ud3-voir-comme .ud-ic { width: 16px; height: 16px; }

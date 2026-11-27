@@ -18,6 +18,7 @@ import { PlatformAccessService } from '../../../../core/platform-access/platform
 import { KyntusToastService } from '@/shared/components/ui/kyntus-toast.service';
 import { KyntusPaletteService } from '../../../../core/navigation/kyntus-palette.service';
 import { AccueilHistoriqueService } from '../../../../core/dashboard/accueil-historique.service';
+import { VoirCommeComponent } from './voir-comme.component';
 import {
   cleIndicateur,
   serie,
@@ -77,7 +78,7 @@ const FLECHE_ACTION =
 @Component({
   selector: 'app-unified-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule, PointageJourWidgetComponent],
+  imports: [CommonModule, RouterModule, PointageJourWidgetComponent, VoirCommeComponent],
   templateUrl: './unified-dashboard.component.html',
   styleUrls: ['./unified-dashboard.component.css'],
   encapsulation: ViewEncapsulation.None,
@@ -104,6 +105,10 @@ export class UnifiedDashboardComponent implements OnInit, OnDestroy {
     { id: 'semaine', label: 'Semaine' },
     { id: 'mois', label: 'Mois' },
   ];
+
+  /** v88 — « Voir comme » (Super Admin) : aperçu en lecture seule de l'accueil et du menu d'un rôle. */
+  readonly voirComme = signal(false);
+  readonly estSuperAdmin = computed(() => this.access.superAdmin());
 
   choisirPeriode(p: PeriodeAccueil): void {
     this.periode.set(p);

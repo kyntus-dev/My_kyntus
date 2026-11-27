@@ -36,6 +36,12 @@
         <span>Que voulez-vous faire ? Une page, une action…</span>
         <kbd>Ctrl K</kbd>
       </button>
+      @if (estSuperAdmin()) {
+        <button type="button" class="ud3-voir-comme" (click)="voirComme.set(true)">
+          <svg class="ud-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Voir comme…
+        </button>
+      }
     </div>
 
     <div class="ud3-focus" role="img" [attr.aria-label]="focusPct() + ' % des actions du jour ouvertes ou reportées'">
@@ -284,3 +290,8 @@
     </section>
   }
 </div>
+
+<!-- v88 — « Voir comme » (Super Admin) -->
+@if (estSuperAdmin()) {
+  <app-voir-comme [ouvert]="voirComme()" (fermer)="voirComme.set(false)"></app-voir-comme>
+}
